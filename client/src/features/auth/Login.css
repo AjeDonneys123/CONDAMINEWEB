@@ -1,9 +1,16 @@
-.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background-color: #f8fafc; }
-.login-card { background: white; padding: 2.5rem; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1); width: 100%; max-width: 800px; text-align: center; transition: all 0.3s; }
+.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100%; }
+.login-card { background: rgba(255, 255, 255, 0.92); padding: 2.5rem; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.16); width: 100%; max-width: 800px; text-align: center; transition: all 0.3s; border: 1px solid rgba(148, 163, 184, 0.22); backdrop-filter: blur(16px); }
 .login-card.narrow { max-width: 450px; }
 
 .app-logo { font-weight: 900; font-size: 2rem; color: #1e293b; margin-bottom: 0.5rem; letter-spacing: -1px; text-transform: uppercase; }
 .app-subtitle { color: #94a3b8; font-weight: 700; margin-bottom: 3rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+@media (max-width: 640px) {
+    .login-card {
+        padding: 1.6rem;
+        border-radius: 28px;
+    }
+}
 
 /* ROLE SELECTOR GRID (2 colonnes maintenant) */
 .role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; max-width: 600px; margin: 0 auto; }

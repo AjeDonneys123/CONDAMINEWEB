@@ -76,8 +76,28 @@ export default function App() {
   
   if (!user) return (
       <div className="app-wrapper">
-          <SystemStatus />
-          <Login onLoginSuccess={setUser} />
+          <div className="public-home">
+              <SystemStatus />
+              <section className="public-hero">
+                  <div className="public-hero-copy">
+                      <p className="public-eyebrow">Plateforme scolaire Condamine</p>
+                      <h1>CondaWeb centralise les devoirs, lectures, exposes et jeux pedagogiques.</h1>
+                      <p className="public-lead">
+                          CondaWeb est la plateforme scolaire utilisee par les eleves et les professeurs pour suivre le travail,
+                          consulter les contenus de classe, remettre les devoirs et acceder aux activites pedagogiques.
+                      </p>
+                      <div className="public-points" aria-label="Fonctionnalites CondaWeb">
+                          <span>Devoirs et suivi</span>
+                          <span>Lectures et exposes</span>
+                          <span>Jeux pedagogiques</span>
+                          <span>Espace professeur</span>
+                      </div>
+                  </div>
+                  <div className="public-hero-panel">
+                      <Login onLoginSuccess={setUser} />
+                  </div>
+              </section>
+          </div>
       </div>
   );
 
