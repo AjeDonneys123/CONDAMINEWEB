@@ -215,6 +215,18 @@ const sanitizeSteps = (steps = []) => {
                 sourceSlidesUrl: String(step?.sourceSlidesUrl || '').trim(),
                 materialSource: String(step?.materialSource || '').trim().slice(0, 80),
                 materialText,
+                questionSlideTextMap: (() => {
+                    const raw = step?.questionSlideTextMap && typeof step.questionSlideTextMap === 'object'
+                        ? step.questionSlideTextMap
+                        : {};
+                    const out = {};
+                    Object.keys(raw).slice(0, 300).forEach((k) => {
+                        const slideId = String(k || '').trim().slice(0, 120);
+                        if (!slideId) return;
+                        out[slideId] = String(raw[k] || '').replace(/\r/g, '').slice(0, 60000);
+                    });
+                    return out;
+                })(),
                 questionCount: Math.max(1, Math.min(20, Number(step?.questionCount || 3))),
                 questionAnswerPairs: Array.isArray(step?.questionAnswerPairs)
                     ? step.questionAnswerPairs
@@ -1036,6 +1048,16 @@ router.patch('/:id/step-data', async (req, res) => {
                 }));
             });
             target.questionSectionQuestions = cleanMap;
+        }
+        if (patch.questionSlideTextMap && typeof patch.questionSlideTextMap === 'object') {
+            const raw = patch.questionSlideTextMap;
+            const clean = {};
+            Object.keys(raw).slice(0, 300).forEach((k) => {
+                const slideId = String(k || '').trim().slice(0, 120);
+                if (!slideId) return;
+                clean[slideId] = String(raw[k] || '').replace(/\r/g, '').slice(0, 60000);
+            });
+            target.questionSlideTextMap = clean;
         }
         if (patch.sheetSlideSectionMap && typeof patch.sheetSlideSectionMap === 'object') {
             const raw = patch.sheetSlideSectionMap;

@@ -57,6 +57,60 @@ const sanitizeSlideTextMap = (input) => {
     });
     return out;
 };
+const getStepSlideTextMap = (step) => {
+    if (!step || typeof step !== 'object') return {};
+    if (step.type === 'sheet') return sanitizeSlideTextMap(step.sheetSlideTextMap);
+    if (step.type === 'question') return sanitizeSlideTextMap(step.questionSlideTextMap);
+    return {};
+};
+const parseManualQuestionBlocks = (raw = '') => {
+    const src = String(raw || '').replace(/\r/g, '').trim();
+    if (!src) return [];
+    return src
+        .split(/\n\s*\n+/)
+        .map((block) => block.trim())
+        .filter(Boolean)
+        .map((block) => {
+            const out = { q: '', question: '', expectedAnswer: '', expectedKeywords: [] };
+            block.split('\n').forEach((line) => {
+                const trimmed = String(line || '').trim();
+                if (!trimmed) return;
+                const qMatch = trimmed.match(/^(?:q(?:uestion)?)[\s:.-]+(.+)$/i);
+                if (qMatch) {
+                    const value = String(qMatch[1] || '').trim();
+                    out.q = value;
+                    out.question = value;
+                    return;
+                }
+                const aMatch = trimmed.match(/^(?:r(?:eponse)?|réponse|answer)[\s:.-]+(.+)$/i);
+                if (aMatch) {
+                    out.expectedAnswer = String(aMatch[1] || '').trim();
+                    return;
+                }
+                const kMatch = trimmed.match(/^(?:mots?\s*cles?|mots?\s*clés|keywords?|tags?)[\s:.-]+(.+)$/i);
+                if (kMatch) {
+                    out.expectedKeywords = String(kMatch[1] || '')
+                        .split(/[;,|]/)
+                        .map((part) => String(part || '').trim())
+                        .filter(Boolean);
+                    return;
+                }
+                if (!out.question) {
+                    out.q = trimmed;
+                    out.question = trimmed;
+                    return;
+                }
+                if (!out.expectedAnswer) {
+                    out.expectedAnswer = trimmed;
+                    return;
+                }
+                out.expectedKeywords.push(trimmed);
+            });
+            out.expectedKeywords = [...new Set(out.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean))];
+            return out;
+        })
+        .filter((row) => String(row.question || '').trim());
+};
 const toEmbedUrl = (rawUrl = '') => {
     const url = String(rawUrl || '').trim();
     if (!url) return '';
@@ -97,6 +151,7 @@ const QUESTION_DRAFT_FIELDS = [
     'sourceSlidesUrl',
     'materialSource',
     'materialText',
+    'questionSlideTextMap',
     'questionCount',
     'questionAnswerPairs',
     'questionSectionQuestions',
@@ -253,6 +308,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [pendingVideoEditorStepId, setPendingVideoEditorStepId] = useState('');
     const [questionSourceNotice, setQuestionSourceNotice] = useState('');
     const [zoneKeywordDrafts, setZoneKeywordDrafts] = useState({});
+    const [bulkQuestionImport, setBulkQuestionImport] = useState('');
+    const [showBulkQuestionImport, setShowBulkQuestionImport] = useState(false);
     const [selectedZoneKeyword, setSelectedZoneKeyword] = useState(null); // { zoneIdx, rowIdx, keywordIdx }
     const [synonymDraft, setSynonymDraft] = useState('');
     const [savingStepData, setSavingStepData] = useState(false);
@@ -273,6 +330,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [slidesManifestError, setSlidesManifestError] = useState('');
     const [slidesActiveIdx, setSlidesActiveIdx] = useState(0);
     const [slideSectionNameDraft, setSlideSectionNameDraft] = useState('');
+    const [slidesTextHydrating, setSlidesTextHydrating] = useState(false);
     const [slidesImageTryByObjectId, setSlidesImageTryByObjectId] = useState({});
     const [slidesImageNonceByObjectId, setSlidesImageNonceByObjectId] = useState({});
     const [slideBlobUrlByObjectId, setSlideBlobUrlByObjectId] = useState({});
@@ -1876,18 +1934,106 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         return () => ctrl.abort();
     }, [keywordSlidesMode, keywordSlidesUrl]);
     useEffect(() => {
-        if (!keywordSlidesMode || !step || step.type !== 'sheet') return;
+        if (!keywordSlidesMode || !step || !['sheet', 'question'].includes(step.type)) return;
+        const currentMap = getStepSlideTextMap(step);
+        const hasStoredSlideText = Object.values(currentMap).some((value) => String(value || '').trim());
+        if (!hasStoredSlideText && Array.isArray(slidesManifest) && slidesManifest.length > 0) {
+            const hydratedMap = {};
+            slidesManifest.forEach((slide) => {
+                const objectId = String(slide?.objectId || '').trim();
+                const text = String(slide?.text || '').replace(/\r/g, '').trim();
+                if (!objectId || !text) return;
+                hydratedMap[objectId] = text;
+            });
+            if (Object.keys(hydratedMap).length > 0) {
+                const activeObjectId = String(slidesManifest[slidesActiveIdx]?.objectId || '').trim();
+                const activeText = String(hydratedMap[activeObjectId] || slidesManifest[slidesActiveIdx]?.text || '').trim();
+                if (step.type === 'sheet') {
+                    updateStep(activeStep, {
+                        sheetSlideTextMap: hydratedMap,
+                        sheetText: activeText || String(step.sheetText || '')
+                    });
+                } else {
+                    updateStep(activeStep, {
+                        questionSlideTextMap: hydratedMap,
+                        materialSource: String(step.sourceSlidesUrl || 'slides'),
+                        materialText: activeText || String(step.materialText || '')
+                    });
+                }
+                return;
+            }
+        }
         const objectId = String(slidesManifest[slidesActiveIdx]?.objectId || '').trim();
         if (!objectId) return;
-        const map = sanitizeSlideTextMap(step.sheetSlideTextMap);
-        const next = String(map[objectId] || step.sheetText || '');
-        setKeywordMaterialSource(`sheet:${step.id}`);
+        const manifestText = String(slidesManifest[slidesActiveIdx]?.text || '').replace(/\r/g, '').trim();
+        const map = getStepSlideTextMap(step);
+        const fallbackText = step.type === 'sheet' ? step.sheetText : step.materialText;
+        const next = String(map[objectId] || manifestText || fallbackText || '');
+        setKeywordMaterialSource(step.type === 'question'
+            ? String(step.sourceSlidesUrl || 'slides')
+            : `sheet:${step.id}`);
         setKeywordMaterialText(next);
         setKeywordSelectedText('');
         setKeywordSelectionSpan(null);
         setActiveTarget('response');
         setEraseMode(false);
-    }, [keywordSlidesMode, step?.id, step?.type, step?.sheetSlideTextMap, step?.sheetText, slidesManifest, slidesActiveIdx]);
+    }, [keywordSlidesMode, step?.id, step?.type, step?.sheetSlideTextMap, step?.questionSlideTextMap, step?.sheetText, step?.materialText, step?.sourceSlidesUrl, slidesManifest, slidesActiveIdx]);
+    useEffect(() => {
+        if (!keywordSlidesMode || !step || !['sheet', 'question'].includes(step.type)) return;
+        const slide = slidesManifest[slidesActiveIdx];
+        const objectId = String(slide?.objectId || '').trim();
+        const slideNumber = Number(slide?.slideNumber || 0);
+        if (!objectId || !slideNumber) return;
+        const map = getStepSlideTextMap(step);
+        const currentText = String(map[objectId] || slide?.text || '').trim();
+        if (currentText || slidesTextHydrating) return;
+        const presentationUrl = String(keywordSlidesUrl || '').trim();
+        if (!presentationUrl) return;
+        let cancelled = false;
+        (async () => {
+            setSlidesTextHydrating(true);
+            try {
+                const res = await fetch('/api/learning/slides/extract-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        presentationUrl,
+                        slideSelection: String(slideNumber)
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(String(data?.error || 'Extraction slide impossible'));
+                const extractedSlide = Array.isArray(data?.slides) ? data.slides.find((row) => Number(row?.slideNumber || 0) === slideNumber) : null;
+                const extractedText = String(extractedSlide?.text || data?.combinedText || '').replace(/^Slide\s+\d+\s*:\s*/i, '').trim();
+                if (cancelled || !extractedText) return;
+                setSlidesManifest((prev) => prev.map((row, idx) => (
+                    idx === slidesActiveIdx ? { ...row, text: extractedText } : row
+                )));
+                slidesManifestCacheRef.current.set(`${presentationUrl}|all`, (slidesManifest || []).map((row, idx) => (
+                    idx === slidesActiveIdx ? { ...row, text: idx === slidesActiveIdx ? extractedText : row.text } : row
+                )));
+                if (step.type === 'sheet') {
+                    const nextMap = sanitizeSlideTextMap(step.sheetSlideTextMap);
+                    nextMap[objectId] = extractedText;
+                    updateStep(activeStep, { sheetSlideTextMap: nextMap, sheetText: extractedText });
+                } else {
+                    const nextMap = sanitizeSlideTextMap(step.questionSlideTextMap);
+                    nextMap[objectId] = extractedText;
+                    updateStep(activeStep, {
+                        questionSlideTextMap: nextMap,
+                        materialSource: String(step.sourceSlidesUrl || 'slides'),
+                        materialText: extractedText
+                    });
+                }
+            } catch (_) {
+            } finally {
+                if (!cancelled) setSlidesTextHydrating(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [keywordSlidesMode, keywordSlidesUrl, step?.id, step?.type, step?.sheetSlideTextMap, step?.questionSlideTextMap, step?.sourceSlidesUrl, slidesManifest, slidesActiveIdx, slidesTextHydrating, activeStep]);
     useEffect(() => {
         setSlideSectionNameDraft(currentSlideSectionName || '');
     }, [currentSlideSectionId, currentSlideSectionName]);
@@ -2695,6 +2841,18 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         rows.push({ q: '', question: '', expectedAnswer: '', expectedKeywords: [] });
         updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
     };
+    const importQuestionsForZone = (zoneIdx = 0) => {
+        const parsed = parseManualQuestionBlocks(bulkQuestionImport);
+        if (!parsed.length) {
+            alert("Aucun bloc valide. Utilise par exemple : Question:, Réponse:, Mots-clés:");
+            return;
+        }
+        const map = getCurrentSectionQuestionsMap();
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: parsed });
+        setKeywordActiveZoneIdx(zoneIdx);
+        setBulkQuestionImport('');
+        setShowBulkQuestionImport(false);
+    };
     const removeZoneQuestion = (zoneIdx = 0, rowIdx = 0) => {
         const map = getCurrentSectionQuestionsMap();
         const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
@@ -2749,6 +2907,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const patch = {};
             if (step.type === 'question') {
                 patch.materialText = String(step.materialText || '');
+                patch.questionSlideTextMap = sanitizeSlideTextMap(step.questionSlideTextMap);
                 patch.questionSectionQuestions = step.questionSectionQuestions || {};
             } else if (step.type === 'sheet') {
                 patch.sheetText = String(step.sheetText || '');
@@ -4627,10 +4786,18 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                         const next = String(e.target.value || '').replace(/\r/g, '');
                                                         setKeywordMaterialText(next);
                                                         const objectId = String(slidesManifest[slidesActiveIdx]?.objectId || '').trim();
-                                                        if (step?.type === 'sheet' && objectId) {
+                                                        if (objectId && step?.type === 'sheet') {
                                                             const map = sanitizeSlideTextMap(step.sheetSlideTextMap);
                                                             map[objectId] = next;
                                                             updateStep(activeStep, { sheetSlideTextMap: map, sheetText: next });
+                                                        } else if (objectId && step?.type === 'question') {
+                                                            const map = sanitizeSlideTextMap(step.questionSlideTextMap);
+                                                            map[objectId] = next;
+                                                            updateStep(activeStep, {
+                                                                questionSlideTextMap: map,
+                                                                materialSource: String(step.sourceSlidesUrl || 'slides'),
+                                                                materialText: next
+                                                            });
                                                         }
                                                     }}
                                                     placeholder="Transcription éditable de la slide..."
@@ -4823,7 +4990,47 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     >
                                         + Question
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload"
+                                        onClick={() => setShowBulkQuestionImport((prev) => !prev)}
+                                    >
+                                        Import bloc
+                                    </button>
                                 </div>
+                                {showBulkQuestionImport && (
+                                    <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+                                        <div className="text-[11px] font-black uppercase text-slate-500 mb-2">
+                                            Import manuel sans IA
+                                        </div>
+                                        <textarea
+                                            rows={8}
+                                            className="v84-q-input"
+                                            value={bulkQuestionImport}
+                                            onChange={(e) => setBulkQuestionImport(e.target.value)}
+                                            placeholder={`Question: Quelle est la capitale de la France ?\nRéponse: Paris\nMots-clés: paris, capitale, france\n\nQuestion: Cite un continent.\nRéponse: Afrique\nMots-clés: afrique, continent`}
+                                        />
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                className="v84-res-btn upload bg-indigo-600 text-white"
+                                                onClick={() => importQuestionsForZone(Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0)}
+                                            >
+                                                Remplacer la section courante
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="v84-res-btn upload"
+                                                onClick={() => {
+                                                    setBulkQuestionImport('');
+                                                    setShowBulkQuestionImport(false);
+                                                }}
+                                            >
+                                                Annuler
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="text-[11px] font-bold text-slate-500 mb-2">
                                     Section courante: {Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx + 1 : 1}
                                 </div>

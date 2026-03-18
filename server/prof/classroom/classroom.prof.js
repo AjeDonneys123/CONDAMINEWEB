@@ -201,6 +201,13 @@ router.get('/plan/:classId', async (req, res) => {
         if (!clsObj) return res.status(404).json({ error: "Classe/Groupe introuvable" });
         const className = clsObj?.name;
 
+        for (const student of students) {
+            if (applyCrossDecay(student.behaviorRecords || [])) {
+                student.markModified('behaviorRecords');
+                await student.save();
+            }
+        }
+
         const [hws, games, learnings, subs, progs] = await Promise.all([
             Homework.find({ targetClassrooms: className, isPunishment: false, isEnabled: { $ne: false } }).lean(),
             GameLevel.find({ targetClassrooms: className, isEnabled: { $ne: false } }).lean(),

@@ -171,6 +171,19 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
+    const getCrossCountdownLabel = (stu) => {
+        const stats = getMyStats(stu);
+        const crosses = Math.max(0, Number(stats?.crosses || 0));
+        if (crosses <= 0) return '';
+        const nextTs = stats?.nextCrossRemovalAt ? new Date(stats.nextCrossRemovalAt).getTime() : NaN;
+        if (!Number.isFinite(nextTs)) return '3 sem.';
+        const msLeft = Math.max(0, nextTs - Date.now());
+        const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+        if (daysLeft <= 1) return '1 j';
+        if (daysLeft < 7) return `${daysLeft} j`;
+        const weeksLeft = Math.ceil(daysLeft / 7);
+        return `${weeksLeft} sem.`;
+    };
     const handleSwapStudents = async (a, b) => {
         if (!a || !b || String(a._id) === String(b._id)) return;
         const aX = a.seatX, aY = a.seatY;
@@ -338,7 +351,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1 }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !isSwapMode && !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
                         {student ? (
                             <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
-                                {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
+                                {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getCrossCountdownLabel(student)}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
                                 <div className="sc-realizations">

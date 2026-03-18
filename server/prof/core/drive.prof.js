@@ -3,10 +3,80 @@ const { google } = require('googleapis');
 const fs = require('fs');
 const fetch = require('node-fetch');
 const { maybeTranscodeUpload } = require('../../core/videoTranscode');
+const OCREngine = require('../../core/ocr.engine');
 
 console.log("☁️ [DRIVE-CORE] Initialisation...");
 
 let oauth2Client = null;
+
+const normalizeSlidesTextChunk = (value = '') => String(value || '').replace(/\s+/g, ' ').trim();
+
+const collectSlidesTextAndColors = (pageElements = [], detectColor = null) => {
+    const texts = [];
+    const colors = new Set();
+
+    const pushTextElements = (elements = []) => {
+        (Array.isArray(elements) ? elements : []).forEach((te) => {
+            const content = normalizeSlidesTextChunk(te?.textRun?.content || te?.autoText?.content || '');
+            if (content) texts.push(content);
+            if (typeof detectColor === 'function') {
+                const rgb = te?.textRun?.style?.foregroundColor?.opaqueColor?.rgbColor;
+                const cname = detectColor(rgb);
+                if (cname) colors.add(cname);
+            }
+        });
+    };
+
+    const visitElement = (el) => {
+        if (!el || typeof el !== 'object') return;
+        pushTextElements(el?.shape?.text?.textElements);
+        pushTextElements(el?.wordArt?.text ? [{ textRun: { content: el.wordArt.text } }] : []);
+        const rows = Array.isArray(el?.table?.tableRows) ? el.table.tableRows : [];
+        rows.forEach((row) => {
+            const cells = Array.isArray(row?.tableCells) ? row.tableCells : [];
+            cells.forEach((cell) => {
+                const cellElements = Array.isArray(cell?.text?.textElements) ? cell.text.textElements : [];
+                pushTextElements(cellElements);
+            });
+        });
+        const children = Array.isArray(el?.group?.children) ? el.group.children : [];
+        children.forEach(visitElement);
+    };
+
+    (Array.isArray(pageElements) ? pageElements : []).forEach(visitElement);
+    return { texts, colors: Array.from(colors) };
+};
+
+const extractSlideTextViaOcr = async ({ presentationId = '', pageObjectId = '', slideNumber = 0, slidesApi = null }) => {
+    const pid = String(presentationId || '').trim();
+    const oid = String(pageObjectId || '').trim();
+    const num = Math.max(0, Number(slideNumber || 0));
+    if (!pid || !oid || !num || !oauth2Client || !slidesApi) return '';
+    try {
+        const thumb = await slidesApi.presentations.pages.getThumbnail({
+            presentationId: pid,
+            pageObjectId: oid,
+            thumbnailProperties_mimeType: 'PNG',
+            thumbnailProperties_thumbnailSize: 'LARGE'
+        });
+        const contentUrl = String(thumb?.data?.contentUrl || '').trim();
+        if (!contentUrl) return '';
+        const tokenObj = await oauth2Client.getAccessToken();
+        const token = typeof tokenObj === 'string' ? tokenObj : String(tokenObj?.token || '').trim();
+        const resp = await fetch(contentUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            timeout: 10000
+        });
+        if (!resp.ok) return '';
+        const arr = await resp.arrayBuffer();
+        const base64 = Buffer.from(arr).toString('base64');
+        const ocr = await OCREngine.extractText(base64);
+        if (!ocr?.success) return '';
+        return String(ocr.filteredText || ocr.text || '').replace(/\r/g, '').trim();
+    } catch (_) {
+        return '';
+    }
+};
 
 const ProfDrive = {
     init: () => {
@@ -273,23 +343,26 @@ const ProfDrive = {
                 .filter((n) => Number.isInteger(n) && n > 0)
         );
         const rows = [];
-        allSlides.forEach((slide, idx) => {
+        for (let idx = 0; idx < allSlides.length; idx += 1) {
+            const slide = allSlides[idx];
             const slideNumber = idx + 1;
-            if (wanted.size > 0 && !wanted.has(slideNumber)) return;
-            const texts = [];
-            (slide?.pageElements || []).forEach((el) => {
-                const elements = el?.shape?.text?.textElements || [];
-                elements.forEach((te) => {
-                    const content = String(te?.textRun?.content || '').replace(/\s+/g, ' ').trim();
-                    if (content) texts.push(content);
+            if (wanted.size > 0 && !wanted.has(slideNumber)) continue;
+            const extracted = collectSlidesTextAndColors(slide?.pageElements || []);
+            let text = extracted.texts.join(' ').trim();
+            if (!text && wanted.size > 0) {
+                text = await extractSlideTextViaOcr({
+                    presentationId,
+                    pageObjectId: String(slide?.objectId || ''),
+                    slideNumber,
+                    slidesApi
                 });
-            });
+            }
             rows.push({
                 slideNumber,
                 objectId: String(slide?.objectId || ''),
-                text: texts.join(' ').trim()
+                text
             });
-        });
+        }
         return {
             presentationId,
             title,
@@ -350,19 +423,9 @@ const ProfDrive = {
             const slide = allSlides[idx];
             const slideNumber = idx + 1;
             if (wanted.size > 0 && !wanted.has(slideNumber)) continue;
-            const texts = [];
-            const colors = new Set();
-            (slide?.pageElements || []).forEach((el) => {
-                const elements = el?.shape?.text?.textElements || [];
-                elements.forEach((te) => {
-                    const content = String(te?.textRun?.content || '').replace(/\s+/g, ' ').trim();
-                    if (content) texts.push(content);
-                    const rgb = te?.textRun?.style?.foregroundColor?.opaqueColor?.rgbColor;
-                    const cname = detectColor(rgb);
-                    if (cname) colors.add(cname);
-                });
-            });
-            const text = texts.join(' ').trim();
+            const extracted = collectSlidesTextAndColors(slide?.pageElements || [], detectColor);
+            const text = extracted.texts.join(' ').trim();
+            const colors = new Set(extracted.colors);
             if (targetColor) {
                 if (!colors.has(targetColor)) continue;
             } else if (cond && !text.toLowerCase().includes(cond)) {
