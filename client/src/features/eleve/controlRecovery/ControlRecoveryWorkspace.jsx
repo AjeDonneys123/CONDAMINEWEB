@@ -60,10 +60,14 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   const patchForm = (patch) => setForm((prev) => ({ ...prev, ...patch }));
 
   const normalizeText = (value = '') => String(value || '')
+    .replace(/[’`´]/g, "'")
+    .replace(/[‐‑‒–—]/g, '-')
+    .replace(/œ/g, 'oe')
+    .replace(/æ/g, 'ae')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^a-z0-9'\-\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 

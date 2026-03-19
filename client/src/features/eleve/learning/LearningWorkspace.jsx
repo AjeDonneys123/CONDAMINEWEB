@@ -5,8 +5,15 @@ import { resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/drive
 const normalize = (txt = '') =>
     String(txt || '')
         .toLowerCase()
+        .replace(/[’`´]/g, "'")
+        .replace(/[‐‑‒–—]/g, '-')
+        .replace(/œ/g, 'oe')
+        .replace(/æ/g, 'ae')
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9'\-\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
 const normalizeRanges = (ranges = [], textLen = 0) => {
     const clean = (ranges || [])
