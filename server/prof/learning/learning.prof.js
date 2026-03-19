@@ -489,6 +489,16 @@ const parseJsonObjects = (raw = '') => {
     }
 };
 
+const shortenExpectedAnswer = (value = '') => {
+    const words = String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .map((word) => word.trim())
+        .filter(Boolean);
+    return words.slice(0, 3).join(' ').trim();
+};
+
 const parseSlideSelection = (raw = '') => {
     const text = String(raw || '').trim();
     if (!text) return [];
@@ -539,7 +549,8 @@ router.post('/generate-question-answers', async (req, res) => {
         const clipped = sourceText.slice(0, 20000);
         const prompt = [
             { text: `Génère exactement ${count} questions de compréhension et leur réponse attendue.` },
-            { text: "Chaque réponse attendue doit être une formulation courte strictement présente dans le texte source (mot pour mot si possible)." },
+            { text: "Chaque réponse attendue doit être très courte: 2 à 3 mots maximum, facile à taper par un élève, et strictement présente dans le texte source (mot pour mot si possible)." },
+            { text: "Interdiction d'écrire une phrase longue. Préfère un groupe nominal très court." },
             { text: `Texte source:\n${clipped}` },
             { text: 'Format JSON strict uniquement: [{"question":"...","answer":"..."}]' }
         ];
@@ -547,7 +558,7 @@ router.post('/generate-question-answers', async (req, res) => {
         const rows = parseJsonObjects(raw)
             .map((r) => ({
                 question: String(r?.question || r?.q || '').trim(),
-                answer: String(r?.answer || r?.expectedAnswer || '').trim()
+                answer: shortenExpectedAnswer(String(r?.answer || r?.expectedAnswer || '').trim())
             }))
             .filter((r) => r.question && r.answer)
             .slice(0, count);
@@ -570,7 +581,8 @@ router.post('/generate-section-questions', async (req, res) => {
 
         const prompt = [
             { text: `Génère exactement ${count} questions de compréhension sur cette section.` },
-            { text: 'Pour chaque question, renvoie aussi une réponse attendue courte ET une liste expectedKeywords (1 à 6 mots-clés).' },
+            { text: 'Pour chaque question, renvoie aussi une réponse attendue très courte (2 à 3 mots maximum) ET une liste expectedKeywords (1 à 6 mots-clés).' },
+            { text: "La réponse attendue doit être facile à taper par un élève. Interdiction d'écrire une phrase longue." },
             { text: 'Chaque mot-clé doit exister textuellement dans la section fournie.' },
             { text: sourceAnswers.length ? `Réponses cibles (optionnel): ${sourceAnswers.join(' | ')}` : 'Réponses cibles: libre.' },
             { text: `Section source:\n${sectionText.slice(0, 15000)}` },
@@ -581,7 +593,7 @@ router.post('/generate-section-questions', async (req, res) => {
         const rows = parseJsonObjects(raw)
             .map((r) => {
                 const question = String(r?.question || r?.q || '').trim();
-                const expectedAnswer = String(r?.expectedAnswer || r?.answer || '').trim();
+                const expectedAnswer = shortenExpectedAnswer(String(r?.expectedAnswer || r?.answer || '').trim());
                 const rawKeywords = Array.isArray(r?.expectedKeywords)
                     ? r.expectedKeywords
                     : Array.isArray(r?.keywords) ? r.keywords : [];

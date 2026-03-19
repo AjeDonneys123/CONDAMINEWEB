@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-const SUCCESS_MESSAGE = "Bravo tu as récupéré ton contrôle, tu obtiens un niveau de plus !";
+const SUCCESS_MESSAGE = "Bravo, vous avez terminé le processus de récupération. Votre travail est en cours de validation par le professeur.";
 
 function speakText(text = '') {
   const value = String(text || '').trim();
@@ -235,7 +235,10 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
     if (saved && activePhase === 4) {
       const res = await fetch(`/api/eleve/control-recovery/complete/${encodeURIComponent(form._id)}`, { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) return alert(data?.error || 'Validation impossible');
+      if (!res.ok) {
+        const missing = Array.isArray(data?.details?.missing) ? data.details.missing.join(', ') : '';
+        return alert(missing ? `${data?.error || 'Validation impossible'}\n${missing}` : (data?.error || 'Validation impossible'));
+      }
       setForm(data.item);
       setFinalMessage(data.message || SUCCESS_MESSAGE);
       speakText(data.message || SUCCESS_MESSAGE);
@@ -432,13 +435,36 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
             </button>
           </div>
 
-          {finalMessage && (
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-700">
-              <div className="text-xl font-black">{finalMessage}</div>
-            </div>
-          )}
         </div>
       </div>
+
+      {finalMessage && (
+        <div className="fixed inset-0 z-[120] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-[28px] border border-emerald-200 bg-white shadow-2xl overflow-hidden">
+            <div className="px-6 py-5 border-b bg-gradient-to-r from-emerald-50 via-white to-amber-50">
+              <div className="text-[11px] font-black uppercase tracking-widest text-emerald-600">Récupération terminée</div>
+              <div className="mt-2 text-2xl font-black text-slate-800">{finalMessage}</div>
+            </div>
+            <div className="px-6 py-5 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setFinalMessage('')}
+                className="px-5 py-3 rounded-2xl border border-slate-200 bg-white font-black text-[12px] text-slate-600"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => {
+                  setFinalMessage('');
+                  if (onQuit) onQuit();
+                }}
+                className="px-5 py-3 rounded-2xl bg-emerald-600 text-white font-black text-[12px]"
+              >
+                Retour
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

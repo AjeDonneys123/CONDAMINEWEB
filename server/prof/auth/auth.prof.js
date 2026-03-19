@@ -211,6 +211,40 @@ router.post('/ai-config/:userId', async (req, res) => {
     }
 });
 
+router.get('/ui-state/:userId', async (req, res) => {
+    try {
+        const user = await Teacher.findById(req.params.userId).lean() || await Admin.findById(req.params.userId).lean();
+        if (!user) return res.status(404).json({ error: "Professeur introuvable" });
+        res.json({
+            ok: true,
+            lastProfTab: String(user.lastProfTab || 'activities'),
+            lastProfClassId: String(user.lastProfClassId || '')
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/ui-state/:userId', async (req, res) => {
+    try {
+        const user = await Teacher.findById(req.params.userId) || await Admin.findById(req.params.userId);
+        if (!user) return res.status(404).json({ error: "Professeur introuvable" });
+        const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'studio', 'students', 'admin'];
+        const nextTab = String(req.body?.lastProfTab || '').trim();
+        const nextClassId = String(req.body?.lastProfClassId || '').trim();
+        if (allowedTabs.includes(nextTab)) user.lastProfTab = nextTab;
+        user.lastProfClassId = nextClassId.slice(0, 80);
+        await user.save();
+        res.json({
+            ok: true,
+            lastProfTab: String(user.lastProfTab || 'activities'),
+            lastProfClassId: String(user.lastProfClassId || '')
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/finder-data', async (req, res) => {
     const [students, teachers, admins] = await Promise.all([
         Student.find({}, 'firstName lastName currentClass').lean(),

@@ -240,6 +240,14 @@ const Models = {
         typedRedoText: { type: String, default: '' },
         nextCourseNote: { type: String, default: '' },
         errorsExplanation: { type: String, default: '' },
+        phase2Mistakes: {
+            type: [{
+                questionNumber: { type: String, default: '' },
+                whatWasWrong: { type: String, default: '' },
+                correctionMade: { type: String, default: '' }
+            }],
+            default: []
+        },
         selfQuestions: {
             type: [{
                 question: { type: String, default: '' },
@@ -290,6 +298,8 @@ const Models = {
         geminiApiEnabled: { type: Boolean, default: false },
         geminiProjectId: { type: String, default: '', trim: true },
         geminiApiKeyEncrypted: { type: String, default: '' },
+        lastProfTab: { type: String, default: 'activities' },
+        lastProfClassId: { type: String, default: '' },
         subjectSections: [SectionSchema], taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
         assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }]
     }),
@@ -301,6 +311,8 @@ const Models = {
         geminiApiEnabled: { type: Boolean, default: false },
         geminiProjectId: { type: String, default: '', trim: true },
         geminiApiKeyEncrypted: { type: String, default: '' },
+        lastProfTab: { type: String, default: 'activities' },
+        lastProfClassId: { type: String, default: '' },
         role: { type: String, default: 'admin' }, isDeveloper: { type: Boolean, default: false }
     }),
 

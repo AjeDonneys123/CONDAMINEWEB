@@ -6,7 +6,7 @@ import './DashboardFolder.css';
  * 🌊 DASHBOARD STREAM (Ex-Folder)
  * Affiche une liste plate chronologique avec badge matière.
  */
-export default function DashboardFolder({ items, type, onSelect }) {
+export default function DashboardFolder({ items, type, onSelect, onDelete }) {
   
   // 1. TRI CHRONOLOGIQUE (Le plus récent en haut)
   // On utilise createdAt ou date s'il existe, sinon on garde l'ordre par défaut
@@ -53,10 +53,26 @@ export default function DashboardFolder({ items, type, onSelect }) {
             <div key={item._id} onClick={() => onSelect(item)} className="stream-card group">
                 {/* LIGNE 1 : MATIÈRE + FLAG PUNITION */}
                 <div className="card-header">
-                    <span className={`subject-badge ${getSubjectClass(subjectName)}`}>
-                        {subjectName}
-                    </span>
-                    {item.isPunishment && <span className="punishment-flag">⚠️ PUNITION</span>}
+                    <div className="card-header-left">
+                        <span className={`subject-badge ${getSubjectClass(subjectName)}`}>
+                            {subjectName}
+                        </span>
+                        {item.isPunishment && <span className="punishment-flag">⚠️ PUNITION</span>}
+                        {item.teacherValidated === true && <span className="validation-flag">✅ DEVOIR VALIDÉ</span>}
+                    </div>
+                    {typeof onDelete === 'function' && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(item);
+                            }}
+                            className="delete-item-btn"
+                            aria-label={`Supprimer ${item.title || 'cet élément'}`}
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
 
                 {/* LIGNE 2 : TITRE */}
@@ -68,7 +84,7 @@ export default function DashboardFolder({ items, type, onSelect }) {
                 <div className="card-footer">
                     {isDone ? (
                         <div className="status-badge status-done">
-                            <span>✅</span> <span>FAIT</span>
+                            <span>✅</span> <span>{item.teacherValidated === true ? 'VALIDÉ' : 'FAIT'}</span>
                         </div>
                     ) : (
                         <div className="status-badge status-todo">

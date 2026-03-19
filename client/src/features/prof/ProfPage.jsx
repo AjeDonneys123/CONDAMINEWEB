@@ -15,6 +15,7 @@ import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
   const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
+  const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'studio', 'students', 'admin'];
 
   const [liveUser, setLiveUser] = useState(getInitialUser());
   const [tab, setTab] = useState('activities');
@@ -34,8 +35,15 @@ export default function ProfPage({ user, onLogout }) {
         const resMe = await fetch(`/api/admin/teachers/${userId}?report-silent=true`);
         if (!resMe.ok) throw new Error("Erreur chargement profil");
         const freshProfile = await resMe.json();
+        const resUi = await fetch(`/api/auth/ui-state/${userId}`);
+        const uiState = resUi.ok ? await resUi.json() : {};
         const isDeveloper = freshProfile?.isDeveloper === true;
         setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper }));
+        const preferredTab = String(uiState?.lastProfTab || freshProfile?.lastProfTab || '').trim();
+        if (allowedTabs.includes(preferredTab)) {
+            const blockedForRole = (!isDeveloper && (preferredTab === 'studio' || preferredTab === 'admin'));
+            if (!blockedForRole) setTab(preferredTab);
+        }
         let filteredCls = [];
         const isAdminUser = String(freshProfile?.role || '').toLowerCase() === 'admin';
         if (isAdminUser) {
@@ -46,20 +54,41 @@ export default function ProfPage({ user, onLogout }) {
         }
         setClasses(filteredCls);
         if (filteredCls.length > 0) {
-            const stillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
-            if (!selectedClassId || !stillExists) setSelectedClassId(filteredCls[0]._id);
+            const preferredClassId = String(uiState?.lastProfClassId || freshProfile?.lastProfClassId || selectedClassId || '').trim();
+            const stillExists = filteredCls.some(c => String(c._id) === String(preferredClassId));
+            if (preferredClassId && stillExists) setSelectedClassId(preferredClassId);
+            else {
+              const currentStillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
+              if (!selectedClassId || !currentStillExists) setSelectedClassId(filteredCls[0]._id);
+            }
         }
     } catch(e) { console.error("Sync Profile Error:", e.message); setFetchError("ÉCHEC CONNEXION"); }
     setLoading(false);
   };
 
-  useEffect(() => { loadProfileAndClasses(); }, [tab]);
+  useEffect(() => { loadProfileAndClasses(); }, []);
 
   useEffect(() => {
     if (!liveUser.isDeveloper && (tab === 'studio' || tab === 'admin')) {
       setTab('activities');
     }
   }, [liveUser.isDeveloper, tab]);
+
+  useEffect(() => {
+    const userId = liveUser.id || liveUser._id;
+    if (!userId) return undefined;
+    const timer = setTimeout(() => {
+      fetch(`/api/auth/ui-state/${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lastProfTab: tab,
+          lastProfClassId: selectedClassId
+        })
+      }).catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [liveUser.id, liveUser._id, tab, selectedClassId]);
 
   const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
   const currentClassName = currentClassObj?.name || "";

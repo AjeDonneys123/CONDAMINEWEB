@@ -71,6 +71,20 @@ router.post('/upload-photo', upload.single('file'), async (req, res) => {
     }
 });
 
+router.delete('/:id', async (req, res) => {
+    try {
+        const doc = await ControlRecovery.findById(req.params.id);
+        if (!doc) return res.status(404).json({ error: 'Récupération introuvable' });
+        if (doc.teacherValidated === true) {
+            return res.status(400).json({ error: 'Impossible de supprimer un devoir déjà validé par le professeur.' });
+        }
+        await ControlRecovery.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/save/:id', async (req, res) => {
     try {
         const doc = await ControlRecovery.findById(req.params.id);
@@ -112,16 +126,38 @@ router.post('/complete/:id', async (req, res) => {
         const doc = await ControlRecovery.findById(req.params.id);
         if (!doc) return res.status(404).json({ error: 'Récupération introuvable' });
         const questionRows = Array.isArray(doc.selfQuestions) ? doc.selfQuestions : [];
+        const phase2Mistakes = Array.isArray(doc.phase2Mistakes) ? doc.phase2Mistakes : [];
         const hasRedo = doc.submissionMode === 'photo'
             ? Boolean(doc.uploadedPhotoUrl)
             : doc.submissionMode === 'keyboard'
                 ? Boolean(String(doc.typedRedoText || '').trim())
-                : Boolean(String(doc.nextCourseNote || '').trim());
-        const hasErrors = Boolean(String(doc.errorsExplanation || '').trim());
+                : true;
+        const hasErrors = phase2Mistakes.some((row) =>
+            String(row?.questionNumber || '').trim()
+            && String(row?.whatWasWrong || '').trim()
+            && String(row?.correctionMade || '').trim()
+        );
         const hasQuestions = questionRows.some((row) => String(row?.question || '').trim() && String(row?.expectedAnswer || '').trim());
         const hasAnswers = questionRows.every((row) => !String(row?.question || '').trim() || Boolean(String(row?.studentAnswer || '').trim()));
         if (!hasRedo || !hasErrors || !hasQuestions || !hasAnswers) {
-            return res.status(400).json({ error: 'Les 4 phases doivent être complétées avant validation.' });
+            const missing = [];
+            if (!hasRedo) missing.push('phase1_redo');
+            if (!hasErrors) missing.push('phase2_errors');
+            if (!hasQuestions) missing.push('phase3_questions');
+            if (!hasAnswers) missing.push('phase4_answers');
+            return res.status(400).json({
+                error: 'Les 4 phases doivent être complétées avant validation.',
+                details: {
+                    hasRedo,
+                    hasErrors,
+                    hasQuestions,
+                    hasAnswers,
+                    questionCount: questionRows.length,
+                    phase2MistakeCount: phase2Mistakes.length,
+                    submissionMode: doc.submissionMode,
+                    missing
+                }
+            });
         }
 
         doc.phase = 4;
@@ -146,7 +182,7 @@ router.post('/complete/:id', async (req, res) => {
         res.json({
             ok: true,
             item: doc,
-            message: 'Bravo tu as récupéré ton contrôle, tu obtiens un niveau de plus !'
+            message: 'Bravo, vous avez terminé le processus de récupération. Votre travail est en cours de validation par le professeur.'
         });
     } catch (e) {
         res.status(500).json({ error: e.message });

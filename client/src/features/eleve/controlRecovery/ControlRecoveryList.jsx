@@ -43,6 +43,20 @@ export default function ControlRecoveryList({ user }) {
     }
   };
 
+  const handleDelete = async (item) => {
+    if (!item?._id) return;
+    if (!window.confirm("Êtes vous sur de vouloir supprimer ce devoir ?")) return;
+    try {
+      const res = await fetch(`/api/eleve/control-recovery/${encodeURIComponent(item._id)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Suppression impossible');
+      if (selected && String(selected._id) === String(item._id)) setSelected(null);
+      await loadData();
+    } catch (e) {
+      alert(e.message || 'Suppression impossible');
+    }
+  };
+
   if (selected) {
     return <ControlRecoveryWorkspace user={user} item={selected} onQuit={() => { setSelected(null); loadData(); }} onSaved={setSelected} />;
   }
@@ -57,7 +71,7 @@ export default function ControlRecoveryList({ user }) {
           {loading ? '...' : '🔄 ACTUALISER'}
         </button>
       </div>
-      <DashboardFolder items={items} type="learning" onSelect={setSelected} />
+      <DashboardFolder items={items} type="learning" onSelect={setSelected} onDelete={handleDelete} />
     </div>
   );
 }
