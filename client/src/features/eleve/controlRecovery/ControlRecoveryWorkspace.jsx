@@ -27,6 +27,7 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   const [questionCursor, setQuestionCursor] = useState(0);
   const [recording, setRecording] = useState(false);
   const [micMutedByUser, setMicMutedByUser] = useState(true);
+  const [phase4Error, setPhase4Error] = useState(null);
   const recognitionRef = useRef(null);
   const activePhase = Math.max(1, Math.min(4, Number(form?.phase || 1)));
 
@@ -57,6 +58,31 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   }, [phase1Valid, phase2Valid, phase3Valid, phase4Valid]);
 
   const patchForm = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+
+  const normalizeText = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const evaluatePhase4Answer = (question) => {
+    const answer = String(question?.studentAnswer || '').trim();
+    const expectedAnswer = String(question?.expectedAnswer || '').trim();
+    const keywords = Array.isArray(question?.expectedKeywords)
+      ? question.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean)
+      : [];
+    const normalizedAnswer = normalizeText(answer);
+    const missingWords = keywords.filter((keyword) => {
+      const normalizedKeyword = normalizeText(keyword);
+      return normalizedKeyword && !normalizedAnswer.includes(normalizedKeyword);
+    });
+    const ok = keywords.length === 0
+      ? answer.length >= 10
+      : missingWords.length === 0;
+    return { ok, expectedAnswer, missingWords };
+  };
 
   const save = async (next = form) => {
     setSaving(true);
@@ -182,6 +208,28 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
       return alert(messages[activePhase]);
     }
 
+    if (activePhase === 4) {
+      for (const question of currentQuestions) {
+        if (!String(question?.question || '').trim()) continue;
+        const evaluation = evaluatePhase4Answer(question);
+        if (!evaluation.ok) {
+          stopDictation();
+          const missingList = evaluation.missingWords.join(', ');
+          const message = evaluation.expectedAnswer
+            ? `Non. La réponse était: ${evaluation.expectedAnswer}. Il te manque les mots clés suivants: ${missingList}.`
+            : `Non. Il te manque les mots clés suivants: ${missingList}.`;
+          setPhase4Error({
+            question: String(question?.question || '').trim(),
+            message
+          });
+          speakText(message);
+          setQuestionCursor(0);
+          return;
+        }
+      }
+      setPhase4Error(null);
+    }
+
     const nextPhase = Math.min(4, activePhase + 1);
     const saved = await save({ ...form, phase: nextPhase });
     if (saved && activePhase === 4) {
@@ -219,6 +267,14 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
         </div>
 
         <div className="p-6">
+          {phase4Error && activePhase === 4 && (
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+              <div className="text-[11px] font-black uppercase tracking-widest">Réponse incorrecte</div>
+              <div className="mt-2 text-lg font-black">{phase4Error.question}</div>
+              <div className="mt-2 font-semibold">{phase4Error.message}</div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
             <input
               className="rounded-2xl border-2 border-slate-200 px-4 py-3 font-bold text-slate-800 placeholder:text-slate-300"
@@ -343,7 +399,10 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
                   <textarea
                     className="w-full min-h-[240px] rounded-2xl border-2 border-slate-200 px-4 py-3 font-semibold placeholder:text-slate-300"
                     value={currentPhase4Question.studentAnswer || ''}
-                    onChange={(e) => updateQuestion(questionCursor, { studentAnswer: e.target.value })}
+                    onChange={(e) => {
+                      setPhase4Error(null);
+                      updateQuestion(questionCursor, { studentAnswer: e.target.value });
+                    }}
                     placeholder="Ta réponse orale retranscrite ou ta réponse écrite..."
                   />
                 </div>
@@ -352,9 +411,22 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
           )}
 
           <div className="mt-5 flex items-center justify-between gap-3">
-            <button onClick={() => save(form)} disabled={saving} className="px-5 py-3 rounded-2xl border border-slate-200 bg-white font-black text-[12px] text-slate-600 disabled:opacity-50">
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => save(form)} disabled={saving} className="px-5 py-3 rounded-2xl border border-slate-200 bg-white font-black text-[12px] text-slate-600 disabled:opacity-50">
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+              <button
+                onClick={async () => {
+                  if (activePhase <= 1) return;
+                  setPhase4Error(null);
+                  await save({ ...form, phase: Math.max(1, activePhase - 1) });
+                }}
+                disabled={saving || activePhase <= 1}
+                className="px-5 py-3 rounded-2xl border border-slate-200 bg-white font-black text-[12px] text-slate-600 disabled:opacity-40"
+              >
+                Phase précédente
+              </button>
+            </div>
             <button onClick={validatePhase} disabled={saving || (activePhase === 1 ? !phase1Valid : activePhase === 2 ? !phase2Valid : activePhase === 3 ? !phase3Valid : !phase4Valid || form?.status === 'done')} className="px-5 py-3 rounded-2xl bg-emerald-600 text-white font-black text-[12px] disabled:opacity-40">
               {activePhase < 4 ? 'Valider cette phase' : (form?.status === 'done' ? 'Contrôle récupéré' : 'Valider la récupération')}
             </button>
