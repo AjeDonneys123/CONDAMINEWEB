@@ -418,6 +418,7 @@ const fetchSheetBinary = async (sheetUrl = '') => {
 router.post('/extract-sheet-text', async (req, res) => {
     try {
         const sheetUrl = String(req.body?.sheetUrl || '').trim();
+        const teacherId = String(req.body?.teacherId || '').trim();
         if (!sheetUrl) return res.status(400).json({ error: 'sheetUrl requis' });
 
         const file = await fetchSheetBinary(sheetUrl);
@@ -440,7 +441,7 @@ router.post('/extract-sheet-text', async (req, res) => {
             { text: "Extrait le texte lisible de ce document pédagogique en français. Réponds uniquement avec le texte brut extrait, sans commentaire." },
             { inlineData: { mimeType: file.mime || 'application/pdf', data: payload.toString('base64') } }
         ];
-        const raw = await ProfAI.ask(promptParts, "Tu es un extracteur OCR strict. Renvoie uniquement le texte brut du document.");
+        const raw = await ProfAI.ask(promptParts, "Tu es un extracteur OCR strict. Renvoie uniquement le texte brut du document.", { teacherId });
         const text = String(raw || '').trim();
         if (!text) {
             return res.status(500).json({ error: "Extraction vide." });
@@ -511,6 +512,7 @@ const parseSlideSelection = (raw = '') => {
 router.post('/auto-highlight', async (req, res) => {
     try {
         const text = String(req.body?.text || '').trim();
+        const teacherId = String(req.body?.teacherId || '').trim();
         const max = Math.max(3, Math.min(20, Number(req.body?.max || 10)));
         if (!text) return res.status(400).json({ error: 'text requis' });
         const clipped = text.slice(0, 20000);
@@ -519,7 +521,7 @@ router.post('/auto-highlight', async (req, res) => {
             { text: `Texte source:\n${clipped}` },
             { text: `Réponds uniquement en JSON: ["passage 1","passage 2"]` }
         ];
-        const raw = await ProfAI.ask(prompt, "Tu sélectionnes des réponses attendues. Format strict JSON array uniquement.");
+        const raw = await ProfAI.ask(prompt, "Tu sélectionnes des réponses attendues. Format strict JSON array uniquement.", { teacherId });
         const snippets = parseJsonArray(raw).slice(0, max);
         if (!snippets.length) return res.status(500).json({ error: 'Aucun passage généré' });
         res.json({ snippets });
@@ -531,6 +533,7 @@ router.post('/auto-highlight', async (req, res) => {
 router.post('/generate-question-answers', async (req, res) => {
     try {
         const sourceText = String(req.body?.sourceText || '').trim();
+        const teacherId = String(req.body?.teacherId || '').trim();
         const count = Math.max(1, Math.min(20, Number(req.body?.count || 3)));
         if (!sourceText) return res.status(400).json({ error: 'sourceText requis' });
         const clipped = sourceText.slice(0, 20000);
@@ -540,7 +543,7 @@ router.post('/generate-question-answers', async (req, res) => {
             { text: `Texte source:\n${clipped}` },
             { text: 'Format JSON strict uniquement: [{"question":"...","answer":"..."}]' }
         ];
-        const raw = await ProfAI.ask(prompt, "Tu es un générateur pédagogique strict. Réponds uniquement avec un JSON valide.");
+        const raw = await ProfAI.ask(prompt, "Tu es un générateur pédagogique strict. Réponds uniquement avec un JSON valide.", { teacherId });
         const rows = parseJsonObjects(raw)
             .map((r) => ({
                 question: String(r?.question || r?.q || '').trim(),
@@ -558,6 +561,7 @@ router.post('/generate-question-answers', async (req, res) => {
 router.post('/generate-section-questions', async (req, res) => {
     try {
         const sectionText = String(req.body?.sectionText || '').trim();
+        const teacherId = String(req.body?.teacherId || '').trim();
         const sourceAnswers = Array.isArray(req.body?.sourceAnswers)
             ? req.body.sourceAnswers.map((x) => String(x || '').trim()).filter(Boolean)
             : [];
@@ -572,7 +576,7 @@ router.post('/generate-section-questions', async (req, res) => {
             { text: `Section source:\n${sectionText.slice(0, 15000)}` },
             { text: 'Format JSON strict: [{"question":"...","expectedAnswer":"...","expectedKeywords":["mot1","mot2"]}]' }
         ];
-        const raw = await ProfAI.ask(prompt, "Tu es un générateur pédagogique strict. Réponds uniquement avec un JSON valide.");
+        const raw = await ProfAI.ask(prompt, "Tu es un générateur pédagogique strict. Réponds uniquement avec un JSON valide.", { teacherId });
         const sourceLower = sectionText.toLowerCase();
         const rows = parseJsonObjects(raw)
             .map((r) => {

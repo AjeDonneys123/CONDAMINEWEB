@@ -7,6 +7,7 @@ import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
 import ExposeList from './exposes/ExposeList';
 import LectureList from './lectures/LectureList';
+import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
 import StatusOverview from './status/StatusOverview';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
@@ -131,6 +132,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 onOpenHandled={() => clearPendingIfMatch('learning')}
               />
             )}
+            {tab === 'controles' && <ControlRecoveryList user={freshUser} />}
             {tab === 'lectures' && (
               <LectureList
                 user={freshUser}

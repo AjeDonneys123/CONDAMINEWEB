@@ -65,6 +65,7 @@ export default function StudentsManager({ globalClassId }) {
   const [editorData, setEditorData] = useState(null);
   const [editorLoading, setEditorLoading] = useState(false);
   const [viewingStudent, setViewingStudent] = useState(null); // Pour la modale de suivi
+  const [controlRecoveriesByStudent, setControlRecoveriesByStudent] = useState({});
 
   useEffect(() => {
     if (!globalClassId) return;
@@ -101,6 +102,20 @@ export default function StudentsManager({ globalClassId }) {
             })
             .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
+        const recoveryPairs = await Promise.all(
+          myStudents.map(async (student) => {
+            const sid = extractId(student?._id);
+            if (!sid) return [sid, []];
+            try {
+              const res = await fetch(`/api/admin/students/${encodeURIComponent(sid)}/control-recoveries`);
+              const rows = res.ok ? await res.json() : [];
+              return [sid, Array.isArray(rows) ? rows : []];
+            } catch (_) {
+              return [sid, []];
+            }
+          })
+        );
+        setControlRecoveriesByStudent(Object.fromEntries(recoveryPairs));
         const lateNames = myStudents
             .filter(s => s.punishmentStatus === 'LATE' || (s.punishmentStatus === 'PENDING' && s.punishmentDueDate && new Date(s.punishmentDueDate).getTime() <= Date.now()))
             .map(s => `${s.firstName} ${s.lastName}`);
@@ -240,6 +255,22 @@ export default function StudentsManager({ globalClassId }) {
       setViewingStudent(null); // On ferme la modale pour rafraîchir
   };
 
+  const handleValidateRecovery = async (recoveryId) => {
+      try {
+          const res = await fetch(`/api/admin/control-recoveries/${encodeURIComponent(recoveryId)}/validate`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Validation impossible');
+          setControlRecoveriesByStudent((prev) => {
+            const sid = extractId(data?.item?.studentId);
+            const current = Array.isArray(prev?.[sid]) ? prev[sid] : [];
+            const next = current.map((row) => String(row?._id) === String(data?.item?._id) ? data.item : row);
+            return { ...prev, [sid]: next };
+          });
+      } catch (e) {
+          alert(e.message || 'Validation impossible');
+      }
+  };
+
   // --- HELPER POUR LA MODALE SUIVI ---
   const getStudentWorkload = (sId) => {
       const currentStudentId = extractId(sId);
@@ -281,6 +312,7 @@ export default function StudentsManager({ globalClassId }) {
   if (loading) return <div className="p-10 text-center text-indigo-500 font-black animate-pulse">CHARGEMENT DE LA MATRICE...</div>;
 
   const workloadItems = viewingStudent ? getStudentWorkload(viewingStudent._id) : [];
+  const controlRecoveries = viewingStudent ? (controlRecoveriesByStudent[extractId(viewingStudent._id)] || []) : [];
   const getStudentRealizations = (student) => {
       const sid = extractId(student?._id);
       const studentNameKey = norm(`${student?.firstName || ''} ${student?.lastName || ''}`);
@@ -360,6 +392,70 @@ export default function StudentsManager({ globalClassId }) {
                                     </div>
                                 ))}
                             </div>
+                        )}
+
+                        {/* DEVOIRS */}
+                        <h4 className="text-xs font-black text-slate-400 uppercase mb-2">📝 RÉCUPÉRATIONS DE CONTRÔLES</h4>
+                        {controlRecoveries.map((rec) => (
+                            <div key={rec._id} className="bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <div className="font-bold text-slate-700">{rec.title || 'RÉCUPÉRER CONTRÔLE'}</div>
+                                        <div className="text-[10px] font-black text-amber-700 uppercase">{rec.subject || 'GÉNÉRAL'} • PHASE {Number(rec.phase || 1)}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleValidateRecovery(rec._id)}
+                                        disabled={rec.teacherValidated === true}
+                                        className="bg-white text-amber-700 px-3 py-2 rounded-xl border border-amber-300 text-xs font-black disabled:opacity-40"
+                                    >
+                                        {rec.teacherValidated ? 'VALIDÉ' : 'VALIDER'}
+                                    </button>
+                                </div>
+
+                                <div className="mt-3 space-y-3 text-[12px] text-slate-700">
+                                    <div>
+                                        <div className="font-black uppercase text-[10px] text-slate-400 mb-1">Phase 1</div>
+                                        <div className="font-semibold">Modalité: {rec.submissionMode === 'photo' ? 'Photo' : rec.submissionMode === 'keyboard' ? 'Clavier' : 'Prochain cours'}</div>
+                                        {rec.uploadedPhotoUrl && (
+                                            <img src={rec.uploadedPhotoUrl} alt="Contrôle refait" className="mt-2 max-h-56 rounded-xl border border-amber-200 bg-white" />
+                                        )}
+                                        {rec.typedRedoText && (
+                                            <div className="mt-2 whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3">{rec.typedRedoText}</div>
+                                        )}
+                                        {rec.nextCourseNote && (
+                                            <div className="mt-2 whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3">{rec.nextCourseNote}</div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <div className="font-black uppercase text-[10px] text-slate-400 mb-1">Phase 2</div>
+                                        <div className="whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3">{rec.errorsExplanation || 'Aucune explication.'}</div>
+                                    </div>
+
+                                    <div>
+                                        <div className="font-black uppercase text-[10px] text-slate-400 mb-1">Phases 3 et 4</div>
+                                        <div className="space-y-2">
+                                            {(Array.isArray(rec.selfQuestions) ? rec.selfQuestions : []).map((row, idx) => (
+                                                <div key={`${rec._id}_${idx}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                                                    <div className="font-black text-slate-700">Q{idx + 1}. {row.question || 'Question non renseignée'}</div>
+                                                    <div className="mt-1"><span className="font-black text-slate-500">Réponse attendue:</span> {row.expectedAnswer || '—'}</div>
+                                                    <div className="mt-1"><span className="font-black text-slate-500">Mots-clés:</span> {(row.expectedKeywords || []).join(', ') || '—'}</div>
+                                                    <div className="mt-1"><span className="font-black text-slate-500">Réponse élève:</span> {row.studentAnswer || '—'}</div>
+                                                    <div className="mt-2 inline-flex px-2 py-1 rounded-full border text-[10px] font-black bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                        {String(row.studentAnswer || '').trim() ? '☑ PHASE 4 RÉPONDUE' : '☐ PHASE 4 MANQUANTE'}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(!Array.isArray(rec.selfQuestions) || rec.selfQuestions.length === 0) && (
+                                                <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-400 italic">Aucune question créée.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {controlRecoveries.length === 0 && (
+                            <div className="text-[12px] text-slate-400 italic mb-4">Aucune récupération de contrôle.</div>
                         )}
 
                         {/* DEVOIRS */}

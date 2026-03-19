@@ -229,6 +229,33 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    ControlRecovery: getModel('ControlRecovery', {
+        studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', index: true },
+        title: { type: String, default: 'RÉCUPÉRER CONTRÔLE' },
+        subject: { type: String, default: 'GÉNÉRAL' },
+        status: { type: String, default: 'todo' },
+        phase: { type: Number, default: 1 },
+        submissionMode: { type: String, enum: ['photo', 'keyboard', 'next_course'], default: 'keyboard' },
+        uploadedPhotoUrl: { type: String, default: '' },
+        typedRedoText: { type: String, default: '' },
+        nextCourseNote: { type: String, default: '' },
+        errorsExplanation: { type: String, default: '' },
+        selfQuestions: {
+            type: [{
+                question: { type: String, default: '' },
+                expectedAnswer: { type: String, default: '' },
+                expectedKeywords: { type: [String], default: [] },
+                studentAnswer: { type: String, default: '' },
+                oralPreferred: { type: Boolean, default: true }
+            }],
+            default: []
+        },
+        completedAt: { type: Date, default: null },
+        awardedBonus: { type: Boolean, default: false },
+        teacherValidated: { type: Boolean, default: false },
+        teacherValidatedAt: { type: Date, default: null }
+    }),
+
     VideoSegment: getModel('VideoSegment', {
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', index: true },
         stepId: { type: String, default: '', index: true },
@@ -259,12 +286,21 @@ const Models = {
     Teacher: getModel('Teacher', {
         firstName: String, lastName: String, password: { type: String, required: true },
         mail: { type: String, default: '', trim: true, lowercase: true },
+        email: { type: String, default: '', trim: true, lowercase: true },
+        geminiApiEnabled: { type: Boolean, default: false },
+        geminiProjectId: { type: String, default: '', trim: true },
+        geminiApiKeyEncrypted: { type: String, default: '' },
         subjectSections: [SectionSchema], taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
         assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }]
     }),
 
     Admin: getModel('Admin', {
         firstName: String, lastName: String, password: { type: String, required: true },
+        mail: { type: String, default: '', trim: true, lowercase: true },
+        email: { type: String, default: '', trim: true, lowercase: true },
+        geminiApiEnabled: { type: Boolean, default: false },
+        geminiProjectId: { type: String, default: '', trim: true },
+        geminiApiKeyEncrypted: { type: String, default: '' },
         role: { type: String, default: 'admin' }, isDeveloper: { type: Boolean, default: false }
     }),
 

@@ -2,6 +2,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const path = require('path');
 
 dotenv.config();
 const app = express();
@@ -87,8 +88,11 @@ safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');
 safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
 safeLoad('/api/eleve/games', './eleve/games/games.eleve');
 safeLoad('/api/eleve/learning', './eleve/learning/learning.eleve');
+safeLoad('/api/eleve/control-recovery', './eleve/control-recovery/controlRecovery.eleve');
 safeLoad('/api/eleve/exposes', './eleve/exposes/exposes.eleve');
 safeLoad('/api/eleve/lectures', './eleve/lectures/lectures.eleve');
+
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // 5. DEMARRAGE SERVEUR + RECONNEXION MONGOOSE
 app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));

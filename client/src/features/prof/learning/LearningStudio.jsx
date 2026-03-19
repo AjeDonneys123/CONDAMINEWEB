@@ -844,6 +844,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const fd = new FormData();
             fd.append('topic', topic || 'Question de compréhension');
             fd.append('count', '4');
+            fd.append('teacherId', teacherId);
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const rows = await res.json();
             const clean = Array.isArray(rows) ? rows.slice(0, 6) : [];
@@ -868,7 +869,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     const res = await fetch('/api/learning/extract-sheet-text', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sheetUrl })
+                        body: JSON.stringify({ sheetUrl, teacherId })
                     });
                     const data = await res.json();
                     if (!res.ok || !data?.text) throw new Error(data?.error || 'Extraction fiche impossible');
@@ -896,6 +897,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const fd = new FormData();
             fd.append('topic', topic);
             fd.append('count', String(count));
+            fd.append('teacherId', teacherId);
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const rows = await res.json();
             const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
@@ -978,6 +980,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const fd = new FormData();
             fd.append('topic', topic);
             fd.append('count', String(count));
+            fd.append('teacherId', teacherId);
             const qRes = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const rows = await qRes.json();
             const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
@@ -1814,7 +1817,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/learning/generate-question-answers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sourceText, count: wanted })
+                body: JSON.stringify({ sourceText, count: wanted, teacherId })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Génération impossible');
@@ -1836,7 +1839,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/learning/extract-sheet-text', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sheetUrl })
+                body: JSON.stringify({ sheetUrl, teacherId })
             });
             const data = await res.json();
             if (!res.ok || !data?.text) throw new Error(data?.error || 'Extraction impossible');
@@ -2623,7 +2626,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/learning/auto-highlight', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, max: 10 })
+                body: JSON.stringify({ text, max: 10, teacherId })
             });
             const data = await res.json();
             if (!res.ok || !Array.isArray(data?.snippets)) throw new Error(data?.error || 'Auto impossible');
@@ -2978,7 +2981,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/learning/generate-section-questions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sectionText: promptText, sourceAnswers: answers, count, topic })
+                body: JSON.stringify({ sectionText: promptText, sourceAnswers: answers, count, topic, teacherId })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Erreur génération');
@@ -2993,8 +2996,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const existing = Array.isArray(map[String(zoneIdx)]) ? map[String(zoneIdx)] : [];
             const next = { ...map, [String(zoneIdx)]: [...existing, ...withForced] };
             updateCurrentSectionQuestionsMap(next);
-        } catch (_) {
-            alert("Erreur génération questions.");
+        } catch (e) {
+            alert(String(e?.message || "Erreur génération questions."));
         }
         setAiTesting(false);
     };

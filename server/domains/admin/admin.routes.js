@@ -6,6 +6,7 @@ require('../../models/BugReport');
 const AdminExpert = require('./experts/admin.expert');
 const StructureDrive = require('../structure/experts/structure.drive');
 const { sendMail, sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
+const { isCentralAiAccount } = require('../../prof/core/profAiKeys');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const isNamedJpVuillet = (user) => {
@@ -47,6 +48,22 @@ router.get('/students', asyncHandler(async (req, res) => {
     res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean()); 
 }));
 
+router.get('/students/:id/control-recoveries', asyncHandler(async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: 'ID invalide' });
+    const rows = await mongoose.model('ControlRecovery').find({ studentId: req.params.id }).sort({ updatedAt: -1 }).lean();
+    res.json(rows);
+}));
+
+router.post('/control-recoveries/:id/validate', asyncHandler(async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: 'ID invalide' });
+    const doc = await mongoose.model('ControlRecovery').findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Récupération introuvable' });
+    doc.teacherValidated = true;
+    doc.teacherValidatedAt = new Date();
+    await doc.save();
+    res.json({ ok: true, item: doc.toObject() });
+}));
+
 // 4. Matières
 router.get('/subjects', asyncHandler(async (req, res) => {
     res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean());
@@ -58,6 +75,9 @@ router.get('/teachers/:id', asyncHandler(async (req, res) => {
     let user = await mongoose.model('Teacher').findById(req.params.id).lean() || await mongoose.model('Admin').findById(req.params.id).lean(); 
     if (!user) return res.status(404).json({ error: "Utilisateur introuvable" }); 
     user.isDeveloper = user.isDeveloper === true || isNamedJpVuillet(user);
+    user.hasPersonalGeminiKey = Boolean(String(user.geminiApiKeyEncrypted || '').trim());
+    user.isCentralAiAccount = isCentralAiAccount(user);
+    delete user.geminiApiKeyEncrypted;
     res.json(user); 
 }));
 

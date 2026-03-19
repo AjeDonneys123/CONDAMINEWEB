@@ -276,6 +276,7 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
             }
             fd.append('topic', aiTopic || "Quiz"); 
             fd.append('count', aiCount);
+            fd.append('teacherId', teacherId);
             
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const cleaned = await res.json();

@@ -1,5 +1,5 @@
 // @signatures: Login, handleLogin, handleReset, handleSelectSuggestion
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './Login.css';
 
 export default function Login({ onLoginSuccess }) {
@@ -12,6 +12,9 @@ export default function Login({ onLoginSuccess }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleReady, setGoogleReady] = useState(false);
+  const googleBtnRef = useRef(null);
   const clean = (str) => (str || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   useEffect(() => {
@@ -23,7 +26,49 @@ export default function Login({ onLoginSuccess }) {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    fetch('/api/auth/google-client-config')
+      .then(res => res.json())
+      .then(data => {
+        const cid = String(data?.clientId || '').trim();
+        if (cid) setGoogleClientId(cid);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const clientId = String(googleClientId || '').trim();
+    if (!clientId) return;
+    let cancelled = false;
+    const boot = () => {
+      if (cancelled || !window.google?.accounts?.id || !googleBtnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => handleGoogleLogin(response?.credential || '')
+      });
+      googleBtnRef.current.innerHTML = '';
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline',
+        size: 'large',
+        shape: 'pill',
+        text: 'continue_with',
+        width: 320
+      });
+      setGoogleReady(true);
+    };
+    const existing = document.getElementById('google-identity-script');
+    if (existing) {
+      boot();
+      return () => { cancelled = true; };
+    }
+    const script = document.createElement('script');
+    script.id = 'google-identity-script';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = boot;
+    document.head.appendChild(script);
+    return () => { cancelled = true; };
+  }, [googleClientId]);
 
   useEffect(() => {
     if (selectedProfile) return;
@@ -95,6 +140,37 @@ export default function Login({ onLoginSuccess }) {
         alert(data.message || "Identifiants incorrects");
       }
     } catch (e2) {
+      alert("Le serveur est injoignable.");
+    }
+    setLoading(false);
+  };
+
+  const handleGoogleLogin = async (credential) => {
+    if (!credential) return;
+    setLoading(true);
+    try {
+      const targetFirstName = selectedProfile?.firstName || inputFirst;
+      const targetLastName = selectedProfile?.lastName || inputLast;
+      const targetClassName = selectedProfile?.className || inputClass;
+      const res = await fetch('/api/auth/google-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credential,
+          targetUserId: selectedProfile?.id || '',
+          targetFirstName,
+          targetLastName,
+          targetClassName
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('player', JSON.stringify(data.user));
+        onLoginSuccess(data.user);
+      } else {
+        alert(data.message || "Connexion Google impossible.");
+      }
+    } catch (_) {
       alert("Le serveur est injoignable.");
     }
     setLoading(false);
@@ -191,6 +267,16 @@ export default function Login({ onLoginSuccess }) {
           <button className="login-submit-btn" disabled={loading || !canSubmit}>
             {loading ? 'Connexion...' : 'Entrer'}
           </button>
+          {googleClientId && (
+            <div className="login-google-wrap">
+              <div ref={googleBtnRef} />
+              {!googleReady && (
+                <button type="button" className="login-google-btn" disabled>
+                  Chargement Google...
+                </button>
+              )}
+            </div>
+          )}
         </form>
       </div>
     </div>

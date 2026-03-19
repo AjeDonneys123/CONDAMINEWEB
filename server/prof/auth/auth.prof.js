@@ -4,6 +4,8 @@ const router = express.Router();
 const { Teacher, Admin, Student, Classroom } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const bcrypt = require('bcryptjs');
+const fetch = require('node-fetch');
+const { encryptApiKey, getTeacherAiConfig, isCentralAiAccount } = require('../core/profAiKeys');
 const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 const isNamedJpVuillet = (user) => {
     if (!user) return false;
@@ -11,6 +13,91 @@ const isNamedJpVuillet = (user) => {
     const last = String(user.lastName || '').trim().toLowerCase();
     return (first === 'jp' || first === 'jean') && last === 'vuillet';
 };
+
+async function verifyGoogleIdToken(idToken = '') {
+    const token = String(idToken || '').trim();
+    if (!token) throw new Error("Token Google manquant");
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(String(data?.error_description || data?.error || 'Token Google invalide'));
+    const aud = String(data?.aud || '').trim();
+    const allowedAud = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+    if (allowedAud && aud && aud !== allowedAud) {
+        throw new Error("Token Google émis pour un autre client");
+    }
+    if (String(data?.email_verified || '').toLowerCase() !== 'true') {
+        throw new Error("Email Google non vérifié");
+    }
+    return {
+        email: String(data?.email || '').trim().toLowerCase(),
+        givenName: String(data?.given_name || '').trim(),
+        familyName: String(data?.family_name || '').trim(),
+        name: String(data?.name || '').trim()
+    };
+}
+
+async function findTeacherOrAdminByGoogleEmail(email = '') {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (!cleanEmail) return null;
+    const emailRx = new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+    const teacher = await Teacher.findOne({
+        $or: [
+            { mail: cleanEmail },
+            { mail: emailRx },
+            { email: cleanEmail },
+            { email: emailRx }
+        ]
+    });
+    if (teacher) return { user: teacher, role: 'prof' };
+
+    const admin = await Admin.findOne({
+        $or: [
+            { mail: cleanEmail },
+            { mail: emailRx },
+            { email: cleanEmail },
+            { email: emailRx }
+        ]
+    });
+    if (admin) return { user: admin, role: 'admin' };
+
+    return null;
+}
+
+async function findAnyAccountByIdentity({ userId = '', firstName = '', lastName = '', className = '' } = {}) {
+    const cleanUserId = String(userId || '').trim();
+    const cleanFirst = String(firstName || '').trim();
+    const cleanLast = String(lastName || '').trim();
+    const cleanClass = String(className || '').trim();
+
+    if (cleanUserId) {
+        let user = await Teacher.findById(cleanUserId);
+        if (user) return { user, role: 'prof' };
+        user = await Admin.findById(cleanUserId);
+        if (user) return { user, role: 'admin' };
+        user = await Student.findById(cleanUserId).populate('assignedGroups', 'name type level');
+        if (user) return { user, role: 'student' };
+    }
+
+    if (!cleanFirst || !cleanLast) return null;
+    const firstRx = new RegExp(`^${cleanFirst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const lastRx = new RegExp(`^${cleanLast.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+    let user = await Teacher.findOne({ firstName: firstRx, lastName: lastRx });
+    if (user) return { user, role: 'prof' };
+
+    user = await Admin.findOne({ firstName: firstRx, lastName: lastRx });
+    if (user) return { user, role: 'admin' };
+
+    const studentQuery = { firstName: firstRx, lastName: lastRx };
+    if (cleanClass) {
+        studentQuery.currentClass = new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    }
+    user = await Student.findOne(studentQuery).populate('assignedGroups', 'name type level');
+    if (user) return { user, role: 'student' };
+
+    return null;
+}
 
 /**
  * 🔐 AUTHENTIFICATION CÔTÉ PROF (HERMÉTIQUE)
@@ -36,7 +123,13 @@ router.post('/login', async (req, res) => {
             delete obj.password;
             return res.json({
                 ok: true,
-                user: { ...obj, id: obj._id, role: obj.role || 'prof', isDeveloper: obj.isDeveloper === true || isNamedJpVuillet(obj) }
+                user: {
+                    ...obj,
+                    id: obj._id,
+                    role: obj.role || 'prof',
+                    isDeveloper: obj.isDeveloper === true || isNamedJpVuillet(obj),
+                    hasPersonalGeminiKey: Boolean(String(obj.geminiApiKeyEncrypted || '').trim())
+                }
             });
         }
     }
@@ -65,6 +158,59 @@ router.get('/config', async (req, res) => {
     res.json({ classrooms: await Classroom.find({}).sort({name:1}).lean() });
 });
 
+router.get('/google-client-config', async (req, res) => {
+    res.json({
+        clientId: String(process.env.GOOGLE_CLIENT_ID || '').trim(),
+        enabled: Boolean(String(process.env.GOOGLE_CLIENT_ID || '').trim())
+    });
+});
+
+router.get('/ai-config/:userId', async (req, res) => {
+    try {
+        const cfg = await getTeacherAiConfig(req.params.userId);
+        if (!cfg) return res.status(404).json({ error: "Professeur introuvable" });
+        res.json({
+            ok: true,
+            isCentralAccount: cfg.isCentral,
+            geminiApiEnabled: cfg.isCentral ? true : cfg.enabled,
+            geminiProjectId: cfg.projectId,
+            hasPersonalKey: cfg.hasEncryptedKey
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/ai-config/:userId', async (req, res) => {
+    try {
+        const user = await Teacher.findById(req.params.userId) || await Admin.findById(req.params.userId);
+        if (!user) return res.status(404).json({ error: "Professeur introuvable" });
+        if (isCentralAiAccount(user)) {
+            return res.json({
+                ok: true,
+                lockedToCentral: true,
+                geminiApiEnabled: true,
+                geminiProjectId: String(process.env.GEMINI_PROJECT_ID || user.geminiProjectId || '').trim(),
+                hasPersonalKey: Boolean(String(user.geminiApiKeyEncrypted || '').trim())
+            });
+        }
+        user.geminiApiEnabled = req.body?.geminiApiEnabled !== false;
+        user.geminiProjectId = String(req.body?.geminiProjectId || '').trim().slice(0, 200);
+        const apiKey = String(req.body?.geminiApiKey || '').trim();
+        if (apiKey) user.geminiApiKeyEncrypted = encryptApiKey(apiKey);
+        else if (req.body?.clearKey === true) user.geminiApiKeyEncrypted = '';
+        await user.save();
+        res.json({
+            ok: true,
+            geminiApiEnabled: user.geminiApiEnabled,
+            geminiProjectId: user.geminiProjectId,
+            hasPersonalKey: Boolean(String(user.geminiApiKeyEncrypted || '').trim())
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/finder-data', async (req, res) => {
     const [students, teachers, admins] = await Promise.all([
         Student.find({}, 'firstName lastName currentClass').lean(),
@@ -89,6 +235,65 @@ router.get('/finder-data', async (req, res) => {
     }));
 
     res.json([...studentItems, ...teacherItems]);
+});
+
+router.post('/google-login', async (req, res) => {
+    try {
+        const { credential, targetUserId, targetFirstName, targetLastName, targetClassName } = req.body || {};
+        const googleUser = await verifyGoogleIdToken(credential);
+        const email = String(googleUser.email || '').trim().toLowerCase();
+        if (!email) return res.status(401).json({ ok: false, message: "Email Google introuvable." });
+
+        if (email === 'vuillet.jean@condamine.edu.ec') {
+            const target = await findAnyAccountByIdentity({
+                userId: targetUserId,
+                firstName: targetFirstName,
+                lastName: targetLastName,
+                className: targetClassName
+            });
+            if (!target?.user) {
+                return res.status(401).json({ ok: false, message: "Aucun compte trouvé avec ce nom/prénom." });
+            }
+            const obj = target.user.toObject();
+            delete obj.password;
+            return res.json({
+                ok: true,
+                user: {
+                    ...obj,
+                    id: obj._id,
+                    role: obj.role || target.role,
+                    isDeveloper: true,
+                    impersonatedByGoogleAdmin: true
+                }
+            });
+        }
+
+        const profOrAdmin = await findTeacherOrAdminByGoogleEmail(email);
+        if (profOrAdmin?.user) {
+            const obj = profOrAdmin.user.toObject();
+            delete obj.password;
+            return res.json({
+                ok: true,
+                user: {
+                    ...obj,
+                    id: obj._id,
+                    role: obj.role || profOrAdmin.role || 'prof',
+                    isDeveloper: obj.isDeveloper === true || isNamedJpVuillet(obj),
+                    hasPersonalGeminiKey: Boolean(String(obj.geminiApiKeyEncrypted || '').trim())
+                }
+            });
+        }
+
+        let user = await Student.findOne({ email }).populate('assignedGroups', 'name type level');
+        if (user) {
+            const plain = user.toObject();
+            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+        }
+
+        return res.status(401).json({ ok: false, message: "Aucun compte Condamine n'est lié à cet email Google." });
+    } catch (e) {
+        return res.status(401).json({ ok: false, message: String(e?.message || 'Connexion Google impossible') });
+    }
 });
 
 // --- 🚀 NOUVELLES ROUTES OAUTH (FIX CANNOT GET) ---

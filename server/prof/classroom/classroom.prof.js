@@ -203,8 +203,10 @@ router.get('/plan/:classId', async (req, res) => {
 
         for (const student of students) {
             if (applyCrossDecay(student.behaviorRecords || [])) {
-                student.markModified('behaviorRecords');
-                await student.save();
+                await Student.updateOne(
+                    { _id: student._id },
+                    { $set: { behaviorRecords: student.behaviorRecords } }
+                );
             }
         }
 

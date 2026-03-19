@@ -40,12 +40,19 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
 
 router.post('/generate-content', upload.single('file'), async (req, res) => {
     const { topic, count } = req.body;
+    const teacherId = String(req.body?.teacherId || '').trim();
     const requestedCount = parseInt(count) || 5;
     try {
         const promptParts = [{ text: `Génère exactement ${requestedCount} questions sur le sujet : "${topic}".` }];
-        const raw = await ProfAI.ask(promptParts, "Tu es un expert Quiz JSON. Renvoie un tableau d'objets [{q, options, a}]. 'options' est un tableau de 4 chaînes et 'a' est l'index de la bonne réponse (0-3).");
-        res.json(ProfAI.sanitize(raw));
-    } catch (e) { res.status(500).json({ error: "Erreur IA" }); }
+        const raw = await ProfAI.ask(promptParts, "Tu es un expert Quiz JSON. Renvoie un tableau d'objets [{q, options, a}]. 'options' est un tableau de 4 chaînes et 'a' est l'index de la bonne réponse (0-3).", { teacherId });
+        const rows = ProfAI.sanitize(raw);
+        if (!rows.length) {
+            return res.status(500).json({ error: "Aucun quiz JSON exploitable renvoyé par Gemini." });
+        }
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ error: String(e?.message || 'Erreur IA') });
+    }
     if (req.file) try { fs.unlinkSync(req.file.path); } catch(e){}
 });
 
