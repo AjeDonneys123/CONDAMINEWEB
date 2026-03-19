@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const { logGeminiUsage } = require('../services/aiUsage.service');
 
 const resolveGeminiApiKey = () => {
     const candidates = [
@@ -94,7 +95,7 @@ const AIEngine = {
         }
     },
 
-    ask: async (prompt, systemInstruction = "") => {
+    ask: async (prompt, systemInstruction = "", options = {}) => {
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         const useLocalFirst = provider === 'local' || provider === 'ollama';
         if (useLocalFirst) {
@@ -122,10 +123,34 @@ const AIEngine = {
             clearTimeout(timeout);
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+            await logGeminiUsage({
+                teacherId: String(options?.teacherId || '').trim(),
+                source: 'global',
+                model: 'gemini-2.5-flash-lite',
+                usageMetadata: data?.usageMetadata,
+                route: String(options?.route || '').trim(),
+                feature: String(options?.feature || '').trim(),
+                prompt,
+                systemInstruction,
+                responseText: text,
+                status: 'success'
+            });
+            return text;
         } catch (e) { 
             clearTimeout(timeout);
             console.error("AI Core Error:", e.message);
+            await logGeminiUsage({
+                teacherId: String(options?.teacherId || '').trim(),
+                source: 'global',
+                model: 'gemini-2.5-flash-lite',
+                route: String(options?.route || '').trim(),
+                feature: String(options?.feature || '').trim(),
+                prompt,
+                systemInstruction,
+                status: 'error',
+                errorMessage: e.message || 'AI core error'
+            });
             return "[]"; 
         }
     }

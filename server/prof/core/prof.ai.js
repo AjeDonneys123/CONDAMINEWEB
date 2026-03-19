@@ -1,9 +1,16 @@
 // @signatures: ProfAI, ask, sanitize
 const fetch = require('node-fetch');
+const { logGeminiUsage } = require('../../services/aiUsage.service');
+const { resolveProfApiKey } = require('./profAiKeys');
 
 const ProfAI = {
     ask: async (prompt, system = "", options = {}) => {
-        const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
+        const teacherId = String(options?.teacherId || '').trim();
+        const resolved = await resolveProfApiKey(teacherId);
+        const apiKey = String(resolved?.apiKey || '').trim();
+        const source = String(resolved?.source || 'missing').trim();
+        const route = String(options?.route || '').trim();
+        const feature = String(options?.feature || '').trim();
         if (!apiKey) {
             console.error("❌ [ProfAI] API KEY MANQUANTE");
             throw new Error("GEMINI_API_KEY manquante");
@@ -63,6 +70,19 @@ const ProfAI = {
                     .join('\n')
                     .trim();
 
+                await logGeminiUsage({
+                    teacherId,
+                    source,
+                    model,
+                    usageMetadata: data?.usageMetadata,
+                    route,
+                    feature,
+                    prompt,
+                    systemInstruction: system,
+                    responseText: text,
+                    status: 'success'
+                });
+
                 if (text) return text;
 
                 const finishReason = String(candidate?.finishReason || '').trim();
@@ -74,6 +94,17 @@ const ProfAI = {
             } catch (e) {
                 clearTimeout(timeout);
                 console.error(`❌ [ProfAI] Exception (${model}):`, e.message);
+                await logGeminiUsage({
+                    teacherId,
+                    source,
+                    model,
+                    route,
+                    feature,
+                    prompt,
+                    systemInstruction: system,
+                    status: 'error',
+                    errorMessage: e.message || 'Gemini exception'
+                });
                 lastError = e;
             }
         }

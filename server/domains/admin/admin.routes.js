@@ -7,6 +7,8 @@ const AdminExpert = require('./experts/admin.expert');
 const StructureDrive = require('../structure/experts/structure.drive');
 const { sendMail, sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 const { isCentralAiAccount } = require('../../prof/core/profAiKeys');
+const { getDailyFreeTierStatus, getFreeTierStatus, getUsageSummary, getCurrentDayWindow, getCurrentMonthWindow } = require('../../services/aiUsage.service');
+const { getCurrentDayAiSpend, getCurrentMonthAiSpend, hasGcpBillingConfig } = require('../../services/gcpBilling.service');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const isNamedJpVuillet = (user) => {
@@ -36,6 +38,59 @@ const requireDeveloper = async (req, res, next) => {
 
 // 1. Check Drive (Indispensable pour le voyant vert)
 router.get('/drive-check', requireDeveloper, asyncHandler(async (req, res) => res.json(await AdminExpert.checkDriveStatus())));
+
+router.get('/ai-usage', requireDeveloper, asyncHandler(async (req, res) => {
+    const teacherId = String(req.query.teacherId || '').trim();
+    const fallbackFreeTier = await getDailyFreeTierStatus({ teacherId });
+    const cloudSpend = await getCurrentDayAiSpend().catch((e) => ({
+        configured: hasGcpBillingConfig(),
+        exact: false,
+        source: 'gcp_error',
+        spentUsd: null,
+        currency: 'USD',
+        rowsMatched: 0,
+        error: e.message || 'GCP billing query failed'
+    }));
+    const preciseSpentUsd = Number.isFinite(Number(cloudSpend?.spentUsd)) ? Number(cloudSpend.spentUsd) : Number(fallbackFreeTier.spentUsd || 0);
+    const budgetUsd = Number(fallbackFreeTier.budgetUsd || 0);
+    const remainingUsd = Math.max(0, budgetUsd - preciseSpentUsd);
+    const remainingPct = budgetUsd > 0 ? Math.max(0, Math.min(100, (remainingUsd / budgetUsd) * 100)) : 100;
+    const freeTier = {
+        ...fallbackFreeTier,
+        spentUsd: preciseSpentUsd,
+        remainingUsd,
+        remainingPct,
+        measurement: cloudSpend?.exact ? 'exact_google_cloud' : 'estimated_local',
+        measurementSource: String(cloudSpend?.source || 'fallback'),
+        googleCloudConfigured: Boolean(cloudSpend?.configured),
+        googleCloudRowsMatched: Number(cloudSpend?.rowsMatched || 0),
+        googleCloudError: String(cloudSpend?.error || '')
+    };
+    const { start: dayStart, end: dayEnd } = getCurrentDayWindow();
+    const { start, end } = getCurrentMonthWindow();
+    const personalMonth = teacherId ? await getUsageSummary({ teacherId, source: 'teacher', start, end }) : null;
+    const globalMonth = await getUsageSummary({ source: 'global', start, end });
+    const centralDay = await getUsageSummary({ teacherId, source: 'central', start: dayStart, end: dayEnd });
+    const globalDay = await getUsageSummary({ source: 'global', start: dayStart, end: dayEnd });
+    const cloudMonth = await getCurrentMonthAiSpend().catch(() => null);
+    res.json({
+        freeTier,
+        cloudSpend,
+        day: {
+            start: dayStart,
+            end: dayEnd,
+            central: centralDay,
+            global: globalDay
+        },
+        month: {
+            start,
+            end,
+            personal: personalMonth,
+            global: globalMonth,
+            cloud: cloudMonth
+        }
+    });
+}));
 
 // 2. Classes (Indispensable pour le menu du haut)
 router.get('/classrooms', asyncHandler(async (req, res) => { 

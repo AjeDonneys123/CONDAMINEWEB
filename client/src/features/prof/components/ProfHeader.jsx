@@ -7,6 +7,19 @@ export default function ProfHeader({ user, onLogout }) {
   const [showDB, setShowDB] = useState(false);
   const [showDrive, setShowDrive] = useState(false);
   const [drive, setDrive] = useState({ loading: true, ok: false, email: '' });
+  const [aiUsage, setAiUsage] = useState({
+    loading: true,
+    remainingPct: 100,
+    remainingUsd: 0,
+    spentUsd: 0,
+    budgetUsd: 0,
+    promptTokens: 0,
+    candidateTokens: 0,
+    totalTokens: 0,
+    measurement: 'estimated_local',
+    googleCloudConfigured: false,
+    googleCloudError: ''
+  });
 
   const checkDrive = async () => {
     if (!user?.isDeveloper) {
@@ -21,7 +34,54 @@ export default function ProfHeader({ user, onLogout }) {
     } catch (e) { setDrive({ loading: false, ok: false }); }
   };
 
-  useEffect(() => { checkDrive(); }, []);
+  const loadAiUsage = async () => {
+    if (!user?.isDeveloper) {
+      setAiUsage((prev) => ({ ...prev, loading: false }));
+      return;
+    }
+    try {
+      const userId = user.id || user._id;
+      const res = await fetch(`/api/admin/ai-usage?userId=${encodeURIComponent(userId || '')}&teacherId=${encodeURIComponent(userId || '')}`);
+      const data = await res.json();
+      const freeTier = data?.freeTier || {};
+      const centralDay = data?.day?.central || {};
+      setAiUsage({
+        loading: false,
+        remainingPct: Number(freeTier.remainingPct || 0),
+        remainingUsd: Number(freeTier.remainingUsd || 0),
+        spentUsd: Number(freeTier.spentUsd || 0),
+        budgetUsd: Number(freeTier.budgetUsd || 0),
+        promptTokens: Number(centralDay.promptTokens || freeTier.promptTokens || 0),
+        candidateTokens: Number(centralDay.candidateTokens || freeTier.candidateTokens || 0),
+        totalTokens: Number(centralDay.totalTokens || freeTier.totalTokens || 0),
+        measurement: String(freeTier.measurement || 'estimated_local'),
+        googleCloudConfigured: Boolean(freeTier.googleCloudConfigured),
+        googleCloudError: String(freeTier.googleCloudError || '')
+      });
+    } catch (e) {
+      setAiUsage((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  useEffect(() => {
+    checkDrive();
+    loadAiUsage();
+    if (!user?.isDeveloper) return undefined;
+    const timer = setInterval(loadAiUsage, 10000);
+    return () => clearInterval(timer);
+  }, [user?.id, user?._id, user?.isDeveloper]);
+
+  const aiToneClass = aiUsage.remainingPct > 60
+    ? 'bg-emerald-600'
+    : aiUsage.remainingPct > 25
+      ? 'bg-amber-500'
+      : 'bg-red-600';
+  const aiLabel = aiUsage.loading
+    ? 'IA...'
+    : `IA ${Math.round(aiUsage.remainingPct)}%`;
+  const aiTitle = aiUsage.loading
+    ? 'Chargement de la consommation IA...'
+    : `Ressource IA restante aujourd'hui: ${aiUsage.remainingUsd.toFixed(2)}$ / ${aiUsage.budgetUsd.toFixed(2)}$ | Dépensé aujourd'hui: ${aiUsage.spentUsd.toFixed(4)}$ | Tokens envoyés aujourd'hui: ${aiUsage.promptTokens.toLocaleString('fr-FR')} | Tokens reçus aujourd'hui: ${aiUsage.candidateTokens.toLocaleString('fr-FR')} | Total tokens aujourd'hui: ${aiUsage.totalTokens.toLocaleString('fr-FR')} | Source: ${aiUsage.measurement === 'exact_google_cloud' ? 'Google Cloud exact pour le coût' : 'Fallback local estimé'}${aiUsage.googleCloudError ? ` | Erreur GCP: ${aiUsage.googleCloudError}` : ''}`;
 
   return (
     <>
@@ -39,6 +99,9 @@ export default function ProfHeader({ user, onLogout }) {
           <div className="flex gap-3">
             {user?.isDeveloper && (
               <>
+                <button title={aiTitle} className={`${aiToneClass} text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg`}>
+                  {aiLabel}{!aiUsage.loading && aiUsage.measurement === 'exact_google_cloud' ? ' GCP' : ''}
+                </button>
                 <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform">☁️ DRIVE</button>
                 <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase hover:scale-105 transition-transform">📊 BDD</button>
               </>
@@ -61,6 +124,9 @@ export default function ProfHeader({ user, onLogout }) {
             <div className="flex items-center gap-2 shrink-0">
                 {user?.isDeveloper && (
                   <>
+                    <button title={aiTitle} className={`${aiToneClass} text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase`}>
+                      {aiLabel}{!aiUsage.loading && aiUsage.measurement === 'exact_google_cloud' ? ' GCP' : ''}
+                    </button>
                     <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">☁️ DRIVE</button>
                     <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">📊 BDD</button>
                   </>

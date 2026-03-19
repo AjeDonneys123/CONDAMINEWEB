@@ -328,6 +328,28 @@ const Models = {
         lastRevisionAt: { type: Date, default: null }
     }),
 
+    AIUsageLedger: getModel('AIUsageLedger', {
+        provider: { type: String, default: 'gemini', index: true },
+        source: { type: String, default: 'global', index: true },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', index: true, default: null },
+        route: { type: String, default: '', index: true },
+        feature: { type: String, default: '', index: true },
+        model: { type: String, default: '', index: true },
+        promptTokens: { type: Number, default: 0 },
+        candidateTokens: { type: Number, default: 0 },
+        totalTokens: { type: Number, default: 0 },
+        cachedContentTokens: { type: Number, default: 0 },
+        thoughtsTokens: { type: Number, default: 0 },
+        estimatedInputCostUsd: { type: Number, default: 0 },
+        estimatedOutputCostUsd: { type: Number, default: 0 },
+        estimatedTotalCostUsd: { type: Number, default: 0 },
+        status: { type: String, default: 'success', index: true },
+        errorMessage: { type: String, default: '' },
+        requestChars: { type: Number, default: 0 },
+        responseChars: { type: Number, default: 0 },
+        occurredAt: { type: Date, default: Date.now, index: true }
+    }),
+
     GameProgress: getModel('GameProgress', {
         studentId: mongoose.Schema.Types.ObjectId, gameId: mongoose.Schema.Types.ObjectId,
         levelReached: { type: Number, default: 0 }, lastScore: { type: Number, default: 0 }

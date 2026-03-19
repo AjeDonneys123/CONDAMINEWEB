@@ -28,11 +28,10 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   const [recording, setRecording] = useState(false);
   const [micMutedByUser, setMicMutedByUser] = useState(true);
   const recognitionRef = useRef(null);
+  const activePhase = Math.max(1, Math.min(4, Number(form?.phase || 1)));
 
   useEffect(() => { setForm(item); }, [item]);
   useEffect(() => { setQuestionCursor(0); setMicMutedByUser(true); setRecording(false); }, [activePhase]);
-
-  const activePhase = Math.max(1, Math.min(4, Number(form?.phase || 1)));
   const currentQuestions = Array.isArray(form?.selfQuestions) && form.selfQuestions.length > 0 ? form.selfQuestions : [emptyQuestion()];
   const phase2Mistakes = Array.isArray(form?.phase2Mistakes) && form.phase2Mistakes.length > 0 ? form.phase2Mistakes : [emptyMistake()];
 
