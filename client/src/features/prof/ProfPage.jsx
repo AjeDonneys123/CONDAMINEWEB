@@ -23,10 +23,12 @@ export default function ProfPage({ user, onLogout }) {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
+  const [uiStateHydrated, setUiStateHydrated] = useState(false);
 
   const loadProfileAndClasses = async () => {
     setLoading(true);
     setFetchError(null);
+    setUiStateHydrated(false);
     try {
         const userId = liveUser.id || liveUser._id;
         const resCls = await fetch('/api/admin/classrooms');
@@ -62,6 +64,7 @@ export default function ProfPage({ user, onLogout }) {
               if (!selectedClassId || !currentStillExists) setSelectedClassId(filteredCls[0]._id);
             }
         }
+        setUiStateHydrated(true);
     } catch(e) { console.error("Sync Profile Error:", e.message); setFetchError("ÉCHEC CONNEXION"); }
     setLoading(false);
   };
@@ -76,7 +79,7 @@ export default function ProfPage({ user, onLogout }) {
 
   useEffect(() => {
     const userId = liveUser.id || liveUser._id;
-    if (!userId) return undefined;
+    if (!userId || !uiStateHydrated || loading) return undefined;
     const timer = setTimeout(() => {
       fetch(`/api/auth/ui-state/${encodeURIComponent(userId)}`, {
         method: 'POST',
@@ -88,7 +91,7 @@ export default function ProfPage({ user, onLogout }) {
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timer);
-  }, [liveUser.id, liveUser._id, tab, selectedClassId]);
+  }, [liveUser.id, liveUser._id, tab, selectedClassId, uiStateHydrated, loading]);
 
   const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
   const currentClassName = currentClassObj?.name || "";
