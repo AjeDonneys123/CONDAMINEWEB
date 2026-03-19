@@ -16,9 +16,12 @@ export default function ProfHeader({ user, onLogout }) {
     promptTokens: 0,
     candidateTokens: 0,
     totalTokens: 0,
+    remainingInputTokensEstimate: 0,
     measurement: 'estimated_local',
     googleCloudConfigured: false,
-    googleCloudError: ''
+    googleCloudError: '',
+    guardBlocked: false,
+    guardWarning: false
   });
 
   const checkDrive = async () => {
@@ -45,6 +48,8 @@ export default function ProfHeader({ user, onLogout }) {
       const data = await res.json();
       const freeTier = data?.freeTier || {};
       const centralDay = data?.day?.central || {};
+      const estimates = data?.estimates || {};
+      const guard = data?.guard || {};
       setAiUsage({
         loading: false,
         remainingPct: Number(freeTier.remainingPct || 0),
@@ -54,9 +59,12 @@ export default function ProfHeader({ user, onLogout }) {
         promptTokens: Number(centralDay.promptTokens || freeTier.promptTokens || 0),
         candidateTokens: Number(centralDay.candidateTokens || freeTier.candidateTokens || 0),
         totalTokens: Number(centralDay.totalTokens || freeTier.totalTokens || 0),
+        remainingInputTokensEstimate: Number(estimates.remainingInputTokensFlashLite || 0),
         measurement: String(freeTier.measurement || 'estimated_local'),
         googleCloudConfigured: Boolean(freeTier.googleCloudConfigured),
-        googleCloudError: String(freeTier.googleCloudError || '')
+        googleCloudError: String(freeTier.googleCloudError || ''),
+        guardBlocked: Boolean(guard.blocked),
+        guardWarning: Boolean(guard.warning)
       });
     } catch (e) {
       setAiUsage((prev) => ({ ...prev, loading: false }));
@@ -81,7 +89,7 @@ export default function ProfHeader({ user, onLogout }) {
     : `IA ${Math.round(aiUsage.remainingPct)}%`;
   const aiTitle = aiUsage.loading
     ? 'Chargement de la consommation IA...'
-    : `Ressource IA restante aujourd'hui: ${aiUsage.remainingUsd.toFixed(2)}$ / ${aiUsage.budgetUsd.toFixed(2)}$ | Dépensé aujourd'hui: ${aiUsage.spentUsd.toFixed(4)}$ | Tokens envoyés aujourd'hui: ${aiUsage.promptTokens.toLocaleString('fr-FR')} | Tokens reçus aujourd'hui: ${aiUsage.candidateTokens.toLocaleString('fr-FR')} | Total tokens aujourd'hui: ${aiUsage.totalTokens.toLocaleString('fr-FR')} | Source: ${aiUsage.measurement === 'exact_google_cloud' ? 'Google Cloud exact pour le coût' : 'Fallback local estimé'}${aiUsage.googleCloudError ? ` | Erreur GCP: ${aiUsage.googleCloudError}` : ''}`;
+    : `Ressource IA restante aujourd'hui: ${aiUsage.remainingUsd.toFixed(4)}$ / ${aiUsage.budgetUsd.toFixed(2)}$ | Dépensé aujourd'hui: ${aiUsage.spentUsd.toFixed(6)}$ | Tokens envoyés aujourd'hui: ${aiUsage.promptTokens.toLocaleString('fr-FR')} | Tokens reçus aujourd'hui: ${aiUsage.candidateTokens.toLocaleString('fr-FR')} | Total tokens aujourd'hui: ${aiUsage.totalTokens.toLocaleString('fr-FR')} | Estimation tokens restants (flash-lite input): ${aiUsage.remainingInputTokensEstimate.toLocaleString('fr-FR')} | Source: ${aiUsage.measurement === 'exact_google_cloud' ? 'Google Cloud exact pour le coût' : 'Fallback local estimé'}${aiUsage.guardBlocked ? ' | BLOQUÉ: quota gratuit atteint' : aiUsage.guardWarning ? ' | ALERTE: quota presque atteint' : ''}${aiUsage.googleCloudError ? ` | Erreur GCP: ${aiUsage.googleCloudError}` : ''}`;
 
   return (
     <>

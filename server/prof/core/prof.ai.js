@@ -2,10 +2,12 @@
 const fetch = require('node-fetch');
 const { logGeminiUsage } = require('../../services/aiUsage.service');
 const { resolveProfApiKey } = require('./profAiKeys');
+const { assertAiWithinFreeTier } = require('../../services/aiGuard.service');
 
 const ProfAI = {
     ask: async (prompt, system = "", options = {}) => {
         const teacherId = String(options?.teacherId || '').trim();
+        await assertAiWithinFreeTier({ teacherId });
         const resolved = await resolveProfApiKey(teacherId);
         const apiKey = String(resolved?.apiKey || '').trim();
         const source = String(resolved?.source || 'missing').trim();

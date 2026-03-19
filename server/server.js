@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const { getAiGuardStatus } = require('./services/aiGuard.service');
 
 dotenv.config();
 const app = express();
@@ -28,7 +29,28 @@ try {
 
 // 2. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-app.get('/api/system/apply-status', (req, res) => res.json({ status: "OK", message: "Kernel Stable" }));
+app.get('/api/system/apply-status', async (req, res) => {
+    try {
+        const ai = await getAiGuardStatus({});
+        if (ai.blocked) {
+            return res.json({
+                status: 'ERROR',
+                message: "Quota IA gratuit consommé: génération bloquée.",
+                details: `${ai.spentUsd.toFixed(4)}$ / ${ai.budgetUsd.toFixed(2)}$ aujourd'hui`
+            });
+        }
+        if (ai.warning) {
+            return res.json({
+                status: 'WARNING',
+                message: "Quota IA presque consommé aujourd'hui.",
+                details: `${ai.remainingUsd.toFixed(3)}$ restants (${ai.remainingPct.toFixed(1)}%)`
+            });
+        }
+        return res.json({ status: "OK", message: "Kernel Stable" });
+    } catch (_) {
+        return res.json({ status: "OK", message: "Kernel Stable" });
+    }
+});
 
 // 3. PROXY RAW
 const ProfDrive = require('./prof/core/drive.prof');

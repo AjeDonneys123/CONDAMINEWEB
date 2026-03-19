@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const DEFAULT_MONTHLY_FREE_USD = Number(process.env.AI_FREE_USD_MONTH || 5);
 const DEFAULT_DAILY_FREE_USD = Number(process.env.AI_FREE_USD_DAY || 0.17);
+const DEFAULT_WARNING_PCT = Number(process.env.AI_FREE_WARNING_PCT || 15);
 
 const MODEL_PRICING = {
     'gemini-2.5-flash-lite': { inputPerMillionUsd: 0.10, outputPerMillionUsd: 0.40 },
@@ -196,6 +197,8 @@ module.exports = {
     getCurrentMonthWindow,
     getDailyFreeTierStatus,
     getFreeTierStatus,
+    DEFAULT_DAILY_FREE_USD,
+    DEFAULT_WARNING_PCT,
     getModelPricing,
     getUsageSummary,
     logGeminiUsage

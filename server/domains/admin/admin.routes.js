@@ -9,6 +9,7 @@ const { sendMail, sendLatePunishmentMail, resetLateMailState } = require('../../
 const { isCentralAiAccount } = require('../../prof/core/profAiKeys');
 const { getDailyFreeTierStatus, getFreeTierStatus, getUsageSummary, getCurrentDayWindow, getCurrentMonthWindow } = require('../../services/aiUsage.service');
 const { getCurrentDayAiSpend, getCurrentMonthAiSpend, hasGcpBillingConfig } = require('../../services/gcpBilling.service');
+const { getAiGuardStatus } = require('../../services/aiGuard.service');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const isNamedJpVuillet = (user) => {
@@ -73,9 +74,15 @@ router.get('/ai-usage', requireDeveloper, asyncHandler(async (req, res) => {
     const centralDay = await getUsageSummary({ teacherId, source: 'central', start: dayStart, end: dayEnd });
     const globalDay = await getUsageSummary({ source: 'global', start: dayStart, end: dayEnd });
     const cloudMonth = await getCurrentMonthAiSpend().catch(() => null);
+    const guard = await getAiGuardStatus({ teacherId });
+    const estRemainingInputTokens = freeTier.remainingUsd > 0 ? Math.floor((freeTier.remainingUsd / 0.10) * 1000000) : 0;
     res.json({
         freeTier,
         cloudSpend,
+        guard,
+        estimates: {
+            remainingInputTokensFlashLite: estRemainingInputTokens
+        },
         day: {
             start: dayStart,
             end: dayEnd,

@@ -1,5 +1,6 @@
 const fetch = require('node-fetch');
 const { logGeminiUsage } = require('../services/aiUsage.service');
+const { assertAiWithinFreeTier } = require('../services/aiGuard.service');
 
 const resolveGeminiApiKey = () => {
     const candidates = [
@@ -96,6 +97,7 @@ const AIEngine = {
     },
 
     ask: async (prompt, systemInstruction = "", options = {}) => {
+        await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         const useLocalFirst = provider === 'local' || provider === 'ollama';
         if (useLocalFirst) {

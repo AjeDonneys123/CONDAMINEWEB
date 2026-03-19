@@ -99,6 +99,33 @@ async function assignPunishmentTemplate(student, teacherId) {
     return true;
 }
 
+async function ensureStudentPunishmentState(student) {
+    if (!student) return false;
+    let changed = false;
+
+    if (student.punishmentStatus === 'NONE') {
+        const records = (student.behaviorRecords || []).filter((r) => Number(r.crosses || 0) >= 3 && r.teacherId);
+        for (const rec of records) {
+            const assigned = await assignPunishmentTemplate(student, rec.teacherId);
+            if (assigned) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    if ((student.punishmentStatus === 'PENDING' || student.punishmentStatus === 'LATE') && student.punishmentDueDate) {
+        const dueTs = new Date(student.punishmentDueDate).getTime();
+        if (Number.isFinite(dueTs) && dueTs <= Date.now() && student.punishmentStatus !== 'LATE') {
+            student.punishmentStatus = 'LATE';
+            await sendLatePunishmentMail(student);
+            changed = true;
+        }
+    }
+
+    return changed;
+}
+
 function applyCrossDecay(behaviorRecords = []) {
     const now = Date.now();
     let changed = false;
@@ -202,10 +229,26 @@ router.get('/plan/:classId', async (req, res) => {
         const className = clsObj?.name;
 
         for (const student of students) {
+            let needsSave = false;
             if (applyCrossDecay(student.behaviorRecords || [])) {
+                needsSave = true;
+            }
+            if (await ensureStudentPunishmentState(student)) {
+                needsSave = true;
+            }
+            if (needsSave) {
                 await Student.updateOne(
                     { _id: student._id },
-                    { $set: { behaviorRecords: student.behaviorRecords } }
+                    {
+                        $set: {
+                            behaviorRecords: student.behaviorRecords,
+                            punishmentStatus: student.punishmentStatus,
+                            punishmentDueDate: student.punishmentDueDate,
+                            punishmentLateMailSentAt: student.punishmentLateMailSentAt || null,
+                            punishmentLateMailTo: student.punishmentLateMailTo || '',
+                            punishmentLateMailError: student.punishmentLateMailError || ''
+                        }
+                    }
                 );
             }
         }
