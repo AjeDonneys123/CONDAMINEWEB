@@ -414,8 +414,35 @@
 
 /* LISTES ET DRAWER */
 .list-container { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: white; border-radius: 20px; overflow-y: auto; }
+.list-container.alphabetic-layout { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }
 .list-finder { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 12px; font-weight: 700; outline: none; margin-bottom: 10px; }
 .list-finder:focus { border-color: #3b82f6; }
+.alpha-plan-board { display: flex; flex-direction: column; gap: 10px; }
+.alpha-header-row { width: max-content; min-width: 100%; }
+.alpha-grid { margin-bottom: 0; }
+.alpha-static-cell.has-separator-soft {
+    border-right: 3px solid #94a3b8;
+    padding-right: 10px;
+    margin-right: -10px;
+    z-index: 2;
+}
+.alpha-group-labels {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+.alpha-group-label {
+    justify-self: center;
+    padding: 6px 16px;
+    border-radius: 999px;
+    background: #0f172a;
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
 .student-list-row { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-radius: 12px; border: 1px solid #f1f5f9; background: #f8fafc; transition: background 0.1s; }
 .student-list-row.has-note { background: #fef9c3; border-color: #fde68a; }
 .student-list-row.swap-source { border: 2px solid #1d4ed8; }
@@ -481,3 +508,8 @@
 }
 .btn-cancel-punish:hover { background: #e11d48; color: white; }
 .btn-cancel-punish:active { transform: scale(0.95); }
+
+@media (max-width: 768px) {
+    .alpha-group-labels { gap: 6px; }
+    .alpha-group-label { font-size: 0.64rem; padding: 5px 10px; }
+}

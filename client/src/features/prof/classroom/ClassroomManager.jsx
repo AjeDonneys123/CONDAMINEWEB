@@ -249,8 +249,15 @@ export default function ClassroomManager({ globalClassId, user }) {
         const fullName = `${stu?.firstName || ''} ${stu?.lastName || ''} ${getDisplayName(stu)}`;
         return normalizeText(fullName).includes(term);
     };
+    const isListFinderMatch = (stu) => {
+        const term = normalizeText(searchTerm);
+        if (!term) return true;
+        const fullName = `${stu?.firstName || ''} ${stu?.lastName || ''} ${getDisplayName(stu)}`;
+        return normalizeText(fullName).includes(term);
+    };
     const planFinderCount = students.filter(isPlanFinderMatch).length;
     const selectedPlanStudents = students.filter(isPlanFinderMatch);
+    const listFinderCount = students.filter(isListFinderMatch).length;
 
     const handleOpenStudent = (stu) => {
         if (placementStudent && String(placementStudent?._id || '') === String(stu?._id || '')) {
@@ -415,40 +422,105 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const renderList = () => {
-        const filtered = students.filter(s => (s.firstName + ' ' + s.lastName).toLowerCase().includes(searchTerm.toLowerCase())).sort((a,b) => a.lastName.localeCompare(b.lastName));
+        const filtered = students
+            .filter(isListFinderMatch)
+            .sort((a, b) => {
+                const firstCmp = String(a.firstName || '').localeCompare(String(b.firstName || ''), 'fr', { sensitivity: 'base' });
+                if (firstCmp !== 0) return firstCmp;
+                return String(a.lastName || '').localeCompare(String(b.lastName || ''), 'fr', { sensitivity: 'base' });
+            });
+        const pairs = [];
+        for (let i = 0; i < filtered.length; i += 2) pairs.push(filtered.slice(i, i + 2));
+        const pairChunkSize = Math.max(1, Math.ceil(pairs.length / 3));
+        const groups = [
+            pairs.slice(0, pairChunkSize),
+            pairs.slice(pairChunkSize, pairChunkSize * 2),
+            pairs.slice(pairChunkSize * 2)
+        ];
+        const maxRows = Math.max(1, ...groups.map((group) => group.length));
+        const getInitial = (stu) => normalizeText(String(stu?.firstName || stu?.lastName || '')).slice(0, 1).toUpperCase() || '?';
         return (
-            <div className="list-container custom-scrollbar">
+            <div className="list-container custom-scrollbar alphabetic-layout">
                 <div className="list-finder-row">
-                    <input className="list-finder" placeholder="🔎 Chercher un élève..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                    {searchTerm.trim() && (
-                        <button
-                            className="finder-clear-btn"
-                            onClick={() => setSearchTerm('')}
-                            title="Effacer la recherche"
-                        >
-                            ✕
-                        </button>
-                    )}
+                    <input className="plan-finder-input" placeholder="🔎 Trouver un élève de la classe..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <div className="plan-finder-count-wrap">
+                        <span className="plan-finder-count" title={searchTerm.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
+                            {searchTerm.trim() ? listFinderCount : students.length}
+                        </span>
+                        {searchTerm.trim() && (
+                            <button
+                                className="finder-clear-btn"
+                                onClick={() => setSearchTerm('')}
+                                title="Effacer la recherche"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
                 </div>
-                {filtered.map(s => {
-                    const stats = getMyStats(s);
-                    const aStats = getActivityStats(s);
-                    const aTotals = getActivityTotals(s);
-                    return (
-                        <div key={s._id} className={`student-list-row ${s.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(s._id) ? 'swap-source' : ''}`}>
-                            <div className="list-info" onClick={() => handleOpenStudent(s)}>
-                                <span className="list-name">{s.lastName} {getDisplayName(s)}</span>
-                                <span className="list-stats">❌ {stats.crosses} | ⭐ {stats.bonuses} {s.punishmentStatus !== 'NONE' ? `| ${isPunishmentLate(s) ? '🚨 RETARD' : '⚠️ PUNI'}` : ''}</span>
-                                <span className="list-realizations">
-                                    {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
-                                    {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
-                                    {aTotals.learning > 0 && <span className="sc-real-badge learning">{aStats.learning}</span>}
-                                </span>
-                            </div>
-                            <div className="list-actions"><button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button><button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button><button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button></div>
-                        </div>
-                    );
-                })}
+                <div className="alpha-plan-board">
+                    <div className="grid-header-row alpha-header-row" style={{ gridTemplateColumns: `repeat(6, var(--cell-size, 100px))` }}>
+                        {Array.from({ length: 6 }).map((_, x) => <div key={x} className="col-header-cell">COL {x + 1}</div>)}
+                    </div>
+                    <div className="interactive-grid alpha-grid" style={{ gridTemplateColumns: `repeat(6, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${maxRows}, var(--cell-size, 100px))` }}>
+                        {groups.map((group, groupIdx) => {
+                            const startCol = groupIdx * 2;
+                            return Array.from({ length: maxRows * 2 }).map((_, slotIdx) => {
+                                const rowIdx = Math.floor(slotIdx / 2);
+                                const pair = group[rowIdx] || [];
+                                const colOffset = slotIdx % 2;
+                                const student = pair[colOffset] || null;
+                                const col = startCol + colOffset;
+                                if (!student) {
+                                    return (
+                                        <div
+                                            key={`empty-${groupIdx}-${slotIdx}`}
+                                            className={`grid-cell-wrapper alpha-static-cell ${colOffset === 1 && groupIdx < 2 ? 'has-separator-soft' : ''}`}
+                                            style={{ gridColumn: col + 1, gridRow: rowIdx + 1 }}
+                                        >
+                                            <div className="grid-cell-empty">+</div>
+                                        </div>
+                                    );
+                                }
+                                const stats = getMyStats(student);
+                                const aStats = getActivityStats(student);
+                                const aTotals = getActivityTotals(student);
+                                return (
+                                    <div
+                                        key={student._id}
+                                        className={`grid-cell-wrapper alpha-static-cell ${colOffset === 1 && groupIdx < 2 ? 'has-separator-soft' : ''}`}
+                                        style={{ gridColumn: col + 1, gridRow: rowIdx + 1 }}
+                                    >
+                                        <div className={`student-card-drag ${student.myNote ? 'has-note' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`} onClick={() => handleOpenStudent(student)}>
+                                            {stats.crosses > 0 && <div className="sc-badge">⏳ {getCrossCountdownLabel(student)}</div>}
+                                            {student.myNote && <div className="sc-note-badge">N</div>}
+                                            {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
+                                            <div className="sc-realizations">
+                                                {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
+                                                {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
+                                                {aTotals.learning > 0 && <span className="sc-real-badge learning">{aStats.learning}</span>}
+                                            </div>
+                                            <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
+                                            <div className="sc-name">{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
+                                            <div className="sc-counters"><span style={{ color: '#ef4444' }}>❌{stats.crosses}</span><span style={{ color: '#10b981' }}>⭐{stats.bonuses}</span></div>
+                                        </div>
+                                    </div>
+                                );
+                            });
+                        })}
+                    </div>
+                    <div className="alpha-group-labels">
+                        {groups.map((group, idx) => {
+                            const first = group[0]?.[0];
+                            const lastPair = group[group.length - 1] || [];
+                            const last = lastPair[lastPair.length - 1];
+                            const firstInitial = first ? getInitial(first) : '-';
+                            const lastInitial = last ? getInitial(last) : '-';
+                            const label = firstInitial === lastInitial ? firstInitial : `${firstInitial}-${lastInitial}`;
+                            return <div key={`label-${idx}`} className="alpha-group-label">{label}</div>;
+                        })}
+                    </div>
+                </div>
             </div>
         );
     };
