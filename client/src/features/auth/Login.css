@@ -39,6 +39,11 @@
 .login-google-btn:active { transform: scale(0.98); }
 .login-google-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .login-google-wrap { display: flex; justify-content: center; margin-top: 0.25rem; }
+.student-password-tools { display: flex; flex-direction: column; gap: 10px; }
+.student-password-btn { width: 100%; padding: 0.95rem 1.1rem; background: #eff6ff; color: #1d4ed8; border-radius: 16px; font-weight: 900; border: 2px solid #dbeafe; text-transform: uppercase; font-size: 0.78rem; }
+.student-password-btn.primary { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.student-password-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.student-password-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 18px; background: #f8fafc; border: 2px solid #e2e8f0; }
 
 .back-btn { background: transparent; border: none; font-weight: 800; color: #94a3b8; cursor: pointer; margin-bottom: 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; text-transform: uppercase; }
 .back-btn:hover { color: #1e293b; }

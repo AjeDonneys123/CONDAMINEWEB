@@ -1,7 +1,7 @@
 // @signatures: ProfStructureRouter, chapters, sections, deleteActivityRequest, deleteChapterRequest, moveChapter, moveActivity, proxy
 const express = require('express');
 const router = express.Router();
-const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel } = require('../models/prof.models');
+const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel, LearningModule, Expose, Lecture, Fiche } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
@@ -102,7 +102,15 @@ router.get('/chapters', async (req, res) => {
             for (const c of allChaps) {
                 const key = `${c.section}_${c.title}`.toUpperCase().trim();
                 if (!registry[key]) registry[key] = c._id;
-                else { await Homework.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); await GameLevel.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); toDelete.push(c._id); }
+                else {
+                    await Homework.updateMany({ chapterId: c._id }, { chapterId: registry[key] });
+                    await GameLevel.updateMany({ chapterId: c._id }, { chapterId: registry[key] });
+                    await LearningModule.updateMany({ chapterId: c._id }, { chapterId: registry[key] });
+                    await Expose.updateMany({ chapterId: c._id }, { chapterId: registry[key] });
+                    await Lecture.updateMany({ chapterId: c._id }, { chapterId: registry[key] });
+                    await Fiche.updateMany({ chapterId: c._id }, { chapterId: registry[key] });
+                    toDelete.push(c._id);
+                }
             }
             if (toDelete.length > 0) await Chapter.deleteMany({ _id: { $in: toDelete } });
         }
@@ -177,6 +185,26 @@ router.post('/activity/delete-request', async (req, res) => {
             await GameLevel.findByIdAndDelete(id);
             // Optionnel : Supprimer la progression associée ?
             // await GameProgress.deleteMany({ gameId: id });
+            return res.json({ ok: true });
+        }
+
+        if (type === 'learning') {
+            await LearningModule.findByIdAndDelete(id);
+            return res.json({ ok: true });
+        }
+
+        if (type === 'expose') {
+            await Expose.findByIdAndDelete(id);
+            return res.json({ ok: true });
+        }
+
+        if (type === 'lecture') {
+            await Lecture.findByIdAndDelete(id);
+            return res.json({ ok: true });
+        }
+
+        if (type === 'fiche') {
+            await Fiche.findByIdAndDelete(id);
             return res.json({ ok: true });
         }
 

@@ -235,6 +235,15 @@ router.get('/bug-reports', requireDeveloper, asyncHandler(async (req, res) => {
     res.json(list);
 }));
 
+router.delete('/bug-reports/:id', requireDeveloper, asyncHandler(async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        return res.status(404).json({ error: 'ID invalide' });
+    }
+    const BugReport = mongoose.model('BugReport');
+    await BugReport.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+}));
+
 // 10. Connect-as (dev only) : ouvre une session miroir prof/élève
 router.post('/connect-as', requireDeveloper, asyncHandler(async (req, res) => {
     const requesterId = String(req.query.userId || req.body?.userId || '').trim();

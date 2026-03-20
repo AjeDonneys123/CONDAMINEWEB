@@ -16,6 +16,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [planFinder, setPlanFinder] = useState("");
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
+    const [placementStudent, setPlacementStudent] = useState(null);
     
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -252,6 +253,9 @@ export default function ClassroomManager({ globalClassId, user }) {
     const selectedPlanStudents = students.filter(isPlanFinderMatch);
 
     const handleOpenStudent = (stu) => {
+        if (placementStudent && String(placementStudent?._id || '') === String(stu?._id || '')) {
+            setPlacementStudent(null);
+        }
         if (isSwapMode) {
             if (!swapSource) {
                 setSwapSource(stu);
@@ -337,6 +341,17 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const moveStudentTo = async (sid, x, y) => { try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sid, x, y }) }); await loadData(); } catch(e){} };
+    const handlePlaceStudentToCell = async (x, y) => {
+        if (!placementStudent?._id) return;
+        const targetStudent = students.find((s) => s.seatX === x && s.seatY === y);
+        if (targetStudent && String(targetStudent._id) !== String(placementStudent._id)) {
+            alert("Cette place est déjà occupée.");
+            return;
+        }
+        await moveStudentTo(placementStudent._id, x, y);
+        setPlacementStudent(null);
+        setPlanFinder('');
+    };
 
     if (!globalClassId) return <div className="p-10 text-center text-slate-400 font-black">SÉLECTIONNEZ UNE CLASSE</div>;
 
@@ -348,7 +363,23 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const isOver = dragOverCell === `${x}-${y}`;
                 const hasSep = separators.includes(x);
                 cells.push(
-                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1 }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !isSwapMode && !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
+                    <div
+                        key={`${x}-${y}`}
+                        className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''} ${placementStudent ? 'placement-mode' : ''}`}
+                        style={{ gridColumn: x + 1, gridRow: y + 1 }}
+                        onDragOver={(e) => handleDragOver(e, x, y)}
+                        onDrop={(e) => handleDrop(e, x, y)}
+                        onClick={() => {
+                            if (placementStudent) {
+                                handlePlaceStudentToCell(x, y);
+                                return;
+                            }
+                            if (!isSwapMode && !student && swapSource) {
+                                moveStudentTo(swapSource._id, x, y);
+                                setSwapSource(null);
+                            }
+                        }}
+                    >
                         {student ? (
                             <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getCrossCountdownLabel(student)}</div>}
@@ -432,12 +463,16 @@ export default function ClassroomManager({ globalClassId, user }) {
                     const stats = getMyStats(s);
                     const aStats = getActivityStats(s);
                     const aTotals = getActivityTotals(s);
+                    const isPlaced = Number.isFinite(Number(s?.seatX)) && Number.isFinite(Number(s?.seatY));
+                    const isPlacementActive = String(placementStudent?._id || '') === String(s._id || '');
                     return (
-                        <div key={s._id} className="plan-match-row">
+                        <div key={s._id} className={`plan-match-row ${isPlacementActive ? 'placing' : ''}`}>
                             <div className="plan-match-info" onClick={() => handleOpenStudent(s)}>
                                 <span className="plan-match-name">{s.lastName} {getDisplayName(s)}</span>
                                 <span className="plan-match-stats">
                                     ❌ {stats.crosses} | ⭐ {stats.bonuses}
+                                    {' | '}
+                                    {isPlaced ? `placé ${Number(s.seatX) + 1}-${Number(s.seatY) + 1}` : 'non placé'}
                                     <span className="plan-match-real">
                                         {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
                                         {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
@@ -446,6 +481,13 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 </span>
                             </div>
                             <div className="plan-match-actions">
+                                <button
+                                    className={`btn-list-action btn-place ${isPlacementActive ? 'active' : ''}`}
+                                    onClick={() => setPlacementStudent((prev) => String(prev?._id || '') === String(s._id || '') ? null : s)}
+                                    title="Placer dans le plan"
+                                >
+                                    {isPlacementActive ? 'OK' : 'Placer'}
+                                </button>
                                 <button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button>
                                 <button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button>
                                 <button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button>
@@ -499,12 +541,12 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div className="plan-finder-row">
                         <input
                             className="plan-finder-input"
-                            placeholder="🔎 Trouver un élève dans le plan..."
+                            placeholder="🔎 Trouver un élève de la classe..."
                             value={planFinder}
                             onChange={(e) => setPlanFinder(e.target.value)}
                         />
                         <div className="plan-finder-count-wrap">
-                            <span className="plan-finder-count" title={planFinder.trim() ? 'Élèves trouvés' : 'Élèves'}>
+                            <span className="plan-finder-count" title={planFinder.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
                                 {planFinder.trim() ? planFinderCount : students.length}
                             </span>
                             {planFinder.trim() && (
@@ -518,6 +560,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                             )}
                         </div>
                     </div>
+                    {placementStudent && (
+                        <div className="placement-hint">
+                            Placement actif pour <strong>{placementStudent.lastName} {getDisplayName(placementStudent)}</strong>. Clique ensuite sur une case vide du plan.
+                        </div>
+                    )}
                     {renderPlanMatchesList()}
                     <div className="cm-toolbar hidden md:flex">
                         <button className="cm-btn purple" onClick={() => fileInputRef.current.click()}>🔮 IMPORT IA</button>

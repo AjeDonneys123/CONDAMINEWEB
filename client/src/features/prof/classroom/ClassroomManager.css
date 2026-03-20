@@ -87,11 +87,12 @@
     padding: 10px 12px;
     border: 2px solid #cbd5e1;
     border-radius: 12px;
-    font-size: 0.8rem;
+    font-size: 16px;
     font-weight: 800;
     color: #0f172a;
     background: #fff;
     outline: none;
+    -webkit-text-size-adjust: 100%;
 }
 .plan-finder-input:focus {
     border-color: #1d4ed8;
@@ -138,6 +139,11 @@
     background: #f8fafc;
     margin-bottom: 6px;
 }
+.plan-match-row.placing {
+    border-color: #2563eb;
+    background: #eff6ff;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
 .plan-match-row:last-child { margin-bottom: 0; }
 .plan-match-info {
     flex: 1;
@@ -168,10 +174,34 @@
     gap: 6px;
 }
 .plan-match-actions .btn-list-action {
-    width: 32px;
+    min-width: 32px;
     height: 32px;
     border-radius: 8px;
     font-size: 0.92rem;
+}
+.btn-list-action.btn-place {
+    width: auto;
+    padding: 0 10px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+.btn-list-action.btn-place.active {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+}
+.placement-hint {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 800;
 }
 
 /* GRID CONTAINER */
@@ -192,6 +222,11 @@
 
 /* CELLULES PC */
 .grid-cell-wrapper { position: relative; transition: border-right 0.2s; width: var(--cell-size); height: var(--cell-size); min-width: var(--cell-size); min-height: var(--cell-size); }
+.grid-cell-wrapper.placement-mode:hover .grid-cell-empty {
+    border-color: #2563eb;
+    background: #dbeafe;
+    color: #1d4ed8;
+}
 .grid-cell-wrapper.has-separator { border-right: 5px solid #1e293b; padding-right: 15px; margin-right: -15px; z-index: 5; }
 .grid-cell-empty { background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; color: #cbd5e1; font-weight: 900; font-size: 1.5rem; transition: all 0.2s; }
 
@@ -300,7 +335,7 @@
     .plan-finder-input {
         padding: 9px 10px;
         border-radius: 10px;
-        font-size: 0.72rem;
+        font-size: 16px;
     }
     .plan-finder-count {
         font-size: 0.62rem;
@@ -318,6 +353,8 @@
         margin-bottom: 8px;
         max-height: 122px;
         padding: 4px;
+        transform: none !important;
+        zoom: 1;
     }
     .plan-match-row {
         padding: 6px 7px;
@@ -325,20 +362,31 @@
         margin-bottom: 5px;
     }
     .plan-match-name {
-        font-size: 0.76rem;
+        font-size: 16px;
+        line-height: 1.1;
     }
     .plan-match-stats {
-        font-size: 0.58rem;
+        font-size: 12px;
     }
     .plan-match-real {
         gap: 3px;
         margin-left: 6px;
     }
     .plan-match-actions .btn-list-action {
-        width: 28px;
-        height: 28px;
-        font-size: 0.78rem;
+        min-width: 28px;
+        height: 32px;
+        font-size: 14px;
         border-radius: 7px;
+    }
+    .btn-list-action.btn-place {
+        min-width: 62px;
+        padding: 0 8px;
+        font-size: 12px;
+    }
+    .placement-hint {
+        margin: 6px;
+        margin-top: 0;
+        font-size: 12px;
     }
     .view-switcher { margin: 0; width: 100%; }
     .voice-finder-btn { min-width: 58px; padding: 8px 8px; font-size: 0.66rem; border-radius: 10px; }

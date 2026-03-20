@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { Student } = require('../models/eleve.models');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
+const { sendMail } = require('../../services/punishmentMailer');
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 const UNIVERSAL_STUDENT_PASSWORD = 'Clemenceau1919';
@@ -34,6 +35,15 @@ function normalizeBirthDateInput(v = '') {
     const mo = Number(mm);
     if (d < 1 || d > 31 || mo < 1 || mo > 12) return '';
     return `${dd}/${mm}/${yyyy}`;
+}
+
+function normalizeStudentPassword(value = '') {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ');
 }
 
 function toBirthDateDisplay(v = null) {
@@ -201,32 +211,17 @@ router.post('/login', async (req, res) => {
             const plain = student.toObject();
             return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
         }
-
-        const entered = normalizeBirthDateInput(password || '');
-        if (!entered) {
-            return res.status(401).json({ ok: false, message: "Rentre ta date de naissance (ex: 05/03/2004)." });
-        }
-        const storedRaw =
-            student.birthDate ||
-            student.dateOfBirth ||
-            student.dob ||
-            student.birthdate ||
-            student.date_naissance ||
-            null;
-        const expected = toBirthDateDisplay(storedRaw);
-        if (!expected) {
-            student.birthDate = entered;
-            student.dateOfBirth = entered;
-            student.dob = entered;
-            student.markModified('birthDate');
-            student.markModified('dateOfBirth');
-            student.markModified('dob');
-            await student.save();
-            const plain = student.toObject();
-            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
-        }
-        if (entered !== expected) {
-            return res.status(401).json({ ok: false, message: "Date de naissance incorrecte." });
+        const entered = normalizeStudentPassword(password || '');
+        const expected = student.hasStudentPassword === true
+            ? normalizeStudentPassword(student.birthDate || '')
+            : normalizeStudentPassword(student.firstName || '');
+        if (!entered || !expected || entered !== expected) {
+            return res.status(401).json({
+                ok: false,
+                message: student.hasStudentPassword === true
+                    ? "Mot de passe élève incorrect."
+                    : "Mot de passe incorrect. Par défaut, utilise ton prénom."
+            });
         }
         if (applyCrossDecay(student.behaviorRecords || [])) {
             student.markModified('behaviorRecords');
@@ -239,6 +234,56 @@ router.post('/login', async (req, res) => {
         res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
     } else {
         res.status(401).json({ ok: false, message: "Élève introuvable" });
+    }
+});
+
+router.post('/student-password/setup', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const password = String(req.body?.password || '').trim();
+        const confirmPassword = String(req.body?.confirmPassword || '').trim();
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ ok: false, message: "Élève introuvable." });
+        if (!password || password.length < 4) {
+            return res.status(400).json({ ok: false, message: "Le mot de passe doit contenir au moins 4 caractères." });
+        }
+        if (password !== confirmPassword) {
+            return res.status(400).json({ ok: false, message: "La confirmation du mot de passe ne correspond pas." });
+        }
+        student.birthDate = password;
+        student.hasStudentPassword = true;
+        student.markModified('birthDate');
+        student.markModified('hasStudentPassword');
+        await student.save();
+        res.json({ ok: true, hasStudentPassword: true });
+    } catch (e) {
+        res.status(500).json({ ok: false, message: e.message });
+    }
+});
+
+router.post('/student-password/recover', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ ok: false, message: "Élève introuvable." });
+        if (student.hasStudentPassword !== true || !String(student.birthDate || '').trim()) {
+            return res.status(400).json({ ok: false, message: "Aucun mot de passe personnalisé à récupérer." });
+        }
+        const to = String(student.email || '').trim().toLowerCase();
+        if (!to) {
+            return res.status(400).json({ ok: false, message: "Aucun email élève enregistré." });
+        }
+        const result = await sendMail({
+            to,
+            subject: 'Récupération de ton mot de passe CondaWeb',
+            text: `Bonjour ${student.firstName || ''},\n\nTon mot de passe CondaWeb est : ${String(student.birthDate || '').trim()}\n\nTu peux maintenant te connecter sur la plateforme.\n\nCeci est un message automatique.`
+        });
+        if (!result?.sent) {
+            return res.status(500).json({ ok: false, message: "Impossible d'envoyer l'email de récupération." });
+        }
+        res.json({ ok: true, message: "Mot de passe envoyé par email." });
+    } catch (e) {
+        res.status(500).json({ ok: false, message: e.message });
     }
 });
 

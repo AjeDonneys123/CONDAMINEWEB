@@ -81,6 +81,7 @@ const Models = {
         birthDate: { type: String, default: '' },
         dateOfBirth: { type: String, default: '' },
         dob: { type: String, default: '' },
+        hasStudentPassword: { type: Boolean, default: false },
         classId: mongoose.Schema.Types.ObjectId,
         assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
         behaviorRecords: [{
@@ -223,6 +224,33 @@ const Models = {
                 summarySubmittedAt: Date,
                 completedAt: Date,
                 updatedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
+    Fiche: getModel('Fiche', {
+        title: { type: String, default: "FICHE" },
+        subject: { type: String, default: "GÉNÉRAL" },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        presentationUrl: { type: String, default: '' },
+        selectedSlides: { type: [Number], default: [] },
+        teacherInstructions: { type: String, default: '' },
+        submissions: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                contentHtml: { type: String, default: '' },
+                plainText: { type: String, default: '' },
+                imageCount: { type: Number, default: 0 },
+                teacherValidated: { type: Boolean, default: false },
+                updatedAt: Date,
+                completedAt: Date
             }],
             default: []
         },

@@ -7,10 +7,19 @@ import React, { useState, useEffect } from 'react';
  */
 export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh, onDeleteItem }) {
     const DEFAULT_SECTIONS = [{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }];
+    const ACTIVITY_OPTIONS = [
+        { type: 'homework', label: 'Devoir', icon: '📝', tone: 'bg-orange-50 border-orange-200 text-orange-700' },
+        { type: 'game', label: 'Jeu', icon: '🎮', tone: 'bg-purple-50 border-purple-200 text-purple-700' },
+        { type: 'learning', label: 'Apprentissage', icon: '🧠', tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+        { type: 'expose', label: 'Exposé', icon: '🗣️', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
+        { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
+        { type: 'fiche', label: 'Fiche', icon: '🗂️', tone: 'bg-amber-50 border-amber-200 text-amber-700' }
+    ];
     const [customSections, setCustomSections] = useState(DEFAULT_SECTIONS);
     const [activeSection, setActiveSection] = useState("GÉNÉRAL"); 
     const [openChaps, setOpenChaps] = useState({}); 
     const [showArchived, setShowArchived] = useState(false); 
+    const [showActivityPicker, setShowActivityPicker] = useState(false);
     
     // MODALES DOSSIERS
     const [showChapterModal, setShowChapterModal] = useState(false);
@@ -118,6 +127,9 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         }
     }
     useEffect(() => { fetchSections(); }, [user, classFilter, onRefresh]);
+    useEffect(() => {
+        setShowActivityPicker(false);
+    }, [activeSection, showArchived]);
 
     // --- LOGIQUE SECTIONS (CRUD) ---
     async function handleCreateSection() {
@@ -226,11 +238,11 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     async function handleToggleActivityEnabled(e, item) {
         e.stopPropagation();
         if (!item?._id) return;
-        if (!['homework', 'game', 'learning', 'expose', 'lecture'].includes(item.actType)) return;
+        if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche'].includes(item.actType)) return;
         const nextValue = item.isEnabled === false;
         const base = item.actType === 'homework'
             ? '/api/homework'
-            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : '/api/lectures')));
+            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : (item.actType === 'lecture' ? '/api/lectures' : '/api/fiches'))));
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -369,18 +381,60 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
             {/* --- CONTENU DOSSIERS --- */}
             <div className="px-6 mt-10">
-                <div className="flex justify-between items-end mb-8">
-                    <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection}</h2>
-                    {!showArchived && (
-                        <div className="flex gap-2">
-                            <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
-                            <button onClick={() => onCreateActivity('game', activeSection)} className="px-5 py-3 rounded-xl bg-purple-600 text-white text-[11px] font-black uppercase shadow-lg">+ Jeu</button>
-                            <button onClick={() => onCreateActivity('learning', activeSection)} className="px-5 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-black uppercase shadow-lg">+ Apprentissage</button>
-                            <button onClick={() => onCreateActivity('expose', activeSection)} className="px-5 py-3 rounded-xl bg-rose-600 text-white text-[11px] font-black uppercase shadow-lg">+ Exposé</button>
-                            <button onClick={() => onCreateActivity('lecture', activeSection)} className="px-5 py-3 rounded-xl bg-sky-600 text-white text-[11px] font-black uppercase shadow-lg">+ Lecture</button>
-                            <button onClick={() => setShowChapterModal(true)} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase shadow-lg">+ Dossier</button>
-                        </div>
-                    )}
+                <div className="flex justify-between items-end gap-4 mb-8 relative">
+                        <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection}</h2>
+                        {!showArchived && (
+                            <div className="flex flex-wrap justify-end gap-3 relative">
+                                <button
+                                    onClick={() => setShowChapterModal(true)}
+                                    className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase shadow-lg"
+                                >
+                                    + Dossier
+                                </button>
+                                <button
+                                    onClick={() => setShowActivityPicker((prev) => !prev)}
+                                    className={`px-5 py-3 rounded-xl text-[11px] font-black uppercase shadow-lg border transition-colors ${
+                                        showActivityPicker
+                                            ? 'bg-indigo-600 text-white border-indigo-600'
+                                            : 'bg-white text-slate-900 border-slate-200'
+                                    }`}
+                                >
+                                    + Activités
+                                </button>
+                                <div className={`absolute right-0 top-full mt-3 w-[min(92vw,360px)] z-30 transition-all duration-150 ${showActivityPicker ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
+                                    <div className="rounded-[24px] border border-slate-200 bg-white/98 shadow-2xl p-4 backdrop-blur">
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                            <div>
+                                                <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Créer une activité</div>
+                                                <div className="text-xs font-bold text-slate-600">Choisis un format pour {activeSection}.</div>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowActivityPicker(false)}
+                                                className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50 text-slate-500 text-sm font-black"
+                                                title="Fermer"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {ACTIVITY_OPTIONS.map((option) => (
+                                                <button
+                                                    key={option.type}
+                                                    onClick={() => {
+                                                        onCreateActivity(option.type, activeSection);
+                                                        setShowActivityPicker(false);
+                                                    }}
+                                                    className={`w-full min-h-[68px] rounded-2xl border px-2.5 py-2.5 text-left transition-transform hover:-translate-y-0.5 ${option.tone}`}
+                                                >
+                                                    <div className="text-sm mb-1">{option.icon}</div>
+                                                    <div className="text-[9px] font-black uppercase leading-tight">{option.label}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 pb-20">
@@ -421,19 +475,19 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                         {chapItems.map(it => (
                                             <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : (it.actType === 'lecture' ? '📖' : '📝'))))}</span>
+                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : (it.actType === 'lecture' ? '📖' : (it.actType === 'fiche' ? '🗂️' : '📝')))))}</span>
                                                     <div className="min-w-0">
                                                         <div className="font-black text-slate-700 text-xs uppercase truncate">{it.title}</div>
-                                                        {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture') && (
-                                                            <div className="text-[10px] font-bold text-slate-400 truncate">
-                                                                👥 {getAudienceLabel(it)}
-                                                            </div>
+                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche') && (
+                                                        <div className="text-[10px] font-bold text-slate-400 truncate">
+                                                            👥 {getAudienceLabel(it)}
+                                                        </div>
                                                         )}
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2">
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
-                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture') && (
+                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche') && (
                                                         <button
                                                             onClick={(e) => handleToggleActivityEnabled(e, it)}
                                                             className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${

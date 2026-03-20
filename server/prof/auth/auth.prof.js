@@ -257,7 +257,8 @@ router.get('/finder-data', async (req, res) => {
         type: 'student',
         firstName: s.firstName,
         lastName: s.lastName,
-        className: s.currentClass || ''
+        className: s.currentClass || '',
+        hasStudentPassword: s.hasStudentPassword === true
     }));
 
     const teacherItems = [...(teachers || []), ...(admins || [])].map(t => ({

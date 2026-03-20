@@ -223,6 +223,13 @@ export default function AdminDashboard({ user, onRefresh }) {
     const openEdit = (it) => { setCurrentItem({ ...it }); setModalMode('edit'); };
     const handleSave = async () => { const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; if (view === 'students' && currentItem.classId) currentItem.currentClass = allClasses.find(c => c._id === currentItem.classId)?.name || ''; try { const res = await fetch(`/api/admin/${map[view]}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentItem) }); if (res.ok) { setModalMode(null); loadData(); if(['classes','groups','teachers'].includes(view)) onRefresh(); } else { const err = await res.json(); alert("Erreur: " + err.error); } } catch(e) { alert("Erreur Réseau"); } };
     const handleDelete = async (id) => { if (view === 'bugs') return; if (!confirm("Supprimer ?")) return; const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; await fetch(`/api/admin/${map[view]}/${id}`, { method: 'DELETE' }); loadData(); };
+    const handleDeleteBug = async (id) => {
+        if (!id) return;
+        if (!confirm("Êtes vous sur de vouloir supprimer ce bug résolu ?")) return;
+        await fetch(`/api/admin/bug-reports/${id}?userId=${encodeURIComponent(user?.id || user?._id || '')}`, { method: 'DELETE' });
+        if (openedBug && String(openedBug._id) === String(id)) setOpenedBug(null);
+        loadData();
+    };
     const isGroupMode = view === 'groups';
     const formatDateTime = (value) => {
         if (!value) return '';
@@ -408,7 +415,10 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 <div key={it._id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50">
                                     <div className="flex items-center justify-between gap-3 mb-2">
                                         <div className="font-black text-slate-800 uppercase text-xs">{it.reporterName || 'Utilisateur'}</div>
-                                        <div className="text-[10px] font-bold text-slate-400">{formatDateTime(it.createdAt)}</div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-[10px] font-bold text-slate-400">{formatDateTime(it.createdAt)}</div>
+                                            <button onClick={() => handleDeleteBug(it._id)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 font-bold hover:bg-red-100 flex items-center justify-center">✕</button>
+                                        </div>
                                     </div>
                                     <div className="text-[10px] font-black uppercase text-indigo-500 mb-2">{it.reporterRole || 'unknown'} {it.page ? `• ${it.page}` : ''}</div>
                                     <div className="text-sm text-slate-700 whitespace-pre-wrap line-clamp-2">{it.description}</div>
@@ -458,7 +468,8 @@ export default function AdminDashboard({ user, onRefresh }) {
                             <div className="text-sm text-slate-700 whitespace-pre-wrap">{openedBug.description}</div>
                         </div>
                         <div className="z-footer">
-                            <button onClick={() => setOpenedBug(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl uppercase text-xs">Fermer</button>
+                            <button onClick={() => handleDeleteBug(openedBug._id)} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl uppercase text-xs">Supprimer</button>
+                            <button onClick={() => setOpenedBug(null)} className="flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl uppercase text-xs">Fermer</button>
                         </div>
                     </div>
                 </div>
