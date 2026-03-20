@@ -18,7 +18,10 @@ export default function Login({ onLoginSuccess }) {
   const [showStudentPasswordSetup, setShowStudentPasswordSetup] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleReady, setGoogleReady] = useState(false);
+  const [devFinderEnabled, setDevFinderEnabled] = useState(false);
   const googleBtnRef = useRef(null);
+  const devKeysRef = useRef(new Set());
+  const devTimerRef = useRef(null);
   const clean = (str) => (str || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   useEffect(() => {
@@ -38,6 +41,50 @@ export default function Login({ onLoginSuccess }) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const clearDevTimer = () => {
+      if (devTimerRef.current) {
+        clearTimeout(devTimerRef.current);
+        devTimerRef.current = null;
+      }
+    };
+    const maybeArmDev = () => {
+      const keys = devKeysRef.current;
+      if (devFinderEnabled) return;
+      if (keys.has('d') && keys.has('e') && keys.has('v') && !devTimerRef.current) {
+        devTimerRef.current = setTimeout(() => {
+          setDevFinderEnabled(true);
+          devTimerRef.current = null;
+        }, 1500);
+      }
+    };
+    const onKeyDown = (event) => {
+      const key = String(event.key || '').toLowerCase();
+      if (!['d', 'e', 'v'].includes(key)) return;
+      devKeysRef.current.add(key);
+      maybeArmDev();
+    };
+    const onKeyUp = (event) => {
+      const key = String(event.key || '').toLowerCase();
+      if (!['d', 'e', 'v'].includes(key)) return;
+      devKeysRef.current.delete(key);
+      clearDevTimer();
+    };
+    const onBlur = () => {
+      devKeysRef.current.clear();
+      clearDevTimer();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      clearDevTimer();
+    };
+  }, [devFinderEnabled]);
 
   useEffect(() => {
     const clientId = String(googleClientId || '').trim();
@@ -85,6 +132,11 @@ export default function Login({ onLoginSuccess }) {
       return;
     }
 
+    if (!devFinderEnabled) {
+      setSuggestions([]);
+      return;
+    }
+
     // Suggestions visibles: élèves uniquement (les profs ne sont jamais listés).
     const matches = allUsersData.filter(s => {
       if (s.type !== 'student') return false;
@@ -127,6 +179,27 @@ export default function Login({ onLoginSuccess }) {
     setLoading(true);
 
     const isTeacher = selectedProfile.type === 'teacher';
+    if (!isTeacher && devFinderEnabled) {
+      try {
+        const res = await fetch('/api/eleve/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId: selectedProfile.id, password: '' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          localStorage.setItem('player', JSON.stringify(data.user));
+          onLoginSuccess(data.user);
+        } else {
+          alert(data.message || "Connexion DEV impossible");
+        }
+      } catch (_) {
+        alert("Le serveur est injoignable.");
+      }
+      setLoading(false);
+      return;
+    }
+
     const loginUrl = isTeacher ? '/api/auth/login' : '/api/eleve/auth/login';
     const body = isTeacher
       ? { firstName: selectedProfile.firstName, lastName: selectedProfile.lastName, password }
@@ -188,7 +261,7 @@ export default function Login({ onLoginSuccess }) {
   const hasStudentPassword = selectedProfile?.hasStudentPassword === true;
   const hasTypedIdentity = clean(inputLast).length > 0 && clean(inputFirst).length > 0;
   const canSubmit = selectedProfile
-    ? (isTestStudentProfile || password.trim().length > 0)
+    ? (isTestStudentProfile || devFinderEnabled || password.trim().length > 0)
     : hasTypedIdentity;
 
   const handleStudentPasswordSetup = async () => {
@@ -239,6 +312,7 @@ export default function Login({ onLoginSuccess }) {
       <div className="login-card narrow">
         <h2 className="app-logo">Connexion</h2>
         <p className="app-subtitle">Nom, prénom, classe. Le profil est détecté automatiquement.</p>
+        {devFinderEnabled && <div className="dev-mode-badge">DEV ON</div>}
 
         <form onSubmit={handleLogin} className="login-inputs mt-6">
           <div className="finder-wrapper">
@@ -277,7 +351,7 @@ export default function Login({ onLoginSuccess }) {
               </div>
             </div>
 
-            {!isTeacherProfile && suggestions.length > 0 && (
+            {devFinderEnabled && !isTeacherProfile && suggestions.length > 0 && (
               <div className="suggestions-box custom-scrollbar">
                 {suggestions.map(s => (
                   <div key={`${s.type}-${s.id}`} className="suggestion-item" onClick={() => handleSelectSuggestion(s)}>
@@ -287,12 +361,12 @@ export default function Login({ onLoginSuccess }) {
                 ))}
               </div>
             )}
-            {!selectedProfile && suggestions.length === 0 && (inputClass || inputLast || inputFirst) && !loading && (
+            {devFinderEnabled && !selectedProfile && suggestions.length === 0 && (inputClass || inputLast || inputFirst) && !loading && (
               <div className="text-xs text-slate-400 text-center italic">Aucun profil trouvé.</div>
             )}
           </div>
 
-          {(isTeacherProfile || isStudentProfile) && (
+          {(isTeacherProfile || (isStudentProfile && !devFinderEnabled)) && (
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}

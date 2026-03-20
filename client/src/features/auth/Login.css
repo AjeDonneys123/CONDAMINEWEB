@@ -4,6 +4,20 @@
 
 .app-logo { font-weight: 900; font-size: 2rem; color: #1e293b; margin-bottom: 0.5rem; letter-spacing: -1px; text-transform: uppercase; }
 .app-subtitle { color: #94a3b8; font-weight: 700; margin-bottom: 3rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+.dev-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -1.75rem auto 1.25rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 999px;
+    background: #111827;
+    color: #34d399;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
 
 @media (max-width: 640px) {
     .login-card {

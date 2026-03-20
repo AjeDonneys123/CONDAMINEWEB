@@ -276,7 +276,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
-        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'scan') {
+        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'scan') {
             if (onDeleteItem) onDeleteItem(id, type, name);
             return;
         }
@@ -473,19 +473,19 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                 {isOpen && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">
                                         {chapItems.map(it => (
-                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
-                                                <div className="flex items-center gap-3">
+                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-start gap-3 shadow-sm border border-slate-100">
+                                                <div className="flex items-start gap-3 min-w-0 flex-1">
                                                     <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : (it.actType === 'lecture' ? '📖' : (it.actType === 'fiche' ? '🗂️' : '📝')))))}</span>
-                                                    <div className="min-w-0">
+                                                    <div className="min-w-0 flex-1">
                                                         <div className="font-black text-slate-700 text-xs uppercase truncate">{it.title}</div>
                                                     {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche') && (
-                                                        <div className="text-[10px] font-bold text-slate-400 truncate">
+                                                        <div className="text-[10px] font-bold text-slate-400 break-words whitespace-normal leading-4 mt-1">
                                                             👥 {getAudienceLabel(it)}
                                                         </div>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-2 shrink-0 self-start">
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
                                                     {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche') && (
                                                         <button
@@ -499,8 +499,20 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                                             {it.isEnabled === false ? 'INACTIF' : 'ACTIF'}
                                                         </button>
                                                     )}
-                                                    <button onClick={() => onEditItem(it, activeSection)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
-                                                    <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
+                                                    <button
+                                                        onClick={() => onEditItem(it, activeSection)}
+                                                        className="w-9 h-9 rounded-lg bg-slate-900 text-white text-[13px] flex items-center justify-center"
+                                                        title="Modifier"
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => prepareDelete(e, it, it.actType)}
+                                                        className="w-9 h-9 rounded-lg bg-red-50 text-red-500 text-[14px] flex items-center justify-center border border-red-100"
+                                                        title="Supprimer"
+                                                    >
+                                                        ✕
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
