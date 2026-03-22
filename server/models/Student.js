@@ -28,6 +28,7 @@ const StudentSchema = new mongoose.Schema({
     birthDate: { type: String, default: '' },
     dateOfBirth: { type: String, default: '' },
     dob: { type: String, default: '' },
+    studentPassword: { type: String, default: '' },
     hasStudentPassword: { type: Boolean, default: false },
 
     // Scolarité

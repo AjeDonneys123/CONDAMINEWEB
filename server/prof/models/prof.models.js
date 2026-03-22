@@ -81,6 +81,7 @@ const Models = {
         birthDate: { type: String, default: '' },
         dateOfBirth: { type: String, default: '' },
         dob: { type: String, default: '' },
+        studentPassword: { type: String, default: '' },
         hasStudentPassword: { type: Boolean, default: false },
         classId: mongoose.Schema.Types.ObjectId,
         assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
@@ -251,6 +252,38 @@ const Models = {
                 teacherValidated: { type: Boolean, default: false },
                 updatedAt: Date,
                 completedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
+    RevisionActivity: getModel('RevisionActivity', {
+        title: { type: String, default: "RÉVISION" },
+        subject: { type: String, default: "GÉNÉRAL" },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        presentationUrl: { type: String, default: '' },
+        selectedSlides: { type: [Number], default: [] },
+        teacherInstructions: { type: String, default: '' },
+        submissions: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                questions: {
+                    type: [{
+                        question: { type: String, default: '' },
+                        expectedAnswer: { type: String, default: '' },
+                        expectedKeywords: { type: [String], default: [] }
+                    }],
+                    default: []
+                },
+                questionCount: { type: Number, default: 0 },
+                completedAt: Date,
+                updatedAt: Date
             }],
             default: []
         },

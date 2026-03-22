@@ -158,6 +158,7 @@ const ScanAI = {
         const upscale = clampNum(options.upscale, 1, 2.3, 2.1);
         const seedTranscription = String(options.seedTranscription || '').trim();
         const threeTabPipelineEnabled = String(process.env.SCAN_THREE_TAB_PIPELINE || 'true').toLowerCase() !== 'false';
+        const teacherId = String(options?.teacherId || '').trim();
         console.log(`👁️ [SCAN-AI] Correction V2=${scanAiV2Enabled ? 'ON' : 'OFF'} (3 passes)...`);
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
@@ -242,7 +243,11 @@ Règles:
                 ...subjectImageParts,
                 { inlineData: { mimeType: "image/jpeg", data: copyB64 } }
             ];
-            const legacyRaw = await AIEngine.ask(legacyParts, legacySystem);
+            const legacyRaw = await AIEngine.ask(legacyParts, legacySystem, {
+                teacherId,
+                route: '/api/scans/correct',
+                feature: 'scan_legacy_correction'
+            });
             const legacyParsedRaw = AIEngine.sanitizeJSON(legacyRaw);
             const legacyParsed = Array.isArray(legacyParsedRaw) ? (legacyParsedRaw[0] || {}) : (legacyParsedRaw || {});
             const normalizedMistakes = Array.isArray(legacyParsed.spellingMistakes)
@@ -299,7 +304,11 @@ Réponds en JSON strict:
                 ...subjectImageParts,
                 ...imagePartsPrimary
             ];
-            const passARaw = await AIEngine.ask(passAParts, passASystem);
+            const passARaw = await AIEngine.ask(passAParts, passASystem, {
+                teacherId,
+                route: '/api/scans/correct',
+                feature: 'scan_pass_a'
+            });
             const passAParsed = parseOrFirstObject(passARaw);
             const passAConfidence = Number.isFinite(Number(passAParsed.confidence)) ? Number(passAParsed.confidence) : null;
             let literalTranscription = String(passAParsed.literalTranscription || '').trim();
@@ -327,7 +336,11 @@ Réponds en JSON strict:
                 ...subjectImageParts,
                 ...imagePartsPrimary
             ];
-            const passBRaw = await AIEngine.ask(passBParts, passBSystem);
+            const passBRaw = await AIEngine.ask(passBParts, passBSystem, {
+                teacherId,
+                route: '/api/scans/correct',
+                feature: 'scan_pass_b'
+            });
             const passBParsed = parseOrFirstObject(passBRaw);
             let orthographyCorrected = String(passBParsed.orthographyCorrected || '').trim();
             if (!orthographyCorrected) orthographyCorrected = fallbackText(passBRaw);
@@ -355,7 +368,11 @@ Réponds en JSON strict:
                 ...subjectImageParts,
                 ...imagePartsPrimary
             ];
-            const passCRaw = await AIEngine.ask(passCParts, passCSystem);
+            const passCRaw = await AIEngine.ask(passCParts, passCSystem, {
+                teacherId,
+                route: '/api/scans/correct',
+                feature: 'scan_pass_c'
+            });
             const passCParsed = parseOrFirstObject(passCRaw);
             const appreciation = String(passCParsed.appreciation || '').trim() || 'Pas d’avis.';
             const questionFeedback = Array.isArray(passCParsed.questionFeedback)
@@ -436,18 +453,22 @@ Réponds en JSON strict:
         }
     },
 
-    correctCopyVariants: async (copyUrl, subjectUrls, instructions, studentList) => {
+    correctCopyVariants: async (copyUrl, subjectUrls, instructions, studentList, options = {}) => {
         const common = { zoneCount: 6, upscale: 2.2 };
+        const teacherId = String(options?.teacherId || '').trim();
         const imageOnly = await ScanAI.correctCopy(copyUrl, subjectUrls, instructions, studentList, {
             ...common,
+            teacherId,
             ocrMode: 'none'
         });
         const hybrid = await ScanAI.correctCopy(copyUrl, subjectUrls, instructions, studentList, {
             ...common,
+            teacherId,
             ocrMode: 'light'
         });
         const ocrRefine = await ScanAI.correctCopy(copyUrl, subjectUrls, instructions, studentList, {
             ...common,
+            teacherId,
             ocrMode: 'full',
             seedTranscription: imageOnly?.literalTranscription || imageOnly?.transcription || ''
         });

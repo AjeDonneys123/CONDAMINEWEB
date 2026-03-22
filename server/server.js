@@ -101,6 +101,7 @@ safeLoad('/api/learning', './prof/learning/learning.prof');
 safeLoad('/api/exposes', './prof/exposes/exposes.prof');
 safeLoad('/api/lectures', './prof/lectures/lectures.prof');
 safeLoad('/api/fiches', './prof/fiches/fiches.prof');
+safeLoad('/api/revisions', './prof/revisions/revisions.prof');
 safeLoad('/api/classroom', './prof/classroom/classroom.prof');
 safeLoad('/api/scans', './prof/scans/scans.prof');
 safeLoad('/api/structure', './prof/structure/structure.prof');
@@ -115,6 +116,7 @@ safeLoad('/api/eleve/control-recovery', './eleve/control-recovery/controlRecover
 safeLoad('/api/eleve/exposes', './eleve/exposes/exposes.eleve');
 safeLoad('/api/eleve/lectures', './eleve/lectures/lectures.eleve');
 safeLoad('/api/eleve/fiches', './eleve/fiches/fiches.eleve');
+safeLoad('/api/eleve/revisions', './eleve/revisions/revisions.eleve');
 
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 

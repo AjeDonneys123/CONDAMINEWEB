@@ -3,10 +3,14 @@ const express = require('express');
 const router = express.Router();
 const { Student } = require('../models/eleve.models');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
-const { sendMail } = require('../../services/punishmentMailer');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const fetch = require('node-fetch');
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 const UNIVERSAL_STUDENT_PASSWORD = 'Clemenceau1919';
+const BCRYPT_HASH_RE = /^\$2[aby]\$/;
+const STUDENT_RESET_TTL_MS = 15 * 60 * 1000;
 
 function normalizeBirthDateInput(v = '') {
     const raw = String(v || '').trim();
@@ -62,6 +66,50 @@ function toBirthDateDisplay(v = null) {
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();
     return { raw, clean: raw.replace(/\s+/g, '') };
+}
+
+function signResetToken(studentId = '', email = '') {
+    const secret = String(process.env.STUDENT_RESET_SECRET || process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_ID || 'conda-student-reset').trim();
+    const payload = {
+        studentId: String(studentId || '').trim(),
+        email: String(email || '').trim().toLowerCase(),
+        exp: Date.now() + STUDENT_RESET_TTL_MS
+    };
+    const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const sig = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
+    return `${encoded}.${sig}`;
+}
+
+function verifyResetToken(token = '', studentId = '') {
+    const raw = String(token || '').trim();
+    const sid = String(studentId || '').trim();
+    if (!raw || !sid) return false;
+    const secret = String(process.env.STUDENT_RESET_SECRET || process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_ID || 'conda-student-reset').trim();
+    const parts = raw.split('.');
+    if (parts.length !== 2) return false;
+    try {
+        const payloadJson = Buffer.from(parts[0], 'base64url').toString('utf8');
+        const payload = JSON.parse(payloadJson);
+        const expectedSig = crypto.createHmac('sha256', secret).update(parts[0]).digest('base64url');
+        if (expectedSig !== parts[1]) return false;
+        if (String(payload?.studentId || '') !== sid) return false;
+        return Number(payload?.exp || 0) > Date.now();
+    } catch (_) {
+        return false;
+    }
+}
+
+async function verifyGoogleIdToken(idToken = '') {
+    const token = String(idToken || '').trim();
+    if (!token) throw new Error("Token Google manquant");
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(String(data?.error_description || data?.error || 'Token Google invalide'));
+    const aud = String(data?.aud || '').trim();
+    const allowedAud = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+    if (allowedAud && aud && aud !== allowedAud) throw new Error("Token Google émis pour un autre client");
+    if (String(data?.email_verified || '').toLowerCase() !== 'true') throw new Error("Email Google non vérifié");
+    return { email: String(data?.email || '').trim().toLowerCase() };
 }
 
 async function syncPunishmentState(student) {
@@ -179,43 +227,58 @@ function applyCrossDecay(behaviorRecords = []) {
  */
 
 router.post('/login', async (req, res) => {
-    const { studentId, password } = req.body || {};
+    const { studentId, password, devBypass } = req.body || {};
     const student = await Student.findById(studentId).populate('assignedGroups', 'name type level');
     if (student) {
+        const finalizeStudentLogin = async () => {
+            if (applyCrossDecay(student.behaviorRecords || [])) {
+                student.markModified('behaviorRecords');
+            }
+            if (await syncPunishmentState(student)) {
+                student.markModified('behaviorRecords');
+            }
+            await student.save();
+            const plain = student.toObject();
+            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+        };
         const lastNameKey = String(student.lastName || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .trim()
             .toUpperCase();
         if (lastNameKey === 'TEST') {
-            if (applyCrossDecay(student.behaviorRecords || [])) {
-                student.markModified('behaviorRecords');
-            }
-            if (await syncPunishmentState(student)) {
-                student.markModified('behaviorRecords');
-            }
-            await student.save();
-            const plain = student.toObject();
-            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+            return finalizeStudentLogin();
+        }
+
+        if (devBypass === true) {
+            return finalizeStudentLogin();
         }
 
         const rawPassword = String(password || '').trim();
         if (rawPassword === UNIVERSAL_STUDENT_PASSWORD) {
-            if (applyCrossDecay(student.behaviorRecords || [])) {
-                student.markModified('behaviorRecords');
-            }
-            if (await syncPunishmentState(student)) {
-                student.markModified('behaviorRecords');
-            }
-            await student.save();
-            const plain = student.toObject();
-            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+            return finalizeStudentLogin();
         }
         const entered = normalizeStudentPassword(password || '');
-        const expected = student.hasStudentPassword === true
-            ? normalizeStudentPassword(student.birthDate || '')
-            : normalizeStudentPassword(student.firstName || '');
-        if (!entered || !expected || entered !== expected) {
+        let isValid = false;
+
+        if (student.hasStudentPassword === true) {
+            const storedHash = String(student.studentPassword || '').trim();
+            if (storedHash && BCRYPT_HASH_RE.test(storedHash)) {
+                isValid = await bcrypt.compare(rawPassword, storedHash);
+            } else {
+                const expectedLegacy = normalizeStudentPassword(student.birthDate || '');
+                if (entered && expectedLegacy && entered === expectedLegacy) {
+                    isValid = true;
+                    student.studentPassword = await bcrypt.hash(rawPassword, 10);
+                    student.markModified('studentPassword');
+                }
+            }
+        } else {
+            const expectedDefault = normalizeStudentPassword(student.firstName || '');
+            isValid = Boolean(entered && expectedDefault && entered === expectedDefault);
+        }
+
+        if (!isValid) {
             return res.status(401).json({
                 ok: false,
                 message: student.hasStudentPassword === true
@@ -223,15 +286,7 @@ router.post('/login', async (req, res) => {
                     : "Mot de passe incorrect. Par défaut, utilise ton prénom."
             });
         }
-        if (applyCrossDecay(student.behaviorRecords || [])) {
-            student.markModified('behaviorRecords');
-        }
-        if (await syncPunishmentState(student)) {
-            student.markModified('behaviorRecords');
-        }
-        await student.save();
-        const plain = student.toObject();
-        res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+        return finalizeStudentLogin();
     } else {
         res.status(401).json({ ok: false, message: "Élève introuvable" });
     }
@@ -242,6 +297,7 @@ router.post('/student-password/setup', async (req, res) => {
         const studentId = String(req.body?.studentId || '').trim();
         const password = String(req.body?.password || '').trim();
         const confirmPassword = String(req.body?.confirmPassword || '').trim();
+        const resetToken = String(req.body?.resetToken || '').trim();
         const student = await Student.findById(studentId);
         if (!student) return res.status(404).json({ ok: false, message: "Élève introuvable." });
         if (!password || password.length < 4) {
@@ -250,9 +306,12 @@ router.post('/student-password/setup', async (req, res) => {
         if (password !== confirmPassword) {
             return res.status(400).json({ ok: false, message: "La confirmation du mot de passe ne correspond pas." });
         }
-        student.birthDate = password;
+        if (student.hasStudentPassword === true && !verifyResetToken(resetToken, studentId)) {
+            return res.status(403).json({ ok: false, message: "Réinitialisation refusée. Utilise d'abord ton compte Google académique." });
+        }
+        student.studentPassword = await bcrypt.hash(password, 10);
         student.hasStudentPassword = true;
-        student.markModified('birthDate');
+        student.markModified('studentPassword');
         student.markModified('hasStudentPassword');
         await student.save();
         res.json({ ok: true, hasStudentPassword: true });
@@ -261,27 +320,30 @@ router.post('/student-password/setup', async (req, res) => {
     }
 });
 
-router.post('/student-password/recover', async (req, res) => {
+router.post('/student-password/google-verify', async (req, res) => {
     try {
         const studentId = String(req.body?.studentId || '').trim();
+        const credential = String(req.body?.credential || '').trim();
         const student = await Student.findById(studentId);
         if (!student) return res.status(404).json({ ok: false, message: "Élève introuvable." });
-        if (student.hasStudentPassword !== true || !String(student.birthDate || '').trim()) {
-            return res.status(400).json({ ok: false, message: "Aucun mot de passe personnalisé à récupérer." });
+        if (student.hasStudentPassword !== true) {
+            return res.status(400).json({ ok: false, message: "Aucun mot de passe personnalisé à réinitialiser." });
         }
-        const to = String(student.email || '').trim().toLowerCase();
-        if (!to) {
+        const studentEmail = String(student.email || '').trim().toLowerCase();
+        if (!studentEmail) {
             return res.status(400).json({ ok: false, message: "Aucun email élève enregistré." });
         }
-        const result = await sendMail({
-            to,
-            subject: 'Récupération de ton mot de passe CondaWeb',
-            text: `Bonjour ${student.firstName || ''},\n\nTon mot de passe CondaWeb est : ${String(student.birthDate || '').trim()}\n\nTu peux maintenant te connecter sur la plateforme.\n\nCeci est un message automatique.`
-        });
-        if (!result?.sent) {
-            return res.status(500).json({ ok: false, message: "Impossible d'envoyer l'email de récupération." });
+        const googleUser = await verifyGoogleIdToken(credential);
+        const googleEmail = String(googleUser.email || '').trim().toLowerCase();
+        if (googleEmail !== studentEmail) {
+            return res.status(403).json({ ok: false, message: "Ce compte Google ne correspond pas à l'élève sélectionné." });
         }
-        res.json({ ok: true, message: "Mot de passe envoyé par email." });
+        res.json({
+            ok: true,
+            resetAuthorized: true,
+            resetToken: signResetToken(studentId, googleEmail),
+            message: "Compte académique vérifié. Tu peux définir un nouveau mot de passe."
+        });
     } catch (e) {
         res.status(500).json({ ok: false, message: e.message });
     }

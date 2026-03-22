@@ -52,7 +52,10 @@ router.get('/ai-usage', requireDeveloper, asyncHandler(async (req, res) => {
         rowsMatched: 0,
         error: e.message || 'GCP billing query failed'
     }));
-    const preciseSpentUsd = Number.isFinite(Number(cloudSpend?.spentUsd)) ? Number(cloudSpend.spentUsd) : Number(fallbackFreeTier.spentUsd || 0);
+    const cloudSpentRaw = cloudSpend?.spentUsd;
+    const preciseSpentUsd = (cloudSpend?.exact === true && cloudSpentRaw !== null && cloudSpentRaw !== undefined && Number.isFinite(Number(cloudSpentRaw)))
+        ? Number(cloudSpentRaw)
+        : Number(fallbackFreeTier.spentUsd || 0);
     const budgetUsd = Number(fallbackFreeTier.budgetUsd || 0);
     const remainingUsd = Math.max(0, budgetUsd - preciseSpentUsd);
     const remainingPct = budgetUsd > 0 ? Math.max(0, Math.min(100, (remainingUsd / budgetUsd) * 100)) : 100;

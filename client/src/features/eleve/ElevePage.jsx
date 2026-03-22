@@ -8,6 +8,7 @@ import GamesGrid from './games/GamesGrid';
 import ExposeList from './exposes/ExposeList';
 import LectureList from './lectures/LectureList';
 import FicheList from './fiches/FicheList';
+import RevisionList from './revisions/RevisionList';
 import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
 import StatusOverview from './status/StatusOverview';
 import BugReportWidget from '../shared/BugReportWidget';
@@ -72,7 +73,8 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           learning: 'apprentissage',
           expose: 'exposes',
           lecture: 'lectures',
-          fiche: 'fiches'
+          fiche: 'fiches',
+          revision: 'revisions'
       };
       const nextTab = tabMap[type];
       if (!nextTab) return;
@@ -147,6 +149,13 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 user={freshUser}
                 openItemId={pendingActivity?.type === 'fiche' ? pendingActivity?.id : ''}
                 onOpenHandled={() => clearPendingIfMatch('fiche')}
+              />
+            )}
+            {tab === 'revisions' && (
+              <RevisionList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'revision' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('revision')}
               />
             )}
             {tab === 'francais' && <MistakesBook user={freshUser} />}

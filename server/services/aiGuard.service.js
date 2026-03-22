@@ -7,7 +7,10 @@ const HARD_BLOCK_PCT = Number(process.env.AI_FREE_BLOCK_PCT || 0);
 async function getAiGuardStatus({ teacherId = '' } = {}) {
     const fallback = await getDailyFreeTierStatus({ teacherId });
     const cloudSpend = await getCurrentDayAiSpend().catch(() => null);
-    const exactSpent = Number.isFinite(Number(cloudSpend?.spentUsd)) ? Number(cloudSpend.spentUsd) : Number(fallback.spentUsd || 0);
+    const cloudSpentRaw = cloudSpend?.spentUsd;
+    const exactSpent = (cloudSpend?.exact === true && cloudSpentRaw !== null && cloudSpentRaw !== undefined && Number.isFinite(Number(cloudSpentRaw)))
+        ? Number(cloudSpentRaw)
+        : Number(fallback.spentUsd || 0);
     const budgetUsd = Number(fallback.budgetUsd || 0);
     const remainingUsd = Math.max(0, budgetUsd - exactSpent);
     const remainingPct = budgetUsd > 0 ? Math.max(0, Math.min(100, (remainingUsd / budgetUsd) * 100)) : 100;

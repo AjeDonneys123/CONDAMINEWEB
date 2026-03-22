@@ -31,9 +31,19 @@ function getCurrentDayWindow(now = new Date()) {
 
 function getRequestChars(prompt = null, systemInstruction = '') {
     const promptChars = Array.isArray(prompt)
-        ? prompt.reduce((sum, part) => sum + String(part?.text || '').length, 0)
+        ? prompt.reduce((sum, part) => {
+            const textLen = String(part?.text || '').length;
+            const inlineLen = String(part?.inlineData?.data || '').length;
+            return sum + textLen + inlineLen;
+        }, 0)
         : String(prompt || '').length;
     return promptChars + String(systemInstruction || '').length;
+}
+
+function estimateTokensFromChars(chars = 0) {
+    const n = Number(chars || 0);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.max(1, Math.round(n / 4));
 }
 
 async function recordUsage(entry = {}) {
@@ -79,8 +89,12 @@ async function logGeminiUsage({
     errorMessage = ''
 } = {}) {
     const pricing = getModelPricing(model);
-    const promptTokens = Number(usageMetadata?.promptTokenCount || 0);
-    const candidateTokens = Number(usageMetadata?.candidatesTokenCount || 0);
+    const requestChars = getRequestChars(prompt, systemInstruction);
+    const responseChars = String(responseText || '').length;
+    const promptTokensRaw = Number(usageMetadata?.promptTokenCount || 0);
+    const candidateTokensRaw = Number(usageMetadata?.candidatesTokenCount || 0);
+    const promptTokens = promptTokensRaw > 0 ? promptTokensRaw : estimateTokensFromChars(requestChars);
+    const candidateTokens = candidateTokensRaw > 0 ? candidateTokensRaw : ((status === 'success' && responseChars > 0) ? estimateTokensFromChars(responseChars) : 0);
     const totalTokens = Number(usageMetadata?.totalTokenCount || (promptTokens + candidateTokens));
     const cachedContentTokens = Number(usageMetadata?.cachedContentTokenCount || 0);
     const thoughtsTokens = Number(usageMetadata?.thoughtsTokenCount || 0);
@@ -105,8 +119,8 @@ async function logGeminiUsage({
         estimatedTotalCostUsd,
         status,
         errorMessage,
-        requestChars: getRequestChars(prompt, systemInstruction),
-        responseChars: String(responseText || '').length
+        requestChars,
+        responseChars
     });
 }
 
@@ -130,31 +144,67 @@ async function getUsageSummary({ teacherId = '', source = '', start = null, end 
                 promptTokens: { $sum: '$promptTokens' },
                 candidateTokens: { $sum: '$candidateTokens' },
                 totalTokens: { $sum: '$totalTokens' },
+                estimatedInputCostUsd: { $sum: '$estimatedInputCostUsd' },
+                estimatedOutputCostUsd: { $sum: '$estimatedOutputCostUsd' },
                 estimatedTotalCostUsd: { $sum: '$estimatedTotalCostUsd' }
             }
         }
     ]);
 
-    return summary || {
+    const base = summary || {
         requests: 0,
         promptTokens: 0,
         candidateTokens: 0,
         totalTokens: 0,
+        estimatedInputCostUsd: 0,
+        estimatedOutputCostUsd: 0,
         estimatedTotalCostUsd: 0
     };
+    const flashLite = getModelPricing('gemini-2.5-flash-lite');
+    const derivedInputCostUsd = (Number(base.promptTokens || 0) / 1000000) * flashLite.inputPerMillionUsd;
+    const derivedOutputCostUsd = (Number(base.candidateTokens || 0) / 1000000) * flashLite.outputPerMillionUsd;
+    const storedTotalCostUsd = Number(base.estimatedTotalCostUsd || 0);
+    const derivedTotalCostUsd = derivedInputCostUsd + derivedOutputCostUsd;
+    return {
+        ...base,
+        estimatedInputCostUsd: Math.max(Number(base.estimatedInputCostUsd || 0), derivedInputCostUsd),
+        estimatedOutputCostUsd: Math.max(Number(base.estimatedOutputCostUsd || 0), derivedOutputCostUsd),
+        estimatedTotalCostUsd: Math.max(storedTotalCostUsd, derivedTotalCostUsd)
+    };
+}
+
+function mergeUsageSummaries(...rows) {
+    return rows.reduce((acc, row) => ({
+        requests: Number(acc.requests || 0) + Number(row?.requests || 0),
+        promptTokens: Number(acc.promptTokens || 0) + Number(row?.promptTokens || 0),
+        candidateTokens: Number(acc.candidateTokens || 0) + Number(row?.candidateTokens || 0),
+        totalTokens: Number(acc.totalTokens || 0) + Number(row?.totalTokens || 0),
+        estimatedInputCostUsd: Number(acc.estimatedInputCostUsd || 0) + Number(row?.estimatedInputCostUsd || 0),
+        estimatedOutputCostUsd: Number(acc.estimatedOutputCostUsd || 0) + Number(row?.estimatedOutputCostUsd || 0),
+        estimatedTotalCostUsd: Number(acc.estimatedTotalCostUsd || 0) + Number(row?.estimatedTotalCostUsd || 0)
+    }), {
+        requests: 0,
+        promptTokens: 0,
+        candidateTokens: 0,
+        totalTokens: 0,
+        estimatedInputCostUsd: 0,
+        estimatedOutputCostUsd: 0,
+        estimatedTotalCostUsd: 0
+    });
 }
 
 async function getFreeTierStatus({ teacherId = '' } = {}) {
     const { start, end } = getCurrentMonthWindow();
-    const source = 'central';
-    const summary = await getUsageSummary({ teacherId, source, start, end });
+    const centralSummary = await getUsageSummary({ teacherId, source: 'central', start, end });
+    const globalSummary = await getUsageSummary({ teacherId, source: 'global', start, end });
+    const summary = mergeUsageSummaries(centralSummary, globalSummary);
     const budgetUsd = Number.isFinite(DEFAULT_MONTHLY_FREE_USD) ? Math.max(0, DEFAULT_MONTHLY_FREE_USD) : 0;
     const spentUsd = Number(summary.estimatedTotalCostUsd || 0);
     const remainingUsd = Math.max(0, budgetUsd - spentUsd);
     const remainingPct = budgetUsd > 0 ? Math.max(0, Math.min(100, (remainingUsd / budgetUsd) * 100)) : 100;
 
     return {
-        source,
+        source: 'central+global',
         windowStart: start,
         windowEnd: end,
         budgetUsd,
@@ -170,15 +220,16 @@ async function getFreeTierStatus({ teacherId = '' } = {}) {
 
 async function getDailyFreeTierStatus({ teacherId = '' } = {}) {
     const { start, end } = getCurrentDayWindow();
-    const source = 'central';
-    const summary = await getUsageSummary({ teacherId, source, start, end });
+    const centralSummary = await getUsageSummary({ teacherId, source: 'central', start, end });
+    const globalSummary = await getUsageSummary({ teacherId, source: 'global', start, end });
+    const summary = mergeUsageSummaries(centralSummary, globalSummary);
     const budgetUsd = Number.isFinite(DEFAULT_DAILY_FREE_USD) ? Math.max(0, DEFAULT_DAILY_FREE_USD) : 0;
     const spentUsd = Number(summary.estimatedTotalCostUsd || 0);
     const remainingUsd = Math.max(0, budgetUsd - spentUsd);
     const remainingPct = budgetUsd > 0 ? Math.max(0, Math.min(100, (remainingUsd / budgetUsd) * 100)) : 100;
 
     return {
-        source,
+        source: 'central+global',
         windowStart: start,
         windowEnd: end,
         budgetUsd,

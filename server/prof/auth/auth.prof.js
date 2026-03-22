@@ -247,7 +247,7 @@ router.post('/ui-state/:userId', async (req, res) => {
 
 router.get('/finder-data', async (req, res) => {
     const [students, teachers, admins] = await Promise.all([
-        Student.find({}, 'firstName lastName currentClass').lean(),
+        Student.find({}, 'firstName lastName currentClass hasStudentPassword studentPassword').lean(),
         Teacher.find({}, 'firstName lastName').lean(),
         Admin.find({}, 'firstName lastName').lean()
     ]);
@@ -258,7 +258,7 @@ router.get('/finder-data', async (req, res) => {
         firstName: s.firstName,
         lastName: s.lastName,
         className: s.currentClass || '',
-        hasStudentPassword: s.hasStudentPassword === true
+        hasStudentPassword: s.hasStudentPassword === true || String(s.studentPassword || '').trim().length > 0
     }));
 
     const teacherItems = [...(teachers || []), ...(admins || [])].map(t => ({

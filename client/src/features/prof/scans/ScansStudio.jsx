@@ -17,6 +17,19 @@ export default function ScansStudio({ user, globalClass }) {
     const [iaDraftBySession, setIaDraftBySession] = useState({});
     const [transcriptView, setTranscriptView] = useState('literal_final');
     const [reCorrectingUrl, setReCorrectingUrl] = useState('');
+    const [manualImportBySession, setManualImportBySession] = useState({});
+    const [manualPromptBySession, setManualPromptBySession] = useState({});
+    const [manualImporting, setManualImporting] = useState(false);
+    const [manualPreparing, setManualPreparing] = useState(false);
+    const [manualCopyingClipboard, setManualCopyingClipboard] = useState(false);
+    const [selectedAssetUrls, setSelectedAssetUrls] = useState([]);
+    const [manualZipDownloading, setManualZipDownloading] = useState(false);
+    const [isDesktopMode, setIsDesktopMode] = useState(() => {
+        if (typeof window === 'undefined') return true;
+        const ua = navigator?.userAgent || '';
+        const isMobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+        return !isMobileUa && window.innerWidth >= 900;
+    });
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -105,6 +118,16 @@ export default function ScansStudio({ user, globalClass }) {
 
     useEffect(() => { loadSessions(); }, []);
     useEffect(() => { localQueueRef.current = localQueue; }, [localQueue]);
+    useEffect(() => {
+        const syncViewport = () => {
+            const ua = navigator?.userAgent || '';
+            const isMobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+            setIsDesktopMode(!isMobileUa && window.innerWidth >= 900);
+        };
+        syncViewport();
+        window.addEventListener('resize', syncViewport);
+        return () => window.removeEventListener('resize', syncViewport);
+    }, []);
     useEffect(() => {
         if (!activeResult) return;
         const tabs = getTranscriptTabs(activeResult);
@@ -264,8 +287,13 @@ export default function ScansStudio({ user, globalClass }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId: activeSession._id, url, type })
         });
+        setSelectedAssetUrls(prev => prev.filter(x => x !== url));
         await loadSessions();
     };
+    const toggleAssetSelection = (url) => {
+        setSelectedAssetUrls(prev => prev.includes(url) ? prev.filter(x => x !== url) : [...prev, url]);
+    };
+    const clearAssetSelection = () => setSelectedAssetUrls([]);
 
     const handleLaunchCorrection = async (sessionId) => {
         setLoading(true);
@@ -308,6 +336,192 @@ export default function ScansStudio({ user, globalClass }) {
             alert("Erreur sauvegarde consignes IA");
         }
         setLoading(false);
+    };
+    const buildManualPrompt = (session) => {
+        const subjectLines = (session.subjectUrls || []).map((url, idx) => `- Sujet ${idx + 1}: ${url}`).join('\n') || '- Aucun sujet';
+        const copyLines = (session.copyUrls || []).map((url, idx) => `- Copie ${idx + 1}: ${url}`).join('\n') || '- Aucune copie';
+        return [
+            `Tu corriges un lot de copies manuscrites pour la session "${session.title || 'Sans titre'}".`,
+            '',
+            'Important:',
+            '- L utilisateur va joindre manuellement toutes les images des sujets puis toutes les images des copies.',
+            '- Chaque copie est indexee dans l ordre ci-dessous. Garde exactement ce copyIndex dans la reponse.',
+            '- Releve le nom de l eleve si visible. Sinon mets "Inconnu".',
+            '- Interdiction absolue de resumer a la place de transcrire.',
+            '- Pour chaque copie, lis vraiment l ecriture et fournis une transcription textuelle exploitable.',
+            '- Donne une appreciation concise et exploitable par le professeur.',
+            '- Utilise seulement les notes A+, A, B, C. Ajoute score20 seulement si tu es certain d etre en notation sur 20.',
+            '- `literalTranscription` = transcription fidele, ligne par ligne, au plus proche de l original. Ne jamais mettre un resume generique.',
+            '- `transcription` = meme contenu mais rendu lisible avec orthographe corrigee. Ne jamais mettre un resume generique.',
+            '- Si un mot est illisible, garde `[illisible]` a sa place, mais continue la transcription.',
+            '- `questionFeedback` = tableau de remarques par question si identifiable.',
+            '- `spellingMistakes` = tableau optionnel [{ "wrong": "...", "correct": "..." }].',
+            '',
+            'Consignes du professeur:',
+            String(iaDraftBySession[session._id] || session.aiInstructions || '').trim() || 'Aucune',
+            '',
+            'Ordre des sujets:',
+            subjectLines,
+            '',
+            'Ordre des copies:',
+            copyLines,
+            '',
+            'Reponds uniquement avec ce JSON:',
+            '```json',
+            '{',
+            '  "corrections": [',
+            '    {',
+            '      "copyIndex": 1,',
+            '      "studentName": "Prenom Nom",',
+            '      "grade": "A|A+|B|C",',
+            '      "score20": 15,',
+            '      "appreciation": "Commentaire global",',
+            '      "literalTranscription": "Texte fidele complet de la copie, pas un resume",',
+            '      "transcription": "Texte complet corrige, pas un resume",',
+            '      "questionFeedback": ["Q1 ...", "Q2 ..."],',
+            '      "spellingMistakes": [{"wrong": "mot faux", "correct": "mot juste"}]',
+            '    }',
+            '  ]',
+            '}',
+            '```'
+        ].join('\n');
+    };
+    const handleLaunchManualMode = async (session) => {
+        const prompt = buildManualPrompt(session);
+        setManualPromptBySession(prev => ({ ...prev, [session._id]: prompt }));
+        setActiveSession(session);
+        setView('manual');
+        setWorkspaceCollapsed(false);
+        setManualPreparing(true);
+        try {
+            await navigator.clipboard.writeText(prompt);
+            setStatus("Prompt du mode B copié.");
+        } catch (_) {
+            setStatus("Copie automatique du prompt refusée.");
+        }
+        try {
+            window.open('https://chatgpt.com/', 'conda-scan-b', 'popup=yes,width=980,height=820,left=80,top=60');
+        } catch (_) {}
+        try {
+            await handleDownloadManualAssets(session);
+        } catch (_) {}
+        setManualPreparing(false);
+    };
+    const handleCopyManualPrompt = async (session) => {
+        const prompt = manualPromptBySession[session._id] || buildManualPrompt(session);
+        setManualPromptBySession(prev => ({ ...prev, [session._id]: prompt }));
+        try {
+            await navigator.clipboard.writeText(prompt);
+            setStatus("Prompt du mode B copié.");
+        } catch (_) {
+            alert("Impossible de copier le prompt automatiquement.");
+        }
+    };
+    const handleImportManualResults = async (sessionId) => {
+        const rawText = String(manualImportBySession[sessionId] || '').trim();
+        if (!rawText) {
+            alert("Colle d'abord la réponse JSON de ChatGPT.");
+            return;
+        }
+        setManualImporting(true);
+        try {
+            const res = await fetch(`/api/scans/manual-import/${sessionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rawText })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || "Import manuel impossible");
+            setManualImportBySession(prev => ({ ...prev, [sessionId]: '' }));
+            await loadSessions();
+            setView('results');
+        } catch (e) {
+            alert(String(e?.message || "Import manuel impossible"));
+        } finally {
+            setManualImporting(false);
+        }
+    };
+    const sanitizeFilePart = (value) => String(value || 'scan')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 40) || 'scan';
+    const downloadBlob = (blob, filename) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    };
+    const inferExtFromBlob = (blob, fallback = 'jpg') => {
+        const type = String(blob?.type || '').toLowerCase();
+        if (type.includes('png')) return 'png';
+        if (type.includes('webp')) return 'webp';
+        if (type.includes('pdf')) return 'pdf';
+        return fallback;
+    };
+    const handleDownloadManualAssets = async (session) => {
+        if (!session?._id) return;
+        setManualZipDownloading(true);
+        try {
+            const res = await fetch(`/api/scans/session-zip/${session._id}`);
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data?.error || "Téléchargement du zip impossible");
+            }
+            const blob = await res.blob();
+            const base = sanitizeFilePart(session?.title || 'session');
+            downloadBlob(blob, `${base}_session.zip`);
+            setStatus("Zip de la session téléchargé.");
+        } catch (e) {
+            alert(String(e?.message || "Téléchargement du zip impossible"));
+        } finally {
+            setManualZipDownloading(false);
+        }
+    };
+    const handleCopyManualAssetsToClipboard = async (session) => {
+        if (!navigator?.clipboard?.write || typeof ClipboardItem === 'undefined') {
+            alert("Copie d'images non supportée sur ce navigateur.");
+            return;
+        }
+        setManualCopyingClipboard(true);
+        try {
+            const rows = [
+                ...(Array.isArray(session?.subjectUrls) ? session.subjectUrls : []).map((url, idx) => ({ url, label: `sujet ${idx + 1}` })),
+                ...(Array.isArray(session?.copyUrls) ? session.copyUrls : []).map((url, idx) => ({ url, label: `copie ${idx + 1}` }))
+            ];
+            if (rows.length === 0) {
+                alert("Aucune image à copier.");
+                return;
+            }
+
+            const items = [];
+            for (const row of rows) {
+                try {
+                    const res = await fetch(row.url);
+                    const blob = await res.blob();
+                    const type = String(blob?.type || '').toLowerCase();
+                    if (!type.startsWith('image/')) continue;
+                    items.push(new ClipboardItem({ [blob.type || 'image/png']: blob }));
+                } catch (_) {}
+            }
+
+            if (items.length === 0) {
+                alert("Aucune image exploitable n'a pu être copiée.");
+                return;
+            }
+
+            await navigator.clipboard.write(items);
+            setStatus(`${items.length} image(s) copiée(s) dans le presse-papiers. Teste ensuite Cmd/Ctrl+V dans ChatGPT.`);
+        } catch (e) {
+            alert("Le navigateur a refusé la copie multiple d'images. Le téléchargement reste la solution fiable.");
+        } finally {
+            setManualCopyingClipboard(false);
+        }
     };
 
     const handleDeleteSession = async (id) => {
@@ -353,6 +567,15 @@ export default function ScansStudio({ user, globalClass }) {
                         >
                             IA
                         </button>
+                        {isDesktopMode && (
+                            <button
+                                onClick={() => handleLaunchManualMode(session)}
+                                className="act-btn btn-manual"
+                                title="Mode B desktop"
+                            >
+                                B
+                            </button>
+                        )}
                         <button onClick={() => { setView('list'); setActiveSession(null); setWorkspaceCollapsed(false); }} className="act-btn btn-delete">✕</button>
                     </div>
                     {localQueue.length > 0 && (
@@ -391,10 +614,34 @@ export default function ScansStudio({ user, globalClass }) {
                                     ))}
                                 </div>
                                 <div className="uploaded-strip custom-scrollbar">
+                                    {uploaded.length > 0 && (
+                                        <div className="asset-selection-toolbar">
+                                            <div className="asset-selection-text">
+                                                {selectedAssetUrls.length > 0
+                                                    ? `${selectedAssetUrls.length} image(s) sélectionnée(s). Essaie maintenant Ctrl/Cmd+C.`
+                                                    : "Clique sur les images pour en sélectionner plusieurs."}
+                                            </div>
+                                            {selectedAssetUrls.length > 0 && (
+                                                <button type="button" className="asset-selection-clear" onClick={clearAssetSelection}>Effacer</button>
+                                            )}
+                                        </div>
+                                    )}
                                     {uploaded.map((url, idx) => (
-                                        <div key={`${url}-${idx}`} className="capture-thumb uploaded">
-                                            <img src={url} />
+                                        <div
+                                            key={`${url}-${idx}`}
+                                            className={`capture-thumb uploaded selectable ${selectedAssetUrls.includes(url) ? 'selected' : ''}`}
+                                            onClick={() => toggleAssetSelection(url)}
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    toggleAssetSelection(url);
+                                                }
+                                            }}
+                                        >
+                                            <img src={url} draggable={false} />
                                             <button onClick={() => handleDeleteUploaded(url, view === 'sujets' ? 'SUBJECT' : 'COPY')} className="thumb-del">✕</button>
+                                            {selectedAssetUrls.includes(url) && <div className="capture-selected-badge">Sélectionnée</div>}
                                         </div>
                                     ))}
                                     {uploaded.length === 0 && (
@@ -459,6 +706,48 @@ export default function ScansStudio({ user, globalClass }) {
                                 />
                                 <div className="ia-menu-actions">
                                     <button className="ia-save-btn" onClick={() => handleSaveAIInstructions(session._id)}>Sauvegarder consignes</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'manual' && isDesktopMode && (
+                            <div className="manual-b-panel">
+                                <div className="manual-b-top">
+                                    <div>
+                                        <div className="manual-b-kicker">Mode B desktop</div>
+                                        <h3 className="manual-b-title">Fallback sans API</h3>
+                                        <p className="manual-b-text">
+                                            Le prompt est copié puis ChatGPT s'ouvre dans une petite fenêtre. Le professeur y colle le prompt,
+                                            récupère automatiquement tous les sujets et copies téléchargés sur l'ordinateur, puis recolle ici la réponse JSON.
+                                        </p>
+                                    </div>
+                                    <div className="manual-b-actions">
+                                        <button className="manual-b-btn primary" onClick={() => handleCopyManualPrompt(session)}>Copier le prompt</button>
+                                        <button className="manual-b-btn" onClick={() => handleCopyManualAssetsToClipboard(session)} disabled={manualCopyingClipboard}>
+                                            {manualCopyingClipboard ? 'Copie...' : 'Copier les images'}
+                                        </button>
+                                        <button className="manual-b-btn" onClick={() => handleDownloadManualAssets(session)} disabled={manualZipDownloading}>
+                                            {manualZipDownloading ? 'Zip...' : 'Télécharger le zip'}
+                                        </button>
+                                        <button className="manual-b-btn" onClick={() => window.open('https://chatgpt.com/', 'conda-scan-b', 'popup=yes,width=980,height=820,left=80,top=60')}>Ouvrir ChatGPT</button>
+                                    </div>
+                                </div>
+                                {manualPreparing && <div className="manual-b-hint">Préparation du mode B en cours: prompt copié, fenêtre ouverte, images téléchargées.</div>}
+                                <textarea
+                                    className="manual-b-prompt"
+                                    value={manualPromptBySession[session._id] || buildManualPrompt(session)}
+                                    onChange={(e) => setManualPromptBySession(prev => ({ ...prev, [session._id]: e.target.value }))}
+                                />
+                                <textarea
+                                    className="manual-b-import"
+                                    value={manualImportBySession[session._id] || ''}
+                                    onChange={(e) => setManualImportBySession(prev => ({ ...prev, [session._id]: e.target.value }))}
+                                    placeholder='Colle ici la réponse JSON de ChatGPT, par exemple {"corrections":[...]}'
+                                />
+                                <div className="manual-b-actions">
+                                    <button className="manual-b-btn success" onClick={() => handleImportManualResults(session._id)} disabled={manualImporting}>
+                                        {manualImporting ? 'Import...' : 'Importer les corrections'}
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -604,6 +893,15 @@ export default function ScansStudio({ user, globalClass }) {
                                         >
                                             IA
                                         </button>
+                                        {isDesktopMode && (
+                                            <button
+                                                onClick={() => handleLaunchManualMode(s)}
+                                                className="act-btn btn-manual"
+                                                title="Mode B desktop"
+                                            >
+                                                B
+                                            </button>
+                                        )}
                                         <button onClick={() => handleDeleteSession(s._id)} className="act-btn btn-delete">✕</button>
                                     </div>
                                 </div>

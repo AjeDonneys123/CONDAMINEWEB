@@ -16,6 +16,9 @@ export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [passwordActionLoading, setPasswordActionLoading] = useState(false);
   const [showStudentPasswordSetup, setShowStudentPasswordSetup] = useState(false);
+  const [studentResetMode, setStudentResetMode] = useState(false);
+  const [studentResetToken, setStudentResetToken] = useState('');
+  const [studentResetNotice, setStudentResetNotice] = useState('');
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleReady, setGoogleReady] = useState(false);
   const [devFinderEnabled, setDevFinderEnabled] = useState(false);
@@ -43,6 +46,7 @@ export default function Login({ onLoginSuccess }) {
   }, []);
 
   useEffect(() => {
+    const DEV_KEYS = ['KeyD', 'KeyE', 'KeyV'];
     const clearDevTimer = () => {
       if (devTimerRef.current) {
         clearTimeout(devTimerRef.current);
@@ -52,7 +56,7 @@ export default function Login({ onLoginSuccess }) {
     const maybeArmDev = () => {
       const keys = devKeysRef.current;
       if (devFinderEnabled) return;
-      if (keys.has('d') && keys.has('e') && keys.has('v') && !devTimerRef.current) {
+      if (DEV_KEYS.every((key) => keys.has(key)) && !devTimerRef.current) {
         devTimerRef.current = setTimeout(() => {
           setDevFinderEnabled(true);
           devTimerRef.current = null;
@@ -60,15 +64,15 @@ export default function Login({ onLoginSuccess }) {
       }
     };
     const onKeyDown = (event) => {
-      const key = String(event.key || '').toLowerCase();
-      if (!['d', 'e', 'v'].includes(key)) return;
-      devKeysRef.current.add(key);
+      const keyCode = String(event.code || '').trim();
+      if (!DEV_KEYS.includes(keyCode)) return;
+      devKeysRef.current.add(keyCode);
       maybeArmDev();
     };
     const onKeyUp = (event) => {
-      const key = String(event.key || '').toLowerCase();
-      if (!['d', 'e', 'v'].includes(key)) return;
-      devKeysRef.current.delete(key);
+      const keyCode = String(event.code || '').trim();
+      if (!DEV_KEYS.includes(keyCode)) return;
+      devKeysRef.current.delete(keyCode);
       clearDevTimer();
     };
     const onBlur = () => {
@@ -158,14 +162,18 @@ export default function Login({ onLoginSuccess }) {
     setPassword('');
     setConfirmPassword('');
     setShowStudentPasswordSetup(false);
+    setStudentResetMode(false);
+    setStudentResetToken('');
+    setStudentResetNotice('');
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!selectedProfile) {
-      // Détection silencieuse d'un prof saisi à la main (sans suggestion affichée).
+      // Détection silencieuse d'un compte saisi à la main (sans suggestion affichée).
       const typedFirst = clean(inputFirst);
       const typedLast = clean(inputLast);
+      const typedClass = clean(inputClass);
       const teacherMatch = allUsersData.find(p =>
         p.type === 'teacher' &&
         clean(p.firstName) === typedFirst &&
@@ -173,6 +181,18 @@ export default function Login({ onLoginSuccess }) {
       );
       if (teacherMatch) {
         handleSelectSuggestion(teacherMatch);
+        return;
+      }
+      const studentMatch = allUsersData.find(p =>
+        p.type === 'student' &&
+        clean(p.firstName) === typedFirst &&
+        clean(p.lastName) === typedLast &&
+        (!typedClass || clean(p.className) === typedClass)
+      );
+      if (studentMatch) {
+        handleSelectSuggestion(studentMatch);
+      } else {
+        alert("Profil élève introuvable. Ajoute la classe exacte, par exemple 6Z.");
       }
       return;
     }
@@ -184,7 +204,11 @@ export default function Login({ onLoginSuccess }) {
         const res = await fetch('/api/eleve/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentId: selectedProfile.id, password: '' })
+          body: JSON.stringify({
+            studentId: selectedProfile.id,
+            password: '',
+            devBypass: true
+          })
         });
         const data = await res.json();
         if (res.ok) {
@@ -228,6 +252,24 @@ export default function Login({ onLoginSuccess }) {
     if (!credential) return;
     setLoading(true);
     try {
+      if (selectedProfile?.type === 'student' && (studentResetMode || selectedProfile?.hasStudentPassword === true)) {
+        const res = await fetch('/api/eleve/auth/student-password/google-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            credential,
+            studentId: selectedProfile?.id || ''
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Vérification Google impossible.");
+        setStudentResetMode(true);
+        setStudentResetToken(String(data.resetToken || ''));
+        setShowStudentPasswordSetup(true);
+        setStudentResetNotice(data.message || "Compte Google vérifié. Définis maintenant ton nouveau mot de passe.");
+        setLoading(false);
+        return;
+      }
       const targetFirstName = selectedProfile?.firstName || inputFirst;
       const targetLastName = selectedProfile?.lastName || inputLast;
       const targetClassName = selectedProfile?.className || inputClass;
@@ -274,15 +316,19 @@ export default function Login({ onLoginSuccess }) {
         body: JSON.stringify({
           studentId: selectedProfile.id,
           password,
-          confirmPassword
+          confirmPassword,
+          resetToken: studentResetToken
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Création impossible.");
       setSelectedProfile((prev) => ({ ...prev, hasStudentPassword: true }));
       setShowStudentPasswordSetup(false);
+      setStudentResetMode(false);
+      setStudentResetToken('');
+      setStudentResetNotice('');
       setConfirmPassword('');
-      alert("Mot de passe créé.");
+      alert(studentResetToken ? "Mot de passe réinitialisé. Connecte-toi maintenant avec ce nouveau mot de passe." : "Mot de passe créé.");
     } catch (e) {
       alert(e.message || "Création impossible.");
     }
@@ -291,20 +337,10 @@ export default function Login({ onLoginSuccess }) {
 
   const handleStudentPasswordRecover = async () => {
     if (!selectedProfile?.id) return;
-    setPasswordActionLoading(true);
-    try {
-      const res = await fetch('/api/eleve/auth/student-password/recover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: selectedProfile.id })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Récupération impossible.");
-      alert(data?.message || "Mot de passe envoyé par email.");
-    } catch (e) {
-      alert(e.message || "Récupération impossible.");
-    }
-    setPasswordActionLoading(false);
+    setStudentResetMode(true);
+    setStudentResetToken('');
+    setShowStudentPasswordSetup(false);
+    setStudentResetNotice("Pour réinitialiser le mot de passe, connecte-toi d'abord avec Google en utilisant l'email enregistré pour cet élève.");
   };
 
   return (
@@ -322,7 +358,7 @@ export default function Login({ onLoginSuccess }) {
               value={inputClass}
               onChange={e => {
                 setInputClass(e.target.value);
-                if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); }
+                if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); setStudentResetMode(false); setStudentResetToken(''); setStudentResetNotice(''); }
               }}
             />
 
@@ -334,7 +370,7 @@ export default function Login({ onLoginSuccess }) {
                   value={inputLast}
                   onChange={e => {
                     setInputLast(e.target.value);
-                    if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); }
+                    if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); setStudentResetMode(false); setStudentResetToken(''); setStudentResetNotice(''); }
                   }}
                 />
               </div>
@@ -345,7 +381,7 @@ export default function Login({ onLoginSuccess }) {
                   value={inputFirst}
                   onChange={e => {
                     setInputFirst(e.target.value);
-                    if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); }
+                    if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); setStudentResetMode(false); setStudentResetToken(''); setStudentResetNotice(''); }
                   }}
                 />
               </div>
@@ -391,12 +427,61 @@ export default function Login({ onLoginSuccess }) {
           {isStudentProfile && !isTestStudentProfile && (
             <div className="student-password-tools">
               {hasStudentPassword ? (
-                <button type="button" onClick={handleStudentPasswordRecover} className="student-password-btn" disabled={passwordActionLoading}>
-                  {passwordActionLoading ? 'Envoi...' : 'Récupérer mon mot de passe'}
-                </button>
+                <>
+                  <button type="button" onClick={handleStudentPasswordRecover} className="student-password-btn" disabled={passwordActionLoading}>
+                    J&apos;ai oublié mon mot de passe
+                  </button>
+                  {studentResetMode && (
+                    <div className="student-password-panel">
+                      <div className="text-xs font-black text-blue-700 uppercase">Réinitialisation par Google</div>
+                      <div className="text-xs text-slate-500 font-semibold">
+                        {studentResetToken
+                          ? "Ton identité Google est validée. Tu peux maintenant choisir un nouveau mot de passe."
+                          : "Si tu n'es pas encore connecté avec Google, utilise le bouton Google ci-dessous avec l'email enregistré pour cet élève."}
+                      </div>
+                      {studentResetNotice && (
+                        <div className={`text-xs font-black ${studentResetToken ? 'text-emerald-700' : 'text-slate-500'}`}>
+                          {studentResetNotice}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {showStudentPasswordSetup && (
+                    <div className="student-password-panel">
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          className="login-field"
+                          placeholder="Nouveau mot de passe"
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                        />
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          className="login-field"
+                          placeholder="Confirmer le mot de passe"
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] uppercase font-black text-slate-400"
+                        >
+                          {showConfirmPassword ? "Cacher" : "Voir"}
+                        </button>
+                      </div>
+                      <button type="button" onClick={handleStudentPasswordSetup} className="student-password-btn primary" disabled={passwordActionLoading || !studentResetToken}>
+                        {passwordActionLoading ? 'Création...' : 'Valider mon nouveau mot de passe'}
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
-                  <button type="button" onClick={() => setShowStudentPasswordSetup((prev) => !prev)} className="student-password-btn" disabled={passwordActionLoading}>
+                  <button type="button" onClick={() => { setShowStudentPasswordSetup((prev) => !prev); setStudentResetMode(false); setStudentResetToken(''); }} className="student-password-btn" disabled={passwordActionLoading}>
                     {showStudentPasswordSetup ? 'Annuler la création' : 'Créer mon mot de passe'}
                   </button>
                   {showStudentPasswordSetup && (

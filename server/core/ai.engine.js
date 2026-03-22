@@ -128,7 +128,7 @@ const AIEngine = {
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
             await logGeminiUsage({
                 teacherId: String(options?.teacherId || '').trim(),
-                source: 'global',
+                source: 'central',
                 model: 'gemini-2.5-flash-lite',
                 usageMetadata: data?.usageMetadata,
                 route: String(options?.route || '').trim(),
@@ -144,7 +144,7 @@ const AIEngine = {
             console.error("AI Core Error:", e.message);
             await logGeminiUsage({
                 teacherId: String(options?.teacherId || '').trim(),
-                source: 'global',
+                source: 'central',
                 model: 'gemini-2.5-flash-lite',
                 route: String(options?.route || '').trim(),
                 feature: String(options?.feature || '').trim(),

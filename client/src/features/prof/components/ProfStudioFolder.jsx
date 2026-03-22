@@ -13,7 +13,8 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         { type: 'learning', label: 'Apprentissage', icon: '🧠', tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
         { type: 'expose', label: 'Exposé', icon: '🗣️', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
         { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
-        { type: 'fiche', label: 'Fiche', icon: '🗂️', tone: 'bg-amber-50 border-amber-200 text-amber-700' }
+        { type: 'fiche', label: 'Fiche', icon: '🗂️', tone: 'bg-amber-50 border-amber-200 text-amber-700' },
+        { type: 'revision', label: 'Révision', icon: '🧩', tone: 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700' }
     ];
     const [customSections, setCustomSections] = useState(DEFAULT_SECTIONS);
     const [activeSection, setActiveSection] = useState("GÉNÉRAL"); 

@@ -54,6 +54,7 @@
 .btn-scan { background: #f0fdf4; color: #22c55e; }
 .btn-results { background: #fff7ed; color: #f97316; }
 .btn-ia { background: #f5f3ff; color: #8b5cf6; border: 2px solid #ddd6fe; }
+.btn-manual { background: #ecfccb; color: #3f6212; border: 2px solid #bef264; }
 .btn-delete { background: #fee2e2; color: #ef4444; width: 30px; height: 30px; border-radius: 50%; padding: 0; }
 .session-collapse-btn {
     width: 30px;
@@ -129,6 +130,94 @@
 }
 .ia-save-btn { background: #10b981; color: #fff; }
 .ia-close-btn { background: #e2e8f0; color: #334155; }
+.manual-b-panel {
+    border-top: 1px solid #d9f99d;
+    background: linear-gradient(180deg, #f7fee7 0%, #ffffff 100%);
+    padding: 14px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.manual-b-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+}
+.manual-b-kicker {
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #65a30d;
+}
+.manual-b-title {
+    margin: 2px 0 4px;
+    font-size: 1.1rem;
+    font-weight: 950;
+    color: #365314;
+    text-transform: uppercase;
+}
+.manual-b-text {
+    margin: 0;
+    color: #3f3f46;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+    max-width: 760px;
+}
+.manual-b-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.manual-b-hint {
+    border: 1px solid #bef264;
+    background: #fefce8;
+    color: #3f6212;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 800;
+}
+.manual-b-btn {
+    border: none;
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    cursor: pointer;
+    background: #e2e8f0;
+    color: #334155;
+}
+.manual-b-btn.primary {
+    background: #65a30d;
+    color: #fff;
+}
+.manual-b-btn.success {
+    background: #0f766e;
+    color: #fff;
+}
+.manual-b-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.manual-b-prompt,
+.manual-b-import {
+    width: 100%;
+    border: 1px solid #d9f99d;
+    border-radius: 14px;
+    padding: 12px;
+    background: #fff;
+    color: #1f2937;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    line-height: 1.45;
+    resize: vertical;
+}
+.manual-b-prompt { min-height: 260px; }
+.manual-b-import { min-height: 220px; }
 .ws-title-toggle {
     border: none;
     background: transparent;
@@ -172,6 +261,34 @@
     border-top: 1px dashed #cbd5e1;
     padding-top: 14px;
 }
+.asset-selection-toolbar {
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    padding: 8px 10px;
+    border: 1px dashed #93c5fd;
+    border-radius: 14px;
+    background: #eff6ff;
+}
+.asset-selection-text {
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.35;
+}
+.asset-selection-clear {
+    align-self: flex-start;
+    border: none;
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+}
 .capture-thumb {
     min-width: 130px;
     width: 130px;
@@ -184,6 +301,15 @@
     flex-shrink: 0;
 }
 .capture-thumb.uploaded { border-color: #94a3b8; }
+.capture-thumb.selectable {
+    cursor: pointer;
+    user-select: none;
+}
+.capture-thumb.selectable.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+    transform: translateY(-2px);
+}
 .capture-thumb img {
     width: 100%;
     height: 100%;
@@ -202,6 +328,18 @@
     color: white;
     font-weight: 900;
     cursor: pointer;
+}
+.capture-selected-badge {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: rgba(37, 99, 235, 0.95);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
 }
 .capture-empty {
     color: #64748b;
@@ -502,6 +640,7 @@
     .ia-menu-panel { padding: 8px 10px; }
     .ia-run-btn, .ia-save-btn, .ia-close-btn { font-size: 10px; padding: 7px 9px; }
     .ia-instructions-input { min-height: 72px; font-size: 12px; }
+    .manual-b-panel { display: none; }
     .ws-title-box {
         flex: 1 1 auto;
         min-width: 70px;
