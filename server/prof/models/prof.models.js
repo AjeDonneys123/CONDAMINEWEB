@@ -349,7 +349,9 @@ const Models = {
         title: String, teacherId: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         subjectUrls: [String], copyUrls: [String], corrections: Array,
         aiInstructions: { type: String, default: "Corrige sévèrement la syntaxe." },
-        date: { type: Date, default: Date.now }
+        date: { type: Date, default: Date.now },
+        classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', default: null },
+        className: { type: String, default: '' }
     }),
 
     Teacher: getModel('Teacher', {

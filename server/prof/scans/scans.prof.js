@@ -17,14 +17,47 @@ Rester proche des mots originaux quand ils sont lisibles.`;
  */
 
 router.get('/sessions', async (req, res) => {
-    res.json(await ScanSession.find({}).sort({ date: -1 }).lean());
+    const teacherId = String(req.query?.teacherId || '').trim();
+    const classId = String(req.query?.classId || '').trim();
+    const includeUnassigned = String(req.query?.includeUnassigned || '').trim() === '1';
+    const query = {};
+    if (teacherId) query.teacherId = teacherId;
+    if (classId) {
+        query.$or = [{ classId }];
+        if (includeUnassigned) query.$or.push({ $or: [{ classId: null }, { classId: { $exists: false } }, { classId: '' }] });
+    } else if (!includeUnassigned) {
+        query.$or = [{ classId: null }, { classId: { $exists: false } }, { classId: '' }];
+    }
+    res.json(await ScanSession.find(query).sort({ date: -1 }).lean());
 });
 
 router.post('/sessions', async (req, res) => {
     try {
-        const { title, teacherId } = req.body || {};
-        const created = await ScanSession.create({ title, teacherId, aiInstructions: defaultAiInstructions });
+        const { title, teacherId, classId, className } = req.body || {};
+        const created = await ScanSession.create({
+            title,
+            teacherId,
+            classId: classId || null,
+            className: String(className || '').trim(),
+            aiInstructions: defaultAiInstructions
+        });
         res.json(created);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/sessions/:id/classroom', async (req, res) => {
+    try {
+        const classId = req.body?.classId || null;
+        const className = String(req.body?.className || '').trim();
+        const updated = await ScanSession.findByIdAndUpdate(
+            req.params.id,
+            { $set: { classId: classId || null, className } },
+            { new: true }
+        );
+        if (!updated) return res.status(404).json({ error: "Session introuvable" });
+        res.json(updated);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

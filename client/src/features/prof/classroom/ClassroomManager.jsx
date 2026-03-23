@@ -32,6 +32,10 @@ export default function ClassroomManager({ globalClassId, user }) {
     const keepListeningRef = useRef(false);
     const currentViewModeRef = useRef('PLAN');
     const lastVoiceValueRef = useRef({ PLAN: '', LIST: '' });
+    const actionHoldTimerRef = useRef(null);
+    const actionHoldModeRef = useRef('idle');
+    const behaviorRepeatIntervalRef = useRef(null);
+    const behaviorRepeatStudentRef = useRef(null);
     
     const myId = user ? (user._id || user.id) : null;
     const isPunishmentLate = (student) => {
@@ -177,13 +181,13 @@ export default function ClassroomManager({ globalClassId, user }) {
         const crosses = Math.max(0, Number(stats?.crosses || 0));
         if (crosses <= 0) return '';
         const nextTs = stats?.nextCrossRemovalAt ? new Date(stats.nextCrossRemovalAt).getTime() : NaN;
-        if (!Number.isFinite(nextTs)) return '3 sem.';
+        if (!Number.isFinite(nextTs)) return '3';
         const msLeft = Math.max(0, nextTs - Date.now());
         const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
-        if (daysLeft <= 1) return '1 j';
-        if (daysLeft < 7) return `${daysLeft} j`;
+        if (daysLeft <= 1) return '1';
+        if (daysLeft < 7) return `${daysLeft}`;
         const weeksLeft = Math.ceil(daysLeft / 7);
-        return `${weeksLeft} sem.`;
+        return `${weeksLeft}`;
     };
     const handleSwapStudents = async (a, b) => {
         if (!a || !b || String(a._id) === String(b._id)) return;
@@ -284,6 +288,59 @@ export default function ClassroomManager({ globalClassId, user }) {
         setIsEditingNickname(false);
     };
 
+    const startDrawerActionHold = () => {
+        actionHoldModeRef.current = 'pending';
+        if (actionHoldTimerRef.current) clearTimeout(actionHoldTimerRef.current);
+        actionHoldTimerRef.current = setTimeout(() => {
+            actionHoldModeRef.current = 'long';
+            actionHoldTimerRef.current = null;
+        }, 350);
+    };
+
+    const endDrawerActionHold = () => {
+        if (actionHoldTimerRef.current) {
+            clearTimeout(actionHoldTimerRef.current);
+            actionHoldTimerRef.current = null;
+        }
+        if (actionHoldModeRef.current === 'pending') {
+            actionHoldModeRef.current = 'short';
+        }
+    };
+
+    const resetDrawerActionHold = () => {
+        if (actionHoldTimerRef.current) {
+            clearTimeout(actionHoldTimerRef.current);
+            actionHoldTimerRef.current = null;
+        }
+        actionHoldModeRef.current = 'idle';
+    };
+
+    const getDrawerActionKeepOpen = () => {
+        const keepOpen = actionHoldModeRef.current === 'long';
+        resetDrawerActionHold();
+        return keepOpen;
+    };
+
+    const stopBehaviorRepeat = (closeDrawer = true) => {
+        if (behaviorRepeatIntervalRef.current) {
+            clearInterval(behaviorRepeatIntervalRef.current);
+            behaviorRepeatIntervalRef.current = null;
+        }
+        behaviorRepeatStudentRef.current = null;
+        if (closeDrawer) setSelectedStudent(null);
+    };
+
+    const startBehaviorRepeat = (studentId, type) => {
+        if (!studentId) return;
+        stopBehaviorRepeat(false);
+        behaviorRepeatStudentRef.current = studentId;
+        addBehavior(studentId, type, null, { keepDrawerOpen: true });
+        behaviorRepeatIntervalRef.current = setInterval(() => {
+            if (!behaviorRepeatStudentRef.current) return;
+            addBehavior(studentId, type, null, { keepDrawerOpen: true });
+        }, 1000);
+    };
+
     const saveNicknameInline = () => {
         if (!selectedStudent?._id) return;
         addBehavior(selectedStudent._id, 'SAVE_NICKNAME', currentNickname);
@@ -295,10 +352,13 @@ export default function ClassroomManager({ globalClassId, user }) {
         const t = setTimeout(() => setActionFlash(''), 1000);
         return () => clearTimeout(t);
     }, [actionFlash]);
+
+    useEffect(() => () => stopBehaviorRepeat(false), []);
     
     // --- GESTION DES ACTIONS ---
-    const addBehavior = async (sid, type, extra = null) => { 
+    const addBehavior = async (sid, type, extra = null, options = {}) => { 
         if (!myId) return alert("Erreur: ID Professeur introuvable.");
+        const keepDrawerOpen = Boolean(options.keepDrawerOpen);
 
         // Optimistic UI Update
         setStudents(prev => prev.map(s => {
@@ -342,7 +402,8 @@ export default function ClassroomManager({ globalClassId, user }) {
 
             if (res.ok) {
                 await loadData();
-                if (['SAVE_NOTE', 'REMOVE_PUNISHMENT'].includes(type)) setSelectedStudent(null);
+                const shouldCloseDrawer = ['SAVE_NOTE', 'REMOVE_PUNISHMENT', 'CROSS', 'BONUS', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type) && !keepDrawerOpen;
+                if (shouldCloseDrawer) setSelectedStudent(null);
             }
         } catch(e) { console.error("Erreur API", e); loadData(); }
     };
@@ -389,15 +450,17 @@ export default function ClassroomManager({ globalClassId, user }) {
                     >
                         {student ? (
                             <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
-                                {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getCrossCountdownLabel(student)}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
-                                <div className="sc-realizations">
-                                    {getActivityTotals(student).homework > 0 && <span className="sc-real-badge hw" title="Devoir">{getActivityStats(student).homework}</span>}
-                                    {getActivityTotals(student).game > 0 && <span className="sc-real-badge game" title="Jeu">{getActivityStats(student).game}</span>}
-                                    {getActivityTotals(student).learning > 0 && <span className="sc-real-badge learning" title="Apprentissage">{getActivityStats(student).learning}</span>}
+                                <div className="sc-realizations sc-realizations-inline">
+                                    {getActivityTotals(student).homework > 0 && <span className="alpha-mini-stat hw" title="Devoir">{getActivityStats(student).homework}</span>}
+                                    {getActivityTotals(student).game > 0 && <span className="alpha-mini-stat game" title="Jeu">{getActivityStats(student).game}</span>}
+                                    {getActivityTotals(student).learning > 0 && <span className="alpha-mini-stat learning" title="Apprentissage">{getActivityStats(student).learning}</span>}
                                 </div>
-                                <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
+                                <div className="sc-avatar-row">
+                                    <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
+                                    {getMyStats(student).crosses > 0 && <div className="sc-badge sc-badge-inline">⏳ {getCrossCountdownLabel(student)}</div>}
+                                </div>
                                 <div className="sc-name">{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
                                 <div className="sc-counters"><span style={{color:'#ef4444'}}>❌{getMyStats(student).crosses}</span><span style={{color:'#10b981'}}>⭐{getMyStats(student).bonuses}</span></div>
                             </div>
@@ -429,16 +492,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 if (firstCmp !== 0) return firstCmp;
                 return String(a.lastName || '').localeCompare(String(b.lastName || ''), 'fr', { sensitivity: 'base' });
             });
-        const pairs = [];
-        for (let i = 0; i < filtered.length; i += 2) pairs.push(filtered.slice(i, i + 2));
-        const pairChunkSize = Math.max(1, Math.ceil(pairs.length / 3));
-        const groups = [
-            pairs.slice(0, pairChunkSize),
-            pairs.slice(pairChunkSize, pairChunkSize * 2),
-            pairs.slice(pairChunkSize * 2)
-        ];
-        const maxRows = Math.max(1, ...groups.map((group) => group.length));
-        const getInitial = (stu) => normalizeText(String(stu?.firstName || stu?.lastName || '')).slice(0, 1).toUpperCase() || '?';
+        const alphaRows = Math.max(gridSize.rows, Math.ceil(filtered.length / Math.max(1, gridSize.cols)));
         return (
             <div className="list-container custom-scrollbar alphabetic-layout">
                 <div className="list-finder-row">
@@ -459,65 +513,52 @@ export default function ClassroomManager({ globalClassId, user }) {
                     </div>
                 </div>
                 <div className="alpha-plan-board">
-                    <div className="grid-header-row alpha-header-row" style={{ gridTemplateColumns: `repeat(6, var(--cell-size, 100px))` }}>
-                        {Array.from({ length: 6 }).map((_, x) => <div key={x} className="col-header-cell">COL {x + 1}</div>)}
+                    <div className="grid-header-row alpha-header-row" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>
+                        {Array.from({ length: gridSize.cols }).map((_, x) => <div key={x} className="col-header-cell">COL {x + 1}</div>)}
                     </div>
-                    <div className="interactive-grid alpha-grid" style={{ gridTemplateColumns: `repeat(6, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${maxRows}, var(--cell-size, 100px))` }}>
-                        {groups.map((group, groupIdx) => {
-                            const startCol = groupIdx * 2;
-                            return Array.from({ length: maxRows * 2 }).map((_, slotIdx) => {
-                                const rowIdx = Math.floor(slotIdx / 2);
-                                const pair = group[rowIdx] || [];
-                                const colOffset = slotIdx % 2;
-                                const student = pair[colOffset] || null;
-                                const col = startCol + colOffset;
-                                if (!student) {
-                                    return (
-                                        <div
-                                            key={`empty-${groupIdx}-${slotIdx}`}
-                                            className={`grid-cell-wrapper alpha-static-cell ${colOffset === 1 && groupIdx < 2 ? 'has-separator-soft' : ''}`}
-                                            style={{ gridColumn: col + 1, gridRow: rowIdx + 1 }}
-                                        >
-                                            <div className="grid-cell-empty">+</div>
-                                        </div>
-                                    );
-                                }
-                                const stats = getMyStats(student);
-                                const aStats = getActivityStats(student);
-                                const aTotals = getActivityTotals(student);
+                    <div className="interactive-grid alpha-grid" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${alphaRows}, var(--cell-size, 100px))` }}>
+                        {Array.from({ length: gridSize.cols * alphaRows }).map((_, idx) => {
+                            const student = filtered[idx] || null;
+                            const col = idx % gridSize.cols;
+                            const row = Math.floor(idx / gridSize.cols);
+                            if (!student) {
                                 return (
                                     <div
-                                        key={student._id}
-                                        className={`grid-cell-wrapper alpha-static-cell ${colOffset === 1 && groupIdx < 2 ? 'has-separator-soft' : ''}`}
-                                        style={{ gridColumn: col + 1, gridRow: rowIdx + 1 }}
+                                        key={`alpha-empty-${idx}`}
+                                        className="grid-cell-wrapper alpha-static-cell"
+                                        style={{ gridColumn: col + 1, gridRow: row + 1 }}
                                     >
-                                        <div className={`student-card-drag ${student.myNote ? 'has-note' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`} onClick={() => handleOpenStudent(student)}>
-                                            {stats.crosses > 0 && <div className="sc-badge">⏳ {getCrossCountdownLabel(student)}</div>}
-                                            {student.myNote && <div className="sc-note-badge">N</div>}
-                                            {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
-                                            <div className="sc-realizations">
-                                                {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
-                                                {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
-                                                {aTotals.learning > 0 && <span className="sc-real-badge learning">{aStats.learning}</span>}
-                                            </div>
-                                            <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
-                                            <div className="sc-name">{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
-                                            <div className="sc-counters"><span style={{ color: '#ef4444' }}>❌{stats.crosses}</span><span style={{ color: '#10b981' }}>⭐{stats.bonuses}</span></div>
-                                        </div>
+                                        <div className="grid-cell-empty">+</div>
                                     </div>
                                 );
-                            });
-                        })}
-                    </div>
-                    <div className="alpha-group-labels">
-                        {groups.map((group, idx) => {
-                            const first = group[0]?.[0];
-                            const lastPair = group[group.length - 1] || [];
-                            const last = lastPair[lastPair.length - 1];
-                            const firstInitial = first ? getInitial(first) : '-';
-                            const lastInitial = last ? getInitial(last) : '-';
-                            const label = firstInitial === lastInitial ? firstInitial : `${firstInitial}-${lastInitial}`;
-                            return <div key={`label-${idx}`} className="alpha-group-label">{label}</div>;
+                            }
+                            const stats = getMyStats(student);
+                            const aStats = getActivityStats(student);
+                            const aTotals = getActivityTotals(student);
+                            return (
+                                <div
+                                    key={student._id}
+                                    className="grid-cell-wrapper alpha-static-cell"
+                                    style={{ gridColumn: col + 1, gridRow: row + 1 }}
+                                >
+                                    <div
+                                        className={`student-card-drag alpha-grid-card ${student.myNote ? 'has-note' : ''} ${stats.crosses >= 3 ? 'punished' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`}
+                                        onClick={() => handleOpenStudent(student)}
+                                    >
+                                        <div className="alpha-grid-topline">
+                                            {aTotals.homework > 0 && <span className="alpha-mini-stat hw">{aStats.homework}</span>}
+                                            {aTotals.game > 0 && <span className="alpha-mini-stat game">{aStats.game}</span>}
+                                            {aTotals.learning > 0 && <span className="alpha-mini-stat learning">{aStats.learning}</span>}
+                                        </div>
+                                        <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
+                                        <div className="sc-name">{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
+                                        <div className="sc-counters">
+                                            <span style={{ color: '#ef4444' }}>❌{stats.crosses}</span>
+                                            <span style={{ color: '#10b981' }}>⭐{stats.bonuses}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
                         })}
                     </div>
                 </div>
@@ -581,7 +622,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="cm-header-center">
                     <div className="view-switcher">
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
-                        <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>📋 LISTE</button>
+                        <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A</button>
                     </div>
                     <button
                         className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
@@ -684,10 +725,46 @@ export default function ClassroomManager({ globalClassId, user }) {
                             </div>
                         </div>
                         <div className="drawer-grid-complex">
-                            <button className="act-btn btn-cross" onClick={() => addBehavior(selectedStudent._id, 'CROSS')}>❌ AJOUTER CROIX</button>
-                            <button className="act-btn btn-bonus" onClick={() => addBehavior(selectedStudent._id, 'BONUS')}>⭐ AJOUTER BONUS</button>
-                            <button className="act-btn btn-rem-cross" onClick={() => addBehavior(selectedStudent._id, 'REMOVE_CROSS')}>RETIRER CROIX</button>
-                            <button className="act-btn btn-rem-bonus" onClick={() => addBehavior(selectedStudent._id, 'REMOVE_BONUS')}>RETIRER BONUS</button>
+                            <button
+                                className="act-btn btn-cross"
+                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'CROSS')}
+                                onPointerUp={() => stopBehaviorRepeat(true)}
+                                onPointerLeave={() => stopBehaviorRepeat(true)}
+                                onPointerCancel={() => stopBehaviorRepeat(true)}
+                                onClick={(e) => e.preventDefault()}
+                            >
+                                ❌ AJOUTER CROIX
+                            </button>
+                            <button
+                                className="act-btn btn-bonus"
+                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'BONUS')}
+                                onPointerUp={() => stopBehaviorRepeat(true)}
+                                onPointerLeave={() => stopBehaviorRepeat(true)}
+                                onPointerCancel={() => stopBehaviorRepeat(true)}
+                                onClick={(e) => e.preventDefault()}
+                            >
+                                ⭐ AJOUTER BONUS
+                            </button>
+                            <button
+                                className="act-btn btn-rem-cross"
+                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'REMOVE_CROSS')}
+                                onPointerUp={() => stopBehaviorRepeat(true)}
+                                onPointerLeave={() => stopBehaviorRepeat(true)}
+                                onPointerCancel={() => stopBehaviorRepeat(true)}
+                                onClick={(e) => e.preventDefault()}
+                            >
+                                RETIRER CROIX
+                            </button>
+                            <button
+                                className="act-btn btn-rem-bonus"
+                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'REMOVE_BONUS')}
+                                onPointerUp={() => stopBehaviorRepeat(true)}
+                                onPointerLeave={() => stopBehaviorRepeat(true)}
+                                onPointerCancel={() => stopBehaviorRepeat(true)}
+                                onClick={(e) => e.preventDefault()}
+                            >
+                                RETIRER BONUS
+                            </button>
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
                             
                             {/* BOUTON REMPLACÉ : SUPPRIMER PUNITION */}

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-export default function ScansStudio({ user, globalClass }) {
+export default function ScansStudio({ user, globalClass, globalClassId, classes = [] }) {
     const [sessions, setSessions] = useState([]);
     const [activeSession, setActiveSession] = useState(null);
     const [view, setView] = useState('list'); 
@@ -35,6 +35,8 @@ export default function ScansStudio({ user, globalClass }) {
     const canvasRef = useRef(null);
     const queueTimersRef = useRef({});
     const localQueueRef = useRef([]);
+    const teacherId = user?.id || user?._id || '';
+    const normalizedGlobalClassId = String(globalClassId || '').trim();
     const gradeClass = (corr = {}) => {
         const g = String(corr.grade || '').toUpperCase();
         if (g === 'A+') return 'grade-aplus';
@@ -98,7 +100,11 @@ export default function ScansStudio({ user, globalClass }) {
     };
 
     const loadSessions = async () => {
-        const res = await fetch('/api/scans/sessions');
+        const params = new URLSearchParams();
+        if (teacherId) params.set('teacherId', teacherId);
+        if (normalizedGlobalClassId) params.set('classId', normalizedGlobalClassId);
+        if (isDesktopMode) params.set('includeUnassigned', '1');
+        const res = await fetch(`/api/scans/sessions?${params.toString()}`);
         const data = await res.json();
         setSessions(data);
         setIaDraftBySession(prev => {
@@ -116,7 +122,7 @@ export default function ScansStudio({ user, globalClass }) {
         }
     };
 
-    useEffect(() => { loadSessions(); }, []);
+    useEffect(() => { loadSessions(); }, [teacherId, normalizedGlobalClassId, isDesktopMode]);
     useEffect(() => { localQueueRef.current = localQueue; }, [localQueue]);
     useEffect(() => {
         const syncViewport = () => {
@@ -529,6 +535,18 @@ export default function ScansStudio({ user, globalClass }) {
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
+    const handleAssignSessionClass = async (sessionId, classId) => {
+        const selected = classes.find((c) => String(c._id) === String(classId));
+        await fetch(`/api/scans/sessions/${sessionId}/classroom`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                classId: selected?._id || null,
+                className: selected?.name || ''
+            })
+        });
+        await loadSessions();
+    };
     const toggleSessionCollapse = (sessionId) => {
         setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
     };
@@ -843,17 +861,33 @@ export default function ScansStudio({ user, globalClass }) {
         );
     };
 
+    const visibleSessions = sessions.filter((session) => {
+        const sessionClassId = String(session?.classId || '').trim();
+        if (sessionClassId) return sessionClassId === normalizedGlobalClassId;
+        return isDesktopMode;
+    });
+
     return (
         <div className="scan-page animate-in fade-in">
             <div className="flex justify-between items-center mb-10">
                 <div>
                     <h2 className="text-4xl font-black text-slate-800 uppercase tracking-tighter">Correction Vision 📸</h2>
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Scanner et corriger via le Drive Pro</p>
+                    {globalClass && <p className="scan-class-context">Classe active: {globalClass}</p>}
                 </div>
                 <button onClick={async () => {
                     const title = prompt("Titre de l'évaluation :");
                     if (!title) return;
-                    await fetch('/api/scans/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, teacherId: user.id || user._id }) });
+                    await fetch('/api/scans/sessions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title,
+                            teacherId,
+                            classId: globalClassId || null,
+                            className: globalClass || ''
+                        })
+                    });
                     loadSessions();
                 }} className="bg-indigo-600 text-white px-8 py-5 rounded-[25px] font-black text-sm shadow-xl hover:scale-105 transition-transform">
                     + NOUVELLE SESSION
@@ -861,7 +895,7 @@ export default function ScansStudio({ user, globalClass }) {
             </div>
 
             <div className="sessions-list">
-                {sessions.map(s => {
+                {visibleSessions.map(s => {
                     const isCollapsed = !!collapsedSessions[s._id];
                     const isActiveWorkspace = activeSession?._id === s._id && view !== 'list';
                     return (
@@ -910,8 +944,26 @@ export default function ScansStudio({ user, globalClass }) {
                                         <div className="s-meta">
                                             <span className="s-date">{new Date(s.date).toLocaleDateString()}</span>
                                             <span className="s-divider">•</span>
+                                            <span className={`s-class-tag ${s.classId ? 'assigned' : 'unassigned'}`}>{s.className || 'Classe non définie'}</span>
+                                            <span className="s-divider">•</span>
                                             <span className="s-count">{s.copyUrls?.length || 0} COPIES</span>
                                         </div>
+                                        {isDesktopMode && (
+                                            <div className="session-class-assign">
+                                                <label htmlFor={`scan-class-${s._id}`} className="session-class-label">Classe</label>
+                                                <select
+                                                    id={`scan-class-${s._id}`}
+                                                    className="session-class-select"
+                                                    value={String(s.classId || '')}
+                                                    onChange={(e) => handleAssignSessionClass(s._id, e.target.value)}
+                                                >
+                                                    <option value="">Non attribuée</option>
+                                                    {classes.map((cls) => (
+                                                        <option key={cls._id} value={cls._id}>{cls.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </>
@@ -919,6 +971,11 @@ export default function ScansStudio({ user, globalClass }) {
                         {isActiveWorkspace && renderWorkspace(s)}
                     </div>
                 )})}
+                {visibleSessions.length === 0 && (
+                    <div className="scan-empty-state">
+                        {globalClass ? `Aucun scan pour ${globalClass}.` : 'Aucun scan.'}
+                    </div>
+                )}
             </div>
         </div>
     );

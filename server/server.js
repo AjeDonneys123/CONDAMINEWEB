@@ -8,7 +8,16 @@ const { getAiGuardStatus } = require('./services/aiGuard.service');
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
+const host = process.env.HOST || '127.0.0.1';
 const SERVER_BOOT_ID = Date.now();
+
+process.on('uncaughtException', (err) => {
+    console.error('💥 UNCAUGHT EXCEPTION:', err?.stack || err?.message || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('💥 UNHANDLED REJECTION:', reason?.stack || reason?.message || reason);
+});
 
 console.log("------------------------------------------------");
 console.log("🚀 KERNEL V88 : STABILIZATION RECOVERY");
@@ -121,7 +130,10 @@ safeLoad('/api/eleve/revisions', './eleve/revisions/revisions.eleve');
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // 5. DEMARRAGE SERVEUR + RECONNEXION MONGOOSE
-app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
+const server = app.listen(port, host, () => console.log(`🏁 PRET SUR ${host}:${port}`));
+server.on('error', (err) => {
+    console.error(`💥 ERREUR DEMARRAGE HTTP ${host}:${port}:`, err.message);
+});
 
 const connectMongoWithRetry = async (delayMs = 10000) => {
     try {

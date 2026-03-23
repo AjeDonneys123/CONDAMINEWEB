@@ -29,6 +29,32 @@
 
 .s-meta { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
 .s-count { color: #6366f1; background: #eef2ff; padding: 2px 8px; border-radius: 6px; }
+.s-class-tag { padding: 2px 8px; border-radius: 999px; font-size: 0.68rem; }
+.s-class-tag.assigned { background: #ecfeff; color: #0f766e; }
+.s-class-tag.unassigned { background: #fff7ed; color: #c2410c; }
+.scan-class-context { margin-top: 6px; font-size: 0.78rem; font-weight: 900; color: #475569; text-transform: uppercase; letter-spacing: 0.08em; }
+.session-class-assign { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.session-class-label { font-size: 0.7rem; font-weight: 900; color: #64748b; text-transform: uppercase; }
+.session-class-select {
+    min-width: 160px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    color: #0f172a;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+.scan-empty-state {
+    border: 2px dashed #cbd5e1;
+    border-radius: 24px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.95rem;
+    font-weight: 900;
+    padding: 28px;
+    text-align: center;
+}
 
 /* BOUTONS ACTIONS */
 .session-card-actions { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
