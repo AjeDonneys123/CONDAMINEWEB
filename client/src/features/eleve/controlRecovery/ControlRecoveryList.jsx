@@ -6,10 +6,12 @@ import LearningList from '../learning/LearningList';
 import ExposeList from '../exposes/ExposeList';
 import LectureList from '../lectures/LectureList';
 import FicheList from '../fiches/FicheList';
+import ProductionsList from '../productions/ProductionsList';
 import RevisionList from '../revisions/RevisionList';
 
 const ACTIVITY_TABS = [
   { id: 'homework', label: '📚 Devoirs' },
+  { id: 'production', label: '🏗️ Productions' },
   { id: 'learning', label: '🧠 Apprentissage' },
   { id: 'lecture', label: '📖 Lectures' },
   { id: 'fiche', label: '🗂️ Fiches' },
@@ -47,7 +49,7 @@ export default function ControlRecoveryList({ user, pendingActivity, openPunishm
   useEffect(() => {
     const type = String(pendingActivity?.type || '').trim();
     if (!type) return;
-    if (type === 'homework' || type === 'learning' || type === 'lecture' || type === 'fiche' || type === 'revision' || type === 'expose') {
+    if (type === 'homework' || type === 'production' || type === 'learning' || type === 'lecture' || type === 'fiche' || type === 'revision' || type === 'expose') {
       setActiveSection(type);
     }
   }, [pendingActivity]);
@@ -100,6 +102,9 @@ export default function ControlRecoveryList({ user, pendingActivity, openPunishm
     }
     if (activeSection === 'learning') {
       return <LearningList user={user} openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('learning')} />;
+    }
+    if (activeSection === 'production') {
+      return <ProductionsList user={user} openItemId={pendingActivity?.type === 'production' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('production')} />;
     }
     if (activeSection === 'lecture') {
       return <LectureList user={user} openItemId={pendingActivity?.type === 'lecture' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('lecture')} />;

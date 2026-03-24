@@ -14,6 +14,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         { type: 'expose', label: 'Exposé', icon: '🗣️', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
         { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
         { type: 'fiche', label: 'Fiche', icon: '🗂️', tone: 'bg-amber-50 border-amber-200 text-amber-700' },
+        { type: 'production', label: 'Production', icon: '🏗️', tone: 'bg-lime-50 border-lime-200 text-lime-700' },
         { type: 'revision', label: 'Révision', icon: '🧩', tone: 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700' }
     ];
     const [customSections, setCustomSections] = useState(DEFAULT_SECTIONS);
@@ -44,6 +45,22 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         const m = String(name || '').trim().toUpperCase().match(/^([1-6])/);
         return m ? m[1] : '';
     };
+    const normalizeLevel = (value = '') => {
+        const raw = String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toUpperCase();
+        if (!raw) return '';
+        if (/^(6|6E|6EME|SIXIEME)/.test(raw)) return '6';
+        if (/^(5|5E|5EME|CINQUIEME)/.test(raw)) return '5';
+        if (/^(4|4E|4EME|QUATRIEME)/.test(raw)) return '4';
+        if (/^(3|3E|3EME|TROISIEME)/.test(raw)) return '3';
+        if (/^(2|2DE|2NDE|SECONDE)/.test(raw)) return '2';
+        if (/^(1|1ERE|PREMIERE)/.test(raw)) return '1';
+        if (/^(T|TERM|TERMINALE)/.test(raw)) return 'T';
+        return raw;
+    };
     const getUserId = () => {
         const fromUnderscore = String(user?._id || '').trim();
         const fromId = String(user?.id || '').trim();
@@ -53,14 +70,14 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     };
     const getSectionsFromUserProfile = () => {
         const raw = Array.isArray(user?.subjectSections) ? user.subjectSections : [];
-        const currentLevel = String(levelFilter || inferLevelFromName(classFilter || ''));
+        const currentLevel = normalizeLevel(levelFilter || inferLevelFromName(classFilter || ''));
         const filtered = raw
             .filter(s => String(s?.name || '').toUpperCase() !== 'GÉNÉRAL')
             .filter(s => {
                 const scope = String(s?.scope || 'GLOBAL').toUpperCase();
                 if (Array.isArray(s?.hiddenIn) && s.hiddenIn.includes(classFilter)) return false;
                 if (scope === 'GLOBAL') return true;
-                if (scope === 'LEVEL') return String(s?.target || '') === currentLevel;
+                if (scope === 'LEVEL') return normalizeLevel(s?.target || '') === currentLevel;
                 if (scope === 'CLASS') return String(s?.target || '') === String(classFilter || '');
                 return true;
             })
@@ -239,11 +256,11 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     async function handleToggleActivityEnabled(e, item) {
         e.stopPropagation();
         if (!item?._id) return;
-        if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche'].includes(item.actType)) return;
+        if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production'].includes(item.actType)) return;
         const nextValue = item.isEnabled === false;
         const base = item.actType === 'homework'
             ? '/api/homework'
-            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : (item.actType === 'lecture' ? '/api/lectures' : '/api/fiches'))));
+            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : (item.actType === 'lecture' ? '/api/lectures' : (item.actType === 'production' ? '/api/productions' : '/api/fiches')))));
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -277,7 +294,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
-        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'scan') {
+        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'production' || type === 'scan') {
             if (onDeleteItem) onDeleteItem(id, type, name);
             return;
         }
@@ -311,6 +328,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     }
 
     const activeColor = safeSections.find(s => s.name.toUpperCase() === activeSection.toUpperCase())?.color || '#64748b';
+    const effectiveLevel = normalizeLevel(levelFilter || inferLevelFromName(classFilter || ''));
 
     const filteredChapters = safeChapters.filter(c => {
         const sectionName = String(c?.section || 'GÉNÉRAL').toUpperCase();
@@ -321,7 +339,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         if (activeSection.toUpperCase() === "GÉNÉRAL" && String(c?.title || '').toUpperCase() === "GÉNÉRAL") return true;
         
         const isForMyClass = c.classroom && String(c.classroom).toUpperCase() === String(classFilter || "").toUpperCase();
-        const isForMyLevel = c.sharedLevel && String(c.sharedLevel) === String(levelFilter);
+        const isForMyLevel = c.sharedLevel && normalizeLevel(c.sharedLevel) === effectiveLevel;
         const isGlobal = !c.classroom && !c.sharedLevel;
         return isForMyClass || isForMyLevel || isGlobal;
     });

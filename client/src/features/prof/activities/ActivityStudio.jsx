@@ -6,6 +6,7 @@ import LearningStudio from '../learning/LearningStudio';
 import ExposeStudio from '../exposes/ExposeStudio';
 import LectureStudio from '../lectures/LectureStudio';
 import FicheStudio from '../fiches/FicheStudio';
+import ProductionStudio from '../productions/ProductionStudio';
 import RevisionStudio from '../revisions/RevisionStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 
@@ -21,18 +22,23 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         setLoading(true);
         try {
             const teacherId = String(user?._id || user?.id || '').trim();
-            const fetchJson = async (url) => {
-                const res = await fetch(url);
-                return res.ok ? await res.json() : [];
+            const fetchJson = async (url, fallback = []) => {
+                try {
+                    const res = await fetch(url);
+                    return res.ok ? await res.json() : fallback;
+                } catch (_) {
+                    return fallback;
+                }
             };
 
-            const [hw, gm, lrn, ex, lec, fic, rev, cp, sts, cls] = await Promise.all([
+            const [hw, gm, lrn, ex, lec, fic, prod, rev, cp, sts, cls] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
                 fetchJson('/api/learning/all'),
                 fetchJson('/api/exposes/all'),
                 fetchJson('/api/lectures/all'),
                 fetchJson('/api/fiches/all'),
+                fetchJson('/api/productions/all'),
                 fetchJson('/api/revisions/all'),
                 fetchJson(`/api/structure/chapters?teacherId=${encodeURIComponent(teacherId)}&classContext=${encodeURIComponent(globalClass || '')}`),
                 fetchJson('/api/admin/students'),
@@ -46,6 +52,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...(ex || []).map(x => ({...x, actType: 'expose', typeLabel: '🗣️ EXP'})),
                 ...(lec || []).map(x => ({...x, actType: 'lecture', typeLabel: '📖 LEC'})),
                 ...(fic || []).map(x => ({...x, actType: 'fiche', typeLabel: '🗂️ FIC'})),
+                ...(prod || []).map(x => ({...x, actType: 'production', typeLabel: '🏗️ PROD'})),
                 ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'}))
             ]);
             setChapters(cp || []);
@@ -64,6 +71,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ? 'cet apprentissage'
                 : type === 'lecture'
                     ? 'cette lecture'
+                    : type === 'production'
+                        ? 'cette production'
                     : type === 'fiche'
                         ? 'cette fiche'
                         : type === 'revision'
@@ -86,6 +95,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         else if (type === 'expose') url = `/api/exposes/${id}`;
         else if (type === 'lecture') url = `/api/lectures/${id}`;
         else if (type === 'fiche') url = `/api/fiches/${id}`;
+        else if (type === 'production') url = `/api/productions/${id}`;
         else if (type === 'revision') url = `/api/revisions/${id}`;
         else if (type === 'scan') url = `/api/scans/sessions/${id}`;
         else url = `/api/structure/chapters/${id}`;
@@ -114,6 +124,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         if (editingItem.type === 'expose') return <ExposeStudio {...props} />;
         if (editingItem.type === 'lecture') return <LectureStudio {...props} />;
         if (editingItem.type === 'fiche') return <FicheStudio {...props} />;
+        if (editingItem.type === 'production') return <ProductionStudio {...props} />;
         if (editingItem.type === 'revision') return <RevisionStudio {...props} />;
         return <GameStudio {...props} />;
     }

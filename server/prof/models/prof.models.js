@@ -258,6 +258,56 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    Production: getModel('Production', {
+        title: { type: String, default: "PRODUCTION" },
+        subject: { type: String, default: "GÉNÉRAL" },
+        productionType: { type: String, enum: ['fiche', 'questionnaire', 'qcm'], default: 'fiche' },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        presentationUrl: { type: String, default: '' },
+        selectedSlides: { type: [Number], default: [] },
+        teacherInstructions: { type: String, default: '' },
+        gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'GameLevel', default: null },
+        questions: {
+            type: [{
+                prompt: { type: String, default: '' },
+                expectedAnswer: { type: String, default: '' },
+                expectedKeywords: { type: [String], default: [] },
+                oralPreferred: { type: Boolean, default: true },
+                options: { type: [String], default: [] },
+                correctIndex: { type: Number, default: 0 }
+            }],
+            default: []
+        },
+        submissions: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                contentHtml: { type: String, default: '' },
+                plainText: { type: String, default: '' },
+                imageCount: { type: Number, default: 0 },
+                answers: {
+                    type: [{
+                        prompt: { type: String, default: '' },
+                        answer: { type: String, default: '' },
+                        selectedIndex: { type: Number, default: -1 },
+                        isCorrect: { type: Boolean, default: false }
+                    }],
+                    default: []
+                },
+                score: { type: Number, default: 0 },
+                teacherValidated: { type: Boolean, default: false },
+                updatedAt: Date,
+                completedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
     RevisionActivity: getModel('RevisionActivity', {
         title: { type: String, default: "RÉVISION" },
         subject: { type: String, default: "GÉNÉRAL" },
@@ -298,6 +348,9 @@ const Models = {
         phase: { type: Number, default: 1 },
         submissionMode: { type: String, enum: ['photo', 'keyboard', 'next_course'], default: 'keyboard' },
         uploadedPhotoUrl: { type: String, default: '' },
+        uploadedPhotoUrls: { type: [String], default: [] },
+        mobileAccessToken: { type: String, default: '', index: true },
+        mobileAccessEnabledAt: { type: Date, default: null },
         typedRedoText: { type: String, default: '' },
         nextCourseNote: { type: String, default: '' },
         errorsExplanation: { type: String, default: '' },

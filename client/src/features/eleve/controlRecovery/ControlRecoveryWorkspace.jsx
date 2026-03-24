@@ -19,10 +19,20 @@ function emptyMistake() {
   return { questionNumber: '', whatWasWrong: '', correctionMade: '' };
 }
 
+function getMobileBaseUrl() {
+  if (typeof window === 'undefined') return 'https://condaweb.vercel.app';
+  const origin = String(window.location.origin || '').trim();
+  const host = String(window.location.hostname || '').trim().toLowerCase();
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  return isLocalhost ? 'https://condaweb.vercel.app' : origin;
+}
+
 export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }) {
   const [form, setForm] = useState(item);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mobileQrUrl, setMobileQrUrl] = useState('');
+  const [mobileLink, setMobileLink] = useState('');
   const [finalMessage, setFinalMessage] = useState('');
   const [questionCursor, setQuestionCursor] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -37,7 +47,7 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   const phase2Mistakes = Array.isArray(form?.phase2Mistakes) && form.phase2Mistakes.length > 0 ? form.phase2Mistakes : [emptyMistake()];
 
   const phase1Valid = form?.submissionMode === 'next_course'
-    || (form?.submissionMode === 'photo' && Boolean(form?.uploadedPhotoUrl))
+    || (form?.submissionMode === 'photo' && Boolean(form?.uploadedPhotoUrl || (Array.isArray(form?.uploadedPhotoUrls) && form.uploadedPhotoUrls.length > 0)))
     || (form?.submissionMode === 'keyboard' && Boolean(String(form?.typedRedoText || '').trim()));
   const phase2Valid = phase2Mistakes.some((row) =>
     String(row?.questionNumber || '').trim() &&
@@ -139,7 +149,8 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
       const res = await fetch('/api/eleve/control-recovery/upload-photo', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Upload impossible');
-      patchForm({ uploadedPhotoUrl: data.url });
+      const current = Array.isArray(form?.uploadedPhotoUrls) ? form.uploadedPhotoUrls : [];
+      patchForm({ uploadedPhotoUrl: data.url, uploadedPhotoUrls: [...current, data.url].slice(0, 6) });
     } catch (e) {
       alert(e.message || 'Upload impossible');
     } finally {
@@ -194,6 +205,21 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   };
 
   useEffect(() => () => stopDictation(), []);
+
+  useEffect(() => {
+    const loadMobileAccess = async () => {
+      if (!form?._id) return;
+      try {
+        const res = await fetch(`/api/eleve/control-recovery/mobile-access/${encodeURIComponent(String(form._id))}`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.token) return;
+        const link = `${getMobileBaseUrl()}/?recoveryMobile=${encodeURIComponent(String(data.token))}`;
+        setMobileLink(link);
+        setMobileQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`);
+      } catch (_) {}
+    };
+    loadMobileAccess();
+  }, [form?._id]);
 
   const validatePhase = async () => {
     const checks = {
@@ -312,10 +338,37 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
               </div>
               <div className="flex-1">
                 {form?.submissionMode === 'photo' && (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <input type="file" accept="image/*" onChange={(e) => uploadPhoto(e.target.files?.[0])} />
                     {uploading && <div className="text-sm font-bold text-slate-400">Upload...</div>}
-                    {form?.uploadedPhotoUrl && <img src={form.uploadedPhotoUrl} alt="Contrôle refait" className="max-h-[420px] rounded-2xl border border-slate-200 bg-white" />}
+                    {Array.isArray(form?.uploadedPhotoUrls) && form.uploadedPhotoUrls.length > 0 && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {form.uploadedPhotoUrls.map((url, index) => (
+                          <img key={`${url}_${index}`} src={url} alt={`Contrôle refait ${index + 1}`} className="h-36 w-full object-cover rounded-2xl border border-slate-200 bg-white" />
+                        ))}
+                      </div>
+                    )}
+                    {!form?.uploadedPhotoUrls?.length && form?.uploadedPhotoUrl && <img src={form.uploadedPhotoUrl} alt="Contrôle refait" className="max-h-[420px] rounded-2xl border border-slate-200 bg-white" />}
+                    <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">Téléphone</div>
+                      <div className="mt-2 text-lg font-black text-slate-800">Prendre les photos depuis le mobile</div>
+                      <div className="mt-2 text-sm font-semibold text-slate-500">Scanne le QR code pour ouvrir directement cette phase sur ton téléphone. Tu peux envoyer jusqu’à 6 photos.</div>
+                      <div className="mt-4 flex flex-col md:flex-row gap-4 md:items-center">
+                        {mobileQrUrl && <img src={mobileQrUrl} alt="QR code récupération de contrôle" className="w-[180px] h-[180px] rounded-2xl border border-slate-200 bg-white p-2" />}
+                        <div className="flex-1 space-y-3">
+                          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-500 break-all">{mobileLink || 'Lien mobile en préparation...'}</div>
+                          {mobileLink && (
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard?.writeText(mobileLink)}
+                              className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] text-slate-700"
+                            >
+                              Copier le lien mobile
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {form?.submissionMode === 'keyboard' && (

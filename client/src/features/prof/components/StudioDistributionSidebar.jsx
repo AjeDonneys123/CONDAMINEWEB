@@ -16,6 +16,22 @@ const inferLevelFromName = (name = '') => {
     if (m) return m[1];
     return '';
 };
+const normalizeLevel = (value = '') => {
+    const cleaned = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+    if (!cleaned) return '';
+    if (/^(6|6E|6EME|SIXIEME)/.test(cleaned)) return '6';
+    if (/^(5|5E|5EME|CINQUIEME)/.test(cleaned)) return '5';
+    if (/^(4|4E|4EME|QUATRIEME)/.test(cleaned)) return '4';
+    if (/^(3|3E|3EME|TROISIEME)/.test(cleaned)) return '3';
+    if (/^(2|2DE|2NDE|SECONDE)/.test(cleaned)) return '2';
+    if (/^(1|1ERE|PREMIERE)/.test(cleaned)) return '1';
+    if (/^(T|TERM|TERMINALE)/.test(cleaned)) return 'T';
+    return cleaned;
+};
 
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
@@ -28,8 +44,8 @@ export default function StudioDistributionSidebar({
         // A. Filtre Niveau (Le plus important)
         // Si un targetLevel est fourni (ex: "4"), on cache tout ce qui n'est pas "4"
         if (targetLevel) {
-            const effectiveLevel = String(c.level || inferLevelFromName(c.name));
-            if (effectiveLevel !== String(targetLevel)) return false;
+            const effectiveLevel = normalizeLevel(c.level || inferLevelFromName(c.name));
+            if (effectiveLevel !== normalizeLevel(targetLevel)) return false;
         }
         
         // B. Filtre Permissions
@@ -62,13 +78,13 @@ export default function StudioDistributionSidebar({
         // B. Filtre Contextuel (Basé sur la classe qu'on regarde)
         if (className) {
              const currentClassObj = allClasses.find(cl => cl.name === className);
-             const currentLevel = currentClassObj ? String(currentClassObj.level) : null;
+             const currentLevel = currentClassObj ? normalizeLevel(currentClassObj.level || inferLevelFromName(currentClassObj.name)) : null;
 
              // Si le dossier est spécifique à une AUTRE classe -> CACHÉ
              if (c.classroom && c.classroom !== className) return false;
 
              // Si le dossier est spécifique à un AUTRE niveau -> CACHÉ
-             if (c.sharedLevel && String(c.sharedLevel) !== String(currentLevel)) return false;
+             if (c.sharedLevel && normalizeLevel(c.sharedLevel) !== normalizeLevel(currentLevel)) return false;
 
              // Si le dossier a été masqué manuellement -> CACHÉ
              if (c.hiddenIn && c.hiddenIn.includes(viewingClass)) return false;

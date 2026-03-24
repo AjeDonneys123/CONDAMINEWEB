@@ -1,7 +1,7 @@
 // @signatures: ProfStructureRouter, chapters, sections, deleteActivityRequest, deleteChapterRequest, moveChapter, moveActivity, proxy
 const express = require('express');
 const router = express.Router();
-const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel, LearningModule, Expose, Lecture, Fiche, RevisionActivity } = require('../models/prof.models');
+const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel, LearningModule, Expose, Lecture, Fiche, Production, RevisionActivity } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
@@ -206,6 +206,11 @@ router.post('/activity/delete-request', async (req, res) => {
 
         if (type === 'fiche') {
             await Fiche.findByIdAndDelete(id);
+            return res.json({ ok: true });
+        }
+
+        if (type === 'production') {
+            await Production.findByIdAndDelete(id);
             return res.json({ ok: true });
         }
 

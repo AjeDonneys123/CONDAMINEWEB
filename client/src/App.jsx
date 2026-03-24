@@ -2,11 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
+import ControlRecoveryMobileCapture from './features/eleve/controlRecovery/ControlRecoveryMobileCapture';
 import SystemStatus from './features/prof/components/SystemStatus';
 import AutoConsoleBugReporter from './features/shared/AutoConsoleBugReporter';
 import './App.css';
 
 export default function App() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const recoveryMobileToken = String(urlParams.get('recoveryMobile') || '').trim();
+  if (recoveryMobileToken) {
+    return <ControlRecoveryMobileCapture token={recoveryMobileToken} />;
+  }
+
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSessionOverride, setIsSessionOverride] = useState(false);

@@ -141,6 +141,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const LearningModule = mongoose.model('LearningModule');
         const Expose = mongoose.model('Expose');
         const Lecture = mongoose.model('Lecture');
+        const Production = mongoose.model('Production');
         const Chapter = mongoose.model('Chapter');
         const Submission = mongoose.model('Submission');
         const GameProgress = mongoose.model('GameProgress');
@@ -313,9 +314,22 @@ router.get('/status-summary/:studentId', async (req, res) => {
             if (!x.isAllClass) return false;
             return matchesClassTargets(x.targetClassrooms, classTargetKeys);
         });
+        const rawProductions = await Production.find({
+            isEnabled: { $ne: false },
+            $or: [
+                { isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms submissions productionType').lean();
+        const productions = rawProductions.filter((x) => {
+            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!x.isAllClass) return false;
+            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
+        });
 
         const chapterIds = [...new Set(
-            [...homeworks, ...games, ...learningModules, ...exposes, ...lectures]
+            [...homeworks, ...games, ...learningModules, ...exposes, ...lectures, ...productions]
                 .map(it => it.chapterId ? String(it.chapterId) : null)
                 .filter(Boolean)
         )];
@@ -452,6 +466,27 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     type: 'lecture',
                     title: lec.title || 'Lecture',
                     label: `📖 ${lec.title || 'Lecture'}`
+                });
+            }
+        }
+
+        for (const prod of productions) {
+            const fallbackSubject = mapToParentDiscipline(prod.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(prod) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
+            const submission = (prod.submissions || []).find((p) => String(p.studentId) === String(student._id));
+            const done = Boolean(submission?.completedAt);
+            entry.activities.total += 1;
+            if (done) entry.activities.done += 1;
+            else {
+                const icon = prod.productionType === 'qcm' ? '🎮' : (prod.productionType === 'questionnaire' ? '🎙️' : '🏗️');
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`${icon} ${prod.title || 'Production'}`);
+                entry.activities.todoItems.push({
+                    id: String(prod._id),
+                    type: 'production',
+                    title: prod.title || 'Production',
+                    label: `${icon} ${prod.title || 'Production'}`
                 });
             }
         }

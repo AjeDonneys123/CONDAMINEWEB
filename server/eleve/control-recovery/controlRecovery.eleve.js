@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const multer = require('multer');
 const router = express.Router();
 const { Student, ControlRecovery } = require('../models/eleve.models');
@@ -8,6 +9,15 @@ const { Student, ControlRecovery } = require('../models/eleve.models');
 const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'recoveries');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir });
+const uploadBatch = multer({ dest: uploadDir });
+
+function finalizeUpload(file) {
+    const ext = path.extname(file.originalname || '') || '.jpg';
+    const finalName = `${file.filename}${ext}`;
+    const finalPath = path.join(uploadDir, finalName);
+    fs.renameSync(file.path, finalPath);
+    return `/uploads/recoveries/${finalName}`;
+}
 
 function cleanQuestionRow(row = {}) {
     return {
@@ -61,11 +71,71 @@ router.post('/create', async (req, res) => {
 router.post('/upload-photo', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Fichier manquant' });
-        const ext = path.extname(req.file.originalname || '') || '.jpg';
-        const finalName = `${req.file.filename}${ext}`;
-        const finalPath = path.join(uploadDir, finalName);
-        fs.renameSync(req.file.path, finalPath);
-        res.json({ ok: true, url: `/uploads/recoveries/${finalName}` });
+        res.json({ ok: true, url: finalizeUpload(req.file) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/mobile-access/:id', async (req, res) => {
+    try {
+        const doc = await ControlRecovery.findById(req.params.id);
+        if (!doc) return res.status(404).json({ error: 'Récupération introuvable' });
+        if (!doc.mobileAccessToken) {
+            doc.mobileAccessToken = crypto.randomBytes(24).toString('hex');
+        }
+        doc.mobileAccessEnabledAt = new Date();
+        await doc.save();
+        res.json({ ok: true, token: doc.mobileAccessToken });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/mobile-session/:token', async (req, res) => {
+    try {
+        const token = String(req.params.token || '').trim();
+        if (!token) return res.status(400).json({ error: 'Token manquant' });
+        const doc = await ControlRecovery.findOne({ mobileAccessToken: token }).lean();
+        if (!doc) return res.status(404).json({ error: 'Session mobile introuvable' });
+        const student = await Student.findById(doc.studentId, 'firstName lastName').lean();
+        res.json({
+            ok: true,
+            item: {
+                _id: String(doc._id),
+                title: doc.title || 'RÉCUPÉRER CONTRÔLE',
+                subject: doc.subject || 'GÉNÉRAL',
+                submissionMode: doc.submissionMode || 'photo',
+                uploadedPhotoUrl: doc.uploadedPhotoUrl || '',
+                uploadedPhotoUrls: Array.isArray(doc.uploadedPhotoUrls) ? doc.uploadedPhotoUrls : [],
+                phase: Number(doc.phase || 1)
+            },
+            student: student || null
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/mobile-upload/:token', uploadBatch.array('files', 6), async (req, res) => {
+    try {
+        const token = String(req.params.token || '').trim();
+        if (!token) return res.status(400).json({ error: 'Token manquant' });
+        const doc = await ControlRecovery.findOne({ mobileAccessToken: token });
+        if (!doc) return res.status(404).json({ error: 'Session mobile introuvable' });
+        const files = Array.isArray(req.files) ? req.files : [];
+        if (files.length === 0) return res.status(400).json({ error: 'Aucune photo envoyée' });
+        const existing = Array.isArray(doc.uploadedPhotoUrls) ? doc.uploadedPhotoUrls : [];
+        if (existing.length + files.length > 6) {
+            return res.status(400).json({ error: 'Maximum 6 photos par devoir.' });
+        }
+        const newUrls = files.map(finalizeUpload);
+        doc.submissionMode = 'photo';
+        doc.uploadedPhotoUrls = [...existing, ...newUrls].slice(0, 6);
+        doc.uploadedPhotoUrl = doc.uploadedPhotoUrls[0] || '';
+        if (Number(doc.phase || 1) < 1) doc.phase = 1;
+        await doc.save();
+        res.json({ ok: true, item: doc });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -97,6 +167,12 @@ router.post('/save/:id', async (req, res) => {
             ? String(req.body.submissionMode)
             : doc.submissionMode;
         doc.uploadedPhotoUrl = String(req.body?.uploadedPhotoUrl || doc.uploadedPhotoUrl || '').trim().slice(0, 500);
+        doc.uploadedPhotoUrls = Array.isArray(req.body?.uploadedPhotoUrls)
+            ? req.body.uploadedPhotoUrls.map((url) => String(url || '').trim().slice(0, 500)).filter(Boolean).slice(0, 6)
+            : doc.uploadedPhotoUrls;
+        if ((!doc.uploadedPhotoUrl || !String(doc.uploadedPhotoUrl).trim()) && Array.isArray(doc.uploadedPhotoUrls) && doc.uploadedPhotoUrls.length > 0) {
+            doc.uploadedPhotoUrl = String(doc.uploadedPhotoUrls[0] || '').trim();
+        }
         doc.typedRedoText = String(req.body?.typedRedoText || '').trim().slice(0, 12000);
         doc.nextCourseNote = String(req.body?.nextCourseNote || '').trim().slice(0, 1200);
         doc.errorsExplanation = String(req.body?.errorsExplanation || '').trim().slice(0, 12000);
@@ -128,7 +204,7 @@ router.post('/complete/:id', async (req, res) => {
         const questionRows = Array.isArray(doc.selfQuestions) ? doc.selfQuestions : [];
         const phase2Mistakes = Array.isArray(doc.phase2Mistakes) ? doc.phase2Mistakes : [];
         const hasRedo = doc.submissionMode === 'photo'
-            ? Boolean(doc.uploadedPhotoUrl)
+            ? Boolean(doc.uploadedPhotoUrl || (Array.isArray(doc.uploadedPhotoUrls) && doc.uploadedPhotoUrls.length > 0))
             : doc.submissionMode === 'keyboard'
                 ? Boolean(String(doc.typedRedoText || '').trim())
                 : true;
