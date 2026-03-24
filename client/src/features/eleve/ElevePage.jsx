@@ -1,14 +1,8 @@
 // @signatures: ElevePage, fetchFreshData
 import React, { useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
-import HomeworkList from './homework/HomeworkList';
-import LearningList from './learning/LearningList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
-import ExposeList from './exposes/ExposeList';
-import LectureList from './lectures/LectureList';
-import FicheList from './fiches/FicheList';
-import RevisionList from './revisions/RevisionList';
 import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
 import StatusOverview from './status/StatusOverview';
 import BugReportWidget from '../shared/BugReportWidget';
@@ -67,19 +61,13 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       const type = String(item?.type || '').toLowerCase();
       const id = String(item?.id || '').trim();
       if (!type || !id) return;
-      const tabMap = {
-          homework: 'devoirs',
-          game: 'jeux',
-          learning: 'apprentissage',
-          expose: 'exposes',
-          lecture: 'lectures',
-          fiche: 'fiches',
-          revision: 'revisions'
-      };
-      const nextTab = tabMap[type];
-      if (!nextTab) return;
+      if (type === 'game') {
+          setPendingActivity({ type, id, title: String(item?.title || '') });
+          setTab('jeux');
+          return;
+      }
       setPendingActivity({ type, id, title: String(item?.title || '') });
-      setTab(nextTab);
+      setTab('controles');
   };
 
   const clearPendingIfMatch = (type) => {
@@ -94,14 +82,15 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           {showPunishmentSplash && (
             <div className={`punishment-splash ${freshUser?.punishmentStatus === 'LATE' ? 'late' : ''}`}>
               <div className="ps-title">{freshUser?.punishmentStatus === 'LATE' ? 'PUNITION EN RETARD' : 'PUNITION À FAIRE'}</div>
-              <div className="ps-sub">Rends la punition dans l'onglet Devoirs.</div>
+              <div className="ps-sub">Rends la punition dans l'onglet Récup contrôle.</div>
               {freshUser?.punishmentStatus === 'PENDING' && punishmentCountdown && (
                 <div className="ps-timer">{punishmentCountdown}</div>
               )}
               <button
                 className="ps-btn"
                 onClick={() => {
-                  setTab('devoirs');
+                  setTab('controles');
+                  setPendingActivity({ type: 'homework', id: '__punishment__', title: 'Punition' });
                   setOpenPunishmentDirect(true);
                   setShowPunishmentSplash(false);
                 }}
@@ -120,42 +109,13 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           />
           <div className="eleve-main-content">
             {tab === 'status' && <StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} />}
-            {tab === 'devoirs' && (
-              <HomeworkList
+            {tab === 'controles' && (
+              <ControlRecoveryList
                 user={freshUser}
+                pendingActivity={pendingActivity}
                 openPunishmentDirect={openPunishmentDirect}
                 onPunishmentOpened={() => setOpenPunishmentDirect(false)}
-                openItemId={pendingActivity?.type === 'homework' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('homework')}
-              />
-            )}
-            {tab === 'apprentissage' && (
-              <LearningList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('learning')}
-              />
-            )}
-            {tab === 'controles' && <ControlRecoveryList user={freshUser} />}
-            {tab === 'lectures' && (
-              <LectureList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'lecture' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('lecture')}
-              />
-            )}
-            {tab === 'fiches' && (
-              <FicheList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'fiche' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('fiche')}
-              />
-            )}
-            {tab === 'revisions' && (
-              <RevisionList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'revision' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('revision')}
+                onActivityHandled={clearPendingIfMatch}
               />
             )}
             {tab === 'francais' && <MistakesBook user={freshUser} />}
@@ -164,13 +124,6 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 user={freshUser}
                 openItemId={pendingActivity?.type === 'game' ? pendingActivity?.id : ''}
                 onOpenHandled={() => clearPendingIfMatch('game')}
-              />
-            )}
-            {tab === 'exposes' && (
-              <ExposeList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'expose' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('expose')}
               />
             )}
           </div>

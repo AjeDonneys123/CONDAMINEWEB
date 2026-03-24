@@ -82,7 +82,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
               <div className="flex flex-col">
                   <span>{isLate ? "PUNITION EN RETARD !" : "PUNITION EN COURS"}</span>
                   <span className="text-[10px] opacity-80 uppercase font-bold">
-                      {isLate ? "Rendez votre travail immédiatement." : "Travail à rendre dans la section Devoirs."}
+                      {isLate ? "Rendez votre travail immédiatement." : "Travail à rendre dans Récup contrôle."}
                   </span>
               </div>
               {!isLate && punishmentCountdown && (
@@ -134,13 +134,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         {/* Onglets à Gauche */}
         <div className="nav-tabs">
             <button onClick={() => onTabChange('status')} className={`tab-item ${activeTab === 'status' ? 'tab-active' : ''}`}>📊 STATUS</button>
-            <button onClick={() => onTabChange('devoirs')} className={`tab-item ${activeTab === 'devoirs' ? 'tab-active' : ''}`}>📚 DEVOIRS</button>
-            <button onClick={() => onTabChange('apprentissage')} className={`tab-item ${activeTab === 'apprentissage' ? 'tab-active' : ''}`}>🧠 APPRENTISSAGE</button>
             <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
-            <button onClick={() => onTabChange('lectures')} className={`tab-item ${activeTab === 'lectures' ? 'tab-active' : ''}`}>📖 LECTURES</button>
-            <button onClick={() => onTabChange('fiches')} className={`tab-item ${activeTab === 'fiches' ? 'tab-active' : ''}`}>🗂️ FICHES</button>
-            <button onClick={() => onTabChange('revisions')} className={`tab-item ${activeTab === 'revisions' ? 'tab-active' : ''}`}>🧩 RÉVISIONS</button>
-            <button onClick={() => onTabChange('exposes')} className={`tab-item ${activeTab === 'exposes' ? 'tab-active' : ''}`}>🗣️ EXPOSÉS</button>
             <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-active' : ''}`}>🇫🇷 FRANÇAIS</button>
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
         </div>
