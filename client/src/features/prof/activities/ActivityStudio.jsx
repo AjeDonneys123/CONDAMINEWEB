@@ -26,7 +26,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 return res.ok ? await res.json() : [];
             };
 
-            const [hw, gm, lrn, ex, lec, fic, rev, sc, cp, sts, cls] = await Promise.all([
+            const [hw, gm, lrn, ex, lec, fic, rev, cp, sts, cls] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
                 fetchJson('/api/learning/all'),
@@ -34,7 +34,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 fetchJson('/api/lectures/all'),
                 fetchJson('/api/fiches/all'),
                 fetchJson('/api/revisions/all'),
-                fetchJson('/api/scans/sessions'), 
                 fetchJson(`/api/structure/chapters?teacherId=${encodeURIComponent(teacherId)}&classContext=${encodeURIComponent(globalClass || '')}`),
                 fetchJson('/api/admin/students'),
                 fetchJson('/api/admin/classrooms') // Ajouté
@@ -47,8 +46,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...(ex || []).map(x => ({...x, actType: 'expose', typeLabel: '🗣️ EXP'})),
                 ...(lec || []).map(x => ({...x, actType: 'lecture', typeLabel: '📖 LEC'})),
                 ...(fic || []).map(x => ({...x, actType: 'fiche', typeLabel: '🗂️ FIC'})),
-                ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'})),
-                ...(sc || []).map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) 
+                ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'}))
             ]);
             setChapters(cp || []);
             setAllStudents(sts || []);
@@ -122,8 +120,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 
     return (
         <div className="space-y-8 animate-in fade-in relative">
-            {loading && <div className="absolute top-4 right-4 z-50 bg-indigo-600 text-white px-3 py-1 rounded-full text-[10px] font-black animate-pulse shadow-lg">SYNCHRONISATION...</div>}
-            
             <ProfStudioFolder 
                 chapters={chapters} 
                 items={activities} 
