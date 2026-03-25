@@ -20,11 +20,8 @@ function emptyMistake() {
 }
 
 function getMobileBaseUrl() {
-  if (typeof window === 'undefined') return 'https://condaweb.vercel.app';
-  const origin = String(window.location.origin || '').trim();
-  const host = String(window.location.hostname || '').trim().toLowerCase();
-  const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-  return isLocalhost ? 'https://condaweb.vercel.app' : origin;
+  if (typeof window === 'undefined') return '';
+  return String(window.location.origin || '').trim();
 }
 
 export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }) {
