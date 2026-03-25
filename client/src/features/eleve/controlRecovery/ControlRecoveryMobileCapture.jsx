@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { resolveBackendAssetUrl } from '../../../utils/driveUrl';
 
 const MAX_PHOTOS = 6;
 
@@ -138,7 +139,7 @@ export default function ControlRecoveryMobileCapture({ token }) {
         <div className="grid grid-cols-3 gap-3">
           {(session?.uploadedPhotoUrls || []).map((url, index) => (
             <div key={`uploaded_${index}`} className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-900">
-              <img src={url} alt={`Photo envoyée ${index + 1}`} className="w-full aspect-square object-cover" />
+              <img src={resolveBackendAssetUrl(url)} alt={`Photo envoyée ${index + 1}`} className="w-full aspect-square object-cover" />
             </div>
           ))}
           {captures.map((item, index) => (

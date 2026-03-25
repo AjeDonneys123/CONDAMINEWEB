@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { resolveBackendAssetUrl } from '../../../utils/driveUrl';
 
 const SUCCESS_MESSAGE = "Bravo, vous avez terminé le processus de récupération. Votre travail est en cours de validation par le professeur.";
 
@@ -374,11 +375,11 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
                     {Array.isArray(form?.uploadedPhotoUrls) && form.uploadedPhotoUrls.length > 0 && (
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {form.uploadedPhotoUrls.map((url, index) => (
-                          <img key={`${url}_${index}`} src={url} alt={`Contrôle refait ${index + 1}`} className="h-36 w-full object-cover rounded-2xl border border-slate-200 bg-white" />
+                          <img key={`${url}_${index}`} src={resolveBackendAssetUrl(url)} alt={`Contrôle refait ${index + 1}`} className="h-36 w-full object-cover rounded-2xl border border-slate-200 bg-white" />
                         ))}
                       </div>
                     )}
-                    {!form?.uploadedPhotoUrls?.length && form?.uploadedPhotoUrl && <img src={form.uploadedPhotoUrl} alt="Contrôle refait" className="max-h-[420px] rounded-2xl border border-slate-200 bg-white" />}
+                    {!form?.uploadedPhotoUrls?.length && form?.uploadedPhotoUrl && <img src={resolveBackendAssetUrl(form.uploadedPhotoUrl)} alt="Contrôle refait" className="max-h-[420px] rounded-2xl border border-slate-200 bg-white" />}
                     <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                       <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">Téléphone</div>
                       <div className="mt-2 text-lg font-black text-slate-800">Prendre les photos depuis le mobile</div>

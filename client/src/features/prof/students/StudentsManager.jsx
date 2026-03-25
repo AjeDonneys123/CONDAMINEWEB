@@ -1,5 +1,6 @@
 // @signatures: StudentsManager, getStudentWorkload, handleOpenCorrection, handleRemovePunishment, handleSaveCorrection, loadMatrix
 import React, { useState, useEffect } from 'react';
+import { resolveBackendAssetUrl } from '../../../utils/driveUrl';
 import './StudentsManager.css';
 
 const extractId = (value) => {
@@ -417,7 +418,7 @@ export default function StudentsManager({ globalClassId }) {
                                         <div className="font-black uppercase text-[10px] text-slate-400 mb-1">Phase 1</div>
                                         <div className="font-semibold">Modalité: {rec.submissionMode === 'photo' ? 'Photo' : rec.submissionMode === 'keyboard' ? 'Clavier' : 'Prochain cours'}</div>
                                         {rec.uploadedPhotoUrl && (
-                                            <img src={rec.uploadedPhotoUrl} alt="Contrôle refait" className="mt-2 max-h-56 rounded-xl border border-amber-200 bg-white" />
+                                            <img src={resolveBackendAssetUrl(rec.uploadedPhotoUrl)} alt="Contrôle refait" className="mt-2 max-h-56 rounded-xl border border-amber-200 bg-white" />
                                         )}
                                         {rec.typedRedoText && (
                                             <div className="mt-2 whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3">{rec.typedRedoText}</div>
