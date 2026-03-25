@@ -6,6 +6,7 @@ import LearningStudio from '../learning/LearningStudio';
 import ExposeStudio from '../exposes/ExposeStudio';
 import LectureStudio from '../lectures/LectureStudio';
 import FicheStudio from '../fiches/FicheStudio';
+import CommentStudio from '../comments/CommentStudio';
 import ProductionStudio from '../productions/ProductionStudio';
 import RevisionStudio from '../revisions/RevisionStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
@@ -31,13 +32,14 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 }
             };
 
-            const [hw, gm, lrn, ex, lec, fic, prod, rev, cp, sts, cls] = await Promise.all([
+            const [hw, gm, lrn, ex, lec, fic, comments, prod, rev, cp, sts, cls] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
                 fetchJson('/api/learning/all'),
                 fetchJson('/api/exposes/all'),
                 fetchJson('/api/lectures/all'),
                 fetchJson('/api/fiches/all'),
+                fetchJson('/api/comments/all'),
                 fetchJson('/api/productions/all'),
                 fetchJson('/api/revisions/all'),
                 fetchJson(`/api/structure/chapters?teacherId=${encodeURIComponent(teacherId)}&classContext=${encodeURIComponent(globalClass || '')}`),
@@ -52,6 +54,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...(ex || []).map(x => ({...x, actType: 'expose', typeLabel: '🗣️ EXP'})),
                 ...(lec || []).map(x => ({...x, actType: 'lecture', typeLabel: '📖 LEC'})),
                 ...(fic || []).map(x => ({...x, actType: 'fiche', typeLabel: '🗂️ FIC'})),
+                ...(comments || []).map(x => ({...x, actType: 'comment', typeLabel: '🧾 COM'})),
                 ...(prod || []).map(x => ({...x, actType: 'production', typeLabel: '🏗️ PROD'})),
                 ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'}))
             ]);
@@ -71,6 +74,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ? 'cet apprentissage'
                 : type === 'lecture'
                     ? 'cette lecture'
+                    : type === 'comment'
+                        ? 'ce commentaire'
                     : type === 'production'
                         ? 'cette production'
                     : type === 'fiche'
@@ -94,6 +99,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         else if (type === 'learning') url = `/api/learning/${id}`;
         else if (type === 'expose') url = `/api/exposes/${id}`;
         else if (type === 'lecture') url = `/api/lectures/${id}`;
+        else if (type === 'comment') url = `/api/comments/${id}`;
         else if (type === 'fiche') url = `/api/fiches/${id}`;
         else if (type === 'production') url = `/api/productions/${id}`;
         else if (type === 'revision') url = `/api/revisions/${id}`;
@@ -123,6 +129,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         if (editingItem.type === 'learning') return <LearningStudio {...props} />;
         if (editingItem.type === 'expose') return <ExposeStudio {...props} />;
         if (editingItem.type === 'lecture') return <LectureStudio {...props} />;
+        if (editingItem.type === 'comment') return <CommentStudio {...props} />;
         if (editingItem.type === 'fiche') return <FicheStudio {...props} />;
         if (editingItem.type === 'production') return <ProductionStudio {...props} />;
         if (editingItem.type === 'revision') return <RevisionStudio {...props} />;

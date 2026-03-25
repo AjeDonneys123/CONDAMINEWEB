@@ -141,6 +141,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const LearningModule = mongoose.model('LearningModule');
         const Expose = mongoose.model('Expose');
         const Lecture = mongoose.model('Lecture');
+        const CommentActivity = mongoose.model('CommentActivity');
         const Production = mongoose.model('Production');
         const Chapter = mongoose.model('Chapter');
         const Submission = mongoose.model('Submission');
@@ -314,6 +315,19 @@ router.get('/status-summary/:studentId', async (req, res) => {
             if (!x.isAllClass) return false;
             return matchesClassTargets(x.targetClassrooms, classTargetKeys);
         });
+        const rawComments = await CommentActivity.find({
+            isEnabled: { $ne: false },
+            $or: [
+                { isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms submissions').lean();
+        const comments = rawComments.filter((x) => {
+            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!x.isAllClass) return false;
+            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
+        });
         const rawProductions = await Production.find({
             isEnabled: { $ne: false },
             $or: [
@@ -329,7 +343,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         });
 
         const chapterIds = [...new Set(
-            [...homeworks, ...games, ...learningModules, ...exposes, ...lectures, ...productions]
+            [...homeworks, ...games, ...learningModules, ...exposes, ...lectures, ...comments, ...productions]
                 .map(it => it.chapterId ? String(it.chapterId) : null)
                 .filter(Boolean)
         )];
@@ -466,6 +480,26 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     type: 'lecture',
                     title: lec.title || 'Lecture',
                     label: `📖 ${lec.title || 'Lecture'}`
+                });
+            }
+        }
+
+        for (const com of comments) {
+            const fallbackSubject = mapToParentDiscipline(com.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(com) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
+            const submission = (com.submissions || []).find((p) => String(p.studentId) === String(student._id));
+            const done = Boolean(submission?.completedAt);
+            entry.activities.total += 1;
+            if (done) entry.activities.done += 1;
+            else {
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`🧾 ${com.title || 'Commentaire'}`);
+                entry.activities.todoItems.push({
+                    id: String(com._id),
+                    type: 'comment',
+                    title: com.title || 'Commentaire',
+                    label: `🧾 ${com.title || 'Commentaire'}`
                 });
             }
         }

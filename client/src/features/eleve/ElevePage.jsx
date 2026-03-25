@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
+import CommentsList from './comments/CommentsList';
 import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
 import StatusOverview from './status/StatusOverview';
 import BugReportWidget from '../shared/BugReportWidget';
@@ -66,6 +67,11 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           setTab('jeux');
           return;
       }
+      if (type === 'comment') {
+          setPendingActivity({ type, id, title: String(item?.title || '') });
+          setTab('comment');
+          return;
+      }
       setPendingActivity({ type, id, title: String(item?.title || '') });
       setTab('controles');
   };
@@ -116,6 +122,13 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 openPunishmentDirect={openPunishmentDirect}
                 onPunishmentOpened={() => setOpenPunishmentDirect(false)}
                 onActivityHandled={clearPendingIfMatch}
+              />
+            )}
+            {tab === 'comment' && (
+              <CommentsList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'comment' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('comment')}
               />
             )}
             {tab === 'francais' && <MistakesBook user={freshUser} />}

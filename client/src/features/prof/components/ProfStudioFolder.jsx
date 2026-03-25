@@ -7,15 +7,16 @@ import React, { useState, useEffect } from 'react';
  */
 export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh, onDeleteItem }) {
     const DEFAULT_SECTIONS = [{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }];
+    const rawSections = Array.isArray(user?.subjectSections) ? user.subjectSections : [];
+    const isHgTeacher = rawSections.some((section) => /HIST|GEO|EMC|HG/.test(String(section?.name || '').toUpperCase()));
     const ACTIVITY_OPTIONS = [
         { type: 'homework', label: 'Devoir', icon: '📝', tone: 'bg-orange-50 border-orange-200 text-orange-700' },
         { type: 'game', label: 'Jeu', icon: '🎮', tone: 'bg-purple-50 border-purple-200 text-purple-700' },
         { type: 'learning', label: 'Apprentissage', icon: '🧠', tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
         { type: 'expose', label: 'Exposé', icon: '🗣️', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
         { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
-        { type: 'fiche', label: 'Fiche', icon: '🗂️', tone: 'bg-amber-50 border-amber-200 text-amber-700' },
-        { type: 'production', label: 'Production', icon: '🏗️', tone: 'bg-lime-50 border-lime-200 text-lime-700' },
-        { type: 'revision', label: 'Révision', icon: '🧩', tone: 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700' }
+        ...(isHgTeacher ? [{ type: 'comment', label: 'Commentaire', icon: '🧾', tone: 'bg-amber-50 border-amber-200 text-amber-700' }] : []),
+        { type: 'production', label: 'Production', icon: '🏗️', tone: 'bg-lime-50 border-lime-200 text-lime-700' }
     ];
     const [customSections, setCustomSections] = useState(DEFAULT_SECTIONS);
     const [activeSection, setActiveSection] = useState("GÉNÉRAL"); 
@@ -256,11 +257,11 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     async function handleToggleActivityEnabled(e, item) {
         e.stopPropagation();
         if (!item?._id) return;
-        if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production'].includes(item.actType)) return;
+        if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(item.actType)) return;
         const nextValue = item.isEnabled === false;
         const base = item.actType === 'homework'
             ? '/api/homework'
-            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : (item.actType === 'lecture' ? '/api/lectures' : (item.actType === 'production' ? '/api/productions' : '/api/fiches')))));
+            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : (item.actType === 'lecture' ? '/api/lectures' : (item.actType === 'comment' ? '/api/comments' : (item.actType === 'production' ? '/api/productions' : '/api/fiches'))))));
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -294,7 +295,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
-        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'production' || type === 'scan') {
+        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'production' || type === 'comment' || type === 'scan') {
             if (onDeleteItem) onDeleteItem(id, type, name);
             return;
         }

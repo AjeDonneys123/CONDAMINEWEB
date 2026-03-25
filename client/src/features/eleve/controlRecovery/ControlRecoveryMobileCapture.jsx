@@ -121,7 +121,7 @@ export default function ControlRecoveryMobileCapture({ token }) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4">
-      <div className="max-w-md mx-auto space-y-4">
+      <div className="max-w-md mx-auto space-y-4 pb-36">
         <div className="rounded-[28px] bg-slate-900 border border-slate-800 p-5">
           <div className="text-[11px] font-black uppercase tracking-[0.25em] text-amber-400">Recup controle mobile</div>
           <div className="mt-2 text-2xl font-black">{session?.title || 'Récupération'}</div>
@@ -150,7 +150,11 @@ export default function ControlRecoveryMobileCapture({ token }) {
           ))}
         </div>
 
-        <div className="flex gap-3">
+        {status && <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4 text-sm font-bold text-slate-200">{status}</div>}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-800 bg-slate-950/96 backdrop-blur px-4 py-4">
+        <div className="max-w-md mx-auto flex gap-3">
           <button onClick={handleCapture} disabled={!cameraReady || sending || ((session?.uploadedPhotoUrls?.length || 0) + captures.length >= MAX_PHOTOS)} className="flex-1 rounded-2xl bg-emerald-500 px-4 py-4 text-sm font-black text-slate-950 disabled:opacity-40">
             Prendre une photo
           </button>
@@ -158,8 +162,6 @@ export default function ControlRecoveryMobileCapture({ token }) {
             {sending ? 'Envoi...' : 'Envoyer'}
           </button>
         </div>
-
-        {status && <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4 text-sm font-bold text-slate-200">{status}</div>}
       </div>
     </div>
   );

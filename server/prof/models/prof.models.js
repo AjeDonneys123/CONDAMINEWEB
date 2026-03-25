@@ -308,6 +308,48 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    CommentActivity: getModel('CommentActivity', {
+        title: { type: String, default: "COMMENTAIRE" },
+        subject: { type: String, default: "HISTOIRE GÉOGRAPHIE" },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        documentUrls: { type: [String], default: [] },
+        documentExtractions: {
+            type: [{
+                url: { type: String, default: '' },
+                extraction: { type: String, default: '' }
+            }],
+            default: []
+        },
+        teacherPrompt: { type: String, default: '' },
+        teacherInstructions: { type: String, default: '' },
+        promptLevel: { type: String, default: '' },
+        submissions: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                rounds: {
+                    type: [{
+                        draft: { type: String, default: '' },
+                        aiFeedback: { type: String, default: '' },
+                        createdAt: Date,
+                        updatedAt: Date
+                    }],
+                    default: []
+                },
+                aiValidated: { type: Boolean, default: false },
+                methodologyReflection: { type: String, default: '' },
+                completedAt: Date,
+                updatedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
     RevisionActivity: getModel('RevisionActivity', {
         title: { type: String, default: "RÉVISION" },
         subject: { type: String, default: "GÉNÉRAL" },
