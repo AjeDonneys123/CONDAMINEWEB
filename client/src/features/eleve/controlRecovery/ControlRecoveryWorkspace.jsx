@@ -31,6 +31,7 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   const [mobileQrUrl, setMobileQrUrl] = useState('');
   const [mobileLink, setMobileLink] = useState('');
   const [mobileError, setMobileError] = useState('');
+  const [mobileDebug, setMobileDebug] = useState(null);
   const [finalMessage, setFinalMessage] = useState('');
   const [questionCursor, setQuestionCursor] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -208,11 +209,26 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
     const loadMobileAccess = async () => {
       if (!form?._id) return;
       setMobileError('');
+      setMobileDebug(null);
       try {
-        const res = await fetch(`/api/eleve/control-recovery/mobile-access/${encodeURIComponent(String(form._id))}`, { method: 'POST' });
+        const requestPath = `/api/eleve/control-recovery/mobile-access/${encodeURIComponent(String(form._id))}`;
+        const res = await fetch(requestPath, { method: 'POST' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data?.token) {
-          setMobileError(String(data?.error || 'Impossible de générer le lien mobile.'));
+          const message = String(data?.error || 'Impossible de générer le lien mobile.');
+          setMobileError(message);
+          setMobileDebug({
+            method: 'POST',
+            path: requestPath,
+            status: Number(res.status || 0),
+            statusText: String(res.statusText || ''),
+            backendHint: window.location.hostname.includes('vercel.app')
+              ? 'Sur ce site, /api est proxyfie vers le backend Render configure dans vercel.json.'
+              : '',
+            probableCause: Number(res.status) === 404
+              ? "La route n'existe pas encore sur le backend actuellement deploye."
+              : ''
+          });
           return;
         }
         const link = `${getMobileBaseUrl()}/?recoveryMobile=${encodeURIComponent(String(data.token))}`;
@@ -220,6 +236,16 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
         setMobileQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`);
       } catch (e) {
         setMobileError(String(e?.message || 'Erreur réseau lors de la génération du lien mobile.'));
+        setMobileDebug({
+          method: 'POST',
+          path: `/api/eleve/control-recovery/mobile-access/${encodeURIComponent(String(form._id))}`,
+          status: 0,
+          statusText: '',
+          backendHint: window.location.hostname.includes('vercel.app')
+            ? 'Sur ce site, /api est proxyfie vers le backend Render configure dans vercel.json.'
+            : '',
+          probableCause: 'Erreur reseau ou backend indisponible.'
+        });
       }
     };
     loadMobileAccess();
@@ -364,6 +390,16 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
                           {mobileError && (
                             <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-600">
                               {mobileError}
+                            </div>
+                          )}
+                          {mobileDebug && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-900 space-y-1">
+                              <div><span className="font-black">Diagnostic</span></div>
+                              <div>Methode: {mobileDebug.method}</div>
+                              <div>Route: {mobileDebug.path}</div>
+                              <div>HTTP: {mobileDebug.status || 'n/a'} {mobileDebug.statusText}</div>
+                              {mobileDebug.backendHint && <div>{mobileDebug.backendHint}</div>}
+                              {mobileDebug.probableCause && <div>Cause probable: {mobileDebug.probableCause}</div>}
                             </div>
                           )}
                           {mobileLink && (
