@@ -30,6 +30,7 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   const [uploading, setUploading] = useState(false);
   const [mobileQrUrl, setMobileQrUrl] = useState('');
   const [mobileLink, setMobileLink] = useState('');
+  const [mobileError, setMobileError] = useState('');
   const [finalMessage, setFinalMessage] = useState('');
   const [questionCursor, setQuestionCursor] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -206,14 +207,20 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   useEffect(() => {
     const loadMobileAccess = async () => {
       if (!form?._id) return;
+      setMobileError('');
       try {
         const res = await fetch(`/api/eleve/control-recovery/mobile-access/${encodeURIComponent(String(form._id))}`, { method: 'POST' });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.token) return;
+        if (!res.ok || !data?.token) {
+          setMobileError(String(data?.error || 'Impossible de générer le lien mobile.'));
+          return;
+        }
         const link = `${getMobileBaseUrl()}/?recoveryMobile=${encodeURIComponent(String(data.token))}`;
         setMobileLink(link);
         setMobileQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`);
-      } catch (_) {}
+      } catch (e) {
+        setMobileError(String(e?.message || 'Erreur réseau lors de la génération du lien mobile.'));
+      }
     };
     loadMobileAccess();
   }, [form?._id]);
@@ -354,6 +361,11 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
                         {mobileQrUrl && <img src={mobileQrUrl} alt="QR code récupération de contrôle" className="w-[180px] h-[180px] rounded-2xl border border-slate-200 bg-white p-2" />}
                         <div className="flex-1 space-y-3">
                           <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-500 break-all">{mobileLink || 'Lien mobile en préparation...'}</div>
+                          {mobileError && (
+                            <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-600">
+                              {mobileError}
+                            </div>
+                          )}
                           {mobileLink && (
                             <button
                               type="button"
