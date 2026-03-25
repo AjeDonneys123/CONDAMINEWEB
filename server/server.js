@@ -8,7 +8,7 @@ const { getAiGuardStatus } = require('./services/aiGuard.service');
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
-const host = process.env.HOST || '127.0.0.1';
+const host = process.env.HOST || '0.0.0.0';
 const SERVER_BOOT_ID = Date.now();
 
 process.on('uncaughtException', (err) => {
