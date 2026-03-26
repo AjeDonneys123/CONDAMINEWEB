@@ -146,6 +146,20 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (!message || message.type !== "CHATGMINI_CHAT_STREAM") return;
+  window.postMessage(
+    {
+      source: "chatgmini-extension",
+      type: "CHATGMINI_CHAT_STREAM",
+      requestId: String(message.requestId || ""),
+      text: String(message.text || ""),
+      done: Boolean(message.done)
+    },
+    "*"
+  );
+});
+
+chrome.runtime.onMessage.addListener((message) => {
   if (!message || message.type !== "CHATGMINI_CHAT_STATUS") return;
   window.postMessage(
     {

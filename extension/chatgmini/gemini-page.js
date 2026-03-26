@@ -134,6 +134,7 @@ function startWatchingResponse(requestId, baselineText = '') {
   if (observer) observer.disconnect();
   reportStatus(requestId, 'watching', 'Surveillance de la reponse demarree.');
   let lastText = String(baselineText || '').trim();
+  let streamedText = '';
   let stableTicks = 0;
   const startedAt = Date.now();
 
@@ -141,6 +142,17 @@ function startWatchingResponse(requestId, baselineText = '') {
     const next = extractLatestResponse();
     if (!next) return;
     if (next === baselineText) return;
+    if (next !== streamedText) {
+      streamedText = next;
+      chrome.runtime.sendMessage({
+        type: 'CHATGMINI_GEMINI_STREAM',
+        requestId,
+        text: next,
+        done: false
+      }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
     if (next !== lastText) {
       lastText = next;
       stableTicks = 0;
@@ -151,6 +163,14 @@ function startWatchingResponse(requestId, baselineText = '') {
     observer.disconnect();
     observer = null;
     reportStatus(requestId, 'response_ready', 'Reponse detectee.');
+    chrome.runtime.sendMessage({
+      type: 'CHATGMINI_GEMINI_STREAM',
+      requestId,
+      text: next,
+      done: true
+    }, () => {
+      void chrome.runtime.lastError;
+    });
     chrome.runtime.sendMessage({
       type: 'CHATGMINI_GEMINI_RESPONSE',
       requestId,
@@ -173,6 +193,14 @@ function startWatchingResponse(requestId, baselineText = '') {
     const fallback = extractLatestResponse();
     if (fallback && fallback !== baselineText) {
       reportStatus(requestId, 'response_ready', 'Reponse detectee en verification finale.');
+      chrome.runtime.sendMessage({
+        type: 'CHATGMINI_GEMINI_STREAM',
+        requestId,
+        text: fallback,
+        done: true
+      }, () => {
+        void chrome.runtime.lastError;
+      });
       chrome.runtime.sendMessage({
         type: 'CHATGMINI_GEMINI_RESPONSE',
         requestId,

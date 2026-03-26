@@ -23,6 +23,7 @@ export default function EleveChatWorkspace({ user }) {
   const [messages, setMessages] = useState([]);
   const [status, setStatus] = useState('');
   const [pendingRequestId, setPendingRequestId] = useState('');
+  const [streamingResponse, setStreamingResponse] = useState('');
   const threadRef = useRef(null);
   const pendingRequestIdRef = useRef('');
 
@@ -64,12 +65,24 @@ export default function EleveChatWorkspace({ user }) {
         }
         return;
       }
+      if (data.type === 'CHATGMINI_CHAT_STREAM') {
+        const reqId = String(data.requestId || '');
+        if (pendingRequestIdRef.current && reqId && reqId !== pendingRequestIdRef.current) return;
+        const text = String(data.text || '').trim();
+        if (!text) return;
+        setStreamingResponse(text);
+        if (data.done) {
+          setStatus('');
+        }
+        return;
+      }
       if (data.type === 'CHATGMINI_CHAT_RESPONSE') {
         const reqId = String(data.requestId || '');
         if (pendingRequestIdRef.current && reqId && reqId !== pendingRequestIdRef.current) return;
         const text = String(data.text || '').trim();
         if (!text) return;
         setMessages((prev) => [...prev, { role: 'assistant', text }]);
+        setStreamingResponse('');
         setStatus('');
         setPendingRequestId('');
       }
@@ -88,7 +101,7 @@ export default function EleveChatWorkspace({ user }) {
   useEffect(() => {
     if (!threadRef.current) return;
     threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [messages, status]);
+  }, [messages, status, streamingResponse]);
 
   const sendMessage = () => {
     const text = String(input || '').trim();
@@ -104,6 +117,7 @@ export default function EleveChatWorkspace({ user }) {
     }
     const requestId = makeRequestId();
     setPendingRequestId(requestId);
+    setStreamingResponse('');
     setMessages((prev) => [...prev, { role: 'student', text }]);
     setInput('');
     setStatus('');
@@ -175,6 +189,12 @@ export default function EleveChatWorkspace({ user }) {
               <div className="eleve-chat-text">{message.text}</div>
             </div>
           ))}
+          {streamingResponse && (
+            <div className="eleve-chat-bubble assistant">
+              <div className="eleve-chat-label">Gemini</div>
+              <div className="eleve-chat-text">{streamingResponse}</div>
+            </div>
+          )}
         </div>
 
         <div className="eleve-chat-composer">

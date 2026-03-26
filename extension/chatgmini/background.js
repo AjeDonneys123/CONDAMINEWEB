@@ -368,6 +368,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "CHATGMINI_GEMINI_STREAM") {
+    const requestId = String(message.requestId || "");
+    loadState((state) => {
+      const target = state.requests[requestId] || null;
+      if (target?.sourceTabId) {
+        chrome.tabs.sendMessage(target.sourceTabId, {
+          type: target.mode === "chat" ? "CHATGMINI_CHAT_STREAM" : "CHATGMINI_HOMEWORK_RESPONSE",
+          requestId,
+          text: String(message.text || ""),
+          done: Boolean(message.done)
+        }, () => {});
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (message.type === "CHATGMINI_GEMINI_STATUS") {
     const requestId = String(message.requestId || "");
     loadState((state) => {
