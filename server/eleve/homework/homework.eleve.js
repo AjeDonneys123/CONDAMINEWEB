@@ -724,4 +724,54 @@ router.post('/submit', async (req, res) => {
     res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes });
 });
 
+router.post('/submit-chat', async (req, res) => {
+    try {
+        const { userText, aiResponse, homeworkId, playerId, antiCheat } = req.body || {};
+        const Submission = mongoose.model('Submission');
+        const Student = mongoose.model('Student');
+        const Homework = mongoose.model('Homework');
+
+        const hid = String(homeworkId || '');
+        const sid = String(playerId || '');
+        const studentText = String(userText || '').trim();
+        const aiText = String(aiResponse || '').trim();
+
+        if (!mongoose.Types.ObjectId.isValid(hid) || !mongoose.Types.ObjectId.isValid(sid)) {
+            return res.status(400).json({ error: 'IDs invalides' });
+        }
+        if (!studentText) return res.status(400).json({ error: "Réponse élève vide." });
+        if (!aiText) return res.status(400).json({ error: "Réponse IA vide." });
+
+        const hw = await Homework.findById(hid, 'isPunishment');
+        if (!hw) return res.status(404).json({ error: 'Devoir introuvable.' });
+
+        const antiCheatSnapshot = sanitizeAntiCheat(antiCheat);
+        await Submission.create({
+            studentId: sid,
+            homeworkId: hid,
+            content: studentText,
+            feedback: aiText,
+            grade: 'CHAT',
+            antiCheat: antiCheatSnapshot
+        });
+
+        if (hw?.isPunishment) {
+            await Homework.findByIdAndUpdate(hid, { $pull: { assignedStudents: sid } });
+            await Student.findByIdAndUpdate(sid, {
+                $set: {
+                    punishmentStatus: 'NONE',
+                    punishmentDueDate: null,
+                    punishmentLateMailSentAt: null,
+                    punishmentLateMailTo: '',
+                    punishmentLateMailError: ''
+                }
+            });
+        }
+
+        return res.json({ ok: true });
+    } catch (e) {
+        return res.status(500).json({ error: e.message || "Erreur d'enregistrement." });
+    }
+});
+
 module.exports = router;

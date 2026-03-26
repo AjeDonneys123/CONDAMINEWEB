@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGmini Companion",
+  "version": "0.1.0",
+  "description": "Extension compagnon pour ouvrir Gemini depuis CondaWeb et detecter sa presence.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "http://localhost:5173/*",
+    "http://127.0.0.1:5173/*",
+    "https://condaweb.vercel.app/*",
+    "https://gemini.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "https://condaweb.vercel.app/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "gemini-page.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "bridge.js"
+      ],
+      "matches": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "https://condaweb.vercel.app/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_title": "ChatGmini"
+  }
+}

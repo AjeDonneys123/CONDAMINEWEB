@@ -137,6 +137,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
             <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
             <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-active' : ''}`}>🇫🇷 FRANÇAIS</button>
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
+            <button onClick={() => onTabChange('chat')} className={`tab-item ${activeTab === 'chat' ? 'tab-active' : ''}`}>💬 CHAT</button>
         </div>
 
         {/* Stats à Droite (Simple et discret) */}

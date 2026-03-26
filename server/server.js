@@ -10,6 +10,8 @@ const app = express();
 const port = process.env.PORT || 3000;
 const host = process.env.HOST || '0.0.0.0';
 const SERVER_BOOT_ID = Date.now();
+let shuttingDown = false;
+let mongoRetryTimer = null;
 
 process.on('uncaughtException', (err) => {
     console.error('💥 UNCAUGHT EXCEPTION:', err?.stack || err?.message || err);
@@ -146,8 +148,31 @@ const connectMongoWithRetry = async (delayMs = 10000) => {
     } catch (err) {
         console.error("❌ Erreur Connexion MongoDB:", err);
         console.log(`⏳ Nouvelle tentative MongoDB dans ${Math.floor(delayMs / 1000)}s...`);
-        setTimeout(() => connectMongoWithRetry(delayMs), delayMs);
+        if (shuttingDown) return;
+        mongoRetryTimer = setTimeout(() => connectMongoWithRetry(delayMs), delayMs);
     }
 };
 
 connectMongoWithRetry();
+
+const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`🛑 Arret recu (${signal}). Fermeture propre du serveur...`);
+    if (mongoRetryTimer) {
+        clearTimeout(mongoRetryTimer);
+        mongoRetryTimer = null;
+    }
+    try {
+        await new Promise((resolve) => server.close(() => resolve()));
+    } catch (_) {}
+    try {
+        if (mongoose.connection.readyState !== 0) {
+            await mongoose.connection.close(false);
+        }
+    } catch (_) {}
+    process.exit(0);
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

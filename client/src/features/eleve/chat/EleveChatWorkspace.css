@@ -1,0 +1,207 @@
+.eleve-chat-page {
+  display: flex;
+  justify-content: center;
+}
+
+.eleve-chat-shell {
+  width: min(980px, 100%);
+  background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+  border: 1px solid #fbcfe8;
+  border-radius: 28px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eleve-chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.eleve-chat-kicker {
+  color: #ea580c;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.eleve-chat-head h2 {
+  margin: 4px 0 0;
+  color: #1e293b;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.eleve-chat-open-btn,
+.eleve-chat-send-btn,
+.eleve-chat-install-link {
+  border: none;
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: #0f172a;
+  color: white;
+  font-weight: 900;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.eleve-chat-send-btn {
+  background: #2563eb;
+}
+
+.eleve-chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.eleve-chat-subtitle {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.eleve-chat-warning {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.eleve-chat-install-link {
+  background: white;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.eleve-chat-thread {
+  min-height: 360px;
+  max-height: 58vh;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eleve-chat-empty {
+  border: 1px dashed #fdba74;
+  background: rgba(255, 255, 255, 0.8);
+  color: #9a3412;
+  border-radius: 18px;
+  padding: 18px;
+  font-weight: 700;
+}
+
+.eleve-chat-bubble {
+  max-width: 82%;
+  border-radius: 20px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eleve-chat-bubble.student {
+  align-self: flex-end;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.eleve-chat-bubble.assistant {
+  align-self: flex-start;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+}
+
+.eleve-chat-bubble.system {
+  align-self: center;
+  max-width: 100%;
+  background: #fff7ed;
+  border: 1px dashed #fdba74;
+}
+
+.eleve-chat-label {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.eleve-chat-text {
+  white-space: pre-wrap;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.eleve-chat-composer {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.eleve-chat-input {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 18px;
+  padding: 14px;
+  outline: none;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.eleve-chat-input:focus {
+  border-color: #93c5fd;
+  background: white;
+}
+
+@media (max-width: 900px) {
+  .eleve-chat-shell {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .eleve-chat-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .eleve-chat-head h2 {
+    font-size: 26px;
+  }
+
+  .eleve-chat-thread {
+    min-height: 280px;
+  }
+
+  .eleve-chat-bubble {
+    max-width: 100%;
+  }
+
+  .eleve-chat-composer {
+    grid-template-columns: 1fr;
+  }
+}

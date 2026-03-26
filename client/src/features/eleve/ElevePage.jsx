@@ -6,6 +6,9 @@ import GamesGrid from './games/GamesGrid';
 import CommentsList from './comments/CommentsList';
 import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
 import StatusOverview from './status/StatusOverview';
+import LearningList from './learning/LearningList';
+import HomeworkList from './homework/HomeworkList';
+import EleveChatWorkspace from './chat/EleveChatWorkspace';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
@@ -72,6 +75,16 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           setTab('comment');
           return;
       }
+      if (type === 'learning') {
+          setPendingActivity({ type, id, title: String(item?.title || '') });
+          setTab('learning');
+          return;
+      }
+      if (type === 'homework') {
+          setPendingActivity({ type, id, title: String(item?.title || '') });
+          setTab('homework');
+          return;
+      }
       setPendingActivity({ type, id, title: String(item?.title || '') });
       setTab('controles');
   };
@@ -131,6 +144,21 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 onOpenHandled={() => clearPendingIfMatch('comment')}
               />
             )}
+            {tab === 'learning' && (
+              <LearningList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('learning')}
+              />
+            )}
+            {tab === 'homework' && (
+              <HomeworkList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'homework' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('homework')}
+              />
+            )}
+            {tab === 'chat' && <EleveChatWorkspace user={freshUser} />}
             {tab === 'francais' && <MistakesBook user={freshUser} />}
             {tab === 'jeux' && (
               <GamesGrid
