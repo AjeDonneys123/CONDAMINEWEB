@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 
+const WEB5E_SESSION_KEY = 'web5eBridgeSession';
+
 const SECTION_CONFIG = {
   eau: {
     title: "L'eau",
@@ -66,6 +68,19 @@ const ARTICLE_FONTS = [
 ];
 
 const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
+
+function normalizeBridgedUser(decoded) {
+  if (!decoded || typeof decoded !== 'object') return null;
+  return {
+    id: decoded.id || decoded._id || '',
+    _id: decoded._id || decoded.id || '',
+    firstName: decoded.firstName || '',
+    lastName: decoded.lastName || '',
+    currentClass: decoded.currentClass || '',
+    isTestAccount: decoded.isTestAccount === true,
+    role: 'student'
+  };
+}
 
 function ArticleEditor({ value, onChange, readOnly }) {
   const [fontFamily, setFontFamily] = useState('Arial');
@@ -157,13 +172,28 @@ function ArticleEditor({ value, onChange, readOnly }) {
 }
 
 export default function App() {
+  const initialStoredUser = (() => {
+    try {
+      const raw = window.localStorage.getItem(WEB5E_SESSION_KEY);
+      if (!raw) return null;
+      return normalizeBridgedUser(JSON.parse(raw));
+    } catch (_) {
+      return null;
+    }
+  })();
   const [allUsersData, setAllUsersData] = useState([]);
   const [inputClass, setInputClass] = useState('');
   const [inputLast, setInputLast] = useState('');
   const [inputFirst, setInputFirst] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState(null);
-  const [user, setUser] = useState(null);
+  const [selectedProfile, setSelectedProfile] = useState(initialStoredUser ? {
+    id: initialStoredUser.id,
+    type: 'student',
+    firstName: initialStoredUser.firstName || '',
+    lastName: initialStoredUser.lastName || '',
+    className: initialStoredUser.currentClass || ''
+  } : null);
+  const [user, setUser] = useState(initialStoredUser);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('eau');
@@ -225,16 +255,9 @@ export default function App() {
       const rawBridgeUser = String(params.get('bridgeUser') || '').trim();
       if (!rawBridgeUser) return;
       const decoded = JSON.parse(window.atob(rawBridgeUser));
-      if (decoded && typeof decoded === 'object') {
-        const bridgedUser = {
-          id: decoded.id || decoded._id || '',
-          _id: decoded._id || decoded.id || '',
-          firstName: decoded.firstName || '',
-          lastName: decoded.lastName || '',
-          currentClass: decoded.currentClass || '',
-          isTestAccount: decoded.isTestAccount === true,
-          role: 'student'
-        };
+      const bridgedUser = normalizeBridgedUser(decoded);
+      if (bridgedUser?.id) {
+        window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(bridgedUser));
         setUser(bridgedUser);
         setSelectedProfile({
           id: bridgedUser.id,
@@ -302,6 +325,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.message || 'Connexion impossible.');
       setSelectedProfile(profile);
       setUser(data.user);
+      window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(normalizeBridgedUser(data.user)));
       setLoginOpen(false);
     } catch (e) {
       alert(e.message || 'Connexion impossible.');
