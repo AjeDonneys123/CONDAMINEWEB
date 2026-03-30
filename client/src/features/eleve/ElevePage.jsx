@@ -109,7 +109,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
   const projet5eBaseUrl = String(
     import.meta.env.VITE_WEB5E_PUBLIC_URL || window.localStorage.getItem('web5ePublicUrl') || 'https://web5e-hu3he1y6x-jeanvuillets-projects.vercel.app'
   ).trim().replace(/\/+$/, '');
-  const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}`;
+  const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}#bridgeUser=${bridgeUser}`;
 
   return (
     <div className="eleve-page-wrapper">

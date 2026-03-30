@@ -85,7 +85,9 @@ function normalizeBridgedUser(decoded) {
 function readBridgeUserFromUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
-    const rawBridgeUser = String(params.get('bridgeUser') || '').trim();
+    const hash = String(window.location.hash || '').replace(/^#/, '');
+    const hashParams = new URLSearchParams(hash);
+    const rawBridgeUser = String(params.get('bridgeUser') || hashParams.get('bridgeUser') || '').trim();
     if (!rawBridgeUser) return null;
     const decodedBase64 = decodeURIComponent(rawBridgeUser);
     return normalizeBridgedUser(JSON.parse(window.atob(decodedBase64)));
@@ -290,6 +292,7 @@ export default function App() {
     setLoginOpen(false);
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete('bridgeUser');
+    cleanUrl.hash = '';
     window.history.replaceState({}, '', cleanUrl.toString());
   }, []);
 
