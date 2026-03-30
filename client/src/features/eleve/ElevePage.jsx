@@ -101,7 +101,9 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     ...freshUser,
     id: freshUser?.id || freshUser?._id || user?.id || user?._id || ''
   })));
-  const projet5eBaseUrl = 'https://web5e-git-pro-jeanvuillets-projects.vercel.app';
+  const projet5eBaseUrl = String(
+    import.meta.env.VITE_WEB5E_PUBLIC_URL || 'https://web5e-git-pro-jeanvuillets-projects.vercel.app'
+  ).trim().replace(/\/+$/, '');
   const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}`;
 
   return (
@@ -178,23 +180,23 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             )}
           </div>
           {is5eStudent && (
-            <div className="eleve-external-link-card">
+            <section className="eleve-external-link-card">
               <div className="eleve-external-link-copy">
                 <div className="eleve-external-link-kicker">Projet 5e</div>
-                <div className="eleve-external-link-title">Accéder au site Projet 5e</div>
+                <div className="eleve-external-link-title">Entrer dans Projet 5e</div>
                 <div className="eleve-external-link-sub">
-                  Le site public sur l’eau et l’énergie est disponible ici. Tu peux le consulter ou l’enrichir si tu te connectes là-bas.
+                  Le site public sur l’eau et l’énergie s’ouvre directement avec ta session élève. Tu arrives sur ton espace sans te reconnecter.
                 </div>
               </div>
-              <a
-                className="eleve-external-link-btn"
-                href={projet5eUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Ouvrir Projet 5e
-              </a>
-            </div>
+              <div className="eleve-external-link-actions">
+                <a
+                  className="eleve-external-link-btn"
+                  href={projet5eUrl}
+                >
+                  Ouvrir Projet 5e
+                </a>
+              </div>
+            </section>
           )}
         </div>
         <BugReportWidget user={freshUser} />

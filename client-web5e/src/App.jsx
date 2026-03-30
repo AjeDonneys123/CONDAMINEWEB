@@ -151,12 +151,54 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
   const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
+  const [siteData, setSiteData] = useState(null);
+  const [tabDocsByKey, setTabDocsByKey] = useState({});
+  const [entryDocsByKey, setEntryDocsByKey] = useState({});
 
   useEffect(() => {
     fetch('/api/auth/finder-data')
       .then((res) => res.ok ? res.json() : [])
       .then((data) => setAllUsersData(Array.isArray(data) ? data : []))
       .catch(() => setAllUsersData([]));
+  }, []);
+
+  useEffect(() => {
+    const loadWeb5e = async () => {
+      try {
+        const res = await fetch('/api/web5e/public');
+        const data = await res.json();
+        if (!res.ok || !data?.ok) throw new Error(data?.error || 'Chargement impossible');
+
+        const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+        const entries = Array.isArray(data.entries) ? data.entries : [];
+        const nextTabDocs = {};
+        const nextEntryDocs = {};
+        const nextContentMap = { eau: {}, energie: {} };
+
+        tabs.forEach((tab) => {
+          const sectionKey = String(tab.sectionKey || '').trim().toLowerCase();
+          const tabKey = String(tab.tabKey || '').trim().toLowerCase();
+          if (!sectionKey || !tabKey) return;
+          nextTabDocs[`${sectionKey}:${tabKey}`] = tab;
+          if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
+          const entry = entries.find((row) => String(row.tabId || '') === String(tab._id || ''));
+          nextEntryDocs[`${sectionKey}:${tabKey}`] = entry || null;
+          nextContentMap[sectionKey][tabKey] = Array.isArray(entry?.blocks) && entry.blocks.length > 0
+            ? entry.blocks
+            : (DEFAULT_CONTENT[sectionKey]?.[tabKey] || []);
+        });
+
+        Object.keys(DEFAULT_CONTENT).forEach((sectionKey) => {
+          nextContentMap[sectionKey] = { ...(DEFAULT_CONTENT[sectionKey] || {}), ...(nextContentMap[sectionKey] || {}) };
+        });
+
+        setSiteData(data.site || null);
+        setTabDocsByKey(nextTabDocs);
+        setEntryDocsByKey(nextEntryDocs);
+        setContentMap(nextContentMap);
+      } catch (_) {}
+    };
+    loadWeb5e();
   }, []);
 
   useEffect(() => {
@@ -181,19 +223,6 @@ export default function App() {
       }
     } catch (_) {}
   }, []);
-
-  useEffect(() => {
-    const raw = localStorage.getItem('web5e-public-content');
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') setContentMap(parsed);
-    } catch (_) {}
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('web5e-public-content', JSON.stringify(contentMap));
-  }, [contentMap]);
 
   const suggestions = useMemo(() => {
     const typedClass = clean(inputClass);
@@ -263,17 +292,49 @@ export default function App() {
     }));
   };
 
+  const persistBlocks = async (nextBlocks) => {
+    const docKey = `${activeSection}:${currentTabId}`;
+    const tabDoc = tabDocsByKey[docKey];
+    if (!tabDoc?._id || !user?.id) return;
+    const existingEntry = entryDocsByKey[docKey];
+    try {
+      const res = await fetch('/api/web5e/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _id: existingEntry?._id || '',
+          tabId: tabDoc._id,
+          studentId: user.id || user._id || '',
+          authorName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          title: tabDoc.title || '',
+          blocks: nextBlocks,
+          isPublished: true
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.entry) {
+        setEntryDocsByKey((prev) => ({ ...prev, [docKey]: data.entry }));
+      }
+    } catch (_) {}
+  };
+
   const addBlock = (type) => {
-    updateBlocks([...blocks, createBlock(type)]);
+    const nextBlocks = [...blocks, createBlock(type)];
+    updateBlocks(nextBlocks);
+    void persistBlocks(nextBlocks);
   };
 
   const updateBlock = (index, value) => {
-    updateBlocks(blocks.map((block, i) => i === index ? { ...block, value } : block));
+    const nextBlocks = blocks.map((block, i) => i === index ? { ...block, value } : block);
+    updateBlocks(nextBlocks);
+    void persistBlocks(nextBlocks);
   };
 
   const removeBlock = (index) => {
     if (blocks.length <= 1) return;
-    updateBlocks(blocks.filter((_, i) => i !== index));
+    const nextBlocks = blocks.filter((_, i) => i !== index);
+    updateBlocks(nextBlocks);
+    void persistBlocks(nextBlocks);
   };
 
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
@@ -339,10 +400,12 @@ export default function App() {
       <header className="hero">
         <div className="hero-copy">
           <div className="eyebrow">Projet 5e</div>
-          <h1>Projet 5e</h1>
+          <h1>{siteData?.title || 'Projet 5e'}</h1>
           <p>
-            Un site public de classe sur deux grands thèmes: l’eau et l’énergie.
-            Les visiteurs consultent le contenu, et les élèves connectés enrichissent les sous-rubriques.
+            {siteData?.subtitle
+              ? `${siteData.subtitle}.`
+              : "Un site public de classe sur deux grands thèmes: l’eau et l’énergie."
+            } Les visiteurs consultent le contenu, et les élèves connectés enrichissent les sous-rubriques.
           </p>
         </div>
         <div className="hero-card">

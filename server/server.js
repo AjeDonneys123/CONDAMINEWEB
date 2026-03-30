@@ -33,6 +33,7 @@ try {
     console.log("📦 Chargement des Modèles...");
     require('./prof/models/prof.models');
     require('./models/Enrollment');
+    require('./web5e/models.web5e');
     console.log("✅ Modèles chargés.");
 } catch (e) {
     console.error("💥 ERREUR CRITIQUE MODÈLES :", e.message);
@@ -132,6 +133,7 @@ safeLoad('/api/eleve/fiches', './eleve/fiches/fiches.eleve');
 safeLoad('/api/eleve/productions', './eleve/productions/productions.eleve');
 safeLoad('/api/eleve/comments', './eleve/comments/comments.eleve');
 safeLoad('/api/eleve/revisions', './eleve/revisions/revisions.eleve');
+safeLoad('/api/web5e', './web5e/web5e.routes');
 
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
