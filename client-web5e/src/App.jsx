@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 
 const SECTION_CONFIG = {
@@ -70,6 +70,19 @@ const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '
 function ArticleEditor({ value, onChange, readOnly }) {
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
+  const editorRef = useRef(null);
+  const lastHtmlRef = useRef(String(value || ''));
+
+  useEffect(() => {
+    const nextHtml = String(value || '');
+    const editor = editorRef.current;
+    lastHtmlRef.current = nextHtml;
+    if (!editor) return;
+    if (document.activeElement === editor) return;
+    if (editor.innerHTML !== nextHtml) {
+      editor.innerHTML = nextHtml;
+    }
+  }, [value]);
 
   const exec = (command, commandValue = null) => {
     document.execCommand(command, false, commandValue);
@@ -88,7 +101,9 @@ function ArticleEditor({ value, onChange, readOnly }) {
     if (!safeUrl) return;
     const html = `<img src="${safeUrl.replace(/"/g, '&quot;')}" alt="" style="max-width:320px;width:100%;height:auto;border-radius:18px;display:block;margin:18px auto;" />`;
     exec('insertHTML', html);
-    onChange?.(document.getElementById('article-editor-active')?.innerHTML || '');
+    const nextHtml = editorRef.current?.innerHTML || '';
+    lastHtmlRef.current = nextHtml;
+    onChange?.(nextHtml);
   };
 
   if (readOnly) {
@@ -127,12 +142,15 @@ function ArticleEditor({ value, onChange, readOnly }) {
         </div>
       </div>
       <div
-        id="article-editor-active"
+        ref={editorRef}
         className="article-editor"
         contentEditable
         suppressContentEditableWarning
-        dangerouslySetInnerHTML={{ __html: value || '' }}
-        onInput={(e) => onChange?.(e.currentTarget.innerHTML)}
+        onInput={(e) => {
+          const nextHtml = e.currentTarget.innerHTML;
+          lastHtmlRef.current = nextHtml;
+          onChange?.(nextHtml);
+        }}
       />
     </div>
   );
