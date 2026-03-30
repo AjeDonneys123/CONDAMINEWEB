@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Production } = require('../models/prof.models');
+const mongoose = require('mongoose');
 
 const sanitizeSlides = (slides = []) => [...new Set(
     (Array.isArray(slides) ? slides : [])
@@ -70,6 +71,9 @@ router.post('/', async (req, res) => {
         data.teacherInstructions = String(data.teacherInstructions || '').slice(0, 4000);
         data.presentationUrl = String(data.presentationUrl || '').trim();
         data.questions = sanitizeQuestions(data.questions, data.productionType);
+        data.gameId = mongoose.Types.ObjectId.isValid(String(data.gameId || '').trim())
+            ? String(data.gameId).trim()
+            : null;
 
         const row = data._id
             ? await Production.findByIdAndUpdate(data._id, data, { new: true })

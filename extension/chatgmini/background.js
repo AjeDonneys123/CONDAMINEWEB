@@ -1,6 +1,76 @@
 let geminiTabId = null;
 let geminiWindowId = null;
 let geminiReadyTabId = null;
+let lastGeminiStatus = "";
+let lastGeminiResponse = "";
+
+function clampPositive(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function arrangeCockpitWindows(sourceTab, layout = {}, callback = () => {}) {
+  const sourceWindowId = sourceTab?.windowId;
+  if (!sourceWindowId) {
+    callback();
+    return;
+  }
+
+  const availLeft = Number(layout?.availLeft || 0);
+  const availTop = Number(layout?.availTop || 0);
+  const availWidth = clampPositive(layout?.availWidth, 1440);
+  const availHeight = clampPositive(layout?.availHeight, 900);
+  const popupWidth = Math.max(360, Math.round(availWidth / 3));
+  const siteWidth = Math.max(720, availWidth - popupWidth);
+  const popupBounds = {
+    left: availLeft,
+    top: availTop,
+    width: popupWidth,
+    height: availHeight
+  };
+  const siteBounds = {
+    left: availLeft + popupWidth,
+    top: availTop,
+    width: siteWidth,
+    height: availHeight
+  };
+
+  chrome.windows.update(
+    sourceWindowId,
+    {
+      state: "normal",
+      left: siteBounds.left,
+      top: siteBounds.top,
+      width: siteBounds.width,
+      height: siteBounds.height,
+      focused: true
+    },
+    () => {
+      if (!geminiWindowId) {
+        callback();
+        return;
+      }
+      chrome.windows.update(
+        geminiWindowId,
+        {
+          state: "normal",
+          left: popupBounds.left,
+          top: popupBounds.top,
+          width: popupBounds.width,
+          height: popupBounds.height,
+          focused: true
+        },
+        () => {
+          if (geminiTabId) {
+            chrome.tabs.update(geminiTabId, { active: true }, () => callback());
+            return;
+          }
+          callback();
+        }
+      );
+    }
+  );
+}
 
 function loadState(callback) {
   chrome.storage.local.get(["chatgmini_geminiTabId", "chatgmini_geminiWindowId", "chatgmini_requests"], (data) => {
@@ -50,63 +120,48 @@ function consumeRequestTarget(requestId, callback) {
 }
 
 function ensureGeminiTab({ focus = false, createIfMissing = false } = {}, callback) {
-  const fallbackQuery = () => {
-    chrome.tabs.query({ url: "https://gemini.google.com/*" }, (tabs) => {
-      const existing = (tabs || []).find((tab) => tab?.id);
-      if (existing?.id) {
-        saveGeminiLocation(existing.id, existing.windowId, () => {
-          if (!focus) {
-            callback(existing.id);
-            return;
-          }
-          chrome.windows.update(existing.windowId, { focused: true, state: "maximized" }, () => {
-            chrome.tabs.update(existing.id, { active: true }, () => callback(existing.id));
-          });
-        });
-        return;
-      }
-      if (!createIfMissing) {
-        callback(null);
-        return;
-      }
-      chrome.windows.create(
-        {
-          url: "https://gemini.google.com/app",
-          type: "popup",
-          focused: true,
-          width: 420,
-          height: 620,
-          left: 24,
-          top: 24
-        },
-        (win) => {
-          const tab = win?.tabs?.find((item) => item?.id);
-          if (chrome.runtime.lastError || !tab?.id) {
-            callback(null);
-            return;
-          }
-          saveGeminiLocation(tab.id, win?.id, () => callback(tab.id));
+  const createPopup = () => {
+    if (!createIfMissing) {
+      callback(null);
+      return;
+    }
+    chrome.windows.create(
+      {
+        url: "https://gemini.google.com/app",
+        type: "popup",
+        focused: true,
+        width: 420,
+        height: 620,
+        left: 24,
+        top: 24
+      },
+      (win) => {
+        const tab = win?.tabs?.find((item) => item?.id);
+        if (chrome.runtime.lastError || !tab?.id) {
+          callback(null);
+          return;
         }
-      );
-    });
+        saveGeminiLocation(tab.id, win?.id, () => callback(tab.id));
+      }
+    );
   };
 
   const withTabId = (tabId) => {
     if (!tabId) {
-      fallbackQuery();
+      createPopup();
       return;
     }
 
     chrome.tabs.get(tabId, (tab) => {
       if (chrome.runtime.lastError || !tab?.id) {
-        saveGeminiLocation(null, null, () => fallbackQuery());
+        saveGeminiLocation(null, null, () => createPopup());
         return;
       }
       if (!focus) {
         callback(tab.id);
         return;
       }
-      chrome.windows.update(tab.windowId, { focused: true }, () => {
+      chrome.windows.update(tab.windowId, { focused: true, state: "normal" }, () => {
         chrome.tabs.update(tab.id, { active: true }, () => callback(tab.id));
       });
     });
@@ -204,14 +259,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "CHATGMINI_OPEN_SIDEPANEL") {
     const tabId = sender?.tab?.id;
-    if (!tabId || !chrome.sidePanel?.open) {
+    if (!tabId || !chrome.sidePanel?.open || !chrome.sidePanel?.setOptions) {
       sendResponse({ ok: false });
       return false;
     }
-    chrome.sidePanel.open({ tabId }, () => {
-      sendResponse({ ok: !chrome.runtime.lastError });
-    });
+    chrome.sidePanel.setOptions(
+      {
+        tabId,
+        path: "sidepanel.html",
+        enabled: true
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ ok: false });
+          return;
+        }
+        chrome.sidePanel.open({ tabId }, () => {
+          sendResponse({ ok: !chrome.runtime.lastError });
+        });
+      }
+    );
     return true;
+  }
+
+  if (message.type === "CHATGMINI_PANEL_STATE") {
+    sendResponse({
+      geminiTabId,
+      geminiReady: Boolean(geminiReadyTabId && geminiReadyTabId === geminiTabId),
+      lastStatus: lastGeminiStatus,
+      lastResponse: lastGeminiResponse
+    });
+    return false;
   }
 
   if (message.type === "CHATGMINI_OPEN_GEMINI") {
@@ -219,13 +297,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false, blocked: true });
       return false;
     }
+    const sourceTab = sender?.tab || null;
+    const layout = message?.layout && typeof message.layout === "object" ? message.layout : {};
     ensureGeminiTab({ focus: true, createIfMissing: true }, (tabId) => {
       if (!tabId) {
         sendResponse({ ok: false });
         return;
       }
-      waitForGeminiReady(tabId, {}, (ready) => {
-        sendResponse({ ok: ready });
+      arrangeCockpitWindows(sourceTab, layout, () => {
+        waitForGeminiReady(tabId, {}, (ready) => {
+          sendResponse({ ok: ready });
+        });
       });
     });
     return true;
@@ -355,6 +437,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "CHATGMINI_GEMINI_RESPONSE") {
     const requestId = String(message.requestId || "");
+    lastGeminiResponse = String(message.text || "");
     consumeRequestTarget(requestId, (target) => {
       if (target?.sourceTabId) {
         chrome.tabs.sendMessage(target.sourceTabId, {
@@ -370,6 +453,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "CHATGMINI_GEMINI_STREAM") {
     const requestId = String(message.requestId || "");
+    lastGeminiResponse = String(message.text || "");
     loadState((state) => {
       const target = state.requests[requestId] || null;
       if (target?.sourceTabId) {
@@ -387,6 +471,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "CHATGMINI_GEMINI_STATUS") {
     const requestId = String(message.requestId || "");
+    lastGeminiStatus = String(message.detail || message.status || "");
     loadState((state) => {
       const target = state.requests[requestId] || null;
       if (target?.sourceTabId) {

@@ -5,6 +5,31 @@ import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 import { applySegmentToUrl, normalizeVideoUrl } from '../../../utils/videoSegments';
 
+function buildMultiplicationTableQuestions(multiplier) {
+    return Array.from({ length: 10 }, (_, index) => {
+        const multiplicand = index + 1;
+        const answer = multiplier * multiplicand;
+        const wrong1 = answer + multiplier;
+        const wrong2 = Math.max(0, answer - multiplier);
+        const wrong3 = answer + multiplier * 2;
+        const options = [answer, wrong1, wrong2, wrong3]
+            .filter((value, pos, arr) => arr.indexOf(value) === pos)
+            .slice(0, 4);
+        while (options.length < 4) {
+            options.push(answer + multiplier * (options.length + 2));
+        }
+        const shuffled = options
+            .map((value) => ({ value, sort: Math.random() }))
+            .sort((a, b) => a.sort - b.sort)
+            .map((item) => String(item.value));
+        return {
+            q: `${multiplier} x ${multiplicand}`,
+            options: shuffled,
+            a: shuffled.findIndex((value) => Number(value) === answer)
+        };
+    });
+}
+
 export default function GameStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
     
     // --- ÉTATS DONNÉES ---
@@ -74,6 +99,21 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     // --- LOGIQUE ÉDITEUR (RESTAURÉE) ---
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
     const handleSelectQuestion = (lIdx, qIdx) => { setActiveLevelIdx(lIdx); setActiveQIdx(qIdx); };
+    const handleInjectMultiplicationTable = (multiplier) => {
+        const prepared = buildMultiplicationTableQuestions(multiplier);
+        setFormData((prev) => {
+            const newLevels = prev.levels.map((lvl, idx) => {
+                if (idx !== activeLevelIdx) return lvl;
+                const isDummy = lvl.questions.length === 1 && lvl.questions[0].q === 'Nouvelle question';
+                return {
+                    ...lvl,
+                    questions: isDummy ? prepared : [...lvl.questions, ...prepared]
+                };
+            });
+            return { ...prev, levels: newLevels };
+        });
+        setActiveQIdx(0);
+    };
     
     const handleAddLevel = () => { 
         setFormData(p => ({ 
@@ -429,6 +469,17 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                     
                     {/* ZONE IA */}
                     <div className="v84-ai-widget">
+                        <div className="v84-ai-row mb-2 flex-wrap">
+                            <button className="v84-gen-btn" type="button" onClick={() => handleInjectMultiplicationTable(2)}>
+                                TABLE DE 2
+                            </button>
+                            <button className="v84-gen-btn" type="button" onClick={() => handleInjectMultiplicationTable(5)}>
+                                TABLE DE 5
+                            </button>
+                            <button className="v84-gen-btn" type="button" onClick={() => handleInjectMultiplicationTable(10)}>
+                                TABLE DE 10
+                            </button>
+                        </div>
                         <div className="v84-ai-row">
                             <span className="text-2xl">🤖</span>
                             <input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} />

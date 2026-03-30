@@ -1,6 +1,7 @@
 .eleve-chat-page {
   display: flex;
   justify-content: center;
+  width: 100%;
 }
 
 .eleve-chat-shell {
@@ -13,6 +14,16 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.eleve-chat-layout-hint {
+  border: 1px dashed #cbd5e1;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  color: #475569;
+  border-radius: 16px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .eleve-chat-head {
@@ -79,6 +90,52 @@
   flex-wrap: wrap;
   font-size: 13px;
   font-weight: 800;
+}
+
+.eleve-chat-fullscreen-alert {
+  border: 1px solid #f59e0b;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%);
+  color: #9a3412;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.12);
+}
+
+.eleve-chat-fullscreen-debug {
+  border-radius: 18px;
+  padding: 14px 16px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.eleve-chat-fullscreen-debug.blocked {
+  border-color: #f59e0b;
+  background: #fff7ed;
+}
+
+.eleve-chat-fullscreen-debug.free {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.eleve-chat-fullscreen-debug-title {
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.eleve-chat-fullscreen-debug-line {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .eleve-chat-install-link {
@@ -203,5 +260,38 @@
 
   .eleve-chat-composer {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1100px) {
+  .eleve-chat-page {
+    justify-content: flex-start;
+    padding-right: clamp(320px, 33vw, 460px);
+  }
+
+  .eleve-chat-shell {
+    width: min(980px, calc(67vw - 40px));
+    margin-left: 0;
+  }
+
+  .eleve-chat-page::after {
+    content: "Zone reservee a la popup Gemini";
+    position: fixed;
+    top: 120px;
+    right: 18px;
+    width: clamp(280px, 29vw, 420px);
+    height: calc(100vh - 150px);
+    border-radius: 28px;
+    border: 1px dashed #f9a8d4;
+    background: linear-gradient(180deg, rgba(255,247,237,0.78) 0%, rgba(255,255,255,0.9) 100%);
+    color: #9a3412;
+    font-size: 13px;
+    font-weight: 900;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 20px;
+    pointer-events: none;
+    z-index: 0;
   }
 }

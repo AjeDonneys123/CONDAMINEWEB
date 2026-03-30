@@ -22,6 +22,32 @@ const DEFAULT_DATA = {
 const uid = () => `prod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const emptyQuestionnaireRow = () => ({ id: uid(), prompt: '', expectedAnswer: '', expectedKeywords: [], oralPreferred: true });
 const emptyQcmRow = () => ({ id: uid(), prompt: '', options: ['', '', '', ''], correctIndex: 0 });
+const extractGoogleSlidesId = (raw = '') => {
+    const txt = String(raw || '').trim();
+    const match = txt.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : '';
+};
+const inferLevelFromName = (name = '') => {
+    const cleaned = String(name || '').trim().toUpperCase();
+    const m = cleaned.match(/^([1-6])/);
+    return m ? m[1] : '';
+};
+const normalizeLevel = (value = '') => {
+    const cleaned = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+    if (!cleaned) return '';
+    if (/^(6|6E|6EME|SIXIEME)/.test(cleaned)) return '6';
+    if (/^(5|5E|5EME|CINQUIEME)/.test(cleaned)) return '5';
+    if (/^(4|4E|4EME|QUATRIEME)/.test(cleaned)) return '4';
+    if (/^(3|3E|3EME|TROISIEME)/.test(cleaned)) return '3';
+    if (/^(2|2DE|2NDE|SECONDE)/.test(cleaned)) return '2';
+    if (/^(1|1ERE|PREMIERE)/.test(cleaned)) return '1';
+    if (/^(T|TERM|TERMINALE)/.test(cleaned)) return 'T';
+    return cleaned;
+};
 
 export default function ProductionStudio({
     initialData,
@@ -31,7 +57,8 @@ export default function ProductionStudio({
     targetLevel,
     onClose,
     allStudents: propStudents,
-    allClasses: propClasses
+    allClasses: propClasses,
+    globalClass
 }) {
     const [formData, setFormData] = useState(() => ({
         ...DEFAULT_DATA,
@@ -45,9 +72,12 @@ export default function ProductionStudio({
     const [allClasses, setAllClasses] = useState(propClasses || []);
     const [games, setGames] = useState([]);
     const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState('');
+    const [viewingClass, setViewingClass] = useState(globalClass || '');
     const [studentSearch, setStudentSearch] = useState('');
     const [loading, setLoading] = useState(false);
+    const [slidesLoading, setSlidesLoading] = useState(false);
+    const [slidesError, setSlidesError] = useState('');
+    const [slidesManifest, setSlidesManifest] = useState([]);
 
     useEffect(() => {
         const load = async () => {
@@ -82,6 +112,46 @@ export default function ProductionStudio({
     }, [initialData]);
 
     useEffect(() => {
+        if (initialData?._id) return;
+        if (!globalClass) return;
+        if (viewingClass) return;
+        setViewingClass(globalClass);
+    }, [globalClass, viewingClass, initialData]);
+
+    useEffect(() => {
+        if (initialData?._id) return;
+        if (!globalClass) return;
+        if (!Array.isArray(chapters) || chapters.length === 0) return;
+        if (Object.keys(distribution).length > 0) return;
+
+        const cleanSection = String(targetSection || 'GÉNÉRAL').trim().toUpperCase();
+        const classObj = (allClasses || []).find((cls) => String(cls?.name || '') === String(globalClass || ''));
+        const currentLevel = normalizeLevel(targetLevel || classObj?.level || inferLevelFromName(globalClass));
+
+        const availableChapters = chapters
+            .filter((chapter) => {
+                const chapSection = String(chapter?.section || 'GÉNÉRAL').trim().toUpperCase();
+                if (chapSection !== cleanSection) return false;
+                if (chapter?.isArchived) return false;
+                if (chapter?.classroom && String(chapter.classroom) !== String(globalClass)) return false;
+                if (chapter?.sharedLevel && normalizeLevel(chapter.sharedLevel) !== currentLevel) return false;
+                if (Array.isArray(chapter?.hiddenIn) && chapter.hiddenIn.includes(globalClass)) return false;
+                return true;
+            })
+            .sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0));
+
+        const defaultChapterId = String(availableChapters[0]?._id || '').trim();
+        if (!defaultChapterId) return;
+
+        setDistribution({
+            [globalClass]: {
+                chapterId: defaultChapterId,
+                studentIds: []
+            }
+        });
+    }, [initialData, globalClass, chapters, distribution, targetSection, targetLevel, allClasses]);
+
+    useEffect(() => {
         setFormData((prev) => {
             if (prev.productionType === 'fiche') return { ...prev, questions: [] };
             if ((prev.questions || []).length > 0) return prev;
@@ -89,9 +159,67 @@ export default function ProductionStudio({
         });
     }, [formData.productionType]);
 
+    useEffect(() => {
+        if (formData.productionType !== 'fiche') {
+            setSlidesManifest([]);
+            setSlidesError('');
+            setSlidesLoading(false);
+            return;
+        }
+        const presentationUrl = String(formData.presentationUrl || '').trim();
+        if (!presentationUrl) {
+            setSlidesManifest([]);
+            setSlidesError('');
+            return;
+        }
+        const ctrl = new AbortController();
+        (async () => {
+            setSlidesLoading(true);
+            setSlidesError('');
+            try {
+                const res = await fetch('/api/learning/slides/manifest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        presentationUrl,
+                        slideSelection: '',
+                        filterCondition: '',
+                        includeThumbnails: false
+                    }),
+                    signal: ctrl.signal
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(String(data?.error || 'Slides indisponibles'));
+                setSlidesManifest(Array.isArray(data?.slides) ? data.slides : []);
+            } catch (e) {
+                if (ctrl.signal.aborted) return;
+                setSlidesManifest([]);
+                setSlidesError(String(e?.message || 'Slides indisponibles'));
+            } finally {
+                if (!ctrl.signal.aborted) setSlidesLoading(false);
+            }
+        })();
+        return () => ctrl.abort();
+    }, [formData.presentationUrl, formData.productionType]);
+
     const gameOptions = useMemo(() => {
         return (Array.isArray(games) ? games : []).sort((a, b) => String(a?.title || '').localeCompare(String(b?.title || '')));
     }, [games]);
+
+    const selectedSlides = useMemo(
+        () => new Set((formData.selectedSlides || []).map((x) => Number(x)).filter(Boolean)),
+        [formData.selectedSlides]
+    );
+    const toggleSlide = (slideNumber) => {
+        const n = Number(slideNumber || 0);
+        if (!n) return;
+        setFormData((prev) => {
+            const current = new Set((prev.selectedSlides || []).map((x) => Number(x)).filter(Boolean));
+            if (current.has(n)) current.delete(n);
+            else current.add(n);
+            return { ...prev, selectedSlides: [...current].sort((a, b) => a - b) };
+        });
+    };
 
     const updateQuestion = (index, patch) => {
         setFormData((prev) => ({
@@ -119,6 +247,7 @@ export default function ProductionStudio({
         if (!String(formData.title || '').trim()) return alert('Titre requis.');
         if (targets.length === 0) return alert('Sélectionne au moins une classe.');
         if (formData.productionType === 'fiche' && !String(formData.presentationUrl || '').trim()) return alert('Lien Google Slides requis.');
+        if (formData.productionType === 'fiche' && (formData.selectedSlides || []).length === 0) return alert("Sélectionne au moins une slide visible pour l'élève.");
         if (formData.productionType === 'questionnaire' && !(formData.questions || []).some((row) => String(row?.prompt || '').trim())) return alert("Ajoute au moins une question.");
         if (formData.productionType === 'qcm' && !(formData.questions || []).some((row) => String(row?.prompt || '').trim() && (row?.options || []).filter(Boolean).length >= 2)) return alert("Ajoute au moins un QCM valide.");
 
@@ -141,7 +270,12 @@ export default function ProductionStudio({
                 grouped[key].classrooms.push(cls);
             });
 
-            for (const [index, entry] of Object.values(grouped).entries()) {
+            const groupEntries = Object.values(grouped);
+            if (groupEntries.length === 0) {
+                return alert('Chaque classe active doit avoir un dossier valide.');
+            }
+
+            for (const [index, entry] of groupEntries.entries()) {
                 const payload = {
                     ...formData,
                     title: String(formData.title || '').trim(),
@@ -153,7 +287,10 @@ export default function ProductionStudio({
                     teacherId: user.id || user._id
                 };
                 if (!(formData._id && index === 0)) delete payload._id;
-                await api.post('/productions', payload);
+                const saved = await api.post('/productions', payload);
+                if (!saved || saved.error || !saved._id) {
+                    throw new Error(String(saved?.error || 'Sauvegarde production impossible'));
+                }
             }
             onClose();
         } catch (e) {
@@ -162,6 +299,8 @@ export default function ProductionStudio({
             setLoading(false);
         }
     };
+
+    const presentationId = extractGoogleSlidesId(formData.presentationUrl);
 
     return (
         <div className="expose-studio-shell">
@@ -210,12 +349,46 @@ export default function ProductionStudio({
                     />
 
                     {formData.productionType === 'fiche' && (
-                        <input
-                            className="expose-subject-input"
-                            value={formData.presentationUrl || ''}
-                            onChange={(e) => setFormData((p) => ({ ...p, presentationUrl: e.target.value }))}
-                            placeholder="https://docs.google.com/presentation/d/..."
-                        />
+                        <>
+                            <input
+                                className="expose-subject-input"
+                                value={formData.presentationUrl || ''}
+                                onChange={(e) => setFormData((p) => ({ ...p, presentationUrl: e.target.value }))}
+                                placeholder="https://docs.google.com/presentation/d/..."
+                            />
+                            <div>
+                                <div className="text-[11px] font-black uppercase text-slate-400 mt-4 mb-2">Slides visibles par les élèves</div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                    {slidesLoading && <div className="text-[11px] font-bold text-slate-500">Chargement des slides...</div>}
+                                    {!slidesLoading && slidesError && <div className="text-[11px] font-bold text-red-500">{slidesError}</div>}
+                                    {!slidesLoading && !slidesError && slidesManifest.length === 0 && <div className="text-[11px] font-bold text-slate-400">Colle un lien Google Slides pour charger les slides.</div>}
+                                    {!slidesLoading && slidesManifest.length > 0 && (
+                                        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 max-h-[340px] overflow-auto">
+                                            {slidesManifest.map((slide) => {
+                                                const slideNumber = Number(slide?.slideNumber || 0);
+                                                const active = selectedSlides.has(slideNumber);
+                                                const thumbUrl = presentationId ? `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presentationId)}&pageObjectId=${encodeURIComponent(String(slide?.objectId || ''))}&slideNumber=${encodeURIComponent(String(slideNumber || ''))}` : '';
+                                                return (
+                                                    <button
+                                                        key={String(slide?.objectId || slideNumber)}
+                                                        type="button"
+                                                        onClick={() => toggleSlide(slideNumber)}
+                                                        className={`rounded-2xl border p-2 text-left transition-all ${active ? 'border-fuchsia-500 bg-fuchsia-50 shadow-md' : 'border-slate-200 bg-white'}`}
+                                                    >
+                                                        <div className="aspect-[16/9] overflow-hidden rounded-xl bg-slate-100 border border-slate-200 mb-2">
+                                                            {thumbUrl
+                                                                ? <img src={thumbUrl} alt={`Slide ${slideNumber}`} className="w-full h-full object-cover" />
+                                                                : <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs font-black">Slide {slideNumber}</div>}
+                                                        </div>
+                                                        <div className="text-[10px] font-black uppercase text-slate-700">Slide {slideNumber}</div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </>
                     )}
 
                     {formData.productionType === 'qcm' && (

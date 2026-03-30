@@ -1,12 +1,14 @@
 const { getDailyFreeTierStatus } = require('./aiUsage.service');
-const { getCurrentDayAiSpend } = require('./gcpBilling.service');
+const { getCurrentDayAiSpend, EXACT_BILLING_ENABLED } = require('./gcpBilling.service');
 
 const WARNING_PCT = Number(process.env.AI_FREE_WARNING_PCT || 15);
 const HARD_BLOCK_PCT = Number(process.env.AI_FREE_BLOCK_PCT || 0);
 
 async function getAiGuardStatus({ teacherId = '' } = {}) {
     const fallback = await getDailyFreeTierStatus({ teacherId });
-    const cloudSpend = await getCurrentDayAiSpend().catch(() => null);
+    const cloudSpend = EXACT_BILLING_ENABLED
+        ? await getCurrentDayAiSpend().catch(() => null)
+        : null;
     const cloudSpentRaw = cloudSpend?.spentUsd;
     const exactSpent = (cloudSpend?.exact === true && cloudSpentRaw !== null && cloudSpentRaw !== undefined && Number.isFinite(Number(cloudSpentRaw)))
         ? Number(cloudSpentRaw)

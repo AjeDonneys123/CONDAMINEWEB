@@ -9,17 +9,27 @@
   <body>
     <div class="panel">
       <div class="kicker">ChatGmini</div>
-      <h1>Chat discret</h1>
-      <p>
-        Test blanc sur blanc pour evaluer la discretion reelle du panneau lateral.
+      <h1>Cockpit Gemini</h1>
+      <p class="hint">
+        Ce panneau ne tente plus d'embarquer Gemini. Il pilote le moteur Gemini ouvert ailleurs et affiche son dernier etat.
       </p>
-      <div class="stack">
-        <div class="card soft">
-          <div class="card-title">Bloc</div>
-          <div class="card-text">Presque invisible, mais toujours present.</div>
-        </div>
-        <button class="cta">Action</button>
+
+      <div class="card">
+        <div class="card-title">Etat moteur</div>
+        <pre id="status" class="status">Chargement...</pre>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Derniere reponse</div>
+        <div id="response" class="response">Aucune reponse capturee pour l'instant.</div>
+      </div>
+
+      <div class="actions">
+        <button id="openGemini" class="cta">Ouvrir / retrouver Gemini</button>
+        <button id="refreshState" class="ghost">Actualiser l'etat</button>
       </div>
     </div>
+
+    <script src="sidepanel.js"></script>
   </body>
 </html>

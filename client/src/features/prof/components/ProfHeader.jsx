@@ -89,7 +89,7 @@ export default function ProfHeader({ user, onLogout }) {
     : `IA ${Math.round(aiUsage.remainingPct)}%`;
   const aiTitle = aiUsage.loading
     ? 'Chargement de la consommation IA...'
-    : `Ressource IA restante aujourd'hui: ${aiUsage.remainingUsd.toFixed(4)}$ / ${aiUsage.budgetUsd.toFixed(2)}$ | Dépensé aujourd'hui: ${aiUsage.spentUsd.toFixed(6)}$ | Tokens envoyés aujourd'hui: ${aiUsage.promptTokens.toLocaleString('fr-FR')} | Tokens reçus aujourd'hui: ${aiUsage.candidateTokens.toLocaleString('fr-FR')} | Total tokens aujourd'hui: ${aiUsage.totalTokens.toLocaleString('fr-FR')} | Estimation tokens restants (flash-lite input): ${aiUsage.remainingInputTokensEstimate.toLocaleString('fr-FR')} | Source: ${aiUsage.measurement === 'exact_google_cloud' ? 'Google Cloud exact pour le coût' : 'Fallback local estimé'}${aiUsage.guardBlocked ? ' | BLOQUÉ: quota gratuit atteint' : aiUsage.guardWarning ? ' | ALERTE: quota presque atteint' : ''}${aiUsage.googleCloudError ? ` | Erreur GCP: ${aiUsage.googleCloudError}` : ''}`;
+    : `Ressource IA restante aujourd'hui: ${aiUsage.remainingUsd.toFixed(4)}$ / ${aiUsage.budgetUsd.toFixed(2)}$ | Dépensé aujourd'hui: ${aiUsage.spentUsd.toFixed(6)}$ | Tokens envoyés aujourd'hui: ${aiUsage.promptTokens.toLocaleString('fr-FR')} | Tokens reçus aujourd'hui: ${aiUsage.candidateTokens.toLocaleString('fr-FR')} | Total tokens aujourd'hui: ${aiUsage.totalTokens.toLocaleString('fr-FR')} | Estimation tokens restants (flash-lite input): ${aiUsage.remainingInputTokensEstimate.toLocaleString('fr-FR')} | Source: estimation locale par tokens${aiUsage.guardBlocked ? ' | BLOQUÉ: quota gratuit atteint' : aiUsage.guardWarning ? ' | ALERTE: quota presque atteint' : ''}`;
 
   return (
     <>
@@ -108,7 +108,7 @@ export default function ProfHeader({ user, onLogout }) {
             {user?.isDeveloper && (
               <>
                 <button title={aiTitle} className={`${aiToneClass} text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg`}>
-                  {aiLabel}{!aiUsage.loading && aiUsage.measurement === 'exact_google_cloud' ? ' GCP' : ''}
+                  {aiLabel}
                 </button>
                 <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform">☁️ DRIVE</button>
                 <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase hover:scale-105 transition-transform">📊 BDD</button>
@@ -133,7 +133,7 @@ export default function ProfHeader({ user, onLogout }) {
                 {user?.isDeveloper && (
                   <>
                     <button title={aiTitle} className={`${aiToneClass} text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase`}>
-                      {aiLabel}{!aiUsage.loading && aiUsage.measurement === 'exact_google_cloud' ? ' GCP' : ''}
+                      {aiLabel}
                     </button>
                     <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">☁️ DRIVE</button>
                     <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">📊 BDD</button>

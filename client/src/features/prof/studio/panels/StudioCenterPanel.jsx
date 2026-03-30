@@ -2,6 +2,50 @@
 import React, { useState } from 'react';
 import { api } from '../../../../services/api';
 
+function buildStudioMultiplicationGame(multiplier) {
+    const questions = Array.from({ length: 10 }, (_, index) => {
+        const multiplicand = index + 1;
+        const answer = multiplier * multiplicand;
+        const options = [
+            answer,
+            answer + multiplier,
+            Math.max(0, answer - multiplier),
+            answer + multiplier * 2
+        ]
+            .filter((value, pos, arr) => arr.indexOf(value) === pos)
+            .slice(0, 4);
+
+        while (options.length < 4) {
+            options.push(answer + multiplier * (options.length + 2));
+        }
+
+        const shuffled = options
+            .map((value) => ({ value, sort: Math.random() }))
+            .sort((a, b) => a.sort - b.sort)
+            .map((item) => String(item.value));
+
+        return {
+            q: `${multiplier} x ${multiplicand}`,
+            options: shuffled,
+            a: shuffled.findIndex((value) => Number(value) === answer)
+        };
+    });
+
+    return {
+        title: `TABLE DE ${multiplier}`,
+        type: 'zombie',
+        subject: 'MATHEMATIQUES',
+        levels: [
+            {
+                name: `Table de ${multiplier}`,
+                questions,
+                intro: {}
+            }
+        ],
+        globalIntro: { sheetUrl: '', videoUrl: '' }
+    };
+}
+
 /**
  * 🎬 PANNEAU CENTRAL STUDIO FUSIONNÉ V2
  * REPAIRS:
@@ -54,6 +98,11 @@ export default function StudioCenterPanel({
         } catch(e) { alert("Erreur prod"); }
     };
 
+    const applyMultiplicationPreset = (multiplier) => {
+        setTestGame(buildStudioMultiplicationGame(multiplier));
+        setShowQuizManager(true);
+    };
+
     const toggleProjectProduction = async () => {
         if (!project) return;
         const next = { ...project, isProduction: !project.isProduction };
@@ -101,6 +150,17 @@ export default function StudioCenterPanel({
                                 L'univers visuel actuel sera testé avec l'activité :<br/> 
                                 <span className="text-2xl uppercase">{testGame.title}</span>
                             </p>
+                            <div className="grid grid-cols-3 gap-3 mb-6">
+                                <button onClick={() => applyMultiplicationPreset(2)} className="py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase">
+                                    Table de 2
+                                </button>
+                                <button onClick={() => applyMultiplicationPreset(5)} className="py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase">
+                                    Table de 5
+                                </button>
+                                <button onClick={() => applyMultiplicationPreset(10)} className="py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase">
+                                    Table de 10
+                                </button>
+                            </div>
                             <button onClick={handleSetProduction} className="w-full py-6 bg-emerald-500 text-white font-black rounded-3xl shadow-xl uppercase hover:scale-[1.02] transition-transform">
                                 🌟 Déclarer comme univers de Production (Julian y aura accès)
                             </button>

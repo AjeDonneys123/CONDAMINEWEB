@@ -8,7 +8,6 @@ const StructureDrive = require('../structure/experts/structure.drive');
 const { sendMail, sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 const { isCentralAiAccount } = require('../../prof/core/profAiKeys');
 const { getDailyFreeTierStatus, getFreeTierStatus, getUsageSummary, getCurrentDayWindow, getCurrentMonthWindow } = require('../../services/aiUsage.service');
-const { getCurrentDayAiSpend, getCurrentMonthAiSpend, hasGcpBillingConfig } = require('../../services/gcpBilling.service');
 const { getAiGuardStatus } = require('../../services/aiGuard.service');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -43,32 +42,13 @@ router.get('/drive-check', requireDeveloper, asyncHandler(async (req, res) => re
 router.get('/ai-usage', requireDeveloper, asyncHandler(async (req, res) => {
     const teacherId = String(req.query.teacherId || '').trim();
     const fallbackFreeTier = await getDailyFreeTierStatus({ teacherId });
-    const cloudSpend = await getCurrentDayAiSpend().catch((e) => ({
-        configured: hasGcpBillingConfig(),
-        exact: false,
-        source: 'gcp_error',
-        spentUsd: null,
-        currency: 'USD',
-        rowsMatched: 0,
-        error: e.message || 'GCP billing query failed'
-    }));
-    const cloudSpentRaw = cloudSpend?.spentUsd;
-    const preciseSpentUsd = (cloudSpend?.exact === true && cloudSpentRaw !== null && cloudSpentRaw !== undefined && Number.isFinite(Number(cloudSpentRaw)))
-        ? Number(cloudSpentRaw)
-        : Number(fallbackFreeTier.spentUsd || 0);
-    const budgetUsd = Number(fallbackFreeTier.budgetUsd || 0);
-    const remainingUsd = Math.max(0, budgetUsd - preciseSpentUsd);
-    const remainingPct = budgetUsd > 0 ? Math.max(0, Math.min(100, (remainingUsd / budgetUsd) * 100)) : 100;
     const freeTier = {
         ...fallbackFreeTier,
-        spentUsd: preciseSpentUsd,
-        remainingUsd,
-        remainingPct,
-        measurement: cloudSpend?.exact ? 'exact_google_cloud' : 'estimated_local',
-        measurementSource: String(cloudSpend?.source || 'fallback'),
-        googleCloudConfigured: Boolean(cloudSpend?.configured),
-        googleCloudRowsMatched: Number(cloudSpend?.rowsMatched || 0),
-        googleCloudError: String(cloudSpend?.error || '')
+        measurement: 'estimated_local',
+        measurementSource: 'local_ledger',
+        googleCloudConfigured: false,
+        googleCloudRowsMatched: 0,
+        googleCloudError: ''
     };
     const { start: dayStart, end: dayEnd } = getCurrentDayWindow();
     const { start, end } = getCurrentMonthWindow();
@@ -76,12 +56,11 @@ router.get('/ai-usage', requireDeveloper, asyncHandler(async (req, res) => {
     const globalMonth = await getUsageSummary({ source: 'global', start, end });
     const centralDay = await getUsageSummary({ teacherId, source: 'central', start: dayStart, end: dayEnd });
     const globalDay = await getUsageSummary({ source: 'global', start: dayStart, end: dayEnd });
-    const cloudMonth = await getCurrentMonthAiSpend().catch(() => null);
     const guard = await getAiGuardStatus({ teacherId });
     const estRemainingInputTokens = freeTier.remainingUsd > 0 ? Math.floor((freeTier.remainingUsd / 0.10) * 1000000) : 0;
     res.json({
         freeTier,
-        cloudSpend,
+        cloudSpend: null,
         guard,
         estimates: {
             remainingInputTokensFlashLite: estRemainingInputTokens
@@ -97,7 +76,7 @@ router.get('/ai-usage', requireDeveloper, asyncHandler(async (req, res) => {
             end,
             personal: personalMonth,
             global: globalMonth,
-            cloud: cloudMonth
+            cloud: null
         }
     });
 }));

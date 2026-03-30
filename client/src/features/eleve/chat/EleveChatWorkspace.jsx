@@ -5,16 +5,46 @@ function makeRequestId() {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function isWindowLikelyFullscreen() {
-  if (typeof window === 'undefined' || typeof screen === 'undefined') return false;
+function getFullscreenDiagnostics() {
+  if (typeof window === 'undefined' || typeof screen === 'undefined') {
+    return {
+      blocked: false,
+      reasons: [],
+      metrics: {}
+    };
+  }
   const domFullscreen = Boolean(document.fullscreenElement);
   const availWidthDelta = Math.abs(window.outerWidth - screen.availWidth);
   const availHeightDelta = Math.abs(window.outerHeight - screen.availHeight);
   const fullWidthDelta = Math.abs(window.outerWidth - screen.width);
   const fullHeightDelta = Math.abs(window.outerHeight - screen.height);
-  return domFullscreen
-    || (availWidthDelta <= 2 && availHeightDelta <= 2)
-    || (fullWidthDelta <= 2 && fullHeightDelta <= 2);
+  const innerWidthDelta = Math.abs(window.innerWidth - screen.availWidth);
+  const innerHeightDelta = Math.abs(window.innerHeight - screen.availHeight);
+  const reasons = [];
+  if (domFullscreen) reasons.push('fullscreen-api');
+  if (availWidthDelta <= 2 && availHeightDelta <= 2) reasons.push('outer≈avail');
+  if (fullWidthDelta <= 2 && fullHeightDelta <= 2) reasons.push('outer≈screen');
+  if (innerWidthDelta <= 2 && innerHeightDelta <= 2) reasons.push('inner≈avail');
+  return {
+    blocked: reasons.length > 0,
+    reasons,
+    metrics: {
+      outerWidth: window.outerWidth,
+      outerHeight: window.outerHeight,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      screenWidth: screen.width,
+      screenHeight: screen.height,
+      availWidth: screen.availWidth,
+      availHeight: screen.availHeight,
+      availWidthDelta,
+      availHeightDelta,
+      fullWidthDelta,
+      fullHeightDelta,
+      innerWidthDelta,
+      innerHeightDelta
+    }
+  };
 }
 
 export default function EleveChatWorkspace({ user }) {
@@ -24,6 +54,8 @@ export default function EleveChatWorkspace({ user }) {
   const [status, setStatus] = useState('');
   const [pendingRequestId, setPendingRequestId] = useState('');
   const [streamingResponse, setStreamingResponse] = useState('');
+  const [fullscreenBlocked, setFullscreenBlocked] = useState(false);
+  const [fullscreenInfo, setFullscreenInfo] = useState({ reasons: [], metrics: {} });
   const threadRef = useRef(null);
   const pendingRequestIdRef = useRef('');
 
@@ -41,6 +73,26 @@ export default function EleveChatWorkspace({ user }) {
     if (hasExtension) return '';
     return "L'extension ChatGmini est necessaire pour discuter avec Gemini depuis ton compte.";
   }, [hasExtension]);
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      const info = getFullscreenDiagnostics();
+      setFullscreenBlocked(info.blocked);
+      setFullscreenInfo({ reasons: info.reasons, metrics: info.metrics });
+      document.documentElement?.setAttribute('data-chatgmini-open-blocked', info.blocked ? 'true' : 'false');
+    };
+    syncFullscreenState();
+    window.addEventListener('resize', syncFullscreenState);
+    window.addEventListener('fullscreenchange', syncFullscreenState);
+    window.addEventListener('orientationchange', syncFullscreenState);
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => {
+      window.removeEventListener('resize', syncFullscreenState);
+      window.removeEventListener('fullscreenchange', syncFullscreenState);
+      window.removeEventListener('orientationchange', syncFullscreenState);
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+    };
+  }, []);
 
   useEffect(() => {
     const detect = () => {
@@ -136,14 +188,25 @@ export default function EleveChatWorkspace({ user }) {
       pushSystemMessage(extensionHint);
       return;
     }
-    if (isWindowLikelyFullscreen()) {
-      document.documentElement?.setAttribute('data-chatgmini-open-blocked', 'true');
-      pushSystemMessage("Sors du plein ecran pour utiliser l'IA. Gemini ne doit pas s'ouvrir tant que la fenetre occupe tout l'ecran.");
+    if (fullscreenBlocked) {
+      pushSystemMessage("Sors du plein ecran pour ouvrir Gemini en mode cockpit.");
       return;
     }
-    document.documentElement?.setAttribute('data-chatgmini-open-blocked', 'false');
-    pushSystemMessage('Demande d’ouverture de Gemini envoyee.');
-    document.dispatchEvent(new CustomEvent('CHATGMINI_OPEN_GEMINI'));
+    pushSystemMessage("Demande d'ouverture de Gemini en mode cockpit envoyee.");
+    document.dispatchEvent(new CustomEvent('CHATGMINI_OPEN_GEMINI', {
+      detail: {
+        layout: {
+          screenX: window.screenX,
+          screenY: window.screenY,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+          availWidth: screen.availWidth,
+          availHeight: screen.availHeight,
+          availLeft: Number(screen.availLeft || 0),
+          availTop: Number(screen.availTop || 0)
+        }
+      }
+    }));
   };
 
   return (
@@ -158,7 +221,11 @@ export default function EleveChatWorkspace({ user }) {
         </div>
 
         <div className="eleve-chat-subtitle">
-          Gemini s'ouvre de facon visible. Les reponses surveillees reviennent aussi dans ce fil CondaWeb.
+          Mode cockpit: Gemini s'ouvre a gauche dans une popup visible, CondaWeb reste a droite.
+        </div>
+
+        <div className="eleve-chat-layout-hint">
+          Mode conseille: CondaWeb prend environ deux tiers de la largeur, et Gemini vient se placer sur le tiers droit.
         </div>
 
         {!hasExtension && (
@@ -174,6 +241,34 @@ export default function EleveChatWorkspace({ user }) {
             </a>
           </div>
         )}
+
+        {fullscreenBlocked && (
+          <div className="eleve-chat-fullscreen-alert">
+            Sors du plein ecran pour utiliser l&apos;IA. Tant que la fenetre occupe tout l&apos;ecran, l&apos;ouverture de Gemini est bloquee.
+          </div>
+        )}
+
+        <div className={`eleve-chat-fullscreen-debug ${fullscreenBlocked ? 'blocked' : 'free'}`}>
+          <div className="eleve-chat-fullscreen-debug-title">
+            Detecteur plein ecran: {fullscreenBlocked ? 'bloque' : 'ok'}
+          </div>
+          <div className="eleve-chat-fullscreen-debug-line">
+            Raisons: {fullscreenInfo.reasons.length ? fullscreenInfo.reasons.join(', ') : 'aucune'}
+          </div>
+          <div className="eleve-chat-fullscreen-debug-line">
+            outer {fullscreenInfo.metrics.outerWidth || 0}x{fullscreenInfo.metrics.outerHeight || 0}
+            {' | '}inner {fullscreenInfo.metrics.innerWidth || 0}x{fullscreenInfo.metrics.innerHeight || 0}
+          </div>
+          <div className="eleve-chat-fullscreen-debug-line">
+            screen {fullscreenInfo.metrics.screenWidth || 0}x{fullscreenInfo.metrics.screenHeight || 0}
+            {' | '}avail {fullscreenInfo.metrics.availWidth || 0}x{fullscreenInfo.metrics.availHeight || 0}
+          </div>
+          <div className="eleve-chat-fullscreen-debug-line">
+            dOuterAvail {fullscreenInfo.metrics.availWidthDelta || 0}/{fullscreenInfo.metrics.availHeightDelta || 0}
+            {' | '}dOuterScreen {fullscreenInfo.metrics.fullWidthDelta || 0}/{fullscreenInfo.metrics.fullHeightDelta || 0}
+            {' | '}dInnerAvail {fullscreenInfo.metrics.innerWidthDelta || 0}/{fullscreenInfo.metrics.innerHeightDelta || 0}
+          </div>
+        </div>
 
         <div className="eleve-chat-thread" ref={threadRef}>
           {messages.length === 0 && (

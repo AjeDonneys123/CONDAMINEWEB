@@ -1,8 +1,10 @@
 const { google } = require('googleapis');
 
 const BILLING_SCOPE = 'https://www.googleapis.com/auth/cloud-platform.read-only';
+const EXACT_BILLING_ENABLED = String(process.env.GCP_EXACT_BILLING_ENABLED || '').trim().toLowerCase() === 'true';
 
 function hasGcpBillingConfig() {
+    if (!EXACT_BILLING_ENABLED) return false;
     return Boolean(
         String(process.env.GCP_BILLING_SERVICE_ACCOUNT_EMAIL || '').trim()
         && String(process.env.GCP_BILLING_SERVICE_ACCOUNT_PRIVATE_KEY || '').trim()
@@ -87,7 +89,7 @@ async function getCurrentMonthAiSpend() {
         return {
             configured: false,
             exact: false,
-            source: 'fallback',
+            source: EXACT_BILLING_ENABLED ? 'fallback' : 'disabled',
             spentUsd: null,
             currency: 'USD',
             rowsMatched: 0
@@ -126,7 +128,7 @@ async function getCurrentDayAiSpend() {
         return {
             configured: false,
             exact: false,
-            source: 'fallback',
+            source: EXACT_BILLING_ENABLED ? 'fallback' : 'disabled',
             spentUsd: null,
             currency: 'USD',
             rowsMatched: 0
@@ -163,5 +165,6 @@ async function getCurrentDayAiSpend() {
 module.exports = {
     getCurrentDayAiSpend,
     getCurrentMonthAiSpend,
-    hasGcpBillingConfig
+    hasGcpBillingConfig,
+    EXACT_BILLING_ENABLED
 };

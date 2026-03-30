@@ -42,6 +42,13 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
     const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
     const isObjectId = (v) => /^[a-f0-9]{24}$/i.test(String(v || '').trim());
+    const normalizeClassKey = (value = '') =>
+        String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
     const inferLevelFromName = (name = '') => {
         const m = String(name || '').trim().toUpperCase().match(/^([1-6])/);
         return m ? m[1] : '';
@@ -459,7 +466,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
                 <div className="grid grid-cols-1 gap-4 pb-20">
                     {filteredChapters.sort((a,b) => a.title.localeCompare(b.title)).map(chap => {
-                        const chapItems = uniqueItems.filter(it => String(it.chapterId) === String(chap._id) && (!it.targetClassrooms || it.targetClassrooms.includes(classFilter) || !classFilter));
+                        const normalizedClassFilter = normalizeClassKey(classFilter);
+                        const chapItems = uniqueItems.filter((it) => {
+                            if (String(it.chapterId) !== String(chap._id)) return false;
+                            if (!classFilter || !Array.isArray(it.targetClassrooms) || it.targetClassrooms.length === 0) return true;
+                            return it.targetClassrooms.some((cls) => normalizeClassKey(cls) === normalizedClassFilter);
+                        });
                         const isOpen = openChaps[chap._id];
                         const isRoot = activeSection.toUpperCase() === "GÉNÉRAL" && chap.title.toUpperCase() === "GÉNÉRAL";
                         const isLastSurvivor = activeSection.toUpperCase() === "GÉNÉRAL" && filteredChapters.length <= 1;
