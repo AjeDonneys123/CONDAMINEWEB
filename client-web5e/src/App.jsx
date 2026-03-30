@@ -74,6 +74,24 @@ function createBlock(type = 'text') {
   };
 }
 
+function createAnimationBlockFromDraft(draft = {}) {
+  return {
+    type: 'animation',
+    title: String(draft.title || 'Nouvelle animation').trim() || 'Nouvelle animation',
+    actorName: String(draft.actorName || 'Personnage').trim() || 'Personnage',
+    actorImageUrl: String(draft.actorImageUrl || '').trim(),
+    soundName: String(draft.soundName || '').trim(),
+    soundUrl: String(draft.soundUrl || '').trim(),
+    hiddenByDefault: false,
+    steps: [
+      { type: 'show', label: 'Montrer', x: 0, y: 0 },
+      { type: 'move', label: 'Déplacement', x: 180, y: 40 },
+      ...(draft.soundUrl ? [{ type: 'sound', label: 'Son', x: 0, y: 0 }] : []),
+      { type: 'hide', label: 'Cacher', x: 0, y: 0 }
+    ]
+  };
+}
+
 const ARTICLE_FONTS = [
   { value: 'Arial', label: 'Arial' },
   { value: 'Georgia', label: 'Georgia' },
@@ -291,6 +309,11 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
           }));
         } else if (step.type === 'stopAction') {
           setActorState((prev) => ({ ...prev }));
+        } else if (step.type === 'sound' && block?.soundUrl) {
+          try {
+            const audio = new Audio(block.soundUrl);
+            audio.play().catch(() => {});
+          } catch (_) {}
         }
       }, delay);
       delay += 650;
@@ -318,6 +341,11 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
               onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
               placeholder="URL de l'image du personnage"
             />
+            <input
+              value={block?.soundUrl || ''}
+              onChange={(e) => updateRoot({ soundUrl: e.target.value })}
+              placeholder="URL du son"
+            />
             <label className="animation-checkbox">
               <input
                 type="checkbox"
@@ -332,6 +360,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             <button type="button" onClick={() => addStep('show')}>Montrer</button>
             <button type="button" onClick={() => addStep('hide')}>Cacher</button>
             <button type="button" onClick={() => addStep('move')}>Déplacement</button>
+            <button type="button" onClick={() => addStep('sound')}>Son</button>
             <button type="button" onClick={() => addStep('stopAction')}>Stop action</button>
           </div>
 
@@ -347,12 +376,21 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                     value={step.type || 'show'}
                     onChange={(e) => updateStep(index, {
                       type: e.target.value,
-                      label: e.target.value === 'move' ? 'Déplacement' : e.target.value === 'show' ? 'Montrer' : e.target.value === 'hide' ? 'Cacher' : 'Stop action'
+                      label: e.target.value === 'move'
+                        ? 'Déplacement'
+                        : e.target.value === 'show'
+                          ? 'Montrer'
+                          : e.target.value === 'hide'
+                            ? 'Cacher'
+                            : e.target.value === 'sound'
+                              ? 'Son'
+                              : 'Stop action'
                     })}
                   >
                     <option value="show">Montrer</option>
                     <option value="hide">Cacher</option>
                     <option value="move">Déplacement</option>
+                    <option value="sound">Son</option>
                     <option value="stopAction">Stop action</option>
                   </select>
                   {step.type === 'move' && (
@@ -428,6 +466,14 @@ export default function App() {
   const [user, setUser] = useState(initialUser);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [creatorOpen, setCreatorOpen] = useState(false);
+  const [animationDraft, setAnimationDraft] = useState({
+    title: '',
+    actorName: '',
+    actorImageUrl: '',
+    soundName: '',
+    soundUrl: ''
+  });
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
   const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
@@ -622,6 +668,20 @@ export default function App() {
     void persistBlocks(nextBlocks);
   };
 
+  const createAnimationFromDrawer = () => {
+    const nextBlocks = [...blocks, createAnimationBlockFromDraft(animationDraft)];
+    updateBlocks(nextBlocks);
+    void persistBlocks(nextBlocks);
+    setCreatorOpen(false);
+    setAnimationDraft({
+      title: '',
+      actorName: '',
+      actorImageUrl: '',
+      soundName: '',
+      soundUrl: ''
+    });
+  };
+
   const updateBlock = (index, value) => {
     const nextBlocks = blocks.map((block, i) => i === index ? { ...block, value } : block);
     updateBlocks(nextBlocks);
@@ -654,6 +714,11 @@ export default function App() {
       <button className="login-toggle" onClick={() => setLoginOpen((prev) => !prev)}>
         {user ? `${user.firstName} ${user.lastName}` : 'Connexion élève'}
       </button>
+      {user && (
+        <button className="creator-toggle" onClick={() => setCreatorOpen((prev) => !prev)}>
+          Créateur animation
+        </button>
+      )}
 
       <aside className={`login-panel ${loginOpen ? 'open' : ''}`}>
         <div className="login-panel-head">
@@ -705,6 +770,49 @@ export default function App() {
             </p>
           </div>
         )}
+      </aside>
+
+      <aside className={`creator-panel ${creatorOpen ? 'open' : ''}`}>
+        <div className="creator-panel-head">
+          <div>
+            <div className="eyebrow">Sprites & son</div>
+            <strong>Créateur d'animation</strong>
+          </div>
+          <button onClick={() => setCreatorOpen(false)}>×</button>
+        </div>
+        <div className="creator-panel-body">
+          <input
+            value={animationDraft.title}
+            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, title: e.target.value }))}
+            placeholder="Titre de l'animation"
+          />
+          <input
+            value={animationDraft.actorName}
+            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorName: e.target.value }))}
+            placeholder="Nom du sprite"
+          />
+          <input
+            value={animationDraft.actorImageUrl}
+            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: e.target.value }))}
+            placeholder="URL de l'image du sprite"
+          />
+          <input
+            value={animationDraft.soundName}
+            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, soundName: e.target.value }))}
+            placeholder="Nom du son"
+          />
+          <input
+            value={animationDraft.soundUrl}
+            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, soundUrl: e.target.value }))}
+            placeholder="URL du son"
+          />
+          <div className="creator-panel-note">
+            Ce créateur prépare un bloc animation avec sprite, déplacement, affichage et son.
+          </div>
+          <button className="primary-btn" type="button" onClick={createAnimationFromDrawer}>
+            Créer l'animation
+          </button>
+        </div>
       </aside>
 
       <header className="hero">
