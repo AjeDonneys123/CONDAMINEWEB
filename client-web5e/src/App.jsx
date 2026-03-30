@@ -101,6 +101,7 @@ const ARTICLE_FONTS = [
 
 const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
 const WEB5E_EDITOR_PASSWORD = 'condamine';
+const WEB5E_TEACHER_PASSWORD = 'a';
 
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
@@ -590,6 +591,29 @@ export default function App() {
 
   const handleLogin = async (event) => {
     event.preventDefault();
+    const typedLast = clean(inputLast);
+    const typedFirst = clean(inputFirst);
+    if (typedLast === 'vuillet' && (typedFirst === 'jp' || typedFirst === 'jean') && clean(password) === WEB5E_TEACHER_PASSWORD) {
+      const teacherUser = {
+        id: 'web5e-teacher-jp-vuillet',
+        _id: 'web5e-teacher-jp-vuillet',
+        firstName: 'JP',
+        lastName: 'Vuillet',
+        currentClass: 'PROF',
+        role: 'teacher'
+      };
+      setSelectedProfile({
+        id: teacherUser.id,
+        type: 'teacher',
+        firstName: teacherUser.firstName,
+        lastName: teacherUser.lastName,
+        className: teacherUser.currentClass
+      });
+      setUser(teacherUser);
+      window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(teacherUser));
+      setLoginOpen(false);
+      return;
+    }
     const profile = resolveProfile();
     if (!profile) {
       alert('Profil élève introuvable.');
@@ -714,7 +738,7 @@ export default function App() {
       <button className="login-toggle" onClick={() => setLoginOpen((prev) => !prev)}>
         {user ? `${user.firstName} ${user.lastName}` : 'Connexion élève'}
       </button>
-      {user && (
+      {isTeacher && (
         <button className="creator-toggle" onClick={() => setCreatorOpen((prev) => !prev)}>
           Créateur animation
         </button>
@@ -859,7 +883,7 @@ export default function App() {
               <button onClick={() => addBlock('text')}>Article</button>
               <button onClick={() => addBlock('image')}>Image</button>
               <button onClick={() => addBlock('embed')}>Iframe</button>
-              <button onClick={() => addBlock('animation')}>Animation</button>
+              {isTeacher && <button onClick={() => addBlock('animation')}>Animation</button>}
             </div>
           )}
         </div>
@@ -939,7 +963,7 @@ export default function App() {
                 </>
               )}
 
-              {block.type === 'animation' && (
+              {block.type === 'animation' && isTeacher && (
                 <AnimationBlockEditor
                   block={block}
                   onChange={(nextBlock) => {
