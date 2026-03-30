@@ -7,9 +7,10 @@ const SECTION_CONFIG = {
     accent: 'water',
     subtitle: "Ressources, usages, préservation et circulation de l'eau dans notre environnement.",
     tabs: [
-      { id: 'cycle', title: "Cycle de l'eau" },
-      { id: 'usages', title: 'Usages' },
-      { id: 'protection', title: 'Protection' }
+      { id: 'manquer-eau', title: "Manquer d'eau" },
+      { id: 'quotidien', title: "L'eau au quotidien" },
+      { id: 'recycler-eau', title: "Recycler l'eau" },
+      { id: 'conflits-eau', title: "Conflits sur l'eau" }
     ]
   },
   energie: {
@@ -17,34 +18,33 @@ const SECTION_CONFIG = {
     accent: 'energy',
     subtitle: "Sources d'énergie, transformations, consommation et défis pour demain.",
     tabs: [
-      { id: 'sources', title: 'Sources' },
-      { id: 'transformations', title: 'Transformations' },
-      { id: 'economies', title: 'Économies' }
+      { id: 'fossiles', title: 'Énergies fossiles' },
+      { id: 'renouvelables', title: 'Énergies renouvelables' }
     ]
   }
 };
 
 const DEFAULT_CONTENT = {
   eau: {
-    cycle: [
-      { type: 'text', value: "Le cycle de l'eau relie évaporation, nuages, pluie et infiltration. Cette rubrique accueillera les traces écrites et les recherches des élèves." }
+    'manquer-eau': [
+      { type: 'text', value: "Pourquoi certaines régions du monde manquent-elles d'eau ? Cette rubrique pourra présenter la sécheresse, le climat, les besoins humains et les inégalités d'accès." }
     ],
-    usages: [
-      { type: 'text', value: "Ici, la classe expliquera comment l'eau est utilisée dans la maison, l'agriculture, l'industrie et la vie quotidienne." }
+    quotidien: [
+      { type: 'text', value: "Ici, la classe décrira tous les usages de l'eau dans la vie de tous les jours: boire, cuisiner, se laver, nettoyer, arroser, produire." }
     ],
-    protection: [
-      { type: 'text', value: "Les élèves pourront proposer des gestes concrets pour économiser l'eau et protéger les rivières, mers et nappes phréatiques." }
+    'recycler-eau': [
+      { type: 'text', value: "Cette partie montrera comment l'eau peut être traitée, réutilisée et économisée grâce aux stations d'épuration, aux récupérateurs et aux gestes du quotidien." }
+    ],
+    'conflits-eau': [
+      { type: 'text', value: "Les élèves pourront expliquer comment l'eau peut provoquer des tensions entre pays, régions, habitants ou activités humaines." }
     ]
   },
   energie: {
-    sources: [
-      { type: 'text', value: "Cette partie présentera les différentes sources d'énergie: solaire, hydraulique, éolienne, fossile, nucléaire." }
+    fossiles: [
+      { type: 'text', value: "Cette partie servira à présenter le charbon, le pétrole et le gaz, leur formation, leurs usages et leurs effets sur l'environnement." }
     ],
-    transformations: [
-      { type: 'text', value: "Les élèves montreront comment l'énergie change de forme: électrique, mécanique, thermique ou lumineuse." }
-    ],
-    economies: [
-      { type: 'text', value: "Cette rubrique servira à rassembler idées, affiches et jeux sur les économies d'énergie." }
+    renouvelables: [
+      { type: 'text', value: "Ici, les élèves présenteront les énergies renouvelables: solaire, éolienne, hydraulique, géothermie et biomasse." }
     ]
   }
 };
@@ -66,7 +66,7 @@ export default function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('eau');
-  const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'cycle', energie: 'sources' });
+  const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
   const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
 
   useEffect(() => {

@@ -97,6 +97,11 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
 
   const userClass = String(freshUser?.currentClass || user?.currentClass || '').trim().toUpperCase();
   const is5eStudent = /^5/.test(userClass);
+  const bridgeUser = encodeURIComponent(window.btoa(JSON.stringify({
+    ...freshUser,
+    id: freshUser?.id || freshUser?._id || user?.id || user?._id || ''
+  })));
+  const projet5eUrl = `https://web5e.vercel.app?bridgeUser=${bridgeUser}`;
 
   return (
     <div className="eleve-page-wrapper">
@@ -182,7 +187,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
               </div>
               <a
                 className="eleve-external-link-btn"
-                href="https://web5e.vercel.app"
+                href={projet5eUrl}
                 target="_blank"
                 rel="noreferrer"
               >
