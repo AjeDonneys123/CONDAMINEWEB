@@ -82,6 +82,28 @@ function normalizeBridgedUser(decoded) {
   };
 }
 
+function readBridgeUserFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const rawBridgeUser = String(params.get('bridgeUser') || '').trim();
+    if (!rawBridgeUser) return null;
+    const decodedBase64 = decodeURIComponent(rawBridgeUser);
+    return normalizeBridgedUser(JSON.parse(window.atob(decodedBase64)));
+  } catch (_) {
+    return null;
+  }
+}
+
+function readStoredWeb5eSession() {
+  try {
+    const raw = window.localStorage.getItem(WEB5E_SESSION_KEY);
+    if (!raw) return null;
+    return normalizeBridgedUser(JSON.parse(raw));
+  } catch (_) {
+    return null;
+  }
+}
+
 function ArticleEditor({ value, onChange, readOnly }) {
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
@@ -172,28 +194,22 @@ function ArticleEditor({ value, onChange, readOnly }) {
 }
 
 export default function App() {
-  const initialStoredUser = (() => {
-    try {
-      const raw = window.localStorage.getItem(WEB5E_SESSION_KEY);
-      if (!raw) return null;
-      return normalizeBridgedUser(JSON.parse(raw));
-    } catch (_) {
-      return null;
-    }
-  })();
+  const initialBridgedUser = readBridgeUserFromUrl();
+  const initialStoredUser = readStoredWeb5eSession();
+  const initialUser = initialBridgedUser || initialStoredUser;
   const [allUsersData, setAllUsersData] = useState([]);
   const [inputClass, setInputClass] = useState('');
   const [inputLast, setInputLast] = useState('');
   const [inputFirst, setInputFirst] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState(initialStoredUser ? {
-    id: initialStoredUser.id,
+  const [selectedProfile, setSelectedProfile] = useState(initialUser ? {
+    id: initialUser.id,
     type: 'student',
-    firstName: initialStoredUser.firstName || '',
-    lastName: initialStoredUser.lastName || '',
-    className: initialStoredUser.currentClass || ''
+    firstName: initialUser.firstName || '',
+    lastName: initialUser.lastName || '',
+    className: initialUser.currentClass || ''
   } : null);
-  const [user, setUser] = useState(initialStoredUser);
+  const [user, setUser] = useState(initialUser);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('eau');
@@ -250,28 +266,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const rawBridgeUser = String(params.get('bridgeUser') || '').trim();
-      if (!rawBridgeUser) return;
-      const decoded = JSON.parse(window.atob(rawBridgeUser));
-      const bridgedUser = normalizeBridgedUser(decoded);
-      if (bridgedUser?.id) {
-        window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(bridgedUser));
-        setUser(bridgedUser);
-        setSelectedProfile({
-          id: bridgedUser.id,
-          type: 'student',
-          firstName: bridgedUser.firstName || '',
-          lastName: bridgedUser.lastName || '',
-          className: bridgedUser.currentClass || ''
-        });
-        setLoginOpen(false);
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('bridgeUser');
-        window.history.replaceState({}, '', cleanUrl.toString());
-      }
-    } catch (_) {}
+    const bridgedUser = readBridgeUserFromUrl();
+    if (!bridgedUser?.id) return;
+    window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(bridgedUser));
+    setUser(bridgedUser);
+    setSelectedProfile({
+      id: bridgedUser.id,
+      type: 'student',
+      firstName: bridgedUser.firstName || '',
+      lastName: bridgedUser.lastName || '',
+      className: bridgedUser.currentClass || ''
+    });
+    setLoginOpen(false);
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('bridgeUser');
+    window.history.replaceState({}, '', cleanUrl.toString());
   }, []);
 
   const suggestions = useMemo(() => {
