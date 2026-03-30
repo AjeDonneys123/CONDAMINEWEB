@@ -320,6 +320,30 @@ router.post('/student-password/setup', async (req, res) => {
     }
 });
 
+router.post('/student-password/reset-self', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const password = String(req.body?.password || '').trim();
+        const confirmPassword = String(req.body?.confirmPassword || '').trim();
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ ok: false, message: "Élève introuvable." });
+        if (!password || password.length < 4) {
+            return res.status(400).json({ ok: false, message: "Le mot de passe doit contenir au moins 4 caractères." });
+        }
+        if (password !== confirmPassword) {
+            return res.status(400).json({ ok: false, message: "La confirmation du mot de passe ne correspond pas." });
+        }
+        student.studentPassword = await bcrypt.hash(password, 10);
+        student.hasStudentPassword = true;
+        student.markModified('studentPassword');
+        student.markModified('hasStudentPassword');
+        await student.save();
+        res.json({ ok: true, hasStudentPassword: true, message: "Nouveau mot de passe enregistré." });
+    } catch (e) {
+        res.status(500).json({ ok: false, message: e.message });
+    }
+});
+
 router.post('/student-password/google-verify', async (req, res) => {
     try {
         const studentId = String(req.body?.studentId || '').trim();

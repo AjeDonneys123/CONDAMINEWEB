@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 
 // Schéma pour les croix/bonus
 const BehaviorRecordSchema = new mongoose.Schema({
@@ -54,5 +55,41 @@ const StudentSchema = new mongoose.Schema({
     isTestAccount: { type: Boolean, default: false },
     lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });
+
+function normalizeStudentUpdate(update) {
+    if (!update || typeof update !== 'object') return update;
+    const directFlag = update.isTestAccount;
+    const setFlag = update.$set?.isTestAccount;
+    const isTestAccount = setFlag !== undefined ? setFlag : directFlag;
+    if (isTestAccount !== true) return update;
+    if (update.$set && typeof update.$set === 'object') {
+        update.$set.email = TEST_ACCOUNT_EMAIL;
+    } else {
+        update.email = TEST_ACCOUNT_EMAIL;
+    }
+    return update;
+}
+
+StudentSchema.pre('save', function forceSharedEmailForTestAccount(next) {
+    if (this.isTestAccount === true) {
+        this.email = TEST_ACCOUNT_EMAIL;
+    }
+    next();
+});
+
+StudentSchema.pre('findOneAndUpdate', function forceSharedEmailBeforeFindOneAndUpdate(next) {
+    normalizeStudentUpdate(this.getUpdate());
+    next();
+});
+
+StudentSchema.pre('updateOne', function forceSharedEmailBeforeUpdateOne(next) {
+    normalizeStudentUpdate(this.getUpdate());
+    next();
+});
+
+StudentSchema.pre('updateMany', function forceSharedEmailBeforeUpdateMany(next) {
+    normalizeStudentUpdate(this.getUpdate());
+    next();
+});
 
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);

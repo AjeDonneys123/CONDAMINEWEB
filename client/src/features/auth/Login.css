@@ -53,6 +53,8 @@
 .login-google-btn:active { transform: scale(0.98); }
 .login-google-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .login-google-wrap { display: flex; justify-content: center; margin-top: 0.25rem; }
+.login-google-section { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.1rem; }
+.login-google-label { text-align: center; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; color: #64748b; letter-spacing: 0.12em; }
 .student-password-tools { display: flex; flex-direction: column; gap: 10px; }
 .student-password-btn { width: 100%; padding: 0.95rem 1.1rem; background: #eff6ff; color: #1d4ed8; border-radius: 16px; font-weight: 900; border: 2px solid #dbeafe; text-transform: uppercase; font-size: 0.78rem; }
 .student-password-btn.primary { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }

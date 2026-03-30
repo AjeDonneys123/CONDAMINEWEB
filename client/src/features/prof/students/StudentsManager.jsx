@@ -97,7 +97,8 @@ export default function StudentsManager({ globalClassId }) {
             .filter(s => {
                 if (!currentClassObj) return false;
                 if (currentClassObj.type === 'GROUP') {
-                    return (s.assignedGroups || []).some(g => extractId(g) === String(globalClassId));
+                    const targetGroupId = String(globalClassId);
+                    return (s.assignedGroups || []).some((g) => extractId(g) === targetGroupId);
                 }
                 return String(s.classId) === String(globalClassId);
             })

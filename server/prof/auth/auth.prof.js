@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const fetch = require('node-fetch');
 const { encryptApiKey, getTeacherAiConfig, isCentralAiAccount } = require('../core/profAiKeys');
 const BCRYPT_HASH_RE = /^\$2[aby]\$/;
+const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 const isNamedJpVuillet = (user) => {
     if (!user) return false;
     const first = String(user.firstName || '').trim().toLowerCase();
@@ -134,6 +135,28 @@ router.post('/login', async (req, res) => {
         }
     }
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });
+});
+
+router.post('/password/reset-self', async (req, res) => {
+    try {
+        const userId = String(req.body?.userId || '').trim();
+        const password = String(req.body?.password || '').trim();
+        const confirmPassword = String(req.body?.confirmPassword || '').trim();
+        if (!userId) return res.status(400).json({ ok: false, message: "Utilisateur introuvable." });
+        if (!password || password.length < 4) {
+            return res.status(400).json({ ok: false, message: "Le mot de passe doit contenir au moins 4 caractères." });
+        }
+        if (password !== confirmPassword) {
+            return res.status(400).json({ ok: false, message: "La confirmation du mot de passe ne correspond pas." });
+        }
+        const user = await Teacher.findById(userId) || await Admin.findById(userId);
+        if (!user) return res.status(404).json({ ok: false, message: "Utilisateur introuvable." });
+        user.password = await bcrypt.hash(password, 10);
+        await user.save();
+        return res.json({ ok: true, message: "Nouveau mot de passe enregistré." });
+    } catch (e) {
+        return res.status(500).json({ ok: false, message: e.message });
+    }
 });
 
 // --- NOUVEAU : BASCULE MODE TESTEUR ---
@@ -317,6 +340,43 @@ router.post('/google-login', async (req, res) => {
                     hasPersonalGeminiKey: Boolean(String(obj.geminiApiKeyEncrypted || '').trim())
                 }
             });
+        }
+
+        if (email === TEST_ACCOUNT_EMAIL) {
+            let targetStudent = null;
+            const cleanTargetUserId = String(targetUserId || '').trim();
+            if (cleanTargetUserId) {
+                targetStudent = await Student.findById(cleanTargetUserId).populate('assignedGroups', 'name type level');
+            }
+
+            if (!targetStudent) {
+                const cleanFirst = String(targetFirstName || '').trim();
+                const cleanLast = String(targetLastName || '').trim();
+                const firstRx = new RegExp(`^${cleanFirst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const lastRx = new RegExp(`^${cleanLast.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const studentQuery = { isTestAccount: true };
+                if (cleanFirst) studentQuery.firstName = firstRx;
+                if (cleanLast) studentQuery.lastName = lastRx;
+                const cleanClass = String(targetClassName || '').trim();
+                if (cleanClass) {
+                    studentQuery.currentClass = new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                }
+                targetStudent = await Student.findOne(studentQuery).populate('assignedGroups', 'name type level');
+            }
+
+            if (!targetStudent) {
+                targetStudent = await Student.findOne({ email: TEST_ACCOUNT_EMAIL, isTestAccount: true })
+                    .populate('assignedGroups', 'name type level');
+            }
+
+            if (!targetStudent) {
+                return res.status(401).json({ ok: false, message: "Sélectionne d'abord un élève test valide." });
+            }
+            if (targetStudent.isTestAccount !== true) {
+                return res.status(401).json({ ok: false, message: "Ce compte n'est pas un compte test Google." });
+            }
+            const plain = targetStudent.toObject();
+            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
         }
 
         let user = await Student.findOne({ email }).populate('assignedGroups', 'name type level');

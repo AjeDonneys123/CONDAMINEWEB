@@ -252,6 +252,19 @@ export default function Login({ onLoginSuccess }) {
     if (!credential) return;
     setLoading(true);
     try {
+      let resolvedProfile = selectedProfile;
+      if (!resolvedProfile) {
+        const typedFirst = clean(inputFirst);
+        const typedLast = clean(inputLast);
+        const typedClass = clean(inputClass);
+        resolvedProfile = allUsersData.find(p =>
+          p.type === 'student' &&
+          clean(p.firstName) === typedFirst &&
+          clean(p.lastName) === typedLast &&
+          (!typedClass || clean(p.className) === typedClass)
+        ) || null;
+      }
+
       if (selectedProfile?.type === 'student' && (studentResetMode || selectedProfile?.hasStudentPassword === true)) {
         const res = await fetch('/api/eleve/auth/student-password/google-verify', {
           method: 'POST',
@@ -270,15 +283,15 @@ export default function Login({ onLoginSuccess }) {
         setLoading(false);
         return;
       }
-      const targetFirstName = selectedProfile?.firstName || inputFirst;
-      const targetLastName = selectedProfile?.lastName || inputLast;
-      const targetClassName = selectedProfile?.className || inputClass;
+      const targetFirstName = resolvedProfile?.firstName || selectedProfile?.firstName || inputFirst;
+      const targetLastName = resolvedProfile?.lastName || selectedProfile?.lastName || inputLast;
+      const targetClassName = resolvedProfile?.className || selectedProfile?.className || inputClass;
       const res = await fetch('/api/auth/google-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           credential,
-          targetUserId: selectedProfile?.id || '',
+          targetUserId: resolvedProfile?.id || selectedProfile?.id || '',
           targetFirstName,
           targetLastName,
           targetClassName
@@ -522,16 +535,19 @@ export default function Login({ onLoginSuccess }) {
           )}
 
           <button className="login-submit-btn" disabled={loading || !canSubmit}>
-            {loading ? 'Connexion...' : 'Entrer'}
+            {loading ? 'Connexion...' : 'Connexion'}
           </button>
           {googleClientId && (
-            <div className="login-google-wrap">
+            <div className="login-google-section">
+              <div className="login-google-label">Connexion avec Google</div>
+              <div className="login-google-wrap">
               <div ref={googleBtnRef} />
               {!googleReady && (
                 <button type="button" className="login-google-btn" disabled>
                   Chargement Google...
                 </button>
               )}
+              </div>
             </div>
           )}
         </form>

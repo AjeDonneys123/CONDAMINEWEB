@@ -221,7 +221,20 @@ export default function AdminDashboard({ user, onRefresh }) {
     const currentMembers = getMembersOf(manageItem);
     const potentialMembers = memberSearch.length > 1 ? allStudents.filter(s => { const isInside = currentMembers.some(m => m._id === s._id); if (isInside) return false; return s.firstName.toLowerCase().includes(memberSearch.toLowerCase()) || s.lastName.toLowerCase().includes(memberSearch.toLowerCase()); }) : [];
     const openEdit = (it) => { setCurrentItem({ ...it }); setModalMode('edit'); };
-    const handleSave = async () => { const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; if (view === 'students' && currentItem.classId) currentItem.currentClass = allClasses.find(c => c._id === currentItem.classId)?.name || ''; try { const res = await fetch(`/api/admin/${map[view]}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentItem) }); if (res.ok) { setModalMode(null); loadData(); if(['classes','groups','teachers'].includes(view)) onRefresh(); } else { const err = await res.json(); alert("Erreur: " + err.error); } } catch(e) { alert("Erreur Réseau"); } };
+    const handleSave = async () => {
+        const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' };
+        const payload = { ...currentItem };
+        if (view === 'students' && payload.classId) {
+            payload.currentClass = allClasses.find(c => c._id === payload.classId)?.name || '';
+        }
+        if (view === 'students' && payload.isTestAccount === true) {
+            payload.email = 'vuillet433@gmail.com';
+        }
+        try {
+            const res = await fetch(`/api/admin/${map[view]}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (res.ok) { setModalMode(null); loadData(); if(['classes','groups','teachers'].includes(view)) onRefresh(); } else { const err = await res.json(); alert("Erreur: " + err.error); }
+        } catch(e) { alert("Erreur Réseau"); }
+    };
     const handleDelete = async (id) => { if (view === 'bugs') return; if (!confirm("Supprimer ?")) return; const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; await fetch(`/api/admin/${map[view]}/${id}`, { method: 'DELETE' }); loadData(); };
     const handleDeleteBug = async (id) => {
         if (!id) return;
@@ -256,7 +269,32 @@ export default function AdminDashboard({ user, onRefresh }) {
                         <div className="z-body">
                             <div className="space-y-4 mb-6 flex-shrink-0">
                                 {['teachers', 'students', 'staff'].includes(view) && <div className="flex gap-4"><input className="admin-input" placeholder="Prénom" value={currentItem.firstName} onChange={e => setCurrentItem({...currentItem, firstName: e.target.value})} /><input className="admin-input" placeholder="Nom" value={currentItem.lastName} onChange={e => setCurrentItem({...currentItem, lastName: e.target.value})} /></div>}
-                                {view === 'students' && (<div className="flex gap-4"><input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} /><input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} /></div>)}
+                                {view === 'students' && (
+                                    <>
+                                        <div className="flex gap-4">
+                                            <input
+                                                className="admin-input"
+                                                placeholder="Email Élève"
+                                                value={currentItem.isTestAccount === true ? 'vuillet433@gmail.com' : (currentItem.email || '')}
+                                                onChange={e => setCurrentItem({...currentItem, email: e.target.value})}
+                                                disabled={currentItem.isTestAccount === true}
+                                            />
+                                            <input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} />
+                                        </div>
+                                        <label className="flex items-center gap-2 text-[11px] font-black uppercase text-slate-500 ml-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={currentItem.isTestAccount === true}
+                                                onChange={(e) => setCurrentItem({
+                                                    ...currentItem,
+                                                    isTestAccount: e.target.checked,
+                                                    email: e.target.checked ? 'vuillet433@gmail.com' : (currentItem.email || '')
+                                                })}
+                                            />
+                                            Compte test Google partagé
+                                        </label>
+                                    </>
+                                )}
                                 {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}
                                 {['classes', 'groups'].includes(view) && (<div className="flex gap-4"><input className="admin-input flex-1" placeholder={view === 'classes' ? "Nom (ex: 6A)" : "Nom (ex: SPE MATHS)"} value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} /><div className="flex-1 flex flex-col gap-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU</label><select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}><option value="">AUTO / AUCUN</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div></div>)}
                                 {view === 'subjects' && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}

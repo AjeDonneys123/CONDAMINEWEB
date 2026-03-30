@@ -99,6 +99,26 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   // Si assignedGroups contient des objets (peuplés par le backend), on affiche le nom.
   const groups = Array.isArray(user.assignedGroups) ? user.assignedGroups : [];
 
+  const handlePasswordReset = async () => {
+    const nextPassword = window.prompt("Nouveau mot de passe ?");
+    if (!nextPassword) return;
+    const confirmPassword = window.prompt("Confirme le nouveau mot de passe.");
+    if (!confirmPassword) return;
+    try {
+      const studentId = user.id || user._id;
+      const res = await fetch('/api/eleve/auth/student-password/reset-self', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, password: nextPassword, confirmPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Réinitialisation impossible.');
+      alert(data?.message || 'Mot de passe mis à jour.');
+    } catch (e) {
+      alert(e.message || 'Réinitialisation impossible.');
+    }
+  };
+
   return (
     <div className="header-wrapper">
       
@@ -114,6 +134,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         </div>
 
         <div className="flex items-center gap-3">
+            <button onClick={handlePasswordReset} className="v80-password-btn">RÉCUPÉRER MON MOT DE PASSE</button>
             <div className="v80-user-info">
                 <span className="v80-user-name">{user.firstName} {user.lastName}</span>
                 <div className="v80-badges-row">

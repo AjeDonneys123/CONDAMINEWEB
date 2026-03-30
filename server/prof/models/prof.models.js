@@ -1,5 +1,6 @@
 // @signatures: ProfModels, getModel
 const mongoose = require('mongoose');
+const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 
 // --- SCHÉMAS UTILITAIRES ---
 
@@ -47,8 +48,75 @@ const SceneSchema = new mongoose.Schema({
 // --- FONCTION DE RÉCUPÉRATION SÉCURISÉE ---
 const getModel = (name, schema) => {
     if (mongoose.models[name]) return mongoose.models[name];
+    if (schema instanceof mongoose.Schema) return mongoose.model(name, schema);
     return mongoose.model(name, new mongoose.Schema(schema, { timestamps: true }));
 };
+
+function normalizeStudentUpdate(update) {
+    if (!update || typeof update !== 'object') return update;
+    const directFlag = update.isTestAccount;
+    const setFlag = update.$set?.isTestAccount;
+    const isTestAccount = setFlag !== undefined ? setFlag : directFlag;
+    if (isTestAccount !== true) return update;
+    if (update.$set && typeof update.$set === 'object') {
+        update.$set.email = TEST_ACCOUNT_EMAIL;
+    } else {
+        update.email = TEST_ACCOUNT_EMAIL;
+    }
+    return update;
+}
+
+const StudentSchema = new mongoose.Schema({
+    firstName: String, lastName: String, currentClass: String,
+    nickname: { type: String, default: '', trim: true },
+    email: { type: String, lowercase: true, trim: true },
+    parentEmail: { type: String, lowercase: true, trim: true },
+    birthDate: { type: String, default: '' },
+    dateOfBirth: { type: String, default: '' },
+    dob: { type: String, default: '' },
+    studentPassword: { type: String, default: '' },
+    hasStudentPassword: { type: Boolean, default: false },
+    classId: mongoose.Schema.Types.ObjectId,
+    assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
+    behaviorRecords: [{
+        teacherId: mongoose.Schema.Types.ObjectId,
+        crosses: { type: Number, default: 0 },
+        bonuses: { type: Number, default: 0 },
+        weeksToRedemption: { type: Number, default: 3 },
+        nextCrossRemovalAt: { type: Date, default: null }
+    }],
+    teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
+    punishmentStatus: { type: String, default: 'NONE' },
+    punishmentDueDate: Date, seatX: Number, seatY: Number, gender: String,
+    punishmentLateMailSentAt: { type: Date, default: null },
+    punishmentLateMailTo: { type: String, default: "" },
+    punishmentLateMailError: { type: String, default: "" },
+    indicators: Array,
+    spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }],
+    isTestAccount: { type: Boolean, default: false }
+}, { timestamps: true });
+
+StudentSchema.pre('save', function forceSharedEmailForTestAccount(next) {
+    if (this.isTestAccount === true) {
+        this.email = TEST_ACCOUNT_EMAIL;
+    }
+    next();
+});
+
+StudentSchema.pre('findOneAndUpdate', function forceSharedEmailBeforeFindOneAndUpdate(next) {
+    normalizeStudentUpdate(this.getUpdate());
+    next();
+});
+
+StudentSchema.pre('updateOne', function forceSharedEmailBeforeUpdateOne(next) {
+    normalizeStudentUpdate(this.getUpdate());
+    next();
+});
+
+StudentSchema.pre('updateMany', function forceSharedEmailBeforeUpdateMany(next) {
+    normalizeStudentUpdate(this.getUpdate());
+    next();
+});
 
 // --- DÉFINITION DES MODÈLES ---
 const Models = {
@@ -73,34 +141,7 @@ const Models = {
         }
     }),
 
-    Student: getModel('Student', {
-        firstName: String, lastName: String, currentClass: String,
-        nickname: { type: String, default: '', trim: true },
-        email: { type: String, lowercase: true, trim: true },
-        parentEmail: { type: String, lowercase: true, trim: true },
-        birthDate: { type: String, default: '' },
-        dateOfBirth: { type: String, default: '' },
-        dob: { type: String, default: '' },
-        studentPassword: { type: String, default: '' },
-        hasStudentPassword: { type: Boolean, default: false },
-        classId: mongoose.Schema.Types.ObjectId,
-        assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
-        behaviorRecords: [{
-            teacherId: mongoose.Schema.Types.ObjectId,
-            crosses: { type: Number, default: 0 },
-            bonuses: { type: Number, default: 0 },
-            weeksToRedemption: { type: Number, default: 3 },
-            nextCrossRemovalAt: { type: Date, default: null }
-        }],
-        teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
-        punishmentStatus: { type: String, default: 'NONE' },
-        punishmentDueDate: Date, seatX: Number, seatY: Number, gender: String,
-        punishmentLateMailSentAt: { type: Date, default: null },
-        punishmentLateMailTo: { type: String, default: "" },
-        punishmentLateMailError: { type: String, default: "" },
-        indicators: Array,
-        spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }]
-    }),
+    Student: getModel('Student', StudentSchema),
 
     Homework: getModel('Homework', {
         title: String, subject: String, isPunishment: { type: Boolean, default: false },

@@ -18,6 +18,7 @@
 .v80-logout-btn { width: 35px; height: 35px; border-radius: 50%; background: #f1f5f9; color: #94a3b8; border: none; cursor: pointer; font-weight: 900; transition: all 0.2s; }
 .v80-logout-btn:hover { background: #fee2e2; color: #ef4444; }
 .v80-back-prof { background: #1e293b; color: white; padding: 5px 12px; border-radius: 10px; font-weight: 900; font-size: 8px; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
+.v80-password-btn { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; padding: 7px 12px; border-radius: 10px; font-weight: 900; font-size: 9px; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
 
 /* NAVIGATION BAR + MINI STATS */
 .nav-bar-container {
@@ -162,6 +163,11 @@
     .v80-logout-btn {
         width: 30px;
         height: 30px;
+    }
+
+    .v80-password-btn {
+        font-size: 8px;
+        padding: 6px 8px;
     }
 
     .nav-bar-container {
