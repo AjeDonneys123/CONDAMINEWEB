@@ -198,6 +198,21 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                   <a
                     className="eleve-external-link-btn"
                     href={projet5eUrl}
+                    onClick={() => {
+                      try {
+                        window.name = JSON.stringify({
+                          web5eBridgeUser: {
+                            id: freshUser?.id || freshUser?._id || user?.id || user?._id || '',
+                            _id: freshUser?._id || user?._id || '',
+                            firstName: freshUser?.firstName || user?.firstName || '',
+                            lastName: freshUser?.lastName || user?.lastName || '',
+                            currentClass: freshUser?.currentClass || user?.currentClass || '',
+                            isTestAccount: freshUser?.isTestAccount === true || user?.isTestAccount === true,
+                            role: 'student'
+                          }
+                        });
+                      } catch (_) {}
+                    }}
                   >
                     Ouvrir Projet 5e
                   </a>

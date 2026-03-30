@@ -68,6 +68,7 @@ const ARTICLE_FONTS = [
 ];
 
 const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
+const WEB5E_EDITOR_PASSWORD = 'condamine';
 
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
@@ -91,6 +92,15 @@ function readBridgeUserFromUrl() {
     if (!rawBridgeUser) return null;
     const decodedBase64 = decodeURIComponent(rawBridgeUser);
     return normalizeBridgedUser(JSON.parse(window.atob(decodedBase64)));
+  } catch (_) {
+    return null;
+  }
+}
+
+function readBridgeUserFromWindowName() {
+  try {
+    const payload = JSON.parse(String(window.name || ''));
+    return normalizeBridgedUser(payload?.web5eBridgeUser);
   } catch (_) {
     return null;
   }
@@ -197,10 +207,12 @@ function ArticleEditor({ value, onChange, readOnly }) {
 
 export default function App() {
   const initialBridgedUser = readBridgeUserFromUrl();
+  const initialWindowNamedUser = readBridgeUserFromWindowName();
   const initialStoredUser = readStoredWeb5eSession();
-  const initialUser = initialBridgedUser || initialStoredUser;
+  const initialUser = initialBridgedUser || initialWindowNamedUser || initialStoredUser;
   const [bridgeDebug, setBridgeDebug] = useState({
     fromUrl: Boolean(initialBridgedUser?.id),
+    fromWindowName: Boolean(initialWindowNamedUser?.id),
     fromStorage: Boolean(initialStoredUser?.id),
     userId: initialUser?.id || ''
   });
@@ -273,11 +285,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const bridgedUser = readBridgeUserFromUrl();
+    const bridgedUser = readBridgeUserFromUrl() || readBridgeUserFromWindowName();
     if (!bridgedUser?.id) return;
     window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(bridgedUser));
     setBridgeDebug({
-      fromUrl: true,
+      fromUrl: Boolean(readBridgeUserFromUrl()?.id),
+      fromWindowName: Boolean(readBridgeUserFromWindowName()?.id),
       fromStorage: true,
       userId: bridgedUser.id
     });
@@ -294,6 +307,9 @@ export default function App() {
     cleanUrl.searchParams.delete('bridgeUser');
     cleanUrl.hash = '';
     window.history.replaceState({}, '', cleanUrl.toString());
+    try {
+      window.name = '';
+    } catch (_) {}
   }, []);
 
   const suggestions = useMemo(() => {
@@ -336,15 +352,27 @@ export default function App() {
       alert('Profil élève introuvable.');
       return;
     }
+    const is5eProfile = /^5/.test(String(profile.className || '').trim().toUpperCase());
+    if (!is5eProfile) {
+      alert("Seuls les élèves de 5e peuvent éditer ce site.");
+      return;
+    }
+    if (clean(password) !== WEB5E_EDITOR_PASSWORD) {
+      alert("Mot de passe édition invalide.");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch('/api/eleve/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: profile.id, password })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Connexion impossible.');
+      const data = {
+        user: {
+          id: profile.id,
+          _id: profile.id,
+          firstName: profile.firstName || '',
+          lastName: profile.lastName || '',
+          currentClass: profile.className || '',
+          role: 'student'
+        }
+      };
       setSelectedProfile(profile);
       setUser(data.user);
       window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(normalizeBridgedUser(data.user)));
