@@ -96,7 +96,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
   };
 
   const userClass = String(freshUser?.currentClass || user?.currentClass || '').trim().toUpperCase();
-  const is5eStudent = /^5/.test(userClass);
+  const is5eStudent = /^5/.test(userClass) || freshUser?.isTestAccount === true || user?.isTestAccount === true;
   const bridgeUser = encodeURIComponent(window.btoa(JSON.stringify({
     ...freshUser,
     id: freshUser?.id || freshUser?._id || user?.id || user?._id || ''

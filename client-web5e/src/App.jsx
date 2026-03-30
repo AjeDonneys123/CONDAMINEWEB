@@ -52,7 +52,90 @@ const DEFAULT_CONTENT = {
 const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 function createBlock(type = 'text') {
-  return { type, value: '' };
+  return {
+    type,
+    value: type === 'text' ? '<h3>Nouveau bloc</h3><p>Écris ici.</p>' : ''
+  };
+}
+
+const ARTICLE_FONTS = [
+  { value: 'Arial', label: 'Arial' },
+  { value: 'Georgia', label: 'Georgia' },
+  { value: 'Trebuchet MS', label: 'Trebuchet' },
+  { value: 'Courier New', label: 'Courier' }
+];
+
+const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
+
+function ArticleEditor({ value, onChange, readOnly }) {
+  const [fontFamily, setFontFamily] = useState('Arial');
+  const [selectedColor, setSelectedColor] = useState('#1d2942');
+
+  const exec = (command, commandValue = null) => {
+    document.execCommand(command, false, commandValue);
+  };
+
+  const applyColor = (color) => {
+    setSelectedColor(color);
+    exec('styleWithCSS', true);
+    exec('foreColor', color);
+  };
+
+  const handleImageInsert = () => {
+    const imageUrl = window.prompt("Colle l'URL de l'image à insérer");
+    if (!imageUrl) return;
+    const safeUrl = String(imageUrl).trim();
+    if (!safeUrl) return;
+    const html = `<img src="${safeUrl.replace(/"/g, '&quot;')}" alt="" style="max-width:320px;width:100%;height:auto;border-radius:18px;display:block;margin:18px auto;" />`;
+    exec('insertHTML', html);
+    onChange?.(document.getElementById('article-editor-active')?.innerHTML || '');
+  };
+
+  if (readOnly) {
+    return <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: value || '' }} />;
+  }
+
+  return (
+    <div className="article-editor-shell">
+      <div className="article-toolbar">
+        <select
+          value={fontFamily}
+          onChange={(e) => {
+            setFontFamily(e.target.value);
+            exec('fontName', e.target.value);
+          }}
+        >
+          {ARTICLE_FONTS.map((font) => (
+            <option key={font.value} value={font.value}>{font.label}</option>
+          ))}
+        </select>
+        <button type="button" onClick={() => exec('bold')}><strong>Gras</strong></button>
+        <button type="button" onClick={() => exec('italic')}><em>Italique</em></button>
+        <button type="button" onClick={() => exec('underline')}><u>Souligné</u></button>
+        <button type="button" onClick={() => exec('insertUnorderedList')}>Liste</button>
+        <button type="button" onClick={handleImageInsert}>Image</button>
+        <div className="article-colors">
+          {ARTICLE_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`article-color-dot ${selectedColor === color ? 'active' : ''}`}
+              style={{ background: color }}
+              onClick={() => applyColor(color)}
+            />
+          ))}
+        </div>
+      </div>
+      <div
+        id="article-editor-active"
+        className="article-editor"
+        contentEditable
+        suppressContentEditableWarning
+        dangerouslySetInnerHTML={{ __html: value || '' }}
+        onInput={(e) => onChange?.(e.currentTarget.innerHTML)}
+      />
+    </div>
+  );
 }
 
 export default function App() {
@@ -320,15 +403,11 @@ export default function App() {
               </div>
 
               {block.type === 'text' && (
-                user ? (
-                  <textarea
-                    value={block.value}
-                    onChange={(e) => updateBlock(index, e.target.value)}
-                    placeholder="Écris ici le contenu de cette rubrique."
-                  />
-                ) : (
-                  <div className="public-text">{block.value}</div>
-                )
+                <ArticleEditor
+                  value={block.value}
+                  onChange={(nextValue) => updateBlock(index, nextValue)}
+                  readOnly={!user}
+                />
               )}
 
               {block.type === 'image' && (
