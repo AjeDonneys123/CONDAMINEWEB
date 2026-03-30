@@ -54,6 +54,20 @@ const DEFAULT_CONTENT = {
 const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 function createBlock(type = 'text') {
+  if (type === 'animation') {
+    return {
+      type,
+      title: 'Nouvelle animation',
+      actorName: 'Personnage',
+      actorImageUrl: '',
+      hiddenByDefault: false,
+      steps: [
+        { type: 'show', label: 'Montrer', x: 0, y: 0 },
+        { type: 'move', label: 'Déplacement', x: 180, y: 40 },
+        { type: 'hide', label: 'Cacher', x: 0, y: 0 }
+      ]
+    };
+  }
   return {
     type,
     value: type === 'text' ? '<h3>Nouveau bloc</h3><p>Écris ici.</p>' : ''
@@ -201,6 +215,189 @@ function ArticleEditor({ value, onChange, readOnly }) {
           onChange?.(nextHtml);
         }}
       />
+    </div>
+  );
+}
+
+function formatContributionName(name = '') {
+  const raw = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  const parts = raw.split(' ');
+  const firstName = parts[0] || '';
+  const lastName = parts.slice(1).join(' ') || '';
+  if (!lastName) return firstName;
+  return `${firstName} ${lastName.slice(0, 3)}`;
+}
+
+function AnimationBlockEditor({ block, onChange, readOnly }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [actorState, setActorState] = useState({
+    visible: block?.hiddenByDefault !== true,
+    x: Number(block?.steps?.find((step) => step.type === 'move')?.x || 0),
+    y: Number(block?.steps?.find((step) => step.type === 'move')?.y || 0)
+  });
+
+  useEffect(() => {
+    setActorState({
+      visible: block?.hiddenByDefault !== true,
+      x: Number(block?.steps?.find((step) => step.type === 'move')?.x || 0),
+      y: Number(block?.steps?.find((step) => step.type === 'move')?.y || 0)
+    });
+    setIsPlaying(false);
+  }, [block]);
+
+  const updateRoot = (patch) => onChange?.({ ...block, ...patch });
+
+  const updateStep = (index, patch) => {
+    const nextSteps = Array.isArray(block?.steps)
+      ? block.steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step)
+      : [];
+    onChange?.({ ...block, steps: nextSteps });
+  };
+
+  const addStep = (type) => {
+    const nextSteps = [...(Array.isArray(block?.steps) ? block.steps : []), {
+      type,
+      label: type === 'move' ? 'Déplacement' : type === 'show' ? 'Montrer' : type === 'hide' ? 'Cacher' : 'Stop action',
+      x: 0,
+      y: 0
+    }];
+    onChange?.({ ...block, steps: nextSteps });
+  };
+
+  const removeStep = (index) => {
+    const nextSteps = (Array.isArray(block?.steps) ? block.steps : []).filter((_, stepIndex) => stepIndex !== index);
+    onChange?.({ ...block, steps: nextSteps });
+  };
+
+  const playAnimation = () => {
+    const steps = Array.isArray(block?.steps) ? block.steps : [];
+    setIsPlaying(true);
+    let delay = 0;
+    const initialVisible = block?.hiddenByDefault !== true;
+    setActorState((prev) => ({ ...prev, visible: initialVisible }));
+    steps.forEach((step) => {
+      window.setTimeout(() => {
+        if (step.type === 'show') {
+          setActorState((prev) => ({ ...prev, visible: true }));
+        } else if (step.type === 'hide') {
+          setActorState((prev) => ({ ...prev, visible: false }));
+        } else if (step.type === 'move') {
+          setActorState((prev) => ({
+            ...prev,
+            visible: true,
+            x: Number(step.x || 0),
+            y: Number(step.y || 0)
+          }));
+        } else if (step.type === 'stopAction') {
+          setActorState((prev) => ({ ...prev }));
+        }
+      }, delay);
+      delay += 650;
+    });
+    window.setTimeout(() => setIsPlaying(false), delay + 100);
+  };
+
+  return (
+    <div className="animation-block-shell">
+      {!readOnly && (
+        <div className="animation-editor">
+          <div className="animation-editor-grid">
+            <input
+              value={block?.title || ''}
+              onChange={(e) => updateRoot({ title: e.target.value })}
+              placeholder="Titre de l'animation"
+            />
+            <input
+              value={block?.actorName || ''}
+              onChange={(e) => updateRoot({ actorName: e.target.value })}
+              placeholder="Nom du personnage"
+            />
+            <input
+              value={block?.actorImageUrl || ''}
+              onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
+              placeholder="URL de l'image du personnage"
+            />
+            <label className="animation-checkbox">
+              <input
+                type="checkbox"
+                checked={block?.hiddenByDefault === true}
+                onChange={(e) => updateRoot({ hiddenByDefault: e.target.checked })}
+              />
+              Caché au départ
+            </label>
+          </div>
+
+          <div className="animation-step-toolbar">
+            <button type="button" onClick={() => addStep('show')}>Montrer</button>
+            <button type="button" onClick={() => addStep('hide')}>Cacher</button>
+            <button type="button" onClick={() => addStep('move')}>Déplacement</button>
+            <button type="button" onClick={() => addStep('stopAction')}>Stop action</button>
+          </div>
+
+          <div className="animation-steps">
+            {(Array.isArray(block?.steps) ? block.steps : []).map((step, index) => (
+              <div key={`${step.type}-${index}`} className="animation-step-card">
+                <div className="animation-step-head">
+                  <strong>{step.label || step.type}</strong>
+                  <button type="button" onClick={() => removeStep(index)}>Supprimer</button>
+                </div>
+                <div className="animation-step-fields">
+                  <select
+                    value={step.type || 'show'}
+                    onChange={(e) => updateStep(index, {
+                      type: e.target.value,
+                      label: e.target.value === 'move' ? 'Déplacement' : e.target.value === 'show' ? 'Montrer' : e.target.value === 'hide' ? 'Cacher' : 'Stop action'
+                    })}
+                  >
+                    <option value="show">Montrer</option>
+                    <option value="hide">Cacher</option>
+                    <option value="move">Déplacement</option>
+                    <option value="stopAction">Stop action</option>
+                  </select>
+                  {step.type === 'move' && (
+                    <>
+                      <input
+                        type="number"
+                        value={Number(step.x || 0)}
+                        onChange={(e) => updateStep(index, { x: Number(e.target.value || 0) })}
+                        placeholder="X"
+                      />
+                      <input
+                        type="number"
+                        value={Number(step.y || 0)}
+                        onChange={(e) => updateStep(index, { y: Number(e.target.value || 0) })}
+                        placeholder="Y"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="animation-stage-shell">
+        <div className="animation-stage">
+          <div
+            className={`animation-actor ${actorState.visible ? 'visible' : 'hidden'}`}
+            style={{
+              transform: `translate(${actorState.x}px, ${actorState.y}px)`
+            }}
+          >
+            {block?.actorImageUrl ? (
+              <img src={block.actorImageUrl} alt={block?.actorName || 'Personnage'} />
+            ) : (
+              <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>
+            )}
+            <div className="animation-actor-name">{block?.actorName || 'Personnage'}</div>
+          </div>
+        </div>
+        <button type="button" className="animation-play-btn" onClick={playAnimation} disabled={isPlaying}>
+          {isPlaying ? 'Animation en cours...' : 'Animation'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -439,6 +636,8 @@ export default function App() {
   };
 
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
+  const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
+  const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
 
   return (
     <div className="web5e-shell">
@@ -552,6 +751,7 @@ export default function App() {
               <button onClick={() => addBlock('text')}>Article</button>
               <button onClick={() => addBlock('image')}>Image</button>
               <button onClick={() => addBlock('embed')}>Iframe</button>
+              <button onClick={() => addBlock('animation')}>Animation</button>
             </div>
           )}
         </div>
@@ -572,7 +772,15 @@ export default function App() {
           {blocks.map((block, index) => (
             <article key={`${activeSection}-${currentTabId}-${index}`} className="block-card">
               <div className="block-head">
-                <span>{block.type === 'text' ? 'Article' : block.type === 'image' ? 'Image' : 'Iframe / Jeu'}</span>
+                <span>
+                  {block.type === 'text'
+                    ? 'Article'
+                    : block.type === 'image'
+                      ? 'Image'
+                      : block.type === 'animation'
+                        ? 'Animation'
+                        : 'Iframe / Jeu'}
+                </span>
                 {user && <button onClick={() => removeBlock(index)}>Supprimer</button>}
               </div>
 
@@ -622,6 +830,22 @@ export default function App() {
                   )}
                 </>
               )}
+
+              {block.type === 'animation' && (
+                <AnimationBlockEditor
+                  block={block}
+                  onChange={(nextBlock) => {
+                    const nextBlocks = blocks.map((row, rowIndex) => rowIndex === index ? nextBlock : row);
+                    updateBlocks(nextBlocks);
+                    void persistBlocks(nextBlocks);
+                  }}
+                  readOnly={!user}
+                />
+              )}
+
+              <div className="block-signature">
+                Apport de {formatContributionName(currentEntry?.authorName || contributionSignature || '') || 'élève'}
+              </div>
             </article>
           ))}
         </div>

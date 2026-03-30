@@ -340,6 +340,15 @@
   resize: vertical;
 }
 
+.block-signature {
+  margin-top: 14px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
 .article-editor-shell {
   display: grid;
   gap: 12px;
@@ -424,6 +433,163 @@
   margin-top: 0;
 }
 
+.animation-block-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.animation-editor {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background: #fffaf5;
+}
+
+.animation-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.animation-editor-grid input,
+.animation-step-fields input,
+.animation-step-fields select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+}
+
+.animation-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.animation-step-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.animation-step-toolbar button,
+.animation-play-btn,
+.animation-step-head button {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  border-radius: 14px;
+  background: #1f2944;
+  color: white;
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.animation-step-head button {
+  background: #fff;
+  color: #e25d34;
+}
+
+.animation-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.animation-step-card {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.animation-step-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.animation-step-fields {
+  display: grid;
+  grid-template-columns: 180px 1fr 1fr;
+  gap: 10px;
+}
+
+.animation-stage-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.animation-stage {
+  position: relative;
+  min-height: 280px;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(102, 198, 255, 0.16), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.animation-actor {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  transition: transform 0.55s ease, opacity 0.35s ease;
+}
+
+.animation-actor.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.animation-actor.visible {
+  opacity: 1;
+}
+
+.animation-actor img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  display: block;
+}
+
+.animation-actor-placeholder {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ec4899, #f97316);
+  color: white;
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.animation-actor-name {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #1d2942;
+}
+
+.animation-play-btn {
+  justify-self: start;
+}
+
 .preview-image,
 .preview-placeholder,
 .embed-frame-shell {
@@ -483,5 +649,10 @@
     left: 20px;
     right: 20px;
     width: auto;
+  }
+
+  .animation-editor-grid,
+  .animation-step-fields {
+    grid-template-columns: 1fr;
   }
 }
