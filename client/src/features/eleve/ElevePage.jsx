@@ -98,11 +98,16 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
   const userClass = String(freshUser?.currentClass || user?.currentClass || '').trim().toUpperCase();
   const is5eStudent = /^5/.test(userClass) || freshUser?.isTestAccount === true || user?.isTestAccount === true;
   const bridgeUser = encodeURIComponent(window.btoa(JSON.stringify({
-    ...freshUser,
-    id: freshUser?.id || freshUser?._id || user?.id || user?._id || ''
+    id: freshUser?.id || freshUser?._id || user?.id || user?._id || '',
+    _id: freshUser?._id || user?._id || '',
+    firstName: freshUser?.firstName || user?.firstName || '',
+    lastName: freshUser?.lastName || user?.lastName || '',
+    currentClass: freshUser?.currentClass || user?.currentClass || '',
+    isTestAccount: freshUser?.isTestAccount === true || user?.isTestAccount === true,
+    role: 'student'
   })));
   const projet5eBaseUrl = String(
-    import.meta.env.VITE_WEB5E_PUBLIC_URL || 'https://web5e-git-pro-jeanvuillets-projects.vercel.app'
+    import.meta.env.VITE_WEB5E_PUBLIC_URL || 'https://web5e-jeanvuillets-projects.vercel.app'
   ).trim().replace(/\/+$/, '');
   const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}`;
 

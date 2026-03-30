@@ -226,13 +226,22 @@ export default function App() {
       if (!rawBridgeUser) return;
       const decoded = JSON.parse(window.atob(rawBridgeUser));
       if (decoded && typeof decoded === 'object') {
-        setUser(decoded);
-        setSelectedProfile({
+        const bridgedUser = {
           id: decoded.id || decoded._id || '',
-          type: 'student',
+          _id: decoded._id || decoded.id || '',
           firstName: decoded.firstName || '',
           lastName: decoded.lastName || '',
-          className: decoded.currentClass || ''
+          currentClass: decoded.currentClass || '',
+          isTestAccount: decoded.isTestAccount === true,
+          role: 'student'
+        };
+        setUser(bridgedUser);
+        setSelectedProfile({
+          id: bridgedUser.id,
+          type: 'student',
+          firstName: bridgedUser.firstName || '',
+          lastName: bridgedUser.lastName || '',
+          className: bridgedUser.currentClass || ''
         });
         setLoginOpen(false);
         const cleanUrl = new URL(window.location.href);
