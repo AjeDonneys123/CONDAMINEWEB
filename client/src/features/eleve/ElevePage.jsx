@@ -95,6 +95,9 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       setPendingActivity(null);
   };
 
+  const userClass = String(freshUser?.currentClass || user?.currentClass || '').trim().toUpperCase();
+  const is5eStudent = /^5/.test(userClass);
+
   return (
     <div className="eleve-page-wrapper">
         <div className="eleve-page-container">
@@ -168,6 +171,25 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
               />
             )}
           </div>
+          {is5eStudent && (
+            <div className="eleve-external-link-card">
+              <div className="eleve-external-link-copy">
+                <div className="eleve-external-link-kicker">Projet 5e</div>
+                <div className="eleve-external-link-title">Accéder au site Projet 5e</div>
+                <div className="eleve-external-link-sub">
+                  Le site public sur l’eau et l’énergie est disponible ici. Tu peux le consulter ou l’enrichir si tu te connectes là-bas.
+                </div>
+              </div>
+              <a
+                className="eleve-external-link-btn"
+                href="https://web5e.vercel.app"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Ouvrir Projet 5e
+              </a>
+            </div>
+          )}
         </div>
         <BugReportWidget user={freshUser} />
     </div>

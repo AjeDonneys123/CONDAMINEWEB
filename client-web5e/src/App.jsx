@@ -1,36 +1,57 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
-const DEFAULT_TABS = [
-  {
-    id: 'accueil',
-    title: 'Accueil',
-    blocks: [
-      { type: 'text', value: 'Bienvenue dans ton espace de publication. Tu pourras ici ajouter des articles, des images, des liens de jeux et des embeds de sites.' }
+const SECTION_CONFIG = {
+  eau: {
+    title: "L'eau",
+    accent: 'water',
+    subtitle: "Ressources, usages, préservation et circulation de l'eau dans notre environnement.",
+    tabs: [
+      { id: 'cycle', title: "Cycle de l'eau" },
+      { id: 'usages', title: 'Usages' },
+      { id: 'protection', title: 'Protection' }
     ]
   },
-  {
-    id: 'journal',
-    title: 'Journal',
-    blocks: [
-      { type: 'text', value: 'Raconte un événement, une sortie, une leçon ou un travail de classe.' }
+  energie: {
+    title: "L'énergie",
+    accent: 'energy',
+    subtitle: "Sources d'énergie, transformations, consommation et défis pour demain.",
+    tabs: [
+      { id: 'sources', title: 'Sources' },
+      { id: 'transformations', title: 'Transformations' },
+      { id: 'economies', title: 'Économies' }
     ]
   }
-];
+};
+
+const DEFAULT_CONTENT = {
+  eau: {
+    cycle: [
+      { type: 'text', value: "Le cycle de l'eau relie évaporation, nuages, pluie et infiltration. Cette rubrique accueillera les traces écrites et les recherches des élèves." }
+    ],
+    usages: [
+      { type: 'text', value: "Ici, la classe expliquera comment l'eau est utilisée dans la maison, l'agriculture, l'industrie et la vie quotidienne." }
+    ],
+    protection: [
+      { type: 'text', value: "Les élèves pourront proposer des gestes concrets pour économiser l'eau et protéger les rivières, mers et nappes phréatiques." }
+    ]
+  },
+  energie: {
+    sources: [
+      { type: 'text', value: "Cette partie présentera les différentes sources d'énergie: solaire, hydraulique, éolienne, fossile, nucléaire." }
+    ],
+    transformations: [
+      { type: 'text', value: "Les élèves montreront comment l'énergie change de forme: électrique, mécanique, thermique ou lumineuse." }
+    ],
+    economies: [
+      { type: 'text', value: "Cette rubrique servira à rassembler idées, affiches et jeux sur les économies d'énergie." }
+    ]
+  }
+};
 
 const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-function newTab(title = 'Nouvel onglet') {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    title,
-    blocks: [
-      { type: 'text', value: '' }
-    ]
-  };
-}
-
-function createEmptyBlock(type = 'text') {
+function createBlock(type = 'text') {
   return { type, value: '' };
 }
 
@@ -42,9 +63,11 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [user, setUser] = useState(null);
-  const [tabs, setTabs] = useState(DEFAULT_TABS);
-  const [activeTabId, setActiveTabId] = useState(DEFAULT_TABS[0].id);
+  const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState('eau');
+  const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'cycle', energie: 'sources' });
+  const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
 
   useEffect(() => {
     fetch('/api/auth/finder-data')
@@ -54,23 +77,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const key = `web5e-tabs:${user.id}`;
     try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setTabs(parsed);
-        setActiveTabId(parsed[0].id);
+      const params = new URLSearchParams(window.location.search);
+      const rawBridgeUser = String(params.get('bridgeUser') || '').trim();
+      if (!rawBridgeUser) return;
+      const decoded = JSON.parse(window.atob(rawBridgeUser));
+      if (decoded && typeof decoded === 'object') {
+        setUser(decoded);
+        setSelectedProfile({
+          id: decoded.id || decoded._id || '',
+          type: 'student',
+          firstName: decoded.firstName || '',
+          lastName: decoded.lastName || '',
+          className: decoded.currentClass || ''
+        });
+        setLoginOpen(false);
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('bridgeUser');
+        window.history.replaceState({}, '', cleanUrl.toString());
       }
     } catch (_) {}
-  }, [user?.id]);
+  }, []);
 
   useEffect(() => {
-    if (!user?.id) return;
-    localStorage.setItem(`web5e-tabs:${user.id}`, JSON.stringify(tabs));
-  }, [tabs, user?.id]);
+    const raw = localStorage.getItem('web5e-public-content');
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') setContentMap(parsed);
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('web5e-public-content', JSON.stringify(contentMap));
+  }, [contentMap]);
 
   const suggestions = useMemo(() => {
     const typedClass = clean(inputClass);
@@ -85,10 +125,12 @@ export default function App() {
         const firstOk = typedFirst ? clean(p.firstName).includes(typedFirst) : true;
         return classOk && lastOk && firstOk;
       })
-      .slice(0, 8);
+      .slice(0, 6);
   }, [allUsersData, inputClass, inputLast, inputFirst]);
 
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
+  const currentSection = SECTION_CONFIG[activeSection];
+  const currentTabId = activeTabBySection[activeSection];
+  const blocks = contentMap[activeSection]?.[currentTabId] || [];
 
   const resolveProfile = () => {
     if (selectedProfile) return selectedProfile;
@@ -121,74 +163,60 @@ export default function App() {
       if (!res.ok) throw new Error(data.message || 'Connexion impossible.');
       setSelectedProfile(profile);
       setUser(data.user);
+      setLoginOpen(false);
     } catch (e) {
       alert(e.message || 'Connexion impossible.');
     }
     setLoading(false);
   };
 
-  const updateTabTitle = (tabId, title) => {
-    setTabs((prev) => prev.map((tab) => tab.id === tabId ? { ...tab, title } : tab));
-  };
-
-  const addTab = () => {
-    const tab = newTab();
-    setTabs((prev) => [...prev, tab]);
-    setActiveTabId(tab.id);
-  };
-
-  const removeTab = (tabId) => {
-    setTabs((prev) => {
-      if (prev.length <= 1) return prev;
-      const next = prev.filter((tab) => tab.id !== tabId);
-      if (activeTabId === tabId) setActiveTabId(next[0].id);
-      return next;
-    });
+  const updateBlocks = (nextBlocks) => {
+    setContentMap((prev) => ({
+      ...prev,
+      [activeSection]: {
+        ...(prev[activeSection] || {}),
+        [currentTabId]: nextBlocks
+      }
+    }));
   };
 
   const addBlock = (type) => {
-    setTabs((prev) => prev.map((tab) => (
-      tab.id === activeTab.id
-        ? { ...tab, blocks: [...tab.blocks, createEmptyBlock(type)] }
-        : tab
-    )));
+    updateBlocks([...blocks, createBlock(type)]);
   };
 
   const updateBlock = (index, value) => {
-    setTabs((prev) => prev.map((tab) => {
-      if (tab.id !== activeTab.id) return tab;
-      return {
-        ...tab,
-        blocks: tab.blocks.map((block, blockIndex) => blockIndex === index ? { ...block, value } : block)
-      };
-    }));
+    updateBlocks(blocks.map((block, i) => i === index ? { ...block, value } : block));
   };
 
   const removeBlock = (index) => {
-    setTabs((prev) => prev.map((tab) => {
-      if (tab.id !== activeTab.id) return tab;
-      if (tab.blocks.length <= 1) return tab;
-      return {
-        ...tab,
-        blocks: tab.blocks.filter((_, blockIndex) => blockIndex !== index)
-      };
-    }));
+    if (blocks.length <= 1) return;
+    updateBlocks(blocks.filter((_, i) => i !== index));
   };
 
-  if (!user) {
-    return (
-      <div className="web5e-shell">
-        <div className="web5e-login-card">
-          <div className="eyebrow">Nouveau site élève</div>
-          <h1>CondaWeb Pages</h1>
-          <p>Connexion sur la BDD actuelle, puis création d’onglets libres pour construire le site de classe.</p>
-          <form className="web5e-login-form" onSubmit={handleLogin}>
+  const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
+
+  return (
+    <div className="web5e-shell">
+      <button className="login-toggle" onClick={() => setLoginOpen((prev) => !prev)}>
+        {user ? `${user.firstName} ${user.lastName}` : 'Connexion élève'}
+      </button>
+
+      <aside className={`login-panel ${loginOpen ? 'open' : ''}`}>
+        <div className="login-panel-head">
+          <div>
+            <div className="eyebrow">Accès édition</div>
+            <strong>{user ? 'Session active' : 'Connexion'}</strong>
+          </div>
+          <button onClick={() => setLoginOpen(false)}>×</button>
+        </div>
+        {!user ? (
+          <form className="corner-login-form" onSubmit={handleLogin}>
             <input value={inputClass} onChange={(e) => setInputClass(e.target.value)} placeholder="Classe" />
             <div className="name-row">
               <input value={inputLast} onChange={(e) => { setInputLast(e.target.value); setSelectedProfile(null); }} placeholder="Nom" />
               <input value={inputFirst} onChange={(e) => { setInputFirst(e.target.value); setSelectedProfile(null); }} placeholder="Prénom" />
             </div>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe élève" />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe" />
             {suggestions.length > 0 && (
               <div className="suggestions">
                 {suggestions.map((profile) => (
@@ -209,113 +237,142 @@ export default function App() {
                 ))}
               </div>
             )}
-            <button type="submit" disabled={loading}>{loading ? 'Connexion...' : 'Entrer'}</button>
+            <button type="submit" className="primary-btn" disabled={loading}>{loading ? 'Connexion...' : 'Entrer'}</button>
           </form>
+        ) : (
+          <div className="session-card">
+            <div className="session-name">{user.firstName} {user.lastName}</div>
+            <div className="session-meta">{user.currentClass || ''}</div>
+            <p>
+              {isTeacher
+                ? "Tu définis ici le contenu visible de chaque sous-onglet."
+                : "Tu peux enrichir les sous-onglets définis par le professeur avec du texte, des images et des iframes."
+              }
+            </p>
+          </div>
+        )}
+      </aside>
+
+      <header className="hero">
+        <div className="hero-copy">
+          <div className="eyebrow">Projet 5e</div>
+          <h1>Projet 5e</h1>
+          <p>
+            Un site public de classe sur deux grands thèmes: l’eau et l’énergie.
+            Les visiteurs consultent le contenu, et les élèves connectés enrichissent les sous-rubriques.
+          </p>
         </div>
-      </div>
-    );
-  }
+        <div className="hero-card">
+          <div className="hero-card-title">Organisation</div>
+          <ul>
+            <li>2 sections principales définies par le professeur</li>
+            <li>Des sous-onglets édités ensuite par les élèves</li>
+            <li>Texte, images et iframe intégrables dans chaque rubrique</li>
+          </ul>
+        </div>
+      </header>
 
-  return (
-    <div className="web5e-shell">
-      <div className="web5e-app">
-        <aside className="web5e-sidebar">
-          <div className="brand">CONDAWEB PAGES</div>
-          <div className="profile-card">
-            <div className="profile-name">{user.firstName} {user.lastName}</div>
-            <div className="profile-meta">{user.currentClass || selectedProfile?.className || ''}</div>
-          </div>
-          <button className="primary-btn" onClick={addTab}>+ Ajouter un onglet</button>
-          <div className="tabs-list">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                className={`tab-chip ${tab.id === activeTab.id ? 'active' : ''}`}
-                onClick={() => setActiveTabId(tab.id)}
-              >
-                <span>{tab.title}</span>
-                {tabs.length > 1 && (
-                  <span
-                    className="tab-close"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      removeTab(tab.id);
-                    }}
-                  >
-                    ×
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </aside>
+      <nav className="section-tabs">
+        {Object.entries(SECTION_CONFIG).map(([sectionId, section]) => (
+          <button
+            key={sectionId}
+            className={`section-tab ${activeSection === sectionId ? `active ${section.accent}` : ''}`}
+            onClick={() => setActiveSection(sectionId)}
+          >
+            {section.title}
+          </button>
+        ))}
+      </nav>
 
-        <main className="web5e-main">
-          <header className="page-header">
-            <input
-              className="tab-title-input"
-              value={activeTab?.title || ''}
-              onChange={(e) => updateTabTitle(activeTab.id, e.target.value)}
-            />
+      <section className={`section-panel ${currentSection.accent}`}>
+        <div className="section-head">
+          <div>
+            <div className="section-kicker">{currentSection.title}</div>
+            <h2>{currentSection.subtitle}</h2>
+          </div>
+          {user && (
             <div className="toolbar">
               <button onClick={() => addBlock('text')}>Article</button>
               <button onClick={() => addBlock('image')}>Image</button>
-              <button onClick={() => addBlock('embed')}>Site / Jeu</button>
+              <button onClick={() => addBlock('embed')}>Iframe</button>
             </div>
-          </header>
+          )}
+        </div>
 
-          <section className="blocks-area">
-            {activeTab?.blocks.map((block, index) => (
-              <article key={`${activeTab.id}-${index}`} className="block-card">
-                <div className="block-head">
-                  <span>{block.type === 'text' ? 'Article' : block.type === 'image' ? 'Image' : 'Embed / Jeu'}</span>
-                  <button onClick={() => removeBlock(index)}>Supprimer</button>
-                </div>
-                {block.type === 'text' && (
+        <div className="subtabs">
+          {currentSection.tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`subtab ${currentTabId === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTabBySection((prev) => ({ ...prev, [activeSection]: tab.id }))}
+            >
+              {tab.title}
+            </button>
+          ))}
+        </div>
+
+        <div className="blocks-area public">
+          {blocks.map((block, index) => (
+            <article key={`${activeSection}-${currentTabId}-${index}`} className="block-card">
+              <div className="block-head">
+                <span>{block.type === 'text' ? 'Article' : block.type === 'image' ? 'Image' : 'Iframe / Jeu'}</span>
+                {user && <button onClick={() => removeBlock(index)}>Supprimer</button>}
+              </div>
+
+              {block.type === 'text' && (
+                user ? (
                   <textarea
                     value={block.value}
                     onChange={(e) => updateBlock(index, e.target.value)}
-                    placeholder="Écris ton article, ton résumé ou ton texte."
+                    placeholder="Écris ici le contenu de cette rubrique."
                   />
-                )}
-                {block.type === 'image' && (
-                  <>
+                ) : (
+                  <div className="public-text">{block.value}</div>
+                )
+              )}
+
+              {block.type === 'image' && (
+                <>
+                  {user && (
                     <input
                       value={block.value}
                       onChange={(e) => updateBlock(index, e.target.value)}
                       placeholder="Colle l'URL de l'image"
                     />
-                    {block.value ? <img src={block.value} alt="" className="preview-image" /> : <div className="preview-placeholder">Aperçu image</div>}
-                  </>
-                )}
-                {block.type === 'embed' && (
-                  <>
+                  )}
+                  {block.value ? <img src={block.value} alt="" className="preview-image" /> : <div className="preview-placeholder">Aucune image ajoutée</div>}
+                </>
+              )}
+
+              {block.type === 'embed' && (
+                <>
+                  {user && (
                     <input
                       value={block.value}
                       onChange={(e) => updateBlock(index, e.target.value)}
                       placeholder="Colle l'URL d'un site, jeu ou Google Sites"
                     />
-                    {block.value ? (
-                      <div className="embed-frame-shell">
-                        <iframe
-                          src={block.value}
-                          title={`embed-${activeTab.id}-${index}`}
-                          className="embed-frame"
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                          allow="fullscreen"
-                        />
-                      </div>
-                    ) : (
-                      <div className="preview-placeholder">Colle un lien iframe pour l’afficher ici</div>
-                    )}
-                  </>
-                )}
-              </article>
-            ))}
-          </section>
-        </main>
-      </div>
+                  )}
+                  {block.value ? (
+                    <div className="embed-frame-shell">
+                      <iframe
+                        src={block.value}
+                        title={`embed-${activeSection}-${currentTabId}-${index}`}
+                        className="embed-frame"
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        allow="fullscreen"
+                      />
+                    </div>
+                  ) : (
+                    <div className="preview-placeholder">Aucun iframe intégré</div>
+                  )}
+                </>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
