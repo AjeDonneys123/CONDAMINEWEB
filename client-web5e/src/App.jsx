@@ -197,6 +197,11 @@ export default function App() {
   const initialBridgedUser = readBridgeUserFromUrl();
   const initialStoredUser = readStoredWeb5eSession();
   const initialUser = initialBridgedUser || initialStoredUser;
+  const [bridgeDebug, setBridgeDebug] = useState({
+    fromUrl: Boolean(initialBridgedUser?.id),
+    fromStorage: Boolean(initialStoredUser?.id),
+    userId: initialUser?.id || ''
+  });
   const [allUsersData, setAllUsersData] = useState([]);
   const [inputClass, setInputClass] = useState('');
   const [inputLast, setInputLast] = useState('');
@@ -269,6 +274,11 @@ export default function App() {
     const bridgedUser = readBridgeUserFromUrl();
     if (!bridgedUser?.id) return;
     window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(bridgedUser));
+    setBridgeDebug({
+      fromUrl: true,
+      fromStorage: true,
+      userId: bridgedUser.id
+    });
     setUser(bridgedUser);
     setSelectedProfile({
       id: bridgedUser.id,
@@ -401,6 +411,16 @@ export default function App() {
 
   return (
     <div className="web5e-shell">
+      {!user && (
+        <div className="bridge-debug-banner">
+          Session bridge absente. Le site n'a reçu aucun élève depuis CondaWeb.
+        </div>
+      )}
+      {user && bridgeDebug.userId && (
+        <div className="bridge-debug-banner success">
+          Session reçue pour {user.firstName} {user.lastName} ({user.currentClass || 'sans classe'}).
+        </div>
+      )}
       <button className="login-toggle" onClick={() => setLoginOpen((prev) => !prev)}>
         {user ? `${user.firstName} ${user.lastName}` : 'Connexion élève'}
       </button>
