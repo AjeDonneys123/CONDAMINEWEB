@@ -101,7 +101,8 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     ...freshUser,
     id: freshUser?.id || freshUser?._id || user?.id || user?._id || ''
   })));
-  const projet5eUrl = `https://web5e.vercel.app?bridgeUser=${bridgeUser}`;
+  const projet5eBaseUrl = 'https://web5e-git-pro-jeanvuillets-projects.vercel.app';
+  const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}`;
 
   return (
     <div className="eleve-page-wrapper">
