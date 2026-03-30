@@ -107,7 +107,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     role: 'student'
   })));
   const projet5eBaseUrl = String(
-    import.meta.env.VITE_WEB5E_PUBLIC_URL || 'https://web5e-jeanvuillets-projects.vercel.app'
+    import.meta.env.VITE_WEB5E_PUBLIC_URL || window.localStorage.getItem('web5ePublicUrl') || 'https://web5e-hu3he1y6x-jeanvuillets-projects.vercel.app'
   ).trim().replace(/\/+$/, '');
   const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}`;
 
@@ -194,12 +194,31 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 </div>
               </div>
               <div className="eleve-external-link-actions">
-                <a
-                  className="eleve-external-link-btn"
-                  href={projet5eUrl}
-                >
-                  Ouvrir Projet 5e
-                </a>
+                {projet5eBaseUrl ? (
+                  <a
+                    className="eleve-external-link-btn"
+                    href={projet5eUrl}
+                  >
+                    Ouvrir Projet 5e
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="eleve-external-link-btn"
+                    onClick={() => {
+                      const value = window.prompt(
+                        'Colle l’URL publique exacte du site Projet 5e (domaine vercel.app public ou domaine custom).',
+                        'https://'
+                      );
+                      const nextUrl = String(value || '').trim().replace(/\/+$/, '');
+                      if (!nextUrl) return;
+                      window.localStorage.setItem('web5ePublicUrl', nextUrl);
+                      window.location.reload();
+                    }}
+                  >
+                    Configurer Projet 5e
+                  </button>
+                )}
               </div>
             </section>
           )}
