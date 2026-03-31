@@ -200,9 +200,9 @@ router.post('/save', async (req, res) => {
                 selectedIndex: -1,
                 correctIndex: -1,
                 isCorrect: false
-            })).filter((ans) => ans.prompt);
+            })).filter((ans) => ans.prompt || ans.answer || ans.expectedKeywords.length > 0 || ans.levelTitle);
             nextEntry.answers = answers;
-            nextEntry.completedAt = answers.length > 0 && answers.every((ans) => ans.answer && ans.expectedKeywords.length > 0) ? (previous?.completedAt || now) : null;
+            nextEntry.completedAt = answers.length > 0 && answers.every((ans) => ans.levelTitle && ans.prompt && ans.answer && ans.expectedKeywords.length > 0) ? (previous?.completedAt || now) : null;
         } else {
             const answers = (Array.isArray(req.body?.answers) ? req.body.answers : []).map((ans) => {
                 const levelTitle = String(ans?.levelTitle || '').trim().slice(0, 120);
@@ -222,12 +222,12 @@ router.post('/save', async (req, res) => {
                     options,
                     selectedIndex: -1,
                     correctIndex: boundedCorrectIndex,
-                    isCorrect: boundedCorrectIndex >= 0 && optionLengthsOk
+                    isCorrect: boundedCorrectIndex >= 0 && optionLengthsOk && options.length === 4
                 };
-            }).filter((ans) => ans.prompt && ans.options.length === 4 && ans.correctIndex >= 0 && ans.isCorrect);
+            }).filter((ans) => ans.prompt || ans.levelTitle || ans.options.some((opt) => opt) || ans.correctIndex >= 0);
             nextEntry.answers = answers;
-            nextEntry.score = answers.length;
-            nextEntry.completedAt = answers.length > 0 ? (previous?.completedAt || now) : null;
+            nextEntry.score = answers.filter((ans) => ans.isCorrect).length;
+            nextEntry.completedAt = answers.length > 0 && answers.every((ans) => ans.levelTitle && ans.prompt && ans.options.length === 4 && ans.options.every((opt) => countWords(opt) > 0 && countWords(opt) <= 4) && ans.correctIndex >= 0) ? (previous?.completedAt || now) : null;
         }
 
         if (idx >= 0) entries[idx] = nextEntry;

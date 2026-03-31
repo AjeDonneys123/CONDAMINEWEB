@@ -36,7 +36,7 @@ const stripHtml = (html = '') =>
     .trim();
 
 const uid = () => `prod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-const emptyQuestionnaireRow = () => ({ id: uid(), prompt: '', answer: '', expectedKeywords: [] });
+const emptyQuestionnaireRow = () => ({ id: uid(), prompt: '', answer: '', expectedKeywords: [], expectedKeywordsText: '' });
 const emptyQuestionnaireLevel = () => ({ id: uid(), title: '', questions: [emptyQuestionnaireRow()] });
 const emptyQcmRow = () => ({ id: uid(), prompt: '', options: ['', '', '', ''], correctIndex: 0 });
 const emptyQcmLevel = () => ({ id: uid(), title: '', questions: [emptyQcmRow()] });
@@ -68,7 +68,8 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
         id: uid(),
         prompt: String(row?.prompt || ''),
         answer: String(row?.answer || ''),
-        expectedKeywords: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords : []
+        expectedKeywords: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords : [],
+        expectedKeywordsText: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords.join(' ') : ''
       }));
     }
     return [emptyQuestionnaireRow()];
@@ -89,7 +90,8 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
         id: uid(),
         prompt: String(row?.prompt || ''),
         answer: String(row?.answer || ''),
-        expectedKeywords: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords : []
+        expectedKeywords: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords : [],
+        expectedKeywordsText: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords.join(' ') : ''
       });
     });
     return grouped.length > 0 ? grouped : [emptyQuestionnaireLevel()];
@@ -258,7 +260,7 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
       questions: (level.questions || []).map((row) => ({
         promptOk: Boolean(String(row?.prompt || '').trim()),
         answerOk: Boolean(String(row?.answer || '').trim()),
-        keywordsOk: Array.isArray(row?.expectedKeywords) && row.expectedKeywords.length > 0
+        keywordsOk: String(row?.expectedKeywordsText || '').trim().length > 0
       }))
     }))
   ), [questionnaireLevels]);
@@ -296,7 +298,7 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
     return { ...level, questions: nextQuestions };
   }));
 
-  const save = async () => {
+  const save = async (mode = 'manual') => {
     setSaving(true);
     try {
       const payload = {
@@ -307,17 +309,13 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
       if (productionType === 'fiche') {
         payload.contentHtml = String(editorRef.current?.innerHTML || contentHtml || '');
       } else if (productionType === 'questionnaire') {
-        const invalid = questionnaireValidity.some((level) => !level.titleOk || (level.questions || []).some((row) => !row.promptOk || !row.answerOk || !row.keywordsOk));
-        if (invalid) throw new Error('Chaque Niveau/Leçon doit avoir un titre, puis des questions avec réponse et mots-clés.');
         payload.answers = questionnaireLevels.flatMap((level) => (level.questions || []).map((row) => ({
           levelTitle: level.title,
           prompt: row.prompt,
           answer: row.answer,
-          expectedKeywords: row.expectedKeywords
+          expectedKeywords: String(row.expectedKeywordsText || '').split(/\s+/).map((part) => part.trim()).filter(Boolean)
         })));
       } else {
-        const invalid = qcmValidity.some((level) => !level.titleOk || (level.questions || []).some((row) => !row.promptOk || !row.optionsOk || !row.lengthOk || !row.correctOk));
-        if (invalid) throw new Error('Chaque niveau doit avoir un titre, puis des QCM valides avec 4 réponses de 4 mots maximum.');
         payload.answers = qcmLevels.flatMap((level) => (level.questions || []).map((row) => ({
           levelTitle: level.title,
           prompt: row.prompt,
@@ -333,7 +331,7 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String(data?.error || 'Sauvegarde impossible'));
-      setSaveMessage('Production enregistrée.');
+      setSaveMessage(mode === 'auto' ? 'Travail sauvegarde automatiquement' : 'Travail sauvegarde');
     } catch (e) {
       setSaveMessage(String(e?.message || 'Sauvegarde impossible'));
     } finally {
@@ -341,6 +339,14 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
       setTimeout(() => setSaveMessage(''), 2200);
     }
   };
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (saving) return;
+      save('auto');
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [saving, productionType, contentHtml, questionnaireLevels, qcmLevels]);
 
   return (
     <div className="prod-workspace">
@@ -351,8 +357,8 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
           <div className="prod-title">{production?.title || 'Production'}</div>
           <div className="prod-subtitle">{production?.teacherInstructions || 'Travaille à partir des slides visibles et construis une production claire.'}</div>
         </div>
-        {saveMessage && <div className="prod-save-message">{saveMessage}</div>}
-        <button className="prod-btn" onClick={save} disabled={saving}>{saving ? 'Sauvegarde...' : 'Enregistrer'}</button>
+        {saveMessage && <div className={`prod-save-message ${/sauvegarde/i.test(saveMessage) && !/impossible|erreur/i.test(saveMessage) ? 'success' : 'error'}`}>{saveMessage}</div>}
+        <button className="prod-btn" onClick={() => save('manual')} disabled={saving}>{saving ? 'Sauvegarde...' : 'Enregistrer'}</button>
       </div>
 
       <div className={`prod-shell ${slideWindowOpen ? 'slide-expanded' : ''}`}>
@@ -469,7 +475,7 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
                             <br />
                             par un espace
                           </div>
-                          <textarea className="prod-input prod-textarea prod-keywords-input" value={(row.expectedKeywords || []).join(' ')} onChange={(e) => setQuestionnaireLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, questions: item.questions.map((question) => question.id === row.id ? { ...question, expectedKeywords: String(e.target.value || '').split(/\s+/).map((part) => part.trim()).filter(Boolean) } : question) } : item))} placeholder="climat oasis desert" />
+                          <textarea className="prod-input prod-textarea prod-keywords-input" value={row.expectedKeywordsText || ''} onChange={(e) => setQuestionnaireLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, questions: item.questions.map((question) => question.id === row.id ? { ...question, expectedKeywordsText: e.target.value } : question) } : item))} placeholder="climat oasis desert" />
                           <div className="prod-hint">{!validity.promptOk && 'Ajoute une question. '}{!validity.answerOk && 'Ajoute une réponse. '}{!validity.keywordsOk && 'Ajoute au moins un mot-clé.'}</div>
                         </div>
                       );

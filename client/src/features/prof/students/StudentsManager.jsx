@@ -76,13 +76,14 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, lms, exs, subs, progs, chapters, draftDocs] = await Promise.all([
+        const [sts, clsList, hws, gms, lms, exs, prods, subs, progs, chapters, draftDocs] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
             fetch('/api/games/all').then(r => r.json()),
             fetch('/api/learning/all').then(r => r.ok ? r.json() : []),
             fetch('/api/exposes/all').then(r => r.ok ? r.json() : []),
+            fetch('/api/productions/all').then(r => r.ok ? r.json() : []),
             fetch('/api/homework/submissions').then(r => r.json()),
             fetch('/api/games/progress').then(r => r.json()),
             fetch('/api/structure/chapters').then(r => r.ok ? r.json() : []),
@@ -137,7 +138,8 @@ export default function StudentsManager({ globalClassId }) {
             ...hws.map(h => ({ ...h, type: 'homework', chapterIdStr: extractId(h.chapterId), label: '📝 ' + h.title })),
             ...gms.map(g => ({ ...g, type: 'game', chapterIdStr: extractId(g.chapterId), label: '🎮 ' + g.title })),
             ...lms.map(m => ({ ...m, type: 'learning', chapterIdStr: extractId(m.chapterId), label: '📚 ' + m.title })),
-            ...exs.map(e => ({ ...e, type: 'expose', chapterIdStr: extractId(e.chapterId), label: '🗣️ ' + e.title }))
+            ...exs.map(e => ({ ...e, type: 'expose', chapterIdStr: extractId(e.chapterId), label: '🗣️ ' + e.title })),
+            ...prods.map(p => ({ ...p, type: 'production', chapterIdStr: extractId(p.chapterId), label: '🏗️ ' + p.title }))
         ];
         const classTargetKey = norm(currentClassName);
         const classStudentIds = new Set(myStudents.map((s) => extractId(s._id)));
@@ -226,6 +228,28 @@ export default function StudentsManager({ globalClassId }) {
                 };
             });
         });
+        prods.forEach((prod) => {
+            const prodId = extractId(prod._id);
+            (prod.submissions || []).forEach((sub) => {
+                const sid = extractId(sub.studentId);
+                if (!sid || !prodId) return;
+                map[`${sid}_${prodId}`] = {
+                    done: Boolean(sub.completedAt || sub.updatedAt || sub.contentHtml || (Array.isArray(sub.answers) && sub.answers.length > 0)),
+                    score: prod.productionType === 'qcm'
+                        ? `${Number(sub.score || 0)} QCM`
+                        : (prod.productionType === 'questionnaire' ? `${Array.isArray(sub.answers) ? sub.answers.length : 0} questions` : 'FICHE'),
+                    production: {
+                        type: String(prod.productionType || 'fiche'),
+                        title: prod.title || 'Production',
+                        contentHtml: sub.contentHtml || '',
+                        plainText: sub.plainText || '',
+                        answers: Array.isArray(sub.answers) ? sub.answers : [],
+                        teacherValidated: sub.teacherValidated === true,
+                        updatedAt: sub.updatedAt || sub.completedAt || null
+                    }
+                };
+            });
+        });
         setTrackingData(map);
 
     } catch (e) { console.error("Matrix Load Error", e); }
@@ -303,7 +327,8 @@ export default function StudentsManager({ globalClassId }) {
                   score: status?.score || null,
                   antiCheat: status ? (status.antiCheat || {}) : {},
                   presentation: status ? (status.presentation || null) : null,
-                  draftDoc: status ? (status.draftDoc || null) : null
+                  draftDoc: status ? (status.draftDoc || null) : null,
+                  production: status ? (status.production || null) : null
               });
           }
       });
@@ -530,6 +555,62 @@ export default function StudentsManager({ globalClassId }) {
                                                 <source src={w.presentation.recordingUrl} />
                                                 Votre navigateur ne supporte pas l'audio.
                                             </audio>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        <h4 className="text-xs font-black text-slate-400 uppercase mb-2 mt-4">🏗️ PRODUCTIONS</h4>
+                        {workloadItems.filter(w => w.type === 'production').map(w => (
+                            <div key={w._id} className={`p-4 rounded-xl border mb-2 ${w.isDone ? 'bg-cyan-50 border-cyan-200' : 'bg-white border-slate-200'}`}>
+                                <div className="font-bold text-slate-700">{w.title}</div>
+                                <div className="text-[9px] font-black text-slate-400 uppercase mb-2">{w.chapterLabel || chapterNameById[extractId(w.chapterId)] || ''}</div>
+                                <div className={`text-[10px] font-black uppercase mb-2 ${w.isDone ? 'text-cyan-700' : 'text-red-400'}`}>
+                                    {w.isDone ? `✅ TERMINÉ (${w.score || 'OK'})` : '⭕ AUCUNE PRODUCTION'}
+                                </div>
+                                {w.production && (
+                                    <div className="space-y-3">
+                                        <div className="text-[10px] font-black uppercase text-slate-500">
+                                            {String(w.production.type || 'fiche').toUpperCase()}
+                                            {w.production.teacherValidated === true ? ' • VALIDÉ' : ''}
+                                        </div>
+                                        {w.production.type === 'fiche' && (
+                                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                                {w.production.contentHtml
+                                                    ? <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: w.production.contentHtml }} />
+                                                    : <div className="text-slate-400 italic">Fiche vide.</div>}
+                                            </div>
+                                        )}
+                                        {w.production.type !== 'fiche' && (
+                                            <div className="space-y-2">
+                                                {(w.production.answers || []).map((row, idx) => (
+                                                    <div key={`${w._id}_${idx}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                                                        {row.levelTitle && <div className="text-[10px] font-black uppercase text-cyan-700 mb-1">{row.levelTitle}</div>}
+                                                        <div className="font-black text-slate-700">{row.prompt || 'Question non renseignée'}</div>
+                                                        {w.production.type === 'questionnaire' && (
+                                                            <>
+                                                                <div className="mt-2"><span className="font-black text-slate-500">Réponse:</span> {row.answer || '—'}</div>
+                                                                <div className="mt-1"><span className="font-black text-slate-500">Mots-clés:</span> {(row.expectedKeywords || []).join(' ') || '—'}</div>
+                                                            </>
+                                                        )}
+                                                        {w.production.type === 'qcm' && (
+                                                            <>
+                                                                <div className="mt-2 grid gap-1">
+                                                                    {(row.options || []).map((option, optIdx) => (
+                                                                        <div key={optIdx} className={`rounded-lg border px-2 py-1 text-[12px] ${Number(row.correctIndex) === optIdx ? 'border-emerald-200 bg-emerald-50 text-emerald-700 font-black' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                                                                            {option || '—'}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                {(!Array.isArray(w.production.answers) || w.production.answers.length === 0) && (
+                                                    <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-400 italic">Aucune donnée enregistrée.</div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 )}

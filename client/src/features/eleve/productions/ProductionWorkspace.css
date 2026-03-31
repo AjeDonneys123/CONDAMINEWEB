@@ -45,7 +45,21 @@
 .prod-save-message {
   font-size: 0.8rem;
   font-weight: 900;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+}
+
+.prod-save-message.success {
   color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.prod-save-message.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
 .prod-btn,
@@ -71,6 +85,8 @@
   background: #1d4ed8;
   color: white;
   border-color: #1d4ed8;
+  position: relative;
+  z-index: 9999;
 }
 
 .prod-btn-ghost {
