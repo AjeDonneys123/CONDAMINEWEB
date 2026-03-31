@@ -60,7 +60,6 @@ function createBlock(type = 'text') {
       title: 'Nouvelle animation',
       actorName: 'Personnage',
       actorImageUrl: '',
-      hiddenByDefault: false,
       actorX: 120,
       actorY: 120,
       actions: [
@@ -69,9 +68,8 @@ function createBlock(type = 'text') {
           name: 'Parler',
           frames: [],
           frameUrlInput: '',
-          speechText: '',
           soundUrl: '',
-          durationMs: 1600
+          spritesOpen: false
         }
       ]
     };
@@ -88,7 +86,6 @@ function createAnimationBlockFromDraft(draft = {}) {
     title: String(draft.title || 'Nouvelle animation').trim() || 'Nouvelle animation',
     actorName: String(draft.actorName || 'Personnage').trim() || 'Personnage',
     actorImageUrl: String(draft.actorImageUrl || '').trim(),
-    hiddenByDefault: false,
     actorX: 120,
     actorY: 120,
     actions: [
@@ -97,9 +94,8 @@ function createAnimationBlockFromDraft(draft = {}) {
         name: 'Parler',
         frames: [],
         frameUrlInput: '',
-        speechText: '',
         soundUrl: String(draft.soundUrl || '').trim(),
-        durationMs: 1600
+        spritesOpen: false
       }
     ]
   };
@@ -284,32 +280,51 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
+  const dragStateRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [recordingActionId, setRecordingActionId] = useState('');
   const [actorState, setActorState] = useState({
-    visible: block?.hiddenByDefault !== true,
     x: Number(block?.actorX || 120),
     y: Number(block?.actorY || 120),
     frameUrl: String(block?.actorImageUrl || ''),
-    actionName: '',
-    speechText: ''
+    actionName: ''
   });
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? block.actions
-    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', speechText: '', soundUrl: '', durationMs: 1600 }];
+    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false }];
 
   useEffect(() => {
     setActorState({
-      visible: block?.hiddenByDefault !== true,
       x: Number(block?.actorX || 120),
       y: Number(block?.actorY || 120),
       frameUrl: String(block?.actorImageUrl || actions[0]?.frames?.[0] || ''),
-      actionName: '',
-      speechText: ''
+      actionName: ''
     });
     setIsPlaying(false);
   }, [block]);
+
+  useEffect(() => {
+    const onMouseMove = (event) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      const nextX = Math.max(0, event.clientX - state.offsetX);
+      const nextY = Math.max(0, event.clientY - state.offsetY);
+      setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
+    };
+    const onMouseUp = () => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      dragStateRef.current = null;
+      updateRoot({ actorX: Math.round(actorState.x), actorY: Math.round(actorState.y) });
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [actorState.x, actorState.y]);
 
   const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
   const updateActions = (nextActions) => onChange?.({ ...block, actions: nextActions });
@@ -336,7 +351,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const addAction = () => {
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', speechText: '', soundUrl: '', durationMs: 1600 }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false }
     ]);
   };
 
@@ -354,6 +369,19 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   const removeFrame = (actionId, frameIndex) => {
     updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: (action.frames || []).filter((_, index) => index !== frameIndex) } : action));
+  };
+
+  const toggleSpritesOpen = (actionId) => {
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, spritesOpen: !action.spritesOpen } : action));
+  };
+
+  const startDragActor = (event) => {
+    if (readOnly) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragStateRef.current = {
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
   };
 
   const handleActorFile = async (fileList) => {
@@ -392,21 +420,13 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const playAnimation = async () => {
     if (isPlaying) return;
     setIsPlaying(true);
-    setActorState((prev) => ({
-      ...prev,
-      visible: true,
-      x: Number(block?.actorX || 120),
-      y: Number(block?.actorY || 120)
-    }));
     for (const action of actions) {
       const frames = Array.isArray(action.frames) && action.frames.length > 0 ? action.frames : [block?.actorImageUrl].filter(Boolean);
       let frameIndex = 0;
       setActorState((prev) => ({
         ...prev,
-        visible: true,
         frameUrl: String(frames[0] || block?.actorImageUrl || ''),
-        actionName: action.name || 'Action',
-        speechText: action.speechText || ''
+        actionName: action.name || 'Action'
       }));
       let frameTimer = null;
       if (frames.length > 1) {
@@ -422,15 +442,18 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
           audio.play().catch(() => {});
         } catch (_) {}
       }
-      if (action.speechText && window.speechSynthesis) {
-        try {
-          const utterance = new SpeechSynthesisUtterance(action.speechText);
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(utterance);
-        } catch (_) {}
+      if (audio) {
+        await new Promise((resolve) => {
+          const onEnded = () => resolve(0);
+          audio.addEventListener('ended', onEnded, { once: true });
+          audio.addEventListener('error', onEnded, { once: true });
+          const fallback = window.setTimeout(() => resolve(0), 10000);
+          audio.addEventListener('ended', () => window.clearTimeout(fallback), { once: true });
+          audio.addEventListener('error', () => window.clearTimeout(fallback), { once: true });
+        });
+      } else {
+        await new Promise((resolve) => window.setTimeout(resolve, Math.max(800, frames.length * 220)));
       }
-      const duration = Math.max(600, Number(action.durationMs || 1600));
-      await new Promise((resolve) => window.setTimeout(resolve, duration));
       if (frameTimer) window.clearInterval(frameTimer);
       if (audio) {
         try {
@@ -439,7 +462,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
         } catch (_) {}
       }
     }
-    setActorState((prev) => ({ ...prev, actionName: '', speechText: '' }));
+    setActorState((prev) => ({ ...prev, actionName: '' }));
     setIsPlaying(false);
   };
 
@@ -447,10 +470,14 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   return (
     <div className="animation-block-shell">
-      <div className={`animation-page-overlay ${actorState.visible ? 'visible' : 'hidden'}`} style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}>
-        <div className="animation-page-actor">
+      <div className="animation-page-overlay visible">
+        <div
+          className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
+          style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}
+          onMouseDown={startDragActor}
+        >
           {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
-          {actorState.speechText ? <div className="animation-speech-bubble">{actorState.speechText}</div> : null}
+          <button type="button" className="animation-sprite-play" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? '...' : 'Play'}</button>
           <div className="animation-actor-name">{actorState.actionName || block?.actorName || 'Personnage'}</div>
         </div>
       </div>
@@ -461,10 +488,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             <input value={block?.title || ''} onChange={(e) => updateRoot({ title: e.target.value })} placeholder="Titre de l'animation" />
             <input value={block?.actorName || ''} onChange={(e) => updateRoot({ actorName: e.target.value })} placeholder="Nom du personnage" />
             <input value={block?.actorImageUrl || ''} onChange={(e) => updateRoot({ actorImageUrl: e.target.value })} placeholder="URL du sprite principal" />
-            <div className="animation-position-row">
-              <input type="number" value={Number(block?.actorX || 120)} onChange={(e) => updateRoot({ actorX: Number(e.target.value || 0) })} placeholder="X" />
-              <input type="number" value={Number(block?.actorY || 120)} onChange={(e) => updateRoot({ actorY: Number(e.target.value || 0) })} placeholder="Y" />
-            </div>
+            <div className="animation-position-note">Tu peux glisser le personnage directement dans la page.</div>
           </div>
           {!readOnly && (
             <div className="animation-upload-card" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
@@ -475,29 +499,22 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             </div>
           )}
           <div className="animation-stage-actions">
-            <button type="button" className="animation-play-btn" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? 'Lecture...' : 'Play'}</button>
             {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+ Nouvelle action</button>}
           </div>
         </div>
 
         <div className="animation-action-stack">
           {actions.map((action, index) => (
-            <div key={action.id} className="animation-action-card">
+            <div key={action.id} className="animation-action-card compact">
               <div className="animation-action-head">
-                <strong>{index + 1}. {action.name || 'Action'}</strong>
+                <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder={`Action ${index + 1}`} />
+                <div className="animation-compact-actions">
+                  <button type="button" onClick={() => toggleSpritesOpen(action.id)}>Sprites</button>
+                  <button type="button" className={recordingActionId === action.id ? 'recording' : ''} onClick={() => void toggleRecord(action.id)}>REC</button>
+                </div>
                 {!readOnly && actions.length > 1 ? <button type="button" onClick={() => removeAction(action.id)}>Supprimer</button> : null}
               </div>
-              <div className="animation-action-fields">
-                <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder="Nom de l'action" />
-                <input type="number" value={Number(action.durationMs || 1600)} onChange={(e) => updateAction(action.id, { durationMs: Number(e.target.value || 0) })} placeholder="Durée ms" />
-                <textarea value={action.speechText || ''} onChange={(e) => updateAction(action.id, { speechText: e.target.value })} placeholder="Texte à dire pendant l'action" rows={3} />
-                <input value={action.soundUrl || ''} onChange={(e) => updateAction(action.id, { soundUrl: e.target.value })} placeholder="URL du son ou audio enregistré" />
-                {!readOnly && <div className="animation-action-toolbar">
-                  <button type="button" className={recordingActionId === action.id ? 'recording' : ''} onClick={() => void toggleRecord(action.id)}>{recordingActionId === action.id ? 'REC...' : 'REC'}</button>
-                  <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Sprites ordinateur</button>
-                </div>}
-              </div>
-              {!readOnly && (
+              {action.spritesOpen && !readOnly && (
                 <div className="animation-upload-card action" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}>
                   <div className="animation-upload-title">Sprites de l'action</div>
                   <div className="animation-upload-note">Plusieurs images possibles. Drag and drop, import ordi, ou URL.</div>
@@ -505,10 +522,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                     <input value={action.frameUrlInput || ''} onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })} placeholder="URL d'un sprite à ajouter" />
                     <button type="button" onClick={() => addFrameFromUrl(action.id)}>Ajouter URL</button>
                   </div>
+                  <input value={action.soundUrl || ''} onChange={(e) => updateAction(action.id, { soundUrl: e.target.value })} placeholder="URL du son si besoin" />
+                  <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer depuis l'ordi</button>
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}
-              <div className="animation-frame-strip">
+              {action.spritesOpen && <div className="animation-frame-strip">
                 {(action.frames || []).map((frame, frameIndex) => (
                   <div key={`${action.id}_${frameIndex}`} className="animation-frame-thumb">
                     <img src={frame} alt="" />
@@ -516,7 +535,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                   </div>
                 ))}
                 {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite dans cette action</div>}
-              </div>
+              </div>}
             </div>
           ))}
         </div>
