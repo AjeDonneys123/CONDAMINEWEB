@@ -102,6 +102,7 @@ const ARTICLE_FONTS = [
 const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
 const WEB5E_EDITOR_PASSWORD = 'condamine';
 const WEB5E_TEACHER_PASSWORD = 'a';
+const WEB5E_DIRECT_STUDENT_PREFIX = 'web5e-direct-student';
 
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
@@ -147,6 +148,23 @@ function readStoredWeb5eSession() {
   } catch (_) {
     return null;
   }
+}
+
+function buildDirectStudentProfile({ firstName = '', lastName = '', className = '' } = {}) {
+  const safeFirst = String(firstName || '').trim();
+  const safeLast = String(lastName || '').trim();
+  const safeClass = String(className || '').trim();
+  const slug = [safeClass, safeLast, safeFirst]
+    .map((part) => clean(part).replace(/[^a-z0-9]+/g, '-'))
+    .filter(Boolean)
+    .join('-') || 'guest';
+  return {
+    id: `${WEB5E_DIRECT_STUDENT_PREFIX}-${slug}`,
+    type: 'student',
+    firstName: safeFirst,
+    lastName: safeLast,
+    className: safeClass
+  };
 }
 
 function ArticleEditor({ value, onChange, readOnly }) {
@@ -581,12 +599,21 @@ export default function App() {
     const typedClass = clean(inputClass);
     const typedLast = clean(inputLast);
     const typedFirst = clean(inputFirst);
-    return allUsersData.find((p) =>
+    const matchedProfile = allUsersData.find((p) =>
       p.type === 'student' &&
       clean(p.lastName) === typedLast &&
       clean(p.firstName) === typedFirst &&
       (!typedClass || clean(p.className) === typedClass)
     ) || null;
+    if (matchedProfile) return matchedProfile;
+    if (/^5/.test(String(inputClass || '').trim()) && typedLast && typedFirst) {
+      return buildDirectStudentProfile({
+        firstName: String(inputFirst || '').trim(),
+        lastName: String(inputLast || '').trim(),
+        className: String(inputClass || '').trim()
+      });
+    }
+    return null;
   };
 
   const handleLogin = async (event) => {
