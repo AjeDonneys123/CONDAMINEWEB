@@ -276,6 +276,7 @@ function formatContributionName(name = '') {
 }
 
 function AnimationBlockEditor({ block, onChange, readOnly }) {
+  const overlayRef = useRef(null);
   const actorFileInputRef = useRef(null);
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
@@ -360,11 +361,19 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top
     };
+    try {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', 'sprite');
+    } catch (_) {}
   };
 
-  const dropActor = (event) => {
+  const finishDragActor = (event) => {
     if (readOnly) return;
-    const shellRect = event.currentTarget.getBoundingClientRect();
+    const shellRect = overlayRef.current?.getBoundingClientRect();
+    if (!shellRect) return;
+    if (event.clientX < shellRect.left || event.clientX > shellRect.right || event.clientY < shellRect.top || event.clientY > shellRect.bottom) {
+      return;
+    }
     const nextX = Math.max(0, event.clientX - shellRect.left - actorDragOffsetRef.current.x);
     const nextY = Math.max(0, event.clientY - shellRect.top - actorDragOffsetRef.current.y);
     setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
@@ -458,12 +467,13 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   return (
     <div className="animation-block-shell">
-      <div className="animation-page-overlay visible" onDragOver={(e) => e.preventDefault()} onDrop={dropActor}>
+      <div ref={overlayRef} className="animation-page-overlay visible" onDragOver={(e) => e.preventDefault()}>
         <div
           className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
           style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}
           draggable={!readOnly}
           onDragStart={startDragActor}
+          onDragEnd={finishDragActor}
         >
           {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
           <button type="button" className="animation-sprite-play" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? '...' : 'Play'}</button>
@@ -531,6 +541,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 }
 
 export default function App() {
+  const creatorSpriteFileInputRef = useRef(null);
   const initialBridgedUser = readBridgeUserFromUrl();
   const initialWindowNamedUser = readBridgeUserFromWindowName();
   const initialStoredUser = readStoredWeb5eSession();
@@ -559,10 +570,7 @@ export default function App() {
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [animationDraft, setAnimationDraft] = useState({
     title: '',
-    actorName: '',
-    actorImageUrl: '',
-    soundName: '',
-    soundUrl: ''
+    actorImageUrl: ''
   });
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
@@ -820,11 +828,18 @@ export default function App() {
     setCreatorOpen(false);
     setAnimationDraft({
       title: '',
-      actorName: '',
-      actorImageUrl: '',
-      soundName: '',
-      soundUrl: ''
+      actorImageUrl: ''
     });
+  };
+
+  const handleCreatorSpriteFile = async (fileList) => {
+    const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAnimationDraft((prev) => ({ ...prev, actorImageUrl: String(reader.result || '') }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateBlock = (index, value) => {
@@ -934,28 +949,22 @@ export default function App() {
             onChange={(e) => setAnimationDraft((prev) => ({ ...prev, title: e.target.value }))}
             placeholder="Titre de l'animation"
           />
-          <input
-            value={animationDraft.actorName}
-            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorName: e.target.value }))}
-            placeholder="Nom du sprite"
-          />
-          <input
-            value={animationDraft.actorImageUrl}
-            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: e.target.value }))}
-            placeholder="URL de l'image du sprite"
-          />
-          <input
-            value={animationDraft.soundName}
-            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, soundName: e.target.value }))}
-            placeholder="Nom du son"
-          />
-          <input
-            value={animationDraft.soundUrl}
-            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, soundUrl: e.target.value }))}
-            placeholder="URL du son"
-          />
-          <div className="creator-panel-note">
-            Ce créateur prépare un bloc animation avec sprite, déplacement, affichage et son.
+          <div className="creator-inline-row">
+            <input
+              value={animationDraft.actorImageUrl}
+              onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: e.target.value }))}
+              placeholder="URL de l'image du sprite"
+            />
+            <button type="button" className="secondary-btn" onClick={() => creatorSpriteFileInputRef.current?.click()}>
+              Importer depuis l'ordi
+            </button>
+            <input
+              ref={creatorSpriteFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden-file-input"
+              onChange={(e) => void handleCreatorSpriteFile(e.target.files)}
+            />
           </div>
           <button className="primary-btn" type="button" onClick={createAnimationFromDrawer}>
             Créer l'animation

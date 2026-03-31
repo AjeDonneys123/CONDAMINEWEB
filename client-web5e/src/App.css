@@ -164,13 +164,11 @@
   font: inherit;
 }
 
-.creator-panel-note {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: #fff8f0;
-  color: #6b7280;
-  font-size: 0.9rem;
-  line-height: 1.5;
+.creator-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
 }
 
 .name-row {
