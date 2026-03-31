@@ -318,7 +318,7 @@ function formatContributionName(name = '') {
   return `${firstName} ${lastName.slice(0, 3)}`;
 }
 
-function AnimationBlockEditor({ block, onChange, readOnly }) {
+function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
   const overlayRef = useRef(null);
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
@@ -798,7 +798,6 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
               <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={playAnimation}>{isPlaying ? '■' : '▶'}</button>
               <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
-              <button type="button" className="animation-action-remove" onClick={() => updateRoot({ actorImageUrl: '' })}>×</button>
               <div className={`animation-load-menu-shell ${loadMenuOpen ? 'open' : ''}`}>
                 <button type="button" onClick={() => setLoadMenuOpen((prev) => !prev)}>Charger</button>
                 {loadMenuOpen ? (
@@ -815,6 +814,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                   </div>
                 ) : null}
               </div>
+              {!readOnly ? <button type="button" className="animation-action-remove" onClick={onRemove}>×</button> : null}
             </div>
           )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
@@ -1438,6 +1438,7 @@ export default function App() {
                       updateBlocks(nextBlocks);
                       void persistBlocks(nextBlocks);
                     }}
+                    onRemove={() => removeBlock(index)}
                     readOnly={!isTeacher}
                   />
                 </div>
