@@ -280,7 +280,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
-  const dragStateRef = useRef(null);
+  const actorDragOffsetRef = useRef({ x: 0, y: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
   const [recordingActionId, setRecordingActionId] = useState('');
   const [actorState, setActorState] = useState({
@@ -303,28 +303,6 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     });
     setIsPlaying(false);
   }, [block]);
-
-  useEffect(() => {
-    const onMouseMove = (event) => {
-      const state = dragStateRef.current;
-      if (!state) return;
-      const nextX = Math.max(0, event.clientX - state.offsetX);
-      const nextY = Math.max(0, event.clientY - state.offsetY);
-      setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
-    };
-    const onMouseUp = () => {
-      const state = dragStateRef.current;
-      if (!state) return;
-      dragStateRef.current = null;
-      updateRoot({ actorX: Math.round(actorState.x), actorY: Math.round(actorState.y) });
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [actorState.x, actorState.y]);
 
   const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
   const updateActions = (nextActions) => onChange?.({ ...block, actions: nextActions });
@@ -378,10 +356,19 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const startDragActor = (event) => {
     if (readOnly) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    dragStateRef.current = {
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top
+    actorDragOffsetRef.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
     };
+  };
+
+  const dropActor = (event) => {
+    if (readOnly) return;
+    const shellRect = event.currentTarget.getBoundingClientRect();
+    const nextX = Math.max(0, event.clientX - shellRect.left - actorDragOffsetRef.current.x);
+    const nextY = Math.max(0, event.clientY - shellRect.top - actorDragOffsetRef.current.y);
+    setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
+    updateRoot({ actorX: Math.round(nextX), actorY: Math.round(nextY) });
   };
 
   const handleActorFile = async (fileList) => {
@@ -417,10 +404,11 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     } catch (_) {}
   };
 
-  const playAnimation = async () => {
+  const playAnimation = async (customActions = null) => {
     if (isPlaying) return;
     setIsPlaying(true);
-    for (const action of actions) {
+    const sequence = Array.isArray(customActions) && customActions.length > 0 ? customActions : actions;
+    for (const action of sequence) {
       const frames = Array.isArray(action.frames) && action.frames.length > 0 ? action.frames : [block?.actorImageUrl].filter(Boolean);
       let frameIndex = 0;
       setActorState((prev) => ({
@@ -470,11 +458,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   return (
     <div className="animation-block-shell">
-      <div className="animation-page-overlay visible">
+      <div className="animation-page-overlay visible" onDragOver={(e) => e.preventDefault()} onDrop={dropActor}>
         <div
           className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
           style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}
-          onMouseDown={startDragActor}
+          draggable={!readOnly}
+          onDragStart={startDragActor}
         >
           {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
           <button type="button" className="animation-sprite-play" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? '...' : 'Play'}</button>
@@ -483,21 +472,19 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       </div>
 
       <div className="animation-editor">
-        <div className="animation-editor-top">
-          <div className="animation-editor-grid">
-            <input value={block?.title || ''} onChange={(e) => updateRoot({ title: e.target.value })} placeholder="Titre de l'animation" />
-            <input value={block?.actorName || ''} onChange={(e) => updateRoot({ actorName: e.target.value })} placeholder="Nom du personnage" />
-            <input value={block?.actorImageUrl || ''} onChange={(e) => updateRoot({ actorImageUrl: e.target.value })} placeholder="URL du sprite principal" />
-            <div className="animation-position-note">Tu peux glisser le personnage directement dans la page.</div>
-          </div>
-          {!readOnly && (
-            <div className="animation-upload-card" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
-              <div className="animation-upload-title">Sprite principal</div>
-              <div className="animation-upload-note">Importe une image depuis l'ordi ou glisse-la ici.</div>
-              <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
-              <button type="button" onClick={() => actorFileInputRef.current?.click()}>Importer depuis l'ordi</button>
+          <div className="animation-editor-top">
+            <div className="animation-editor-grid">
+              <input value={block?.title || ''} onChange={(e) => updateRoot({ title: e.target.value })} placeholder="Titre de l'animation" />
+              <input value={block?.actorName || ''} onChange={(e) => updateRoot({ actorName: e.target.value })} placeholder="Nom du personnage" />
             </div>
-          )}
+            {!readOnly && (
+              <div className="animation-inline-row" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
+                <input value={block?.actorImageUrl || ''} onChange={(e) => updateRoot({ actorImageUrl: e.target.value })} placeholder="URL du sprite principal" />
+                <button type="button" onClick={() => updateRoot({ actorImageUrl: String(block?.actorImageUrl || '').trim() })}>Importer URL</button>
+                <button type="button" onClick={() => actorFileInputRef.current?.click()}>Importer depuis l'ordi</button>
+                <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
+              </div>
+            )}
           <div className="animation-stage-actions">
             {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+ Nouvelle action</button>}
           </div>
@@ -511,19 +498,18 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <div className="animation-compact-actions">
                   <button type="button" onClick={() => toggleSpritesOpen(action.id)}>Sprites</button>
                   <button type="button" className={recordingActionId === action.id ? 'recording' : ''} onClick={() => void toggleRecord(action.id)}>REC</button>
+                  <button type="button" onClick={() => void playAnimation([action])}>Play</button>
                 </div>
                 {!readOnly && actions.length > 1 ? <button type="button" onClick={() => removeAction(action.id)}>Supprimer</button> : null}
               </div>
               {action.spritesOpen && !readOnly && (
                 <div className="animation-upload-card action" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}>
-                  <div className="animation-upload-title">Sprites de l'action</div>
-                  <div className="animation-upload-note">Plusieurs images possibles. Drag and drop, import ordi, ou URL.</div>
-                  <div className="animation-url-row">
+                  <div className="animation-inline-row">
                     <input value={action.frameUrlInput || ''} onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })} placeholder="URL d'un sprite à ajouter" />
-                    <button type="button" onClick={() => addFrameFromUrl(action.id)}>Ajouter URL</button>
+                    <button type="button" onClick={() => addFrameFromUrl(action.id)}>Importer URL</button>
+                    <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer depuis l'ordi</button>
                   </div>
                   <input value={action.soundUrl || ''} onChange={(e) => updateAction(action.id, { soundUrl: e.target.value })} placeholder="URL du son si besoin" />
-                  <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer depuis l'ordi</button>
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}

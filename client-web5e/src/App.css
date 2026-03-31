@@ -568,15 +568,11 @@
   gap: 10px;
 }
 
-.animation-position-note {
-  display: flex;
+.animation-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
   align-items: center;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px dashed rgba(28, 41, 67, 0.14);
-  background: rgba(255, 255, 255, 0.84);
-  color: #64748b;
-  font-weight: 700;
 }
 
 .animation-stage-actions,
@@ -651,6 +647,15 @@
 
 .animation-upload-card.action {
   margin-top: 12px;
+}
+
+.animation-upload-card.action input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
 }
 
 .animation-upload-title {
@@ -878,6 +883,7 @@
   }
 
   .animation-editor-grid,
+  .animation-inline-row,
   .animation-url-row {
     grid-template-columns: 1fr;
   }
