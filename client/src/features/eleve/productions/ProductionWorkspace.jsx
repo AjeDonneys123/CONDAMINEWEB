@@ -352,7 +352,7 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
     const interval = window.setInterval(() => {
       if (saving) return;
       save('auto');
-    }, 5 * 60 * 1000);
+    }, 4 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [saving, productionType, contentHtml, questionnaireLevels, qcmLevels]);
 

@@ -225,7 +225,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     bonuses: 0,
                     homework: { total: 0, done: 0, todo: 0, todoTitles: [] },
                     games: { total: 0, done: 0, started: 0, todo: 0, todoTitles: [] },
-                    activities: { total: 0, done: 0, todo: 0, todoTitles: [], todoItems: [] }
+                    activities: { total: 0, done: 0, todo: 0, todoTitles: [], todoItems: [], savedItems: [] }
                 });
             }
             return disciplineMap.get(subject);
@@ -510,10 +510,17 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const entry = ensureDiscipline(subject);
             const submission = (prod.submissions || []).find((p) => String(p.studentId) === String(student._id));
             const done = Boolean(submission?.completedAt);
+            const icon = prod.productionType === 'qcm' ? '🎮' : (prod.productionType === 'questionnaire' ? '🎙️' : '🏗️');
             entry.activities.total += 1;
-            if (done) entry.activities.done += 1;
-            else {
-                const icon = prod.productionType === 'qcm' ? '🎮' : (prod.productionType === 'questionnaire' ? '🎙️' : '🏗️');
+            if (done) {
+                entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(prod._id),
+                    type: 'production',
+                    title: prod.title || 'Production',
+                    label: `${icon} ${prod.title || 'Production'}`
+                });
+            } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`${icon} ${prod.title || 'Production'}`);
                 entry.activities.todoItems.push({

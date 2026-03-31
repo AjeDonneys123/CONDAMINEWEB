@@ -83,6 +83,24 @@ export default function StatusOverview({ user, onOpenActivity }) {
                 </div>
               </div>
             )}
+
+            {(d.activities?.savedItems?.length > 0) && (
+              <div className="status-saved">
+                <div className="mb-1">Déjà enregistré:</div>
+                <div className="flex flex-wrap gap-2">
+                  {(d.activities.savedItems || []).map((it, idx) => (
+                    <button
+                      key={`${it.type}_${it.id}_${idx}`}
+                      type="button"
+                      className="status-saved-btn"
+                      onClick={() => onOpenActivity && onOpenActivity(it)}
+                    >
+                      {it.label || it.title || 'Activité'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
