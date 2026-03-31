@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import ManualEraser from '../../client/src/features/prof/studio/studioComp/ManualEraser';
+import '../../client/src/features/prof/studio/studioComp/ManualEraser.css';
 
 const WEB5E_SESSION_KEY = 'web5eBridgeSession';
 
@@ -74,7 +76,9 @@ function createBlock(type = 'text') {
           soundUrl: '',
           spritesOpen: false,
           spriteToolsOpen: false,
-          spriteUrlOpen: false
+          spriteUrlOpen: false,
+          spriteEditorOpen: false,
+          selectedFrameIndex: 0
         }
       ]
     };
@@ -105,9 +109,20 @@ function createAnimationBlockFromDraft(draft = {}) {
         soundUrl: String(draft.soundUrl || '').trim(),
         spritesOpen: false,
         spriteToolsOpen: false,
-        spriteUrlOpen: false
+        spriteUrlOpen: false,
+        spriteEditorOpen: false,
+        selectedFrameIndex: 0
       }
     ]
+  };
+}
+
+function createSpriteFrame(url = '') {
+  return {
+    id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    url: String(url || '').trim(),
+    width: 140,
+    height: 140
   };
 }
 
@@ -316,6 +331,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const [recordingActionId, setRecordingActionId] = useState('');
   const [importNotice, setImportNotice] = useState('');
   const [loadMenuOpen, setLoadMenuOpen] = useState(false);
+  const [eraserState, setEraserState] = useState(null);
   const [actorState, setActorState] = useState({
     x: Number(block?.actorX || 120),
     y: Number(block?.actorY || 120),
@@ -327,7 +343,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? block.actions
-    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false }];
+    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
 
   useEffect(() => {
     setActorState({
@@ -420,7 +436,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       flashNotice("Import sprite impossible");
       return;
     }
-    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: [...(action.frames || []), ...urls] } : action));
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: [...(action.frames || []), ...urls.map(createSpriteFrame)] } : action));
     flashNotice("Sprite importé");
   };
 
@@ -431,7 +447,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const addAction = () => {
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
     ]);
   };
 
@@ -440,7 +456,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     const nextPreset = {
       id: `saved_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       name: String(action.name || 'Action').trim() || 'Action',
-      frames: Array.isArray(action.frames) ? action.frames.filter(Boolean) : []
+      frames: Array.isArray(action.frames) ? action.frames.map((frame) => ({
+        id: `saved_frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        url: typeof frame === 'string' ? frame : String(frame?.url || ''),
+        width: Number(frame?.width || 140),
+        height: Number(frame?.height || 140)
+      })).filter((frame) => frame.url) : []
     };
     const withoutSameName = savedActions.filter((item) => clean(item.name) !== clean(nextPreset.name));
     updateSavedActions([...withoutSameName, nextPreset]);
@@ -462,7 +483,9 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             soundUrl: '',
             spritesOpen: false,
             spriteToolsOpen: false,
-            spriteUrlOpen: false
+            spriteUrlOpen: false,
+            spriteEditorOpen: false,
+            selectedFrameIndex: 0
           }
         : action
     )));
@@ -476,7 +499,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   };
 
   const removeFrame = (actionId, frameIndex) => {
-    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: (action.frames || []).filter((_, index) => index !== frameIndex) } : action));
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: (action.frames || []).filter((_, index) => index !== frameIndex), selectedFrameIndex: Math.max(0, Math.min((action.selectedFrameIndex || 0), (action.frames || []).length - 2)) } : action));
   };
 
   const toggleSpritesOpen = (actionId) => {
@@ -497,6 +520,63 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
         ? { ...action, spriteUrlOpen: !action.spriteUrlOpen }
         : action
     )));
+  };
+
+  const toggleSpriteEditorOpen = (actionId) => {
+    updateActions(actions.map((action) => (
+      action.id === actionId ? { ...action, spriteEditorOpen: !action.spriteEditorOpen } : action
+    )));
+  };
+
+  const selectFrame = (actionId, frameIndex) => {
+    const action = actions.find((item) => item.id === actionId);
+    const frame = action?.frames?.[frameIndex];
+    const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
+    if (normalizedFrame?.url) {
+      setActorState((prev) => ({
+        ...prev,
+        frameUrl: normalizedFrame.url,
+        width: Number(normalizedFrame.width || prev.width || 140),
+        height: Number(normalizedFrame.height || prev.height || 140)
+      }));
+    }
+    updateActions(actions.map((actionItem) => (
+      actionItem.id === actionId ? { ...actionItem, selectedFrameIndex: frameIndex } : actionItem
+    )));
+  };
+
+  const updateFrame = (actionId, frameIndex, patch) => {
+    const action = actions.find((item) => item.id === actionId);
+    if (action?.selectedFrameIndex === frameIndex) {
+      if (patch.url || patch.width || patch.height) {
+        setActorState((prev) => ({
+          ...prev,
+          frameUrl: patch.url || prev.frameUrl,
+          width: Number(patch.width || prev.width || 140),
+          height: Number(patch.height || prev.height || 140)
+        }));
+      }
+    }
+    updateActions(actions.map((action) => (
+      action.id === actionId
+        ? {
+            ...action,
+            frames: (action.frames || []).map((frame, index) => (
+              index === frameIndex
+                ? { ...(typeof frame === 'string' ? createSpriteFrame(frame) : frame), ...patch }
+                : (typeof frame === 'string' ? createSpriteFrame(frame) : frame)
+            ))
+          }
+        : action
+    )));
+  };
+
+  const openFrameEraser = (actionId, frameIndex) => {
+    const action = actions.find((item) => item.id === actionId);
+    const frame = action?.frames?.[frameIndex];
+    const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
+    if (!normalizedFrame?.url) return;
+    setEraserState({ actionId, frameIndex, url: normalizedFrame.url });
   };
 
   const startDragActor = (event) => {
@@ -551,7 +631,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       flashNotice("Aucune image détectée");
       return;
     }
-    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), safeValue], frameUrlInput: '' } : item));
+    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), createSpriteFrame(safeValue)], frameUrlInput: '' } : item));
     flashNotice("Sprite importé");
   };
 
@@ -588,7 +668,9 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     setIsPlaying(true);
     const sequence = Array.isArray(customActions) && customActions.length > 0 ? customActions : actions;
     for (const action of sequence) {
-      const frames = Array.isArray(action.frames) && action.frames.length > 0 ? action.frames : [block?.actorImageUrl].filter(Boolean);
+      const frames = Array.isArray(action.frames) && action.frames.length > 0
+        ? action.frames.map((frame) => (typeof frame === 'string' ? frame : frame?.url)).filter(Boolean)
+        : [block?.actorImageUrl].filter(Boolean);
       let frameIndex = 0;
       setActorState((prev) => ({
         ...prev,
@@ -651,7 +733,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     actionLoopStopRef.current = { stop: false, actionId: '' };
   };
 
-  const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || actions[0]?.frames?.[0] || '';
+  const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url) || '';
 
   return (
     <div className="animation-block-shell">
@@ -710,6 +792,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <div className="animation-compact-actions">
                   <button type="button" className="icon-btn" onClick={() => saveActionPreset(action)}>+</button>
                   <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
+                  <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
                   <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
@@ -746,8 +829,8 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                   <div className="animation-sprite-drop-hint">Colle, glisse, ou ajoute des sprites ici.</div>
                   <div className="animation-frame-strip in-space">
                     {(action.frames || []).map((frame, frameIndex) => (
-                      <div key={`${action.id}_${frameIndex}`} className="animation-frame-thumb">
-                        <img src={frame} alt="" />
+                      <div key={`${action.id}_${frameIndex}`} className={`animation-frame-thumb ${frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : ''}`} onClick={() => selectFrame(action.id, frameIndex)}>
+                        <img src={typeof frame === 'string' ? frame : frame?.url} alt="" />
                         {!readOnly ? <button type="button" onClick={() => removeFrame(action.id, frameIndex)}>×</button> : null}
                       </div>
                     ))}
@@ -756,17 +839,62 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}
+              {action.spriteEditorOpen && !readOnly ? (() => {
+                const selectedFrame = action.frames?.[action.selectedFrameIndex || 0];
+                const normalizedFrame = typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame;
+                return (
+                  <div className="animation-sprite-editor-panel">
+                    {normalizedFrame?.url ? (
+                      <>
+                        <div className="animation-sprite-editor-preview">
+                          <img
+                            src={normalizedFrame.url}
+                            alt=""
+                            style={{ width: Number(normalizedFrame.width || 140), height: Number(normalizedFrame.height || 140) }}
+                          />
+                        </div>
+                        <div className="animation-sprite-editor-controls">
+                          <div className="animation-sprite-editor-row">
+                            <span>Largeur</span>
+                            <input type="range" min="40" max="320" value={Number(normalizedFrame.width || 140)} onChange={(e) => updateFrame(action.id, action.selectedFrameIndex || 0, { width: Number(e.target.value) })} />
+                            <strong>{Number(normalizedFrame.width || 140)}px</strong>
+                          </div>
+                          <div className="animation-sprite-editor-row">
+                            <span>Hauteur</span>
+                            <input type="range" min="40" max="320" value={Number(normalizedFrame.height || 140)} onChange={(e) => updateFrame(action.id, action.selectedFrameIndex || 0, { height: Number(e.target.value) })} />
+                            <strong>{Number(normalizedFrame.height || 140)}px</strong>
+                          </div>
+                          <button type="button" onClick={() => openFrameEraser(action.id, action.selectedFrameIndex || 0)}>Supprimer le fond</button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="animation-frame-empty">Choisis un sprite.</div>
+                    )}
+                  </div>
+                );
+              })() : null}
             </div>
           ))}
           </div>
         </div>
       </div>
+      {eraserState ? (
+        <ManualEraser
+          imageUrl={eraserState.url}
+          onCancel={() => setEraserState(null)}
+          onSave={(nextUrl) => {
+            updateFrame(eraserState.actionId, eraserState.frameIndex, { url: nextUrl });
+            setEraserState(null);
+            flashNotice('Fond supprimé');
+          }}
+          resolveUrl={(url) => url}
+        />
+      ) : null}
     </div>
   );
 }
 
 export default function App() {
-  const creatorSpriteFileInputRef = useRef(null);
   const initialBridgedUser = readBridgeUserFromUrl();
   const initialWindowNamedUser = readBridgeUserFromWindowName();
   const initialStoredUser = readStoredWeb5eSession();
@@ -791,11 +919,6 @@ export default function App() {
   const [user, setUser] = useState(initialUser);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [creatorOpen, setCreatorOpen] = useState(false);
-  const [animationDraft, setAnimationDraft] = useState({
-    title: '',
-    actorImageUrl: ''
-  });
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
   const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
@@ -986,7 +1109,6 @@ export default function App() {
     setInputClass('');
     setInputLast('');
     setInputFirst('');
-    setCreatorOpen(false);
     setLoginOpen(false);
     setBridgeDebug({
       fromUrl: false,
@@ -1038,27 +1160,6 @@ export default function App() {
     void persistBlocks(nextBlocks);
   };
 
-  const createAnimationFromDrawer = () => {
-    const nextBlocks = [...blocks, createAnimationBlockFromDraft(animationDraft)];
-    updateBlocks(nextBlocks);
-    void persistBlocks(nextBlocks);
-    setCreatorOpen(false);
-    setAnimationDraft({
-      title: '',
-      actorImageUrl: ''
-    });
-  };
-
-  const handleCreatorSpriteFile = async (fileList) => {
-    const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAnimationDraft((prev) => ({ ...prev, actorImageUrl: String(reader.result || '') }));
-    };
-    reader.readAsDataURL(file);
-  };
-
   const updateBlock = (index, value) => {
     const nextBlocks = blocks.map((block, i) => i === index ? { ...block, value } : block);
     updateBlocks(nextBlocks);
@@ -1091,12 +1192,6 @@ export default function App() {
       <button className="login-toggle" onClick={() => setLoginOpen((prev) => !prev)}>
         {user ? `${user.firstName} ${user.lastName}` : 'Connexion élève'}
       </button>
-      {isTeacher && (
-        <button className="creator-toggle" onClick={() => setCreatorOpen((prev) => !prev)}>
-          Créateur animation
-        </button>
-      )}
-
       <aside className={`login-panel ${loginOpen ? 'open' : ''}`}>
         <div className="login-panel-head">
           <div>
@@ -1149,44 +1244,6 @@ export default function App() {
             </button>
           </div>
         )}
-      </aside>
-
-      <aside className={`creator-panel ${creatorOpen ? 'open' : ''}`}>
-        <div className="creator-panel-head">
-          <div>
-            <div className="eyebrow">Sprites & son</div>
-            <strong>Créateur d'animation</strong>
-          </div>
-          <button onClick={() => setCreatorOpen(false)}>×</button>
-        </div>
-        <div className="creator-panel-body">
-          <input
-            value={animationDraft.title}
-            onChange={(e) => setAnimationDraft((prev) => ({ ...prev, title: e.target.value }))}
-            placeholder="Titre de l'animation"
-          />
-          <div className="creator-inline-row">
-            <input
-              value={animationDraft.actorImageUrl}
-              onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: e.target.value }))}
-              onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: nextValue })))}
-              placeholder="URL de l'image du sprite"
-            />
-            <button type="button" className="secondary-btn" onClick={() => creatorSpriteFileInputRef.current?.click()}>
-              Importer depuis l'ordi
-            </button>
-            <input
-              ref={creatorSpriteFileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden-file-input"
-              onChange={(e) => void handleCreatorSpriteFile(e.target.files)}
-            />
-          </div>
-          <button className="primary-btn" type="button" onClick={createAnimationFromDrawer}>
-            Créer l'animation
-          </button>
-        </div>
       </aside>
 
       <header className="hero">
