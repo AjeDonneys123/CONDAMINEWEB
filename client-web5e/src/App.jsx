@@ -829,7 +829,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
   const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url) || '';
   const actorRenderWidth = Number(normalizedSelectedFrame?.width || actorState.width || block?.actorWidth || 140);
   const actorRenderHeight = Number(normalizedSelectedFrame?.height || actorState.height || block?.actorHeight || 140);
-  const actorRenderFrame = String(normalizedSelectedFrame?.url || currentActorFrame || '');
+  const actorRenderFrame = String((isPlaying || playingActionId) ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || ''));
 
   return (
     <div className="animation-block-shell">
