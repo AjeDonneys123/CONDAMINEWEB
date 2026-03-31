@@ -300,7 +300,9 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
   const actorDragStateRef = useRef(null);
+  const actionLoopStopRef = useRef({ stop: false, actionId: '' });
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playingActionId, setPlayingActionId] = useState('');
   const [recordingActionId, setRecordingActionId] = useState('');
   const [importNotice, setImportNotice] = useState('');
   const [actorState, setActorState] = useState({
@@ -517,6 +519,24 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     setIsPlaying(false);
   };
 
+  const toggleActionLoop = async (action) => {
+    if (!action?.id) return;
+    if (playingActionId === action.id) {
+      actionLoopStopRef.current = { stop: true, actionId: action.id };
+      setPlayingActionId('');
+      return;
+    }
+    if (isPlaying) return;
+    actionLoopStopRef.current = { stop: false, actionId: action.id };
+    setPlayingActionId(action.id);
+    while (!actionLoopStopRef.current.stop && actionLoopStopRef.current.actionId === action.id) {
+      // eslint-disable-next-line no-await-in-loop
+      await playAnimation([action]);
+    }
+    setPlayingActionId('');
+    actionLoopStopRef.current = { stop: false, actionId: '' };
+  };
+
   const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || actions[0]?.frames?.[0] || '';
 
   return (
@@ -565,8 +585,8 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder={`Action ${index + 1}`} />
                 <div className="animation-compact-actions">
                   <button type="button" onClick={() => toggleSpritesOpen(action.id)}>Sprites</button>
-                  <button type="button" className={recordingActionId === action.id ? 'recording' : ''} onClick={() => void toggleRecord(action.id)}>REC</button>
-                  <button type="button" onClick={() => void playAnimation([action])}>Play</button>
+                  <button type="button" className={recordingActionId === action.id ? 'recording active' : ''} onClick={() => void toggleRecord(action.id)}>REC</button>
+                  <button type="button" className={playingActionId === action.id ? 'playing active' : ''} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? 'Stop' : 'Play'}</button>
                 </div>
                 {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove" onClick={() => removeAction(action.id)}>×</button> : null}
               </div>
@@ -1089,7 +1109,7 @@ export default function App() {
 
         <div className="blocks-area public">
           {blocks.map((block, index) => (
-            <article key={`${activeSection}-${currentTabId}-${index}`} className="block-card">
+            <article key={`${activeSection}-${currentTabId}-${index}`} className={`block-card ${block.type === 'animation' ? 'block-card-animation' : ''}`}>
               <div className="block-head">
                 <span>
                   {block.type === 'text'

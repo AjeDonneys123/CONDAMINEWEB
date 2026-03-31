@@ -407,6 +407,12 @@
   border: 1px solid rgba(28, 41, 67, 0.08);
 }
 
+.block-card-animation {
+  position: relative;
+  overflow: visible;
+  min-height: 420px;
+}
+
 .block-head {
   display: flex;
   justify-content: space-between;
@@ -527,6 +533,7 @@
   display: grid;
   gap: 18px;
   padding-right: 360px;
+  min-height: 340px;
 }
 
 .animation-editor {
@@ -608,6 +615,18 @@
 .animation-frame-thumb button {
   background: #fff;
   color: #e25d34;
+}
+
+.animation-action-head button.active.recording {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.animation-action-head button.active.playing {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
 }
 
 .animation-action-remove {
