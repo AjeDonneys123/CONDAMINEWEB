@@ -37,6 +37,7 @@ const stripHtml = (html = '') =>
 
 const uid = () => `prod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const emptyQuestionnaireRow = () => ({ id: uid(), prompt: '', answer: '', expectedKeywords: [] });
+const emptyQuestionnaireLevel = () => ({ id: uid(), title: '', questions: [emptyQuestionnaireRow()] });
 const emptyQcmRow = () => ({ id: uid(), prompt: '', options: ['', '', '', ''], correctIndex: 0 });
 const emptyQcmLevel = () => ({ id: uid(), title: '', questions: [emptyQcmRow()] });
 const countWords = (value = '') => String(value || '').trim().split(/\s+/).filter(Boolean).length;
@@ -71,6 +72,27 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
       }));
     }
     return [emptyQuestionnaireRow()];
+  });
+  const [questionnaireLevels, setQuestionnaireLevels] = useState(() => {
+    const saved = Array.isArray(initialSubmission?.answers) ? initialSubmission.answers : [];
+    if (productionType !== 'questionnaire') return [];
+    if (saved.length === 0) return [emptyQuestionnaireLevel()];
+    const grouped = [];
+    saved.forEach((row) => {
+      const levelTitle = String(row?.levelTitle || '').trim() || `Niveau/Lecon ${grouped.length + 1}`;
+      let level = grouped.find((item) => item.title === levelTitle);
+      if (!level) {
+        level = { id: uid(), title: levelTitle, questions: [] };
+        grouped.push(level);
+      }
+      level.questions.push({
+        id: uid(),
+        prompt: String(row?.prompt || ''),
+        answer: String(row?.answer || ''),
+        expectedKeywords: Array.isArray(row?.expectedKeywords) ? row.expectedKeywords : []
+      });
+    });
+    return grouped.length > 0 ? grouped : [emptyQuestionnaireLevel()];
   });
   const [qcmLevels, setQcmLevels] = useState(() => {
     const saved = Array.isArray(initialSubmission?.answers) ? initialSubmission.answers : [];
@@ -231,12 +253,15 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
   };
 
   const questionnaireValidity = useMemo(() => (
-    answers.map((row) => ({
-      promptOk: Boolean(String(row?.prompt || '').trim()),
-      answerOk: Boolean(String(row?.answer || '').trim()),
-      keywordsOk: Array.isArray(row?.expectedKeywords) && row.expectedKeywords.length > 0
+    questionnaireLevels.map((level) => ({
+      titleOk: Boolean(String(level?.title || '').trim()),
+      questions: (level.questions || []).map((row) => ({
+        promptOk: Boolean(String(row?.prompt || '').trim()),
+        answerOk: Boolean(String(row?.answer || '').trim()),
+        keywordsOk: Array.isArray(row?.expectedKeywords) && row.expectedKeywords.length > 0
+      }))
     }))
-  ), [answers]);
+  ), [questionnaireLevels]);
 
   const qcmValidity = useMemo(() => (
     qcmLevels.map((level) => ({
@@ -254,8 +279,14 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
     }))
   ), [qcmLevels]);
 
-  const addQuestionnaireRow = () => setAnswers((prev) => [...prev, emptyQuestionnaireRow()]);
-  const removeQuestionnaireRow = (id) => setAnswers((prev) => prev.length > 1 ? prev.filter((row) => row.id !== id) : prev);
+  const addQuestionnaireLevel = () => setQuestionnaireLevels((prev) => [...prev, emptyQuestionnaireLevel()]);
+  const removeQuestionnaireLevel = (id) => setQuestionnaireLevels((prev) => prev.length > 1 ? prev.filter((level) => level.id !== id) : prev);
+  const addQuestionnaireRow = (levelId) => setQuestionnaireLevels((prev) => prev.map((level) => level.id === levelId ? { ...level, questions: [...(level.questions || []), emptyQuestionnaireRow()] } : level));
+  const removeQuestionnaireRow = (levelId, rowId) => setQuestionnaireLevels((prev) => prev.map((level) => {
+    if (level.id !== levelId) return level;
+    const nextQuestions = (level.questions || []).length > 1 ? level.questions.filter((row) => row.id !== rowId) : level.questions;
+    return { ...level, questions: nextQuestions };
+  }));
   const addQcmLevel = () => setQcmLevels((prev) => [...prev, emptyQcmLevel()]);
   const removeQcmLevel = (id) => setQcmLevels((prev) => prev.length > 1 ? prev.filter((level) => level.id !== id) : prev);
   const addQcmQuestion = (levelId) => setQcmLevels((prev) => prev.map((level) => level.id === levelId ? { ...level, questions: [...(level.questions || []), emptyQcmRow()] } : level));
@@ -276,13 +307,14 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
       if (productionType === 'fiche') {
         payload.contentHtml = String(editorRef.current?.innerHTML || contentHtml || '');
       } else if (productionType === 'questionnaire') {
-        const invalid = questionnaireValidity.some((row) => !row.promptOk || !row.answerOk || !row.keywordsOk);
-        if (invalid) throw new Error('Chaque question doit avoir une question, une réponse et au moins un mot-clé.');
-        payload.answers = answers.map((row) => ({
+        const invalid = questionnaireValidity.some((level) => !level.titleOk || (level.questions || []).some((row) => !row.promptOk || !row.answerOk || !row.keywordsOk));
+        if (invalid) throw new Error('Chaque Niveau/Leçon doit avoir un titre, puis des questions avec réponse et mots-clés.');
+        payload.answers = questionnaireLevels.flatMap((level) => (level.questions || []).map((row) => ({
+          levelTitle: level.title,
           prompt: row.prompt,
           answer: row.answer,
           expectedKeywords: row.expectedKeywords
-        }));
+        })));
       } else {
         const invalid = qcmValidity.some((level) => !level.titleOk || (level.questions || []).some((row) => !row.promptOk || !row.optionsOk || !row.lengthOk || !row.correctOk));
         if (invalid) throw new Error('Chaque niveau doit avoir un titre, puis des QCM valides avec 4 réponses de 4 mots maximum.');
@@ -407,27 +439,41 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
                   <div className="prod-panel-kicker">Questionnaire</div>
                   <div className="prod-panel-title">Questions d'apprentissage</div>
                 </div>
-                <button type="button" className="prod-btn prod-btn-soft" onClick={addQuestionnaireRow}>+ Ajouter</button>
+                <button type="button" className="prod-btn prod-btn-soft" onClick={addQuestionnaireLevel}>+ Niveau/Leçon</button>
               </div>
-              {answers.map((row, index) => {
-                const validity = questionnaireValidity[index] || {};
+              {questionnaireLevels.map((level, levelIndex) => {
+                const levelValidity = questionnaireValidity[levelIndex] || { questions: [] };
                 return (
-                  <div key={row.id} className="prod-card">
+                  <div key={level.id} className="prod-level-card">
                     <div className="prod-card-head">
-                      <div className="prod-card-title">Bloc {index + 1}</div>
-                      <button type="button" className="prod-link-danger" onClick={() => removeQuestionnaireRow(row.id)}>Supprimer</button>
+                      <div className="prod-card-title">Niveau/Leçon {levelIndex + 1}</div>
+                      <button type="button" className="prod-link-danger" onClick={() => removeQuestionnaireLevel(level.id)}>Supprimer niveau/leçon</button>
                     </div>
-                    <textarea className="prod-input prod-textarea" value={row.prompt || ''} onChange={(e) => setAnswers((prev) => prev.map((item) => item.id === row.id ? { ...item, prompt: e.target.value } : item))} placeholder="Question" />
-                    <textarea className="prod-input prod-textarea large" value={row.answer || ''} onChange={(e) => setAnswers((prev) => prev.map((item) => item.id === row.id ? { ...item, answer: e.target.value } : item))} placeholder="Réponse attendue" />
-                    <div className="prod-field-help">
-                      Mots-cles
-                      <br />
-                      separes
-                      <br />
-                      par un espace
-                    </div>
-                    <textarea className="prod-input prod-textarea prod-keywords-input" value={(row.expectedKeywords || []).join(' ')} onChange={(e) => setAnswers((prev) => prev.map((item) => item.id === row.id ? { ...item, expectedKeywords: String(e.target.value || '').split(/\s+/).map((part) => part.trim()).filter(Boolean) } : item))} placeholder="climat oasis desert" />
-                    <div className="prod-hint">{!validity.promptOk && 'Ajoute une question. '}{!validity.answerOk && 'Ajoute une réponse. '}{!validity.keywordsOk && 'Ajoute au moins un mot-clé.'}</div>
+                    <input className="prod-input" value={level.title || ''} onChange={(e) => setQuestionnaireLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, title: e.target.value } : item))} placeholder="Titre du Niveau/Leçon" />
+                    {!levelValidity.titleOk && <div className="prod-hint">Ajoute un titre de Niveau/Leçon.</div>}
+                    <div className="prod-actions-row"><button type="button" className="prod-btn prod-btn-soft" onClick={() => addQuestionnaireRow(level.id)}>+ Question</button></div>
+                    {(level.questions || []).map((row, index) => {
+                      const validity = levelValidity.questions?.[index] || {};
+                      return (
+                        <div key={row.id} className="prod-card inner">
+                          <div className="prod-card-head">
+                            <div className="prod-card-title">Question {index + 1}</div>
+                            <button type="button" className="prod-link-danger" onClick={() => removeQuestionnaireRow(level.id, row.id)}>Supprimer</button>
+                          </div>
+                          <textarea className="prod-input prod-textarea" value={row.prompt || ''} onChange={(e) => setQuestionnaireLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, questions: item.questions.map((question) => question.id === row.id ? { ...question, prompt: e.target.value } : question) } : item))} placeholder="Question" />
+                          <textarea className="prod-input prod-textarea large" value={row.answer || ''} onChange={(e) => setQuestionnaireLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, questions: item.questions.map((question) => question.id === row.id ? { ...question, answer: e.target.value } : question) } : item))} placeholder="Réponse attendue" />
+                          <div className="prod-field-help">
+                            Mots-cles
+                            <br />
+                            separes
+                            <br />
+                            par un espace
+                          </div>
+                          <textarea className="prod-input prod-textarea prod-keywords-input" value={(row.expectedKeywords || []).join(' ')} onChange={(e) => setQuestionnaireLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, questions: item.questions.map((question) => question.id === row.id ? { ...question, expectedKeywords: String(e.target.value || '').split(/\s+/).map((part) => part.trim()).filter(Boolean) } : question) } : item))} placeholder="climat oasis desert" />
+                          <div className="prod-hint">{!validity.promptOk && 'Ajoute une question. '}{!validity.answerOk && 'Ajoute une réponse. '}{!validity.keywordsOk && 'Ajoute au moins un mot-clé.'}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -439,9 +485,9 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
               <div className="prod-block-head">
                 <div>
                   <div className="prod-panel-kicker">QCM</div>
-                  <div className="prod-panel-title">Construire les niveaux</div>
+                  <div className="prod-panel-title">Construire les Niveau/Leçon</div>
                 </div>
-                <button type="button" className="prod-btn prod-btn-soft" onClick={addQcmLevel}>+ Niveau</button>
+                <button type="button" className="prod-btn prod-btn-soft" onClick={addQcmLevel}>+ Niveau/Leçon</button>
               </div>
               {production?.linkedGameTitle && <div className="prod-banner">Jeu associé: {production.linkedGameTitle}</div>}
               {qcmLevels.map((level, levelIndex) => {
@@ -449,11 +495,11 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
                 return (
                   <div key={level.id} className="prod-level-card">
                     <div className="prod-card-head">
-                      <div className="prod-card-title">Niveau {levelIndex + 1}</div>
-                      <button type="button" className="prod-link-danger" onClick={() => removeQcmLevel(level.id)}>Supprimer niveau</button>
+                      <div className="prod-card-title">Niveau/Leçon {levelIndex + 1}</div>
+                      <button type="button" className="prod-link-danger" onClick={() => removeQcmLevel(level.id)}>Supprimer niveau/leçon</button>
                     </div>
-                    <input className="prod-input" value={level.title || ''} onChange={(e) => setQcmLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, title: e.target.value } : item))} placeholder="Titre du niveau" />
-                    {!levelValidity.titleOk && <div className="prod-hint">Ajoute un titre de niveau.</div>}
+                    <input className="prod-input" value={level.title || ''} onChange={(e) => setQcmLevels((prev) => prev.map((item) => item.id === level.id ? { ...item, title: e.target.value } : item))} placeholder="Titre du Niveau/Leçon" />
+                    {!levelValidity.titleOk && <div className="prod-hint">Ajoute un titre de Niveau/Leçon.</div>}
                     <div className="prod-actions-row"><button type="button" className="prod-btn prod-btn-soft" onClick={() => addQcmQuestion(level.id)}>+ Question</button></div>
                     {(level.questions || []).map((row, index) => {
                       const validity = levelValidity.questions?.[index] || {};
@@ -497,7 +543,13 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
             <button type="button" className="prod-slide-window-close" onClick={() => setSlideWindowOpen(false)}>✕</button>
           </div>
           <div className="prod-slide-window-body">
+            <button type="button" className="prod-floating-arrow prod-floating-arrow-left" onClick={() => canGoPrevSlide && setActiveSlideIdx((prev) => prev - 1)} disabled={!canGoPrevSlide} aria-label="Slide précédente">
+              ‹
+            </button>
             <img src={buildSlidesThumbnailUrl(presentationId, activeSlide?.objectId, activeSlide?.slideNumber)} alt={`Slide ${activeSlide?.slideNumber || ''}`} draggable="false" />
+            <button type="button" className="prod-floating-arrow prod-floating-arrow-right" onClick={() => canGoNextSlide && setActiveSlideIdx((prev) => prev + 1)} disabled={!canGoNextSlide} aria-label="Slide suivante">
+              ›
+            </button>
           </div>
           {['nw', 'ne', 'sw', 'se'].map((corner) => (
             <div

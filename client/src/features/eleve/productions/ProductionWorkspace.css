@@ -421,8 +421,39 @@
 }
 
 .prod-slide-window-body {
+  position: relative;
   height: calc(100% - 52px);
   background: #f8fafc;
+}
+
+.prod-floating-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.82);
+  color: #0f172a;
+  font-size: 1.1rem;
+  font-weight: 900;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.prod-floating-arrow:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.prod-floating-arrow-left {
+  left: 10px;
+}
+
+.prod-floating-arrow-right {
+  right: 10px;
 }
 
 .prod-slide-window-resize {
