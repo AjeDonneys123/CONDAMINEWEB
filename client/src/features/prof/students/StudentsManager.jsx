@@ -67,6 +67,7 @@ export default function StudentsManager({ globalClassId }) {
   const [editorLoading, setEditorLoading] = useState(false);
   const [viewingStudent, setViewingStudent] = useState(null); // Pour la modale de suivi
   const [controlRecoveriesByStudent, setControlRecoveriesByStudent] = useState({});
+  const [viewingWork, setViewingWork] = useState(null);
 
   useEffect(() => {
     if (!globalClassId) return;
@@ -297,6 +298,44 @@ export default function StudentsManager({ globalClassId }) {
       }
   };
 
+  const openWorkViewer = (payload) => {
+      if (!payload) return;
+      setViewingWork(payload);
+  };
+
+  const handleOpenActivityWork = (student, act, status) => {
+      if (!student || !act || !status?.done) return;
+      if (act.type === 'homework' && status?.subId) return handleOpenCorrection(status.subId);
+      if (act.type === 'expose' && status?.presentation) {
+          return openWorkViewer({
+              kind: 'expose',
+              title: act.title || 'Exposé',
+              studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+              chapterLabel: act.chapterLabel || chapterNameById[extractId(act.chapterId)] || '',
+              expose: status.presentation
+          });
+      }
+      if (act.type === 'production' && status?.production) {
+          return openWorkViewer({
+              kind: 'production',
+              title: status.production.title || act.title || 'Production',
+              studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+              chapterLabel: act.chapterLabel || chapterNameById[extractId(act.chapterId)] || '',
+              production: status.production
+          });
+      }
+  };
+
+  const handleOpenRecoveryWork = (student, rec) => {
+      if (!student || !rec) return;
+      openWorkViewer({
+          kind: 'control-recovery',
+          title: rec.title || 'RÉCUPÉRER CONTRÔLE',
+          studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+          recovery: rec
+      });
+  };
+
   // --- HELPER POUR LA MODALE SUIVI ---
   const getStudentWorkload = (sId) => {
       const currentStudentId = extractId(sId);
@@ -424,15 +463,16 @@ export default function StudentsManager({ globalClassId }) {
                         {/* DEVOIRS */}
                         <h4 className="text-xs font-black text-slate-400 uppercase mb-2">📝 RÉCUPÉRATIONS DE CONTRÔLES</h4>
                         {controlRecoveries.map((rec) => (
-                            <div key={rec._id} className="bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3">
+                            <button key={rec._id} type="button" onClick={() => handleOpenRecoveryWork(viewingStudent, rec)} className="w-full text-left bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3 hover:bg-amber-100 transition-colors">
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <div className="font-bold text-slate-700">{rec.title || 'RÉCUPÉRER CONTRÔLE'}</div>
                                         <div className="text-[10px] font-black text-amber-700 uppercase">{rec.subject || 'GÉNÉRAL'} • PHASE {Number(rec.phase || 1)}</div>
                                     </div>
                                     <button
-                                        onClick={() => handleValidateRecovery(rec._id)}
+                                        onClick={(e) => { e.stopPropagation(); handleValidateRecovery(rec._id); }}
                                         disabled={rec.teacherValidated === true}
+                                        type="button"
                                         className="bg-white text-amber-700 px-3 py-2 rounded-xl border border-amber-300 text-xs font-black disabled:opacity-40"
                                     >
                                         {rec.teacherValidated ? 'VALIDÉ' : 'VALIDER'}
@@ -479,7 +519,7 @@ export default function StudentsManager({ globalClassId }) {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                         {controlRecoveries.length === 0 && (
                             <div className="text-[12px] text-slate-400 italic mb-4">Aucune récupération de contrôle.</div>
@@ -532,7 +572,7 @@ export default function StudentsManager({ globalClassId }) {
 
                         <h4 className="text-xs font-black text-slate-400 uppercase mb-2 mt-4">🗣️ EXPOSÉS</h4>
                         {workloadItems.filter(w => w.type === 'expose').map(w => (
-                            <div key={w._id} className={`p-4 rounded-xl border mb-2 ${w.isDone ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
+                            <button key={w._id} type="button" onClick={() => w.isDone && w.presentation && openWorkViewer({ kind: 'expose', title: w.title || 'Exposé', studentName: `${viewingStudent?.firstName || ''} ${viewingStudent?.lastName || ''}`.trim(), chapterLabel: w.chapterLabel || chapterNameById[extractId(w.chapterId)] || '', expose: w.presentation })} className={`w-full text-left p-4 rounded-xl border mb-2 transition-colors ${w.isDone ? 'bg-rose-50 border-rose-200 hover:bg-rose-100' : 'bg-white border-slate-200'}`}>
                                 <div className="font-bold text-slate-700">{w.title}</div>
                                 <div className="text-[9px] font-black text-slate-400 uppercase mb-2">{w.chapterLabel || chapterNameById[extractId(w.chapterId)] || ''}</div>
                                 <div className={`text-[10px] font-black uppercase mb-2 ${w.isDone ? 'text-rose-600' : 'text-red-400'}`}>
@@ -558,12 +598,12 @@ export default function StudentsManager({ globalClassId }) {
                                         )}
                                     </div>
                                 )}
-                            </div>
+                            </button>
                         ))}
 
                         <h4 className="text-xs font-black text-slate-400 uppercase mb-2 mt-4">🏗️ PRODUCTIONS</h4>
                         {workloadItems.filter(w => w.type === 'production').map(w => (
-                            <div key={w._id} className={`p-4 rounded-xl border mb-2 ${w.isDone ? 'bg-cyan-50 border-cyan-200' : 'bg-white border-slate-200'}`}>
+                            <button key={w._id} type="button" onClick={() => w.isDone && w.production && openWorkViewer({ kind: 'production', title: w.production.title || w.title || 'Production', studentName: `${viewingStudent?.firstName || ''} ${viewingStudent?.lastName || ''}`.trim(), chapterLabel: w.chapterLabel || chapterNameById[extractId(w.chapterId)] || '', production: w.production })} className={`w-full text-left p-4 rounded-xl border mb-2 transition-colors ${w.isDone ? 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100' : 'bg-white border-slate-200'}`}>
                                 <div className="font-bold text-slate-700">{w.title}</div>
                                 <div className="text-[9px] font-black text-slate-400 uppercase mb-2">{w.chapterLabel || chapterNameById[extractId(w.chapterId)] || ''}</div>
                                 <div className={`text-[10px] font-black uppercase mb-2 ${w.isDone ? 'text-cyan-700' : 'text-red-400'}`}>
@@ -614,10 +654,102 @@ export default function StudentsManager({ globalClassId }) {
                                         )}
                                     </div>
                                 )}
-                            </div>
+                            </button>
                         ))}
 
                         {workloadItems.length === 0 && <div className="text-center p-10 text-slate-300 font-bold italic">Aucune activité assignée.</div>}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {viewingWork && (
+            <div className="correction-overlay" onClick={() => setViewingWork(null)}>
+                <div className="correction-card !max-w-4xl !h-[82vh]" onClick={(e) => e.stopPropagation()}>
+                    <div className="corr-header bg-slate-900">
+                        <div>
+                            <h2 className="text-xl font-black uppercase text-white">{viewingWork.title}</h2>
+                            <p className="text-xs text-slate-400 font-bold">
+                                {viewingWork.studentName || 'Élève'}
+                                {viewingWork.chapterLabel ? ` • ${viewingWork.chapterLabel}` : ''}
+                            </p>
+                        </div>
+                        <button onClick={() => setViewingWork(null)} className="text-white text-2xl font-black">✕</button>
+                    </div>
+                    <div className="corr-body flex-col bg-slate-50 p-6 overflow-y-auto gap-4 custom-scrollbar">
+                        {viewingWork.kind === 'expose' && (
+                            <div className="space-y-4">
+                                <div className="text-[11px] font-black uppercase text-rose-600">Présentation enregistrée</div>
+                                <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                                    <div><span className="font-black text-slate-500">Slides:</span> {viewingWork.expose?.slidesText || 'non renseigné'}</div>
+                                </div>
+                                {viewingWork.expose?.canvasUrl && <iframe src={viewingWork.expose.canvasUrl} title={`expose-${viewingWork.title}`} className="w-full min-h-[360px] rounded-xl border border-slate-200 bg-white" />}
+                                {viewingWork.expose?.recordingUrl && <audio controls className="w-full"><source src={viewingWork.expose.recordingUrl} /></audio>}
+                            </div>
+                        )}
+                        {viewingWork.kind === 'production' && (
+                            <div className="space-y-4">
+                                <div className="text-[11px] font-black uppercase text-emerald-600">{String(viewingWork.production?.type || 'fiche').toUpperCase()}</div>
+                                {viewingWork.production?.type === 'fiche' ? (
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                                        {viewingWork.production?.contentHtml ? <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: viewingWork.production.contentHtml }} /> : <div className="text-slate-400 italic">Aucune donnée enregistrée.</div>}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {(viewingWork.production?.answers || []).map((row, idx) => (
+                                            <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                                <div className="text-[10px] font-black uppercase text-slate-400">{(row.levelTitle || '').trim() || `Niveau/Leçon ${idx + 1}`}</div>
+                                                <div className="mt-1 font-black text-slate-800">{row.prompt || 'Question non renseignée'}</div>
+                                                {viewingWork.production?.type === 'questionnaire' && <>
+                                                    <div className="mt-2"><span className="font-black text-slate-500">Réponse:</span> {row.answer || '—'}</div>
+                                                    <div className="mt-1"><span className="font-black text-slate-500">Mots-clés:</span> {(row.expectedKeywords || []).join(' ') || '—'}</div>
+                                                </>}
+                                                {viewingWork.production?.type === 'qcm' && <div className="mt-2 grid gap-1">
+                                                    {(row.options || []).map((option, optIdx) => (
+                                                        <div key={optIdx} className={`rounded-lg border px-2 py-1 text-[12px] ${Number(row.correctIndex) === optIdx ? 'border-emerald-200 bg-emerald-50 text-emerald-700 font-black' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{option || '—'}</div>
+                                                    ))}
+                                                </div>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {viewingWork.kind === 'control-recovery' && (
+                            <div className="space-y-4">
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                                    <div className="text-[10px] font-black uppercase text-amber-700">{viewingWork.recovery?.subject || 'GÉNÉRAL'} • PHASE {Number(viewingWork.recovery?.phase || 1)}</div>
+                                    <div className="mt-2 text-sm text-slate-700">
+                                        <div><span className="font-black text-slate-500">Mode:</span> {viewingWork.recovery?.submissionMode || 'keyboard'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Erreurs expliquées:</span> {viewingWork.recovery?.errorsExplanation || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Texte retapé:</span> {viewingWork.recovery?.typedRedoText || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Note prochain cours:</span> {viewingWork.recovery?.nextCourseNote || '—'}</div>
+                                    </div>
+                                </div>
+                                {Array.isArray(viewingWork.recovery?.phase2Mistakes) && viewingWork.recovery.phase2Mistakes.length > 0 && viewingWork.recovery.phase2Mistakes.map((mistake, idx) => (
+                                    <div key={idx} className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                                        <div><span className="font-black text-slate-500">Question:</span> {mistake.questionNumber || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Erreur:</span> {mistake.whatWasWrong || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Correction:</span> {mistake.correctionMade || '—'}</div>
+                                    </div>
+                                ))}
+                                {Array.isArray(viewingWork.recovery?.selfQuestions) && viewingWork.recovery.selfQuestions.length > 0 && viewingWork.recovery.selfQuestions.map((q, idx) => (
+                                    <div key={idx} className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                                        <div className="font-black text-slate-800">{q.question || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Réponse attendue:</span> {q.expectedAnswer || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Mots-clés:</span> {(q.expectedKeywords || []).join(' ') || '—'}</div>
+                                        <div className="mt-1"><span className="font-black text-slate-500">Réponse élève:</span> {q.studentAnswer || '—'}</div>
+                                    </div>
+                                ))}
+                                {Array.isArray(viewingWork.recovery?.uploadedPhotoUrls) && viewingWork.recovery.uploadedPhotoUrls.length > 0 && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {viewingWork.recovery.uploadedPhotoUrls.map((url, idx) => (
+                                            <img key={idx} src={resolveBackendAssetUrl(url)} alt={`copie-${idx + 1}`} className="w-full rounded-xl border border-slate-200 bg-white" />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -753,7 +885,7 @@ export default function StudentsManager({ globalClassId }) {
                                     return (
                                         <td key={act._id} className="p-2 text-center border-b">
                                             {status?.done ? (
-                                                <button onClick={() => act.type === 'homework' && handleOpenCorrection(status.subId)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : (act.type === 'game' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-rose-100 text-rose-700 border-rose-200')}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
+                                                <button onClick={() => handleOpenActivityWork(s, act, status)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : (act.type === 'game' ? 'bg-purple-100 text-purple-700 border-purple-200' : act.type === 'production' ? 'bg-cyan-100 text-cyan-700 border-cyan-200' : 'bg-rose-100 text-rose-700 border-rose-200')}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
                                             ) : <div className="text-slate-200 text-xs">•</div>}
                                         </td>
                                     );
