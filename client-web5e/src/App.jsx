@@ -325,6 +325,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const recorderChunksRef = useRef([]);
   const actorDragStateRef = useRef(null);
   const actorResizeStateRef = useRef(null);
+  const spriteResizeStateRef = useRef(null);
   const actionLoopStopRef = useRef({ stop: false, actionId: '' });
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingActionId, setPlayingActionId] = useState('');
@@ -385,6 +386,19 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
           y: resizeState.corner.includes('n') ? resizeState.startTop - heightDelta : resizeState.startTop
         }));
       }
+      const spriteResizeState = spriteResizeStateRef.current;
+      if (spriteResizeState) {
+        const deltaX = event.clientX - spriteResizeState.startX;
+        const deltaY = event.clientY - spriteResizeState.startY;
+        const signX = spriteResizeState.corner.includes('w') ? -1 : 1;
+        const signY = spriteResizeState.corner.includes('n') ? -1 : 1;
+        const nextWidth = Math.max(40, Math.round(spriteResizeState.startWidth + (deltaX * signX)));
+        const nextHeight = Math.max(40, Math.round(spriteResizeState.startHeight + (deltaY * signY)));
+        updateFrame(spriteResizeState.actionId, spriteResizeState.frameIndex, {
+          width: nextWidth,
+          height: nextHeight
+        });
+      }
     };
     const onMouseUp = () => {
       const dragState = actorDragStateRef.current;
@@ -402,6 +416,9 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
           actorY: Math.round(actorState.y)
         });
       }
+      if (spriteResizeStateRef.current) {
+        spriteResizeStateRef.current = null;
+      }
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -409,7 +426,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [actorState.x, actorState.y, actorState.width, actorState.height]);
+  }, [actorState.x, actorState.y, actorState.width, actorState.height, actions]);
 
   const savedActions = Array.isArray(block?.savedActions) ? block.savedActions : [];
   const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions, savedActions });
@@ -577,6 +594,24 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
     if (!normalizedFrame?.url) return;
     setEraserState({ actionId, frameIndex, url: normalizedFrame.url });
+  };
+
+  const startSpriteResize = (event, actionId, frameIndex, corner) => {
+    const action = actions.find((item) => item.id === actionId);
+    const frame = action?.frames?.[frameIndex];
+    const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
+    if (!normalizedFrame) return;
+    spriteResizeStateRef.current = {
+      actionId,
+      frameIndex,
+      corner,
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: Number(normalizedFrame.width || 140),
+      startHeight: Number(normalizedFrame.height || 140)
+    };
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const startDragActor = (event) => {
@@ -792,7 +827,6 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <div className="animation-compact-actions">
                   <button type="button" className="icon-btn" onClick={() => saveActionPreset(action)}>+</button>
                   <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
-                  <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
                   <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
@@ -807,7 +841,10 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 >
                   <div className="animation-sprite-space-head">
                     <div className="animation-sprite-space-title">Sprites</div>
-                    <button type="button" className="icon-btn" onClick={() => toggleSpriteToolsOpen(action.id)}>+</button>
+                    <div className="animation-sprite-space-actions">
+                      <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
+                      <button type="button" className="icon-btn" onClick={() => toggleSpriteToolsOpen(action.id)}>+</button>
+                    </div>
                   </div>
                   {action.spriteToolsOpen ? (
                     <div className="animation-sprite-tools">
@@ -847,22 +884,24 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                     {normalizedFrame?.url ? (
                       <>
                         <div className="animation-sprite-editor-preview">
-                          <img
-                            src={normalizedFrame.url}
-                            alt=""
+                          <div
+                            className="animation-sprite-editor-target"
                             style={{ width: Number(normalizedFrame.width || 140), height: Number(normalizedFrame.height || 140) }}
-                          />
+                          >
+                            <img
+                              src={normalizedFrame.url}
+                              alt=""
+                              style={{ width: Number(normalizedFrame.width || 140), height: Number(normalizedFrame.height || 140) }}
+                            />
+                            <button type="button" className="animation-editor-resizer nw" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'nw')} />
+                            <button type="button" className="animation-editor-resizer ne" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'ne')} />
+                            <button type="button" className="animation-editor-resizer sw" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'sw')} />
+                            <button type="button" className="animation-editor-resizer se" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'se')} />
+                          </div>
                         </div>
                         <div className="animation-sprite-editor-controls">
-                          <div className="animation-sprite-editor-row">
-                            <span>Largeur</span>
-                            <input type="range" min="40" max="320" value={Number(normalizedFrame.width || 140)} onChange={(e) => updateFrame(action.id, action.selectedFrameIndex || 0, { width: Number(e.target.value) })} />
-                            <strong>{Number(normalizedFrame.width || 140)}px</strong>
-                          </div>
-                          <div className="animation-sprite-editor-row">
-                            <span>Hauteur</span>
-                            <input type="range" min="40" max="320" value={Number(normalizedFrame.height || 140)} onChange={(e) => updateFrame(action.id, action.selectedFrameIndex || 0, { height: Number(e.target.value) })} />
-                            <strong>{Number(normalizedFrame.height || 140)}px</strong>
+                          <div className="animation-sprite-editor-size-readout">
+                            {Number(normalizedFrame.width || 140)} x {Number(normalizedFrame.height || 140)} px
                           </div>
                           <button type="button" onClick={() => openFrameEraser(action.id, action.selectedFrameIndex || 0)}>Supprimer le fond</button>
                         </div>
@@ -1019,6 +1058,12 @@ export default function App() {
   const currentSection = SECTION_CONFIG[activeSection];
   const currentTabId = activeTabBySection[activeSection];
   const blocks = contentMap[activeSection]?.[currentTabId] || [];
+  const articleBlocks = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => block.type !== 'animation');
+  const animationBlocks = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => block.type === 'animation');
 
   const resolveProfile = () => {
     if (selectedProfile) return selectedProfile;
@@ -1307,8 +1352,8 @@ export default function App() {
           ))}
         </div>
 
-        <div className="blocks-area public">
-          {blocks.map((block, index) => (
+        <div className="blocks-area public article-stage">
+          {articleBlocks.map(({ block, index }) => (
             <article key={`${activeSection}-${currentTabId}-${index}`} className={`block-card ${block.type === 'animation' ? 'block-card-animation' : ''}`}>
               <div className="block-head">
                 <span>
@@ -1370,23 +1415,33 @@ export default function App() {
                 </>
               )}
 
-              {block.type === 'animation' && (
-                <AnimationBlockEditor
-                  block={block}
-                  onChange={(nextBlock) => {
-                    const nextBlocks = blocks.map((row, rowIndex) => rowIndex === index ? nextBlock : row);
-                    updateBlocks(nextBlocks);
-                    void persistBlocks(nextBlocks);
-                  }}
-                  readOnly={!isTeacher}
-                />
-              )}
-
               <div className="block-signature">
                 Apport de {formatContributionName(currentEntry?.authorName || contributionSignature || '') || 'élève'}
               </div>
             </article>
           ))}
+          {animationBlocks.length > 0 && (
+            <div className="article-animation-layer">
+              {animationBlocks.map(({ block, index }) => (
+                <div key={`${activeSection}-${currentTabId}-animation-${index}`} className="article-animation-instance">
+                  {user && (
+                    <button type="button" className="article-animation-remove" onClick={() => removeBlock(index)}>
+                      Supprimer animation
+                    </button>
+                  )}
+                  <AnimationBlockEditor
+                    block={block}
+                    onChange={(nextBlock) => {
+                      const nextBlocks = blocks.map((row, rowIndex) => rowIndex === index ? nextBlock : row);
+                      updateBlocks(nextBlocks);
+                      void persistBlocks(nextBlocks);
+                    }}
+                    readOnly={!isTeacher}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>

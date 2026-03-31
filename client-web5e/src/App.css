@@ -398,6 +398,37 @@
 
 .blocks-area.public {
   gap: 18px;
+  position: relative;
+  min-height: 420px;
+}
+
+.article-animation-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.article-animation-instance {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.article-animation-remove {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 260;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  background: rgba(255, 255, 255, 0.96);
+  color: #dc2626;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 10px 18px rgba(28, 41, 67, 0.12);
 }
 
 .block-card {
@@ -794,6 +825,12 @@
   gap: 8px;
 }
 
+.animation-sprite-space-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .animation-sprite-space-title {
   font-size: 0.8rem;
   font-weight: 800;
@@ -851,6 +888,13 @@
   background-position: 0 0, 0 9px, 9px -9px, -9px 0;
 }
 
+.animation-sprite-editor-target {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .animation-sprite-editor-preview img {
   object-fit: contain;
   display: block;
@@ -860,20 +904,48 @@
 .animation-sprite-editor-controls {
   display: grid;
   gap: 10px;
+  justify-items: start;
 }
 
-.animation-sprite-editor-row {
-  display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) 54px;
-  gap: 10px;
-  align-items: center;
-}
-
-.animation-sprite-editor-row span,
-.animation-sprite-editor-row strong {
+.animation-sprite-editor-size-readout {
   font-size: 0.78rem;
   font-weight: 800;
   color: #1d2942;
+}
+
+.animation-editor-resizer {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid #60a5fa;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 8px 12px rgba(28, 41, 67, 0.12);
+}
+
+.animation-editor-resizer.nw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.animation-editor-resizer.ne {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.animation-editor-resizer.sw {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.animation-editor-resizer.se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
 }
 
 .animation-upload-title {
