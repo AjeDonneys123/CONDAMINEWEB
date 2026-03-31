@@ -507,10 +507,10 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                         {chapItems.map(it => (
                                             <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-start gap-3 shadow-sm border border-slate-100">
                                                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : (it.actType === 'lecture' ? '📖' : (it.actType === 'fiche' ? '🗂️' : '📝')))))}</span>
+                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : (it.actType === 'lecture' ? '📖' : (it.actType === 'fiche' ? '🗂️' : (it.actType === 'production' ? '🏗️' : '📝'))))))}</span>
                                                     <div className="min-w-0 flex-1">
                                                         <div className="font-black text-slate-700 text-xs uppercase truncate">{it.title}</div>
-                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche') && (
+                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche' || it.actType === 'production') && (
                                                         <div className="text-[10px] font-bold text-slate-400 break-words whitespace-normal leading-4 mt-1">
                                                             👥 {getAudienceLabel(it)}
                                                         </div>
@@ -519,7 +519,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                                 </div>
                                                 <div className="flex gap-2 shrink-0 self-start">
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
-                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche') && (
+                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche' || it.actType === 'production') && (
                                                         <button
                                                             onClick={(e) => handleToggleActivityEnabled(e, it)}
                                                             className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${

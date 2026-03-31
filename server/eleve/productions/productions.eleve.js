@@ -79,6 +79,26 @@ const stripHtml = (html = '') =>
         .replace(/\s+/g, ' ')
         .trim();
 
+const sanitizeKeywords = (value) => {
+    const parts = Array.isArray(value) ? value : String(value || '').split(',');
+    return parts
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .slice(0, 20);
+};
+
+const sanitizeQcmOptions = (options) =>
+    (Array.isArray(options) ? options : [])
+        .map((item) => String(item || '').trim().slice(0, 120))
+        .slice(0, 4);
+
+const countWords = (value = '') =>
+    String(value || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .length;
+
 router.get('/list/:studentId', async (req, res) => {
     try {
         const Student = mongoose.model('Student');
@@ -172,29 +192,42 @@ router.post('/save', async (req, res) => {
             nextEntry.completedAt = nextEntry.plainText ? (previous?.completedAt || now) : null;
         } else if (type === 'questionnaire') {
             const answers = (Array.isArray(req.body?.answers) ? req.body.answers : []).map((ans) => ({
+                levelTitle: String(ans?.levelTitle || '').trim().slice(0, 120),
                 prompt: String(ans?.prompt || '').trim().slice(0, 600),
                 answer: String(ans?.answer || '').trim().slice(0, 5000),
+                expectedKeywords: sanitizeKeywords(ans?.expectedKeywords),
+                options: [],
                 selectedIndex: -1,
+                correctIndex: -1,
                 isCorrect: false
             })).filter((ans) => ans.prompt);
             nextEntry.answers = answers;
-            nextEntry.completedAt = answers.length > 0 && answers.every((ans) => ans.answer) ? (previous?.completedAt || now) : null;
+            nextEntry.completedAt = answers.length > 0 && answers.every((ans) => ans.answer && ans.expectedKeywords.length > 0) ? (previous?.completedAt || now) : null;
         } else {
-            const sourceQuestions = Array.isArray(row.questions) ? row.questions : [];
-            const answers = (Array.isArray(req.body?.answers) ? req.body.answers : []).map((ans, index) => {
-                const selectedIndex = Number(ans?.selectedIndex);
-                const ref = sourceQuestions[index] || {};
-                const isCorrect = selectedIndex === Number(ref?.correctIndex || 0);
+            const answers = (Array.isArray(req.body?.answers) ? req.body.answers : []).map((ans) => {
+                const levelTitle = String(ans?.levelTitle || '').trim().slice(0, 120);
+                const prompt = String(ans?.prompt || '').trim().slice(0, 600);
+                const options = sanitizeQcmOptions(ans?.options);
+                const correctIndex = Number(ans?.correctIndex);
+                const boundedCorrectIndex = Number.isFinite(correctIndex) ? Math.max(0, Math.min(options.length - 1, correctIndex)) : -1;
+                const optionLengthsOk = options.every((opt) => {
+                    const words = countWords(opt);
+                    return words > 0 && words <= 4;
+                });
                 return {
-                    prompt: String(ref?.prompt || ans?.prompt || '').trim().slice(0, 600),
+                    levelTitle,
+                    prompt,
                     answer: '',
-                    selectedIndex: Number.isFinite(selectedIndex) ? selectedIndex : -1,
-                    isCorrect
+                    expectedKeywords: [],
+                    options,
+                    selectedIndex: -1,
+                    correctIndex: boundedCorrectIndex,
+                    isCorrect: boundedCorrectIndex >= 0 && optionLengthsOk
                 };
-            }).filter((ans) => ans.prompt);
+            }).filter((ans) => ans.prompt && ans.options.length === 4 && ans.correctIndex >= 0 && ans.isCorrect);
             nextEntry.answers = answers;
-            nextEntry.score = answers.filter((ans) => ans.isCorrect).length;
-            nextEntry.completedAt = answers.length === sourceQuestions.length && sourceQuestions.length > 0 ? (previous?.completedAt || now) : null;
+            nextEntry.score = answers.length;
+            nextEntry.completedAt = answers.length > 0 ? (previous?.completedAt || now) : null;
         }
 
         if (idx >= 0) entries[idx] = nextEntry;

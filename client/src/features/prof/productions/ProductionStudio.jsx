@@ -160,12 +160,6 @@ export default function ProductionStudio({
     }, [formData.productionType]);
 
     useEffect(() => {
-        if (formData.productionType !== 'fiche') {
-            setSlidesManifest([]);
-            setSlidesError('');
-            setSlidesLoading(false);
-            return;
-        }
         const presentationUrl = String(formData.presentationUrl || '').trim();
         if (!presentationUrl) {
             setSlidesManifest([]);
@@ -200,7 +194,7 @@ export default function ProductionStudio({
             }
         })();
         return () => ctrl.abort();
-    }, [formData.presentationUrl, formData.productionType]);
+    }, [formData.presentationUrl]);
 
     const gameOptions = useMemo(() => {
         return (Array.isArray(games) ? games : []).sort((a, b) => String(a?.title || '').localeCompare(String(b?.title || '')));
@@ -246,10 +240,8 @@ export default function ProductionStudio({
         const targets = Object.keys(distribution);
         if (!String(formData.title || '').trim()) return alert('Titre requis.');
         if (targets.length === 0) return alert('Sélectionne au moins une classe.');
-        if (formData.productionType === 'fiche' && !String(formData.presentationUrl || '').trim()) return alert('Lien Google Slides requis.');
-        if (formData.productionType === 'fiche' && (formData.selectedSlides || []).length === 0) return alert("Sélectionne au moins une slide visible pour l'élève.");
-        if (formData.productionType === 'questionnaire' && !(formData.questions || []).some((row) => String(row?.prompt || '').trim())) return alert("Ajoute au moins une question.");
-        if (formData.productionType === 'qcm' && !(formData.questions || []).some((row) => String(row?.prompt || '').trim() && (row?.options || []).filter(Boolean).length >= 2)) return alert("Ajoute au moins un QCM valide.");
+        if (!String(formData.presentationUrl || '').trim()) return alert('Lien Google Slides requis.');
+        if ((formData.selectedSlides || []).length === 0) return alert("Sélectionne au moins une slide visible pour l'élève.");
 
         setLoading(true);
         try {
@@ -348,45 +340,49 @@ export default function ProductionStudio({
                         placeholder="Consigne professeur"
                     />
 
+                    <input
+                        className="expose-subject-input"
+                        value={formData.presentationUrl || ''}
+                        onChange={(e) => setFormData((p) => ({ ...p, presentationUrl: e.target.value }))}
+                        placeholder="https://docs.google.com/presentation/d/..."
+                    />
+                    <div>
+                        <div className="text-[11px] font-black uppercase text-slate-400 mt-4 mb-2">Slides visibles par les élèves</div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            {slidesLoading && <div className="text-[11px] font-bold text-slate-500">Chargement des slides...</div>}
+                            {!slidesLoading && slidesError && <div className="text-[11px] font-bold text-red-500">{slidesError}</div>}
+                            {!slidesLoading && !slidesError && slidesManifest.length === 0 && <div className="text-[11px] font-bold text-slate-400">Colle un lien Google Slides pour charger les slides.</div>}
+                            {!slidesLoading && slidesManifest.length > 0 && (
+                                <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 max-h-[340px] overflow-auto">
+                                    {slidesManifest.map((slide) => {
+                                        const slideNumber = Number(slide?.slideNumber || 0);
+                                        const active = selectedSlides.has(slideNumber);
+                                        const thumbUrl = presentationId ? `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presentationId)}&pageObjectId=${encodeURIComponent(String(slide?.objectId || ''))}&slideNumber=${encodeURIComponent(String(slideNumber || ''))}` : '';
+                                        return (
+                                            <button
+                                                key={String(slide?.objectId || slideNumber)}
+                                                type="button"
+                                                onClick={() => toggleSlide(slideNumber)}
+                                                className={`rounded-2xl border p-2 text-left transition-all ${active ? 'border-fuchsia-500 bg-fuchsia-50 shadow-md' : 'border-slate-200 bg-white'}`}
+                                            >
+                                                <div className="aspect-[16/9] overflow-hidden rounded-xl bg-slate-100 border border-slate-200 mb-2">
+                                                    {thumbUrl
+                                                        ? <img src={thumbUrl} alt={`Slide ${slideNumber}`} className="w-full h-full object-cover" />
+                                                        : <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs font-black">Slide {slideNumber}</div>}
+                                                </div>
+                                                <div className="text-[10px] font-black uppercase text-slate-700">Slide {slideNumber}</div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {formData.productionType === 'fiche' && (
                         <>
-                            <input
-                                className="expose-subject-input"
-                                value={formData.presentationUrl || ''}
-                                onChange={(e) => setFormData((p) => ({ ...p, presentationUrl: e.target.value }))}
-                                placeholder="https://docs.google.com/presentation/d/..."
-                            />
-                            <div>
-                                <div className="text-[11px] font-black uppercase text-slate-400 mt-4 mb-2">Slides visibles par les élèves</div>
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                                    {slidesLoading && <div className="text-[11px] font-bold text-slate-500">Chargement des slides...</div>}
-                                    {!slidesLoading && slidesError && <div className="text-[11px] font-bold text-red-500">{slidesError}</div>}
-                                    {!slidesLoading && !slidesError && slidesManifest.length === 0 && <div className="text-[11px] font-bold text-slate-400">Colle un lien Google Slides pour charger les slides.</div>}
-                                    {!slidesLoading && slidesManifest.length > 0 && (
-                                        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 max-h-[340px] overflow-auto">
-                                            {slidesManifest.map((slide) => {
-                                                const slideNumber = Number(slide?.slideNumber || 0);
-                                                const active = selectedSlides.has(slideNumber);
-                                                const thumbUrl = presentationId ? `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presentationId)}&pageObjectId=${encodeURIComponent(String(slide?.objectId || ''))}&slideNumber=${encodeURIComponent(String(slideNumber || ''))}` : '';
-                                                return (
-                                                    <button
-                                                        key={String(slide?.objectId || slideNumber)}
-                                                        type="button"
-                                                        onClick={() => toggleSlide(slideNumber)}
-                                                        className={`rounded-2xl border p-2 text-left transition-all ${active ? 'border-fuchsia-500 bg-fuchsia-50 shadow-md' : 'border-slate-200 bg-white'}`}
-                                                    >
-                                                        <div className="aspect-[16/9] overflow-hidden rounded-xl bg-slate-100 border border-slate-200 mb-2">
-                                                            {thumbUrl
-                                                                ? <img src={thumbUrl} alt={`Slide ${slideNumber}`} className="w-full h-full object-cover" />
-                                                                : <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs font-black">Slide {slideNumber}</div>}
-                                                        </div>
-                                                        <div className="text-[10px] font-black uppercase text-slate-700">Slide {slideNumber}</div>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[12px] font-bold text-amber-900">
+                                Les élèves voient ces slides puis rédigent leur fiche librement.
                             </div>
                         </>
                     )}
@@ -404,76 +400,23 @@ export default function ProductionStudio({
                         </select>
                     )}
 
-                    {formData.productionType !== 'fiche' && (
+                    {formData.productionType === 'questionnaire' && (
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div className="text-[11px] font-black uppercase text-slate-400">Contenu élève</div>
-                                <button type="button" onClick={addQuestion} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[11px] font-black text-slate-700">
-                                    + Ajouter
-                                </button>
+                            <div className="text-[11px] font-black uppercase text-slate-400">Production élève attendue</div>
+                            <div className="text-sm font-semibold text-slate-600">
+                                L'élève voit les slides, puis rédige lui-même plusieurs blocs avec:
+                                question, réponse attendue et mots-clés.
                             </div>
-                            {(formData.questions || []).map((row, index) => (
-                                <div key={row.id || index} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="text-[11px] font-black uppercase text-slate-400">Question {index + 1}</div>
-                                        <button type="button" onClick={() => removeQuestion(index)} className="text-[11px] font-black text-red-500">Supprimer</button>
-                                    </div>
-                                    <textarea
-                                        className="expose-subject-input"
-                                        style={{ minHeight: 90, resize: 'vertical' }}
-                                        value={row.prompt || ''}
-                                        onChange={(e) => updateQuestion(index, { prompt: e.target.value })}
-                                        placeholder="Question"
-                                    />
-                                    {formData.productionType === 'questionnaire' && (
-                                        <>
-                                            <textarea
-                                                className="expose-subject-input"
-                                                style={{ minHeight: 90, resize: 'vertical' }}
-                                                value={row.expectedAnswer || ''}
-                                                onChange={(e) => updateQuestion(index, { expectedAnswer: e.target.value })}
-                                                placeholder="Réponse attendue"
-                                            />
-                                            <input
-                                                className="expose-subject-input"
-                                                value={(row.expectedKeywords || []).join(', ')}
-                                                onChange={(e) => updateQuestion(index, {
-                                                    expectedKeywords: String(e.target.value || '').split(',').map((part) => part.trim()).filter(Boolean)
-                                                })}
-                                                placeholder="Mots-clés attendus"
-                                            />
-                                        </>
-                                    )}
-                                    {formData.productionType === 'qcm' && (
-                                        <>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                {(row.options || []).map((option, optIdx) => (
-                                                    <input
-                                                        key={optIdx}
-                                                        className="expose-subject-input"
-                                                        value={option || ''}
-                                                        onChange={(e) => {
-                                                            const next = [...(row.options || [])];
-                                                            next[optIdx] = e.target.value;
-                                                            updateQuestion(index, { options: next });
-                                                        }}
-                                                        placeholder={`Option ${optIdx + 1}`}
-                                                    />
-                                                ))}
-                                            </div>
-                                            <select
-                                                className="expose-subject-input"
-                                                value={Number(row.correctIndex || 0)}
-                                                onChange={(e) => updateQuestion(index, { correctIndex: Number(e.target.value || 0) })}
-                                            >
-                                                {(row.options || []).map((_, optIdx) => (
-                                                    <option key={optIdx} value={optIdx}>Bonne réponse: option {optIdx + 1}</option>
-                                                ))}
-                                            </select>
-                                        </>
-                                    )}
-                                </div>
-                            ))}
+                        </div>
+                    )}
+
+                    {formData.productionType === 'qcm' && (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                            <div className="text-[11px] font-black uppercase text-slate-400">Production élève attendue</div>
+                            <div className="text-sm font-semibold text-slate-600">
+                                L'élève crée lui-même ses questions QCM avec 4 réponses, puis choisit la bonne.
+                                Chaque réponse est limitée à 3-4 mots maximum.
+                            </div>
                         </div>
                     )}
                 </div>

@@ -332,9 +332,13 @@ const Models = {
                 imageCount: { type: Number, default: 0 },
                 answers: {
                     type: [{
+                        levelTitle: { type: String, default: '' },
                         prompt: { type: String, default: '' },
                         answer: { type: String, default: '' },
+                        expectedKeywords: { type: [String], default: [] },
+                        options: { type: [String], default: [] },
                         selectedIndex: { type: Number, default: -1 },
+                        correctIndex: { type: Number, default: -1 },
                         isCorrect: { type: Boolean, default: false }
                     }],
                     default: []

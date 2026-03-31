@@ -14,6 +14,7 @@ export default function ControlRecoveryList({ user, pendingActivity, openPunishm
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [latchedPendingActivity, setLatchedPendingActivity] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -34,6 +35,13 @@ export default function ControlRecoveryList({ user, pendingActivity, openPunishm
   };
 
   useEffect(() => { loadData(); }, [user]);
+
+  useEffect(() => {
+    const nextId = String(pendingActivity?.id || '').trim();
+    const nextType = String(pendingActivity?.type || '').trim();
+    if (!nextId || !nextType) return;
+    setLatchedPendingActivity(pendingActivity);
+  }, [pendingActivity]);
 
   const createNew = async () => {
     try {
@@ -69,7 +77,8 @@ export default function ControlRecoveryList({ user, pendingActivity, openPunishm
     return <ControlRecoveryWorkspace user={user} item={selected} onQuit={() => { setSelected(null); loadData(); }} onSaved={setSelected} />;
   }
 
-  const pendingType = String(pendingActivity?.type || '').trim();
+  const effectivePendingActivity = pendingActivity?.id ? pendingActivity : latchedPendingActivity;
+  const pendingType = String(effectivePendingActivity?.type || '').trim();
 
   const renderPendingActivity = () => {
     if (pendingType === 'homework') {
@@ -78,31 +87,31 @@ export default function ControlRecoveryList({ user, pendingActivity, openPunishm
           user={user}
           openPunishmentDirect={openPunishmentDirect}
           onPunishmentOpened={onPunishmentOpened}
-          openItemId={pendingActivity?.type === 'homework' && pendingActivity?.id !== '__punishment__' ? pendingActivity?.id : ''}
+          openItemId={effectivePendingActivity?.type === 'homework' && effectivePendingActivity?.id !== '__punishment__' ? effectivePendingActivity?.id : ''}
           onOpenHandled={() => onActivityHandled?.('homework')}
         />
       );
     }
     if (pendingType === 'learning') {
-      return <LearningList user={user} openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('learning')} />;
+      return <LearningList user={user} openItemId={effectivePendingActivity?.type === 'learning' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('learning')} />;
     }
     if (pendingType === 'production') {
-      return <ProductionsList user={user} openItemId={pendingActivity?.type === 'production' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('production')} />;
+      return <ProductionsList user={user} openItemId={effectivePendingActivity?.type === 'production' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('production')} />;
     }
     if (pendingType === 'comment') {
-      return <CommentsList user={user} openItemId={pendingActivity?.type === 'comment' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('comment')} />;
+      return <CommentsList user={user} openItemId={effectivePendingActivity?.type === 'comment' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('comment')} />;
     }
     if (pendingType === 'lecture') {
-      return <LectureList user={user} openItemId={pendingActivity?.type === 'lecture' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('lecture')} />;
+      return <LectureList user={user} openItemId={effectivePendingActivity?.type === 'lecture' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('lecture')} />;
     }
     if (pendingType === 'fiche') {
-      return <FicheList user={user} openItemId={pendingActivity?.type === 'fiche' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('fiche')} />;
+      return <FicheList user={user} openItemId={effectivePendingActivity?.type === 'fiche' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('fiche')} />;
     }
     if (pendingType === 'revision') {
-      return <RevisionList user={user} openItemId={pendingActivity?.type === 'revision' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('revision')} />;
+      return <RevisionList user={user} openItemId={effectivePendingActivity?.type === 'revision' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('revision')} />;
     }
     if (pendingType === 'expose') {
-      return <ExposeList user={user} openItemId={pendingActivity?.type === 'expose' ? pendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('expose')} />;
+      return <ExposeList user={user} openItemId={effectivePendingActivity?.type === 'expose' ? effectivePendingActivity?.id : ''} onOpenHandled={() => onActivityHandled?.('expose')} />;
     }
     return null;
   };
