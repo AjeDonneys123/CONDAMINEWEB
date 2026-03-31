@@ -552,23 +552,15 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
         </div>
         <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + 150)}px, ${Number(actorState.y)}px)` }}>
           {!readOnly && (
-            <div className="animation-inline-row compact" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
-              <input
-                value={block?.actorImageUrl || ''}
-                onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
-                onBlur={(e) => importActorFromValue(e.target.value)}
-                onPaste={(e) => handleUrlOrImagePaste(e, importActorFromValue)}
-                placeholder="URL ou image du sprite"
-              />
+            <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
+              <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={playAnimation}>{isPlaying ? '■' : '▶'}</button>
+              <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
+              <button type="button" className="animation-action-remove" onClick={() => updateRoot({ actorImageUrl: '' })}>×</button>
               <button type="button" onClick={() => actorFileInputRef.current?.click()}>Ordi</button>
               <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
             </div>
           )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
-          <div className="animation-stage-actions compact">
-            <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={playAnimation} disabled={false}>{isPlaying ? 'Stop' : 'Play'}</button>
-            {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>}
-          </div>
 
           <div className="animation-action-stack compact">
           {actions.map((action, index) => (
@@ -577,8 +569,8 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder={`Action ${index + 1}`} />
                 <div className="animation-compact-actions">
                   <button type="button" onClick={() => toggleSpritesOpen(action.id)}>Sprites</button>
-                  <button type="button" className={recordingActionId === action.id ? 'recording active' : ''} onClick={() => void toggleRecord(action.id)}>REC</button>
-                  <button type="button" className={playingActionId === action.id ? 'playing active' : ''} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? 'Stop' : 'Play'}</button>
+                  <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
+                  <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
                 {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove" onClick={() => removeAction(action.id)}>×</button> : null}
               </div>

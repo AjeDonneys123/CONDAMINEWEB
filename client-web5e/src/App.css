@@ -590,6 +590,12 @@
   align-items: center;
 }
 
+.animation-sprite-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .animation-inline-row.compact input,
 .animation-inline-row.compact button {
   min-height: 34px;
@@ -650,6 +656,19 @@
   border-color: #1d4ed8;
 }
 
+.icon-btn {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .animation-action-remove {
   width: 36px;
   min-width: 36px;
@@ -682,6 +701,7 @@
   gap: 12px;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: nowrap;
 }
 
 .animation-action-head input {
@@ -860,6 +880,11 @@
 
 .animation-action-card.compact .animation-action-head {
   margin-bottom: 6px;
+}
+
+.animation-action-card.compact .animation-compact-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .animation-sprite-play.active {
