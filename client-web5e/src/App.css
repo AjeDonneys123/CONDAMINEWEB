@@ -548,7 +548,7 @@
 .animation-editor.compact-floating {
   position: absolute;
   z-index: 220;
-  width: 300px;
+  width: 260px;
   padding: 10px;
   gap: 8px;
   border-radius: 18px;
@@ -594,6 +594,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
 }
 
 .animation-inline-row.compact input,
@@ -677,6 +678,43 @@
   border-radius: 999px;
   font-size: 1.2rem;
   line-height: 1;
+}
+
+.animation-load-menu-shell {
+  position: relative;
+}
+
+.animation-load-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 150px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 28px rgba(28, 41, 67, 0.14);
+  z-index: 30;
+}
+
+.animation-load-item {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.animation-load-item.secondary {
+  background: #fff;
+  color: #1d2942;
+}
+
+.animation-load-empty {
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .animation-action-stack {
@@ -789,16 +827,16 @@
 }
 
 .animation-page-actor img {
-  width: 140px;
-  height: 140px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 18px 28px rgba(29, 41, 66, 0.22));
 }
 
 .animation-actor-placeholder {
-  width: 140px;
-  height: 140px;
+  width: 100%;
+  height: 100%;
   border-radius: 24px;
   display: grid;
   place-items: center;
@@ -830,6 +868,42 @@
 
 .animation-actor-name.top {
   order: -1;
+}
+
+.animation-actor-resizer {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid #93c5fd;
+  border-radius: 6px;
+  background: #fff;
+  cursor: nwse-resize;
+  box-shadow: 0 8px 14px rgba(28, 41, 67, 0.12);
+}
+
+.animation-actor-resizer.nw {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+
+.animation-actor-resizer.ne {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+
+.animation-actor-resizer.sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+
+.animation-actor-resizer.se {
+  right: -6px;
+  bottom: -6px;
+  cursor: nwse-resize;
 }
 
 .animation-frame-strip {
@@ -885,6 +959,7 @@
 .animation-action-card.compact .animation-compact-actions {
   flex-wrap: nowrap;
   gap: 6px;
+  align-items: center;
 }
 
 .animation-sprite-play.active {

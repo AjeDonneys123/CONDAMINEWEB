@@ -62,6 +62,9 @@ function createBlock(type = 'text') {
       actorImageUrl: '',
       actorX: 120,
       actorY: 120,
+      actorWidth: 140,
+      actorHeight: 140,
+      savedActions: [],
       actions: [
         {
           id: `action_${Date.now()}`,
@@ -88,6 +91,9 @@ function createAnimationBlockFromDraft(draft = {}) {
     actorImageUrl: String(draft.actorImageUrl || '').trim(),
     actorX: 120,
     actorY: 120,
+    actorWidth: 140,
+    actorHeight: 140,
+    savedActions: [],
     actions: [
       {
         id: `action_${Date.now()}`,
@@ -295,19 +301,22 @@ function formatContributionName(name = '') {
 
 function AnimationBlockEditor({ block, onChange, readOnly }) {
   const overlayRef = useRef(null);
-  const actorFileInputRef = useRef(null);
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
   const actorDragStateRef = useRef(null);
+  const actorResizeStateRef = useRef(null);
   const actionLoopStopRef = useRef({ stop: false, actionId: '' });
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingActionId, setPlayingActionId] = useState('');
   const [recordingActionId, setRecordingActionId] = useState('');
   const [importNotice, setImportNotice] = useState('');
+  const [loadMenuOpen, setLoadMenuOpen] = useState(false);
   const [actorState, setActorState] = useState({
     x: Number(block?.actorX || 120),
     y: Number(block?.actorY || 120),
+    width: Number(block?.actorWidth || 140),
+    height: Number(block?.actorHeight || 140),
     frameUrl: String(block?.actorImageUrl || ''),
     actionName: ''
   });
@@ -320,6 +329,8 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     setActorState({
       x: Number(block?.actorX || 120),
       y: Number(block?.actorY || 120),
+      width: Number(block?.actorWidth || 140),
+      height: Number(block?.actorHeight || 140),
       frameUrl: String(block?.actorImageUrl || actions[0]?.frames?.[0] || ''),
       actionName: ''
     });
@@ -328,19 +339,49 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   useEffect(() => {
     const onMouseMove = (event) => {
-      const state = actorDragStateRef.current;
-      if (!state) return;
       const shellRect = overlayRef.current?.getBoundingClientRect();
       if (!shellRect) return;
-      const nextX = Math.max(0, event.clientX - shellRect.left - state.x);
-      const nextY = Math.max(0, event.clientY - shellRect.top - state.y);
-      setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
+      const dragState = actorDragStateRef.current;
+      if (dragState) {
+        const nextX = Math.max(0, event.clientX - shellRect.left - dragState.x);
+        const nextY = Math.max(0, event.clientY - shellRect.top - dragState.y);
+        setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
+      }
+      const resizeState = actorResizeStateRef.current;
+      if (resizeState) {
+        const deltaX = event.clientX - resizeState.startX;
+        const deltaY = event.clientY - resizeState.startY;
+        const signX = resizeState.corner.includes('w') ? -1 : 1;
+        const signY = resizeState.corner.includes('n') ? -1 : 1;
+        const nextWidth = Math.max(48, Math.round(resizeState.startWidth + (deltaX * signX)));
+        const nextHeight = Math.max(48, Math.round(resizeState.startHeight + (deltaY * signY)));
+        const widthDelta = nextWidth - resizeState.startWidth;
+        const heightDelta = nextHeight - resizeState.startHeight;
+        setActorState((prev) => ({
+          ...prev,
+          width: nextWidth,
+          height: nextHeight,
+          x: resizeState.corner.includes('w') ? resizeState.startLeft - widthDelta : resizeState.startLeft,
+          y: resizeState.corner.includes('n') ? resizeState.startTop - heightDelta : resizeState.startTop
+        }));
+      }
     };
     const onMouseUp = () => {
-      const state = actorDragStateRef.current;
-      if (!state) return;
-      actorDragStateRef.current = null;
-      updateRoot({ actorX: Math.round(actorState.x), actorY: Math.round(actorState.y) });
+      const dragState = actorDragStateRef.current;
+      if (dragState) {
+        actorDragStateRef.current = null;
+        updateRoot({ actorX: Math.round(actorState.x), actorY: Math.round(actorState.y) });
+      }
+      const resizeState = actorResizeStateRef.current;
+      if (resizeState) {
+        actorResizeStateRef.current = null;
+        updateRoot({
+          actorWidth: Math.round(actorState.width),
+          actorHeight: Math.round(actorState.height),
+          actorX: Math.round(actorState.x),
+          actorY: Math.round(actorState.y)
+        });
+      }
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -348,10 +389,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [actorState.x, actorState.y]);
+  }, [actorState.x, actorState.y, actorState.width, actorState.height]);
 
-  const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
+  const savedActions = Array.isArray(block?.savedActions) ? block.savedActions : [];
+  const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions, savedActions });
   const updateActions = (nextActions) => onChange?.({ ...block, actions: nextActions });
+  const updateSavedActions = (nextSavedActions) => onChange?.({ ...block, actions, savedActions: nextSavedActions });
 
   const flashNotice = (message) => {
     setImportNotice(message);
@@ -388,6 +431,39 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     ]);
   };
 
+  const saveActionPreset = (action) => {
+    if (!action?.id) return;
+    const nextPreset = {
+      id: `saved_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: String(action.name || 'Action').trim() || 'Action',
+      frames: Array.isArray(action.frames) ? action.frames.filter(Boolean) : []
+    };
+    const withoutSameName = savedActions.filter((item) => clean(item.name) !== clean(nextPreset.name));
+    updateSavedActions([...withoutSameName, nextPreset]);
+    flashNotice('Action chargeable ajoutée');
+  };
+
+  const loadSavedAction = (presetId) => {
+    const preset = savedActions.find((item) => item.id === presetId);
+    if (!preset) return;
+    const targetActionId = actions[0]?.id;
+    if (!targetActionId) return;
+    updateActions(actions.map((action) => (
+      action.id === targetActionId
+        ? {
+            ...action,
+            name: preset.name,
+            frames: Array.isArray(preset.frames) ? [...preset.frames] : [],
+            frameUrlInput: '',
+            soundUrl: '',
+            spritesOpen: false
+          }
+        : action
+    )));
+    setLoadMenuOpen(false);
+    flashNotice('Action chargée');
+  };
+
   const removeAction = (actionId) => {
     if (actions.length <= 1) return;
     updateActions(actions.filter((action) => action.id !== actionId));
@@ -403,12 +479,28 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   const startDragActor = (event) => {
     if (readOnly) return;
+    if (event.target.closest('.animation-actor-resizer')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     actorDragStateRef.current = {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top
     };
     event.preventDefault();
+  };
+
+  const startResizeActor = (event, corner) => {
+    if (readOnly) return;
+    actorResizeStateRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: Number(actorState.width || 140),
+      startHeight: Number(actorState.height || 140),
+      startLeft: Number(actorState.x || 0),
+      startTop: Number(actorState.y || 0),
+      corner
+    };
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const handleActorFile = async (fileList) => {
@@ -544,20 +636,46 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
       <div ref={overlayRef} className="animation-page-overlay visible">
         <div
           className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
-          style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}
+          style={{
+            transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)`,
+            width: Number(actorState.width || 140),
+            height: Number(actorState.height || 140)
+          }}
           onMouseDown={startDragActor}
         >
           <div className="animation-actor-name top">{block?.actorName || 'Personnage'}</div>
           {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
+          {!readOnly ? (
+            <>
+              <button type="button" className="animation-actor-resizer nw" onMouseDown={(e) => startResizeActor(e, 'nw')} aria-label="Redimensionner le sprite en haut a gauche" />
+              <button type="button" className="animation-actor-resizer ne" onMouseDown={(e) => startResizeActor(e, 'ne')} aria-label="Redimensionner le sprite en haut a droite" />
+              <button type="button" className="animation-actor-resizer sw" onMouseDown={(e) => startResizeActor(e, 'sw')} aria-label="Redimensionner le sprite en bas a gauche" />
+              <button type="button" className="animation-actor-resizer se" onMouseDown={(e) => startResizeActor(e, 'se')} aria-label="Redimensionner le sprite en bas a droite" />
+            </>
+          ) : null}
         </div>
-        <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + 150)}px, ${Number(actorState.y)}px)` }}>
+        <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + actorState.width + 12)}px, ${Number(actorState.y)}px)` }}>
           {!readOnly && (
             <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
               <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={playAnimation}>{isPlaying ? '■' : '▶'}</button>
               <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
               <button type="button" className="animation-action-remove" onClick={() => updateRoot({ actorImageUrl: '' })}>×</button>
-              <button type="button" onClick={() => actorFileInputRef.current?.click()}>Ordi</button>
-              <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
+              <div className={`animation-load-menu-shell ${loadMenuOpen ? 'open' : ''}`}>
+                <button type="button" onClick={() => setLoadMenuOpen((prev) => !prev)}>Charger</button>
+                {loadMenuOpen ? (
+                  <div className="animation-load-menu">
+                    {savedActions.length === 0 ? (
+                      <div className="animation-load-empty">Aucune action</div>
+                    ) : (
+                      savedActions.map((item) => (
+                        <button key={item.id} type="button" className="animation-load-item" onClick={() => loadSavedAction(item.id)}>
+                          {item.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </div>
           )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
@@ -568,6 +686,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
               <div className="animation-action-head">
                 <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder={`Action ${index + 1}`} />
                 <div className="animation-compact-actions">
+                  <button type="button" className="icon-btn" onClick={() => saveActionPreset(action)}>+</button>
                   <button type="button" onClick={() => toggleSpritesOpen(action.id)}>Sprites</button>
                   <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
