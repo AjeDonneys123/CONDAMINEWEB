@@ -377,6 +377,39 @@
   flex-wrap: wrap;
 }
 
+.mini-animation-panel {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 32px rgba(28, 41, 67, 0.08);
+}
+
+.mini-animation-panel input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+}
+
+.mini-animation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.mini-animation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .subtabs {
   display: flex;
   gap: 10px;

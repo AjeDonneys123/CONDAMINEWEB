@@ -936,6 +936,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
 }
 
 export default function App() {
+  const animationCreateFileInputRef = useRef(null);
   const initialBridgedUser = readBridgeUserFromUrl();
   const initialWindowNamedUser = readBridgeUserFromWindowName();
   const initialStoredUser = readStoredWeb5eSession();
@@ -960,6 +961,11 @@ export default function App() {
   const [user, setUser] = useState(initialUser);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [animationCreateOpen, setAnimationCreateOpen] = useState(false);
+  const [animationDraft, setAnimationDraft] = useState({
+    title: '',
+    actorImageUrl: ''
+  });
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
   const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
@@ -1202,9 +1208,31 @@ export default function App() {
   };
 
   const addBlock = (type) => {
+    if (type === 'animation') {
+      setAnimationCreateOpen(true);
+      return;
+    }
     const nextBlocks = [...blocks, createBlock(type)];
     updateBlocks(nextBlocks);
     void persistBlocks(nextBlocks);
+  };
+
+  const createAnimationFromMiniPanel = () => {
+    const nextBlocks = [...blocks, createAnimationBlockFromDraft(animationDraft)];
+    updateBlocks(nextBlocks);
+    void persistBlocks(nextBlocks);
+    setAnimationCreateOpen(false);
+    setAnimationDraft({ title: '', actorImageUrl: '' });
+  };
+
+  const handleAnimationCreateFile = async (fileList) => {
+    const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAnimationDraft((prev) => ({ ...prev, actorImageUrl: String(reader.result || '') }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateBlock = (index, value) => {
@@ -1341,6 +1369,35 @@ export default function App() {
             </div>
           )}
         </div>
+        {isTeacher && animationCreateOpen ? (
+          <div className="mini-animation-panel">
+            <input
+              value={animationDraft.title}
+              onChange={(e) => setAnimationDraft((prev) => ({ ...prev, title: e.target.value }))}
+              placeholder="Nom de l'animation"
+            />
+            <div className="mini-animation-row">
+              <input
+                value={animationDraft.actorImageUrl}
+                onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: e.target.value }))}
+                onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: nextValue })))}
+                placeholder="Image ou URL"
+              />
+              <button type="button" onClick={() => animationCreateFileInputRef.current?.click()}>Importer</button>
+              <input
+                ref={animationCreateFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden-file-input"
+                onChange={(e) => void handleAnimationCreateFile(e.target.files)}
+              />
+            </div>
+            <div className="mini-animation-actions">
+              <button type="button" onClick={() => setAnimationCreateOpen(false)}>Annuler</button>
+              <button type="button" className="primary-btn" onClick={createAnimationFromMiniPanel}>Creer</button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="subtabs">
           {currentSection.tabs.map((tab) => (
