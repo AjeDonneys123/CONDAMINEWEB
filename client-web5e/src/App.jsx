@@ -176,6 +176,24 @@ function buildDirectStudentProfile({ firstName = '', lastName = '', className = 
   };
 }
 
+function handleUrlOrImagePaste(event, onValue) {
+  const clipboard = event.clipboardData;
+  if (!clipboard) return;
+  const items = Array.from(clipboard.items || []);
+  const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
+  if (imageItem) {
+    event.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onValue?.(String(reader.result || ''));
+    reader.readAsDataURL(file);
+    return;
+  }
+  const pastedText = String(clipboard.getData('text/plain') || '').trim();
+  if (pastedText) onValue?.(pastedText);
+}
+
 function ArticleEditor({ value, onChange, readOnly }) {
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
@@ -489,7 +507,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             </div>
             {!readOnly && (
               <div className="animation-inline-row" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
-                <input value={block?.actorImageUrl || ''} onChange={(e) => updateRoot({ actorImageUrl: e.target.value })} placeholder="URL du sprite principal" />
+                <input
+                  value={block?.actorImageUrl || ''}
+                  onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
+                  onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => updateRoot({ actorImageUrl: nextValue }))}
+                  placeholder="URL du sprite principal"
+                />
                 <button type="button" onClick={() => updateRoot({ actorImageUrl: String(block?.actorImageUrl || '').trim() })}>Importer URL</button>
                 <button type="button" onClick={() => actorFileInputRef.current?.click()}>Importer depuis l'ordi</button>
                 <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
@@ -515,7 +538,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
               {action.spritesOpen && !readOnly && (
                 <div className="animation-upload-card action" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}>
                   <div className="animation-inline-row">
-                    <input value={action.frameUrlInput || ''} onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })} placeholder="URL d'un sprite à ajouter" />
+                    <input
+                      value={action.frameUrlInput || ''}
+                      onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })}
+                      onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => updateAction(action.id, { frameUrlInput: nextValue }))}
+                      placeholder="URL d'un sprite à ajouter"
+                    />
                     <button type="button" onClick={() => addFrameFromUrl(action.id)}>Importer URL</button>
                     <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer depuis l'ordi</button>
                   </div>
@@ -556,7 +584,6 @@ export default function App() {
   const [inputClass, setInputClass] = useState('');
   const [inputLast, setInputLast] = useState('');
   const [inputFirst, setInputFirst] = useState('');
-  const [password, setPassword] = useState('');
   const [selectedProfile, setSelectedProfile] = useState(initialUser ? {
     id: initialUser.id,
     type: 'student',
@@ -699,11 +726,9 @@ export default function App() {
     event.preventDefault();
     const typedLast = clean(inputLast);
     const typedFirst = clean(inputFirst);
-    const cleanPassword = clean(password);
     if (
       typedLast === 'vuillet' &&
-      (typedFirst === 'jp' || typedFirst === 'jean') &&
-      (cleanPassword === WEB5E_TEACHER_PASSWORD || cleanPassword === WEB5E_EDITOR_PASSWORD)
+      (typedFirst === 'jp' || typedFirst === 'jean')
     ) {
       const teacherUser = {
         id: 'web5e-teacher-jp-vuillet',
@@ -735,10 +760,6 @@ export default function App() {
       alert("Seuls les élèves de 5e peuvent éditer ce site.");
       return;
     }
-    if (cleanPassword !== WEB5E_EDITOR_PASSWORD) {
-      alert("Mot de passe édition invalide.");
-      return;
-    }
     setLoading(true);
     try {
       const data = {
@@ -768,7 +789,6 @@ export default function App() {
     setInputClass('');
     setInputLast('');
     setInputFirst('');
-    setPassword('');
     setCreatorOpen(false);
     setLoginOpen(false);
     setBridgeDebug({
@@ -895,7 +915,6 @@ export default function App() {
               <input value={inputLast} onChange={(e) => { setInputLast(e.target.value); setSelectedProfile(null); }} placeholder="Nom" />
               <input value={inputFirst} onChange={(e) => { setInputFirst(e.target.value); setSelectedProfile(null); }} placeholder="Prénom" />
             </div>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe" />
             {suggestions.length > 0 && (
               <div className="suggestions">
                 {suggestions.map((profile) => (
@@ -953,6 +972,7 @@ export default function App() {
             <input
               value={animationDraft.actorImageUrl}
               onChange={(e) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: e.target.value }))}
+              onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => setAnimationDraft((prev) => ({ ...prev, actorImageUrl: nextValue })))}
               placeholder="URL de l'image du sprite"
             />
             <button type="button" className="secondary-btn" onClick={() => creatorSpriteFileInputRef.current?.click()}>
