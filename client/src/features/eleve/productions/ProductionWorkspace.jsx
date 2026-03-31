@@ -344,7 +344,7 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
       setSaveMessage(String(e?.message || 'Sauvegarde impossible'));
     } finally {
       setSaving(false);
-      setTimeout(() => setSaveMessage(''), 2200);
+      setTimeout(() => setSaveMessage(''), 1500);
     }
   };
 
@@ -374,9 +374,13 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
           <div className="prod-title">{production?.title || 'Production'}</div>
           <div className="prod-subtitle">{production?.teacherInstructions || 'Travaille à partir des slides visibles et construis une production claire.'}</div>
         </div>
-        {saveMessage && <div className={`prod-save-message ${/sauvegarde/i.test(saveMessage) && !/impossible|erreur/i.test(saveMessage) ? 'success' : 'error'}`}>{saveMessage}</div>}
-        <button className="prod-btn" onClick={() => save('manual')} disabled={saving}>{saving ? 'Sauvegarde...' : 'Enregistrer'}</button>
-        <button className="prod-btn prod-btn-finish" onClick={handleFinish} disabled={saving}>J&apos;ai fini</button>
+        <div className="prod-topbar-actions">
+          <div className="prod-save-stack">
+            {saveMessage && <div className={`prod-save-message ${/sauvegarde/i.test(saveMessage) && !/impossible|erreur/i.test(saveMessage) ? 'success' : 'error'}`}>{saveMessage}</div>}
+            <button className="prod-btn" onClick={() => save('manual')} disabled={saving}>{saving ? 'Sauvegarde...' : 'Enregistrer'}</button>
+          </div>
+          <button className="prod-btn prod-btn-finish" onClick={handleFinish} disabled={saving}>J&apos;ai fini</button>
+        </div>
       </div>
 
       <div className={`prod-shell ${slideWindowOpen ? 'slide-expanded' : ''}`}>
