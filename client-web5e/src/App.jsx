@@ -824,13 +824,15 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             <div key={action.id} className="animation-action-card compact">
               <div className="animation-action-head">
                 <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder={`Action ${index + 1}`} />
+              </div>
+              <div className="animation-action-toolbar-row">
                 <div className="animation-compact-actions">
                   <button type="button" className="icon-btn" onClick={() => saveActionPreset(action)}>+</button>
                   <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
                   <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
-                {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove" onClick={() => removeAction(action.id)}>×</button> : null}
+                {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove small" onClick={(e) => { e.stopPropagation(); removeAction(action.id); }}>×</button> : null}
               </div>
               {action.spritesOpen && !readOnly && (
                 <div
@@ -868,7 +870,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                     {(action.frames || []).map((frame, frameIndex) => (
                       <div key={`${action.id}_${frameIndex}`} className={`animation-frame-thumb ${frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : ''}`} onClick={() => selectFrame(action.id, frameIndex)}>
                         <img src={typeof frame === 'string' ? frame : frame?.url} alt="" />
-                        {!readOnly ? <button type="button" onClick={() => removeFrame(action.id, frameIndex)}>×</button> : null}
+                        {!readOnly ? <button type="button" onClick={(e) => { e.stopPropagation(); removeFrame(action.id, frameIndex); }}>×</button> : null}
                       </div>
                     ))}
                     {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite</div>}
