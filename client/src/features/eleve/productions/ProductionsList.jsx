@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import DashboardFolder from '../components/DashboardFolder';
 import ProductionWorkspace from './ProductionWorkspace';
 
@@ -35,8 +35,34 @@ export default function ProductionsList({ user, openItemId = '', onOpenHandled }
         if (onOpenHandled) onOpenHandled();
     }, [openItemId, items, selected, onOpenHandled]);
 
+    const relatedAlternatives = useMemo(() => {
+        if (!selected?._id) return [];
+        const currentType = String(selected?.productionType || '').trim();
+        const currentUrl = String(selected?.presentationUrl || '').trim();
+        const currentSlides = JSON.stringify(Array.isArray(selected?.selectedSlides) ? selected.selectedSlides : []);
+        return (items || []).filter((item) => {
+            if (String(item?._id || '') === String(selected?._id || '')) return false;
+            if (String(item?.productionType || '').trim() === currentType) return false;
+            const sameUrl = String(item?.presentationUrl || '').trim() === currentUrl;
+            const sameSlides = JSON.stringify(Array.isArray(item?.selectedSlides) ? item.selectedSlides : []) === currentSlides;
+            return sameUrl && sameSlides;
+        });
+    }, [items, selected]);
+
     if (selected) {
-        return <ProductionWorkspace production={selected} user={user} onQuit={() => { setSelected(null); loadData(); }} />;
+        return (
+            <ProductionWorkspace
+                production={selected}
+                user={user}
+                relatedAlternatives={relatedAlternatives}
+                onSwitchProduction={(nextProductionId) => {
+                    const next = (items || []).find((item) => String(item?._id || '') === String(nextProductionId || ''));
+                    if (!next) return;
+                    setSelected(next);
+                }}
+                onQuit={() => { setSelected(null); loadData(); }}
+            />
+        );
     }
 
     return (

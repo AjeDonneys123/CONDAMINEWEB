@@ -42,7 +42,15 @@ const emptyQcmRow = () => ({ id: uid(), prompt: '', options: ['', '', '', ''], c
 const emptyQcmLevel = () => ({ id: uid(), title: '', questions: [emptyQcmRow()] });
 const countWords = (value = '') => String(value || '').trim().split(/\s+/).filter(Boolean).length;
 
-export default function ProductionWorkspace({ production, user, onQuit }) {
+const productionTypeLabel = (type = '') => {
+  const cleanType = String(type || '').trim().toLowerCase();
+  if (cleanType === 'fiche') return 'une fiche';
+  if (cleanType === 'questionnaire') return "une activité d'apprentissage";
+  if (cleanType === 'qcm') return 'un QCM';
+  return 'une autre activité';
+};
+
+export default function ProductionWorkspace({ production, user, relatedAlternatives = [], onSwitchProduction, onQuit }) {
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
   const slideWindowInteractionRef = useRef(null);
@@ -348,6 +356,15 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
     return () => window.clearInterval(interval);
   }, [saving, productionType, contentHtml, questionnaireLevels, qcmLevels]);
 
+  const handleFinish = async () => {
+    await save('manual');
+    const nextChoice = Array.isArray(relatedAlternatives) ? relatedAlternatives[0] : null;
+    if (!nextChoice?._id) return;
+    const wantsAnother = window.confirm(`Veux-tu faire une autre activité ?\\n\\nJe peux te proposer ${productionTypeLabel(nextChoice.productionType)} sur les mêmes slides.`);
+    if (!wantsAnother) return;
+    onSwitchProduction?.(String(nextChoice._id));
+  };
+
   return (
     <div className="prod-workspace">
       <div className="prod-topbar">
@@ -359,6 +376,7 @@ export default function ProductionWorkspace({ production, user, onQuit }) {
         </div>
         {saveMessage && <div className={`prod-save-message ${/sauvegarde/i.test(saveMessage) && !/impossible|erreur/i.test(saveMessage) ? 'success' : 'error'}`}>{saveMessage}</div>}
         <button className="prod-btn" onClick={() => save('manual')} disabled={saving}>{saving ? 'Sauvegarde...' : 'Enregistrer'}</button>
+        <button className="prod-btn prod-btn-finish" onClick={handleFinish} disabled={saving}>J&apos;ai fini</button>
       </div>
 
       <div className={`prod-shell ${slideWindowOpen ? 'slide-expanded' : ''}`}>

@@ -89,6 +89,11 @@
   z-index: 9999;
 }
 
+.prod-btn-finish {
+  background: #047857;
+  border-color: #047857;
+}
+
 .prod-btn-ghost {
   background: white;
   color: #334155;

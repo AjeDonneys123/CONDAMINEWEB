@@ -646,6 +646,9 @@ router.post('/slides/extract-text', async (req, res) => {
 
 router.post('/slides/manifest', async (req, res) => {
     try {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         const presentationUrl = String(req.body?.presentationUrl || '').trim();
         const slideSelection = String(req.body?.slideSelection || '').trim();
         const filterCondition = String(req.body?.filterCondition || '').trim();
@@ -689,7 +692,9 @@ router.get('/slides/thumbnail', async (req, res) => {
             }
         }
         res.setHeader('Content-Type', out.contentType || 'image/png');
-        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         return res.status(200).send(out.buffer);
     } catch (e) {
         const presentationId = String(req.query.presentationId || '').trim();
@@ -711,7 +716,9 @@ router.get('/slides/thumbnail', async (req, res) => {
                     const ct = String(r.headers.get('content-type') || '').toLowerCase();
                     if (!ct.startsWith('image/')) continue;
                     res.setHeader('Content-Type', ct || 'image/png');
-                    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
                     return res.status(200).send(buf);
                 } catch (_) {}
             }
