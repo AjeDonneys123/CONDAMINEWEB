@@ -540,7 +540,17 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
   };
 
   const toggleSpritesOpen = (actionId) => {
-    updateActions(actions.map((action) => action.id === actionId ? { ...action, spritesOpen: !action.spritesOpen } : action));
+    updateActions(actions.map((action) => (
+      action.id === actionId
+        ? {
+            ...action,
+            spritesOpen: !action.spritesOpen,
+            spriteEditorOpen: action.spritesOpen ? false : action.spriteEditorOpen,
+            spriteToolsOpen: action.spritesOpen ? false : action.spriteToolsOpen,
+            spriteUrlOpen: action.spritesOpen ? false : action.spriteUrlOpen
+          }
+        : action
+    )));
   };
 
   const toggleSpriteToolsOpen = (actionId) => {
@@ -806,7 +816,20 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
     actionLoopStopRef.current = { stop: false, actionId: '' };
   };
 
+  const selectedAction = actions.find((action) => Number(action?.selectedFrameIndex) >= -1) || null;
+  const selectedFrameIndex = Number(selectedAction?.selectedFrameIndex);
+  const selectedFrameData = selectedFrameIndex === -1
+    ? {
+        url: String(block?.actorImageUrl || ''),
+        width: Number(block?.actorWidth || actorState.width || 140),
+        height: Number(block?.actorHeight || actorState.height || 140)
+      }
+    : (selectedFrameIndex >= 0 ? selectedAction?.frames?.[selectedFrameIndex] : null);
+  const normalizedSelectedFrame = typeof selectedFrameData === 'string' ? createSpriteFrame(selectedFrameData) : selectedFrameData;
   const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url) || '';
+  const actorRenderWidth = Number(normalizedSelectedFrame?.width || actorState.width || block?.actorWidth || 140);
+  const actorRenderHeight = Number(normalizedSelectedFrame?.height || actorState.height || block?.actorHeight || 140);
+  const actorRenderFrame = String(normalizedSelectedFrame?.url || currentActorFrame || '');
 
   return (
     <div className="animation-block-shell">
@@ -815,13 +838,13 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
           className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
           style={{
             transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)`,
-            width: Number(actorState.width || 140),
-            height: Number(actorState.height || 140)
+            width: actorRenderWidth,
+            height: actorRenderHeight
           }}
           onMouseDown={startDragActor}
         >
           <div className="animation-actor-name top">{block?.actorName || 'Personnage'}</div>
-          {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
+          {actorRenderFrame ? <img src={actorRenderFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
           {!readOnly ? (
             <>
               <button type="button" className="animation-actor-resizer nw" onMouseDown={(e) => startResizeActor(e, 'nw')} aria-label="Redimensionner le sprite en haut a gauche" />
