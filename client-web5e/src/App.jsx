@@ -547,38 +547,30 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
           style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}
           onMouseDown={startDragActor}
         >
+          <div className="animation-actor-name top">{block?.actorName || 'Personnage'}</div>
           {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
-          <button type="button" className="animation-sprite-play" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? '...' : 'Play'}</button>
-          <div className="animation-actor-name">{actorState.actionName || block?.actorName || 'Personnage'}</div>
         </div>
-      </div>
-
-      <div className="animation-editor">
-          <div className="animation-editor-top">
-            <div className="animation-editor-grid">
-              <input value={block?.title || ''} onChange={(e) => updateRoot({ title: e.target.value })} placeholder="Titre de l'animation" />
-              <input value={block?.actorName || ''} onChange={(e) => updateRoot({ actorName: e.target.value })} placeholder="Nom du personnage" />
+        <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + 150)}px, ${Number(actorState.y)}px)` }}>
+          {!readOnly && (
+            <div className="animation-inline-row compact" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
+              <input
+                value={block?.actorImageUrl || ''}
+                onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
+                onBlur={(e) => importActorFromValue(e.target.value)}
+                onPaste={(e) => handleUrlOrImagePaste(e, importActorFromValue)}
+                placeholder="URL ou image du sprite"
+              />
+              <button type="button" onClick={() => actorFileInputRef.current?.click()}>Ordi</button>
+              <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
             </div>
-            {!readOnly && (
-              <div className="animation-inline-row" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
-                <input
-                  value={block?.actorImageUrl || ''}
-                  onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
-                  onBlur={(e) => importActorFromValue(e.target.value)}
-                  onPaste={(e) => handleUrlOrImagePaste(e, importActorFromValue)}
-                  placeholder="URL du sprite principal"
-                />
-                <button type="button" onClick={() => actorFileInputRef.current?.click()}>Importer depuis l'ordi</button>
-                <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
-              </div>
-            )}
+          )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
-          <div className="animation-stage-actions">
-            {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+ Nouvelle action</button>}
+          <div className="animation-stage-actions compact">
+            <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={playAnimation} disabled={false}>{isPlaying ? 'Stop' : 'Play'}</button>
+            {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>}
           </div>
-        </div>
 
-        <div className="animation-action-stack">
+          <div className="animation-action-stack compact">
           {actions.map((action, index) => (
             <div key={action.id} className="animation-action-card compact">
               <div className="animation-action-head">
@@ -616,6 +608,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
               </div>}
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>

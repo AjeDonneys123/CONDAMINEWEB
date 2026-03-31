@@ -545,6 +545,16 @@
   background: #fffaf5;
 }
 
+.animation-editor.compact-floating {
+  position: absolute;
+  z-index: 220;
+  width: 300px;
+  padding: 10px;
+  gap: 8px;
+  border-radius: 18px;
+  box-shadow: 0 14px 28px rgba(28, 41, 67, 0.12);
+}
+
 .animation-editor-top {
   display: grid;
   gap: 16px;
@@ -580,6 +590,13 @@
   align-items: center;
 }
 
+.animation-inline-row.compact input,
+.animation-inline-row.compact button {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
 .animation-import-notice {
   font-size: 0.78rem;
   color: #64748b;
@@ -593,6 +610,10 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.animation-stage-actions.compact {
+  gap: 8px;
 }
 
 .animation-play-btn,
@@ -642,6 +663,10 @@
 .animation-action-stack {
   display: grid;
   gap: 10px;
+}
+
+.animation-action-stack.compact {
+  gap: 8px;
 }
 
 .animation-action-card {
@@ -783,6 +808,10 @@
   color: #1d2942;
 }
 
+.animation-actor-name.top {
+  order: -1;
+}
+
 .animation-frame-strip {
   margin-top: 12px;
   display: flex;
@@ -792,8 +821,8 @@
 
 .animation-frame-thumb {
   position: relative;
-  width: 82px;
-  height: 82px;
+  width: 54px;
+  height: 54px;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(28, 41, 67, 0.12);
@@ -827,6 +856,16 @@
 
 .animation-action-card.compact {
   padding: 10px 12px;
+}
+
+.animation-action-card.compact .animation-action-head {
+  margin-bottom: 6px;
+}
+
+.animation-sprite-play.active {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
 }
 
 .animation-action-toolbar .recording {
