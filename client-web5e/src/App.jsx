@@ -394,10 +394,15 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
         const signY = spriteResizeState.corner.includes('n') ? -1 : 1;
         const nextWidth = Math.max(40, Math.round(spriteResizeState.startWidth + (deltaX * signX)));
         const nextHeight = Math.max(40, Math.round(spriteResizeState.startHeight + (deltaY * signY)));
-        updateFrame(spriteResizeState.actionId, spriteResizeState.frameIndex, {
-          width: nextWidth,
-          height: nextHeight
-        });
+        if (spriteResizeState.frameIndex === -1) {
+          updateRoot({ actorWidth: nextWidth, actorHeight: nextHeight });
+          setActorState((prev) => ({ ...prev, width: nextWidth, height: nextHeight }));
+        } else {
+          updateFrame(spriteResizeState.actionId, spriteResizeState.frameIndex, {
+            width: nextWidth,
+            height: nextHeight
+          });
+        }
       }
     };
     const onMouseUp = () => {
@@ -562,6 +567,18 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
     )));
   };
 
+  const selectOriginalActor = (actionId) => {
+    setActorState((prev) => ({
+      ...prev,
+      frameUrl: String(block?.actorImageUrl || ''),
+      width: Number(block?.actorWidth || prev.width || 140),
+      height: Number(block?.actorHeight || prev.height || 140)
+    }));
+    updateActions(actions.map((actionItem) => (
+      actionItem.id === actionId ? { ...actionItem, selectedFrameIndex: -1 } : actionItem
+    )));
+  };
+
   const updateFrame = (actionId, frameIndex, patch) => {
     const action = actions.find((item) => item.id === actionId);
     if (action?.selectedFrameIndex === frameIndex) {
@@ -598,7 +615,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
 
   const startSpriteResize = (event, actionId, frameIndex, corner) => {
     const action = actions.find((item) => item.id === actionId);
-    const frame = action?.frames?.[frameIndex];
+    const frame = frameIndex === -1
+      ? { url: String(block?.actorImageUrl || ''), width: Number(block?.actorWidth || actorState.width || 140), height: Number(block?.actorHeight || actorState.height || 140) }
+      : action?.frames?.[frameIndex];
     const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
     if (!normalizedFrame) return;
     spriteResizeStateRef.current = {
@@ -867,6 +886,14 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
                   ) : null}
                   <div className="animation-sprite-drop-hint">Colle, glisse, ou ajoute des sprites ici.</div>
                   <div className="animation-frame-strip in-space">
+                    {block?.actorImageUrl ? (
+                      <div
+                        className={`animation-frame-thumb origin ${Number(action.selectedFrameIndex) === -1 ? 'selected' : ''}`}
+                        onClick={() => selectOriginalActor(action.id)}
+                      >
+                        <img src={block.actorImageUrl} alt="" />
+                      </div>
+                    ) : null}
                     {(action.frames || []).map((frame, frameIndex) => (
                       <div key={`${action.id}_${frameIndex}`} className={`animation-frame-thumb ${frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : ''}`} onClick={() => selectFrame(action.id, frameIndex)}>
                         <img src={typeof frame === 'string' ? frame : frame?.url} alt="" />
@@ -879,8 +906,11 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
                 </div>
               )}
               {action.spriteEditorOpen && !readOnly ? (() => {
-                const selectedFrame = action.frames?.[action.selectedFrameIndex || 0];
-                const normalizedFrame = typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame;
+                const isOriginalSelected = Number(action.selectedFrameIndex) === -1;
+                const selectedFrame = isOriginalSelected ? null : action.frames?.[action.selectedFrameIndex || 0];
+                const normalizedFrame = isOriginalSelected
+                  ? createSpriteFrame(block?.actorImageUrl || '')
+                  : (typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame);
                 return (
                   <div className="animation-sprite-editor-panel">
                     {normalizedFrame?.url ? (
@@ -895,17 +925,17 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
                               alt=""
                               style={{ width: Number(normalizedFrame.width || 140), height: Number(normalizedFrame.height || 140) }}
                             />
-                            <button type="button" className="animation-editor-resizer nw" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'nw')} />
-                            <button type="button" className="animation-editor-resizer ne" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'ne')} />
-                            <button type="button" className="animation-editor-resizer sw" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'sw')} />
-                            <button type="button" className="animation-editor-resizer se" onMouseDown={(e) => startSpriteResize(e, action.id, action.selectedFrameIndex || 0, 'se')} />
+                            <button type="button" className="animation-editor-resizer nw" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'nw')} />
+                            <button type="button" className="animation-editor-resizer ne" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'ne')} />
+                            <button type="button" className="animation-editor-resizer sw" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'sw')} />
+                            <button type="button" className="animation-editor-resizer se" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'se')} />
                           </div>
                         </div>
                         <div className="animation-sprite-editor-controls">
                           <div className="animation-sprite-editor-size-readout">
                             {Number(normalizedFrame.width || 140)} x {Number(normalizedFrame.height || 140)} px
                           </div>
-                          <button type="button" onClick={() => openFrameEraser(action.id, action.selectedFrameIndex || 0)}>Supprimer le fond</button>
+                          {!isOriginalSelected ? <button type="button" onClick={() => openFrameEraser(action.id, action.selectedFrameIndex || 0)}>Supprimer le fond</button> : null}
                         </div>
                       </>
                     ) : (
