@@ -553,6 +553,7 @@
   gap: 8px;
   border-radius: 18px;
   box-shadow: 0 14px 28px rgba(28, 41, 67, 0.12);
+  pointer-events: auto;
 }
 
 .animation-editor-top {
@@ -697,6 +698,7 @@
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 16px 28px rgba(28, 41, 67, 0.14);
   z-index: 30;
+  pointer-events: auto;
 }
 
 .animation-load-item {
@@ -950,16 +952,30 @@
 
 .animation-action-card.compact {
   padding: 10px 12px;
+  pointer-events: auto;
 }
 
 .animation-action-card.compact .animation-action-head {
   margin-bottom: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
 }
 
 .animation-action-card.compact .animation-compact-actions {
   flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
+}
+
+.animation-action-card.compact .animation-action-head input {
+  min-width: 0;
+}
+
+.animation-action-card.compact .animation-action-head .animation-action-remove {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
 }
 
 .animation-sprite-play.active {

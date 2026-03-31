@@ -687,7 +687,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder={`Action ${index + 1}`} />
                 <div className="animation-compact-actions">
                   <button type="button" className="icon-btn" onClick={() => saveActionPreset(action)}>+</button>
-                  <button type="button" onClick={() => toggleSpritesOpen(action.id)}>Sprites</button>
+                  <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
                   <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
