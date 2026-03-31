@@ -525,8 +525,10 @@
 }
 
 .animation-block-shell {
+  position: relative;
   display: grid;
   gap: 18px;
+  padding-right: 360px;
 }
 
 .animation-editor {
@@ -538,6 +540,11 @@
   background: #fffaf5;
 }
 
+.animation-editor-top {
+  display: grid;
+  gap: 16px;
+}
+
 .animation-editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -545,8 +552,10 @@
 }
 
 .animation-editor-grid input,
-.animation-step-fields input,
-.animation-step-fields select {
+.animation-action-fields input,
+.animation-action-fields textarea,
+.animation-position-row input,
+.animation-url-row input {
   width: 100%;
   padding: 12px 14px;
   border-radius: 14px;
@@ -555,24 +564,26 @@
   font: inherit;
 }
 
-.animation-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 4px;
-  font-weight: 700;
-  color: #475569;
+.animation-position-row,
+.animation-url-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.animation-step-toolbar {
+.animation-stage-actions,
+.animation-action-toolbar {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.animation-step-toolbar button,
 .animation-play-btn,
-.animation-step-head button {
+.animation-add-action-btn,
+.animation-action-head button,
+.animation-upload-card button,
+.animation-action-toolbar button,
+.animation-url-row button {
   border: 1px solid rgba(28, 41, 67, 0.12);
   border-radius: 14px;
   background: #1f2944;
@@ -583,24 +594,25 @@
   cursor: pointer;
 }
 
-.animation-step-head button {
+.animation-action-head button,
+.animation-frame-thumb button {
   background: #fff;
   color: #e25d34;
 }
 
-.animation-steps {
+.animation-action-stack {
   display: grid;
   gap: 10px;
 }
 
-.animation-step-card {
+.animation-action-card {
   padding: 14px;
   border-radius: 16px;
   border: 1px solid rgba(28, 41, 67, 0.08);
   background: rgba(255, 255, 255, 0.92);
 }
 
-.animation-step-head {
+.animation-action-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -608,57 +620,83 @@
   margin-bottom: 10px;
 }
 
-.animation-step-fields {
+.animation-action-fields {
   display: grid;
-  grid-template-columns: 180px 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.animation-stage-shell {
+.animation-action-fields textarea {
+  grid-column: 1 / -1;
+  resize: vertical;
+}
+
+.animation-upload-card {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px dashed rgba(28, 41, 67, 0.2);
+  background: rgba(255, 255, 255, 0.88);
 }
 
-.animation-stage {
-  position: relative;
-  min-height: 280px;
-  overflow: hidden;
-  border-radius: 24px;
-  border: 1px solid rgba(28, 41, 67, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(102, 198, 255, 0.16), transparent 24%),
-    linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+.animation-upload-card.action {
+  margin-top: 12px;
 }
 
-.animation-actor {
+.animation-upload-title {
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #1d2942;
+}
+
+.animation-upload-note {
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.animation-page-overlay {
   position: absolute;
-  top: 28px;
-  left: 28px;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  transition: transform 0.55s ease, opacity 0.35s ease;
-}
-
-.animation-actor.hidden {
-  opacity: 0;
+  inset: 0;
+  z-index: 200;
   pointer-events: none;
 }
 
-.animation-actor.visible {
+.animation-page-overlay.hidden {
+  opacity: 0;
+}
+
+.animation-page-overlay.visible {
   opacity: 1;
 }
 
-.animation-actor img {
-  width: 96px;
-  height: 96px;
+.animation-page-actor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  transition: transform 0.18s linear;
+}
+
+.animation-page-actor img {
+  width: 140px;
+  height: 140px;
   object-fit: contain;
   display: block;
+  filter: drop-shadow(0 18px 28px rgba(29, 41, 66, 0.22));
 }
 
 .animation-actor-placeholder {
-  width: 96px;
-  height: 96px;
+  width: 140px;
+  height: 140px;
   border-radius: 24px;
   display: grid;
   place-items: center;
@@ -666,6 +704,17 @@
   color: white;
   font-size: 2rem;
   font-weight: 900;
+}
+
+.animation-speech-bubble {
+  max-width: 260px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  color: #1d2942;
+  font-weight: 800;
+  box-shadow: 0 16px 28px rgba(28, 41, 67, 0.12);
 }
 
 .animation-actor-name {
@@ -677,8 +726,51 @@
   color: #1d2942;
 }
 
-.animation-play-btn {
-  justify-self: start;
+.animation-frame-strip {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.animation-frame-thumb {
+  position: relative;
+  width: 82px;
+  height: 82px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+}
+
+.animation-frame-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.animation-frame-thumb button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.animation-frame-empty {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(28, 41, 67, 0.16);
+  color: #64748b;
+  font-weight: 700;
+}
+
+.animation-action-toolbar .recording {
+  background: #dc2626;
+  border-color: #dc2626;
 }
 
 .preview-image,
@@ -754,8 +846,19 @@
     top: 126px;
   }
 
+  .animation-block-shell {
+    padding-right: 0;
+  }
+
+  .animation-page-overlay {
+    position: relative;
+    min-height: 220px;
+  }
+
   .animation-editor-grid,
-  .animation-step-fields {
+  .animation-action-fields,
+  .animation-position-row,
+  .animation-url-row {
     grid-template-columns: 1fr;
   }
 }

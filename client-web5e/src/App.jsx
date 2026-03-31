@@ -61,10 +61,18 @@ function createBlock(type = 'text') {
       actorName: 'Personnage',
       actorImageUrl: '',
       hiddenByDefault: false,
-      steps: [
-        { type: 'show', label: 'Montrer', x: 0, y: 0 },
-        { type: 'move', label: 'Déplacement', x: 180, y: 40 },
-        { type: 'hide', label: 'Cacher', x: 0, y: 0 }
+      actorX: 120,
+      actorY: 120,
+      actions: [
+        {
+          id: `action_${Date.now()}`,
+          name: 'Parler',
+          frames: [],
+          frameUrlInput: '',
+          speechText: '',
+          soundUrl: '',
+          durationMs: 1600
+        }
       ]
     };
   }
@@ -80,14 +88,19 @@ function createAnimationBlockFromDraft(draft = {}) {
     title: String(draft.title || 'Nouvelle animation').trim() || 'Nouvelle animation',
     actorName: String(draft.actorName || 'Personnage').trim() || 'Personnage',
     actorImageUrl: String(draft.actorImageUrl || '').trim(),
-    soundName: String(draft.soundName || '').trim(),
-    soundUrl: String(draft.soundUrl || '').trim(),
     hiddenByDefault: false,
-    steps: [
-      { type: 'show', label: 'Montrer', x: 0, y: 0 },
-      { type: 'move', label: 'Déplacement', x: 180, y: 40 },
-      ...(draft.soundUrl ? [{ type: 'sound', label: 'Son', x: 0, y: 0 }] : []),
-      { type: 'hide', label: 'Cacher', x: 0, y: 0 }
+    actorX: 120,
+    actorY: 120,
+    actions: [
+      {
+        id: `action_${Date.now()}`,
+        name: 'Parler',
+        frames: [],
+        frameUrlInput: '',
+        speechText: '',
+        soundUrl: String(draft.soundUrl || '').trim(),
+        durationMs: 1600
+      }
     ]
   };
 }
@@ -267,193 +280,246 @@ function formatContributionName(name = '') {
 }
 
 function AnimationBlockEditor({ block, onChange, readOnly }) {
+  const actorFileInputRef = useRef(null);
+  const actionFileInputRefs = useRef({});
+  const recorderRef = useRef(null);
+  const recorderChunksRef = useRef([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [recordingActionId, setRecordingActionId] = useState('');
   const [actorState, setActorState] = useState({
     visible: block?.hiddenByDefault !== true,
-    x: Number(block?.steps?.find((step) => step.type === 'move')?.x || 0),
-    y: Number(block?.steps?.find((step) => step.type === 'move')?.y || 0)
+    x: Number(block?.actorX || 120),
+    y: Number(block?.actorY || 120),
+    frameUrl: String(block?.actorImageUrl || ''),
+    actionName: '',
+    speechText: ''
   });
+
+  const actions = Array.isArray(block?.actions) && block.actions.length > 0
+    ? block.actions
+    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', speechText: '', soundUrl: '', durationMs: 1600 }];
 
   useEffect(() => {
     setActorState({
       visible: block?.hiddenByDefault !== true,
-      x: Number(block?.steps?.find((step) => step.type === 'move')?.x || 0),
-      y: Number(block?.steps?.find((step) => step.type === 'move')?.y || 0)
+      x: Number(block?.actorX || 120),
+      y: Number(block?.actorY || 120),
+      frameUrl: String(block?.actorImageUrl || actions[0]?.frames?.[0] || ''),
+      actionName: '',
+      speechText: ''
     });
     setIsPlaying(false);
   }, [block]);
 
-  const updateRoot = (patch) => onChange?.({ ...block, ...patch });
+  const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
+  const updateActions = (nextActions) => onChange?.({ ...block, actions: nextActions });
 
-  const updateStep = (index, patch) => {
-    const nextSteps = Array.isArray(block?.steps)
-      ? block.steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step)
-      : [];
-    onChange?.({ ...block, steps: nextSteps });
+  const readFilesAsDataUrls = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
+    return Promise.all(files.map((file) => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    })));
   };
 
-  const addStep = (type) => {
-    const nextSteps = [...(Array.isArray(block?.steps) ? block.steps : []), {
-      type,
-      label: type === 'move' ? 'Déplacement' : type === 'show' ? 'Montrer' : type === 'hide' ? 'Cacher' : 'Stop action',
-      x: 0,
-      y: 0
-    }];
-    onChange?.({ ...block, steps: nextSteps });
+  const appendFrames = async (actionId, fileList) => {
+    const urls = (await readFilesAsDataUrls(fileList)).filter(Boolean);
+    if (urls.length === 0) return;
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: [...(action.frames || []), ...urls] } : action));
   };
 
-  const removeStep = (index) => {
-    const nextSteps = (Array.isArray(block?.steps) ? block.steps : []).filter((_, stepIndex) => stepIndex !== index);
-    onChange?.({ ...block, steps: nextSteps });
+  const updateAction = (actionId, patch) => {
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, ...patch } : action));
   };
 
-  const playAnimation = () => {
-    const steps = Array.isArray(block?.steps) ? block.steps : [];
+  const addAction = () => {
+    updateActions([
+      ...actions,
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', speechText: '', soundUrl: '', durationMs: 1600 }
+    ]);
+  };
+
+  const removeAction = (actionId) => {
+    if (actions.length <= 1) return;
+    updateActions(actions.filter((action) => action.id !== actionId));
+  };
+
+  const addFrameFromUrl = (actionId) => {
+    const action = actions.find((item) => item.id === actionId);
+    const safeUrl = String(action?.frameUrlInput || '').trim();
+    if (!safeUrl) return;
+    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), safeUrl], frameUrlInput: '' } : item));
+  };
+
+  const removeFrame = (actionId, frameIndex) => {
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: (action.frames || []).filter((_, index) => index !== frameIndex) } : action));
+  };
+
+  const handleActorFile = async (fileList) => {
+    const urls = await readFilesAsDataUrls(fileList);
+    if (urls[0]) updateRoot({ actorImageUrl: urls[0] });
+  };
+
+  const toggleRecord = async (actionId) => {
+    if (recordingActionId === actionId && recorderRef.current) {
+      recorderRef.current.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recorderChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) recorderChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recorderChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => updateAction(actionId, { soundUrl: String(reader.result || '') });
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach((track) => track.stop());
+        recorderRef.current = null;
+        recorderChunksRef.current = [];
+        setRecordingActionId('');
+      };
+      recorderRef.current = recorder;
+      setRecordingActionId(actionId);
+      recorder.start();
+    } catch (_) {}
+  };
+
+  const playAnimation = async () => {
+    if (isPlaying) return;
     setIsPlaying(true);
-    let delay = 0;
-    const initialVisible = block?.hiddenByDefault !== true;
-    setActorState((prev) => ({ ...prev, visible: initialVisible }));
-    steps.forEach((step) => {
-      window.setTimeout(() => {
-        if (step.type === 'show') {
-          setActorState((prev) => ({ ...prev, visible: true }));
-        } else if (step.type === 'hide') {
-          setActorState((prev) => ({ ...prev, visible: false }));
-        } else if (step.type === 'move') {
-          setActorState((prev) => ({
-            ...prev,
-            visible: true,
-            x: Number(step.x || 0),
-            y: Number(step.y || 0)
-          }));
-        } else if (step.type === 'stopAction') {
-          setActorState((prev) => ({ ...prev }));
-        } else if (step.type === 'sound' && block?.soundUrl) {
-          try {
-            const audio = new Audio(block.soundUrl);
-            audio.play().catch(() => {});
-          } catch (_) {}
-        }
-      }, delay);
-      delay += 650;
-    });
-    window.setTimeout(() => setIsPlaying(false), delay + 100);
+    setActorState((prev) => ({
+      ...prev,
+      visible: true,
+      x: Number(block?.actorX || 120),
+      y: Number(block?.actorY || 120)
+    }));
+    for (const action of actions) {
+      const frames = Array.isArray(action.frames) && action.frames.length > 0 ? action.frames : [block?.actorImageUrl].filter(Boolean);
+      let frameIndex = 0;
+      setActorState((prev) => ({
+        ...prev,
+        visible: true,
+        frameUrl: String(frames[0] || block?.actorImageUrl || ''),
+        actionName: action.name || 'Action',
+        speechText: action.speechText || ''
+      }));
+      let frameTimer = null;
+      if (frames.length > 1) {
+        frameTimer = window.setInterval(() => {
+          frameIndex = (frameIndex + 1) % frames.length;
+          setActorState((prev) => ({ ...prev, frameUrl: String(frames[frameIndex] || '') }));
+        }, 180);
+      }
+      let audio = null;
+      if (action.soundUrl) {
+        try {
+          audio = new Audio(action.soundUrl);
+          audio.play().catch(() => {});
+        } catch (_) {}
+      }
+      if (action.speechText && window.speechSynthesis) {
+        try {
+          const utterance = new SpeechSynthesisUtterance(action.speechText);
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        } catch (_) {}
+      }
+      const duration = Math.max(600, Number(action.durationMs || 1600));
+      await new Promise((resolve) => window.setTimeout(resolve, duration));
+      if (frameTimer) window.clearInterval(frameTimer);
+      if (audio) {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch (_) {}
+      }
+    }
+    setActorState((prev) => ({ ...prev, actionName: '', speechText: '' }));
+    setIsPlaying(false);
   };
+
+  const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || actions[0]?.frames?.[0] || '';
 
   return (
     <div className="animation-block-shell">
-      {!readOnly && (
-        <div className="animation-editor">
+      <div className={`animation-page-overlay ${actorState.visible ? 'visible' : 'hidden'}`} style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}>
+        <div className="animation-page-actor">
+          {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
+          {actorState.speechText ? <div className="animation-speech-bubble">{actorState.speechText}</div> : null}
+          <div className="animation-actor-name">{actorState.actionName || block?.actorName || 'Personnage'}</div>
+        </div>
+      </div>
+
+      <div className="animation-editor">
+        <div className="animation-editor-top">
           <div className="animation-editor-grid">
-            <input
-              value={block?.title || ''}
-              onChange={(e) => updateRoot({ title: e.target.value })}
-              placeholder="Titre de l'animation"
-            />
-            <input
-              value={block?.actorName || ''}
-              onChange={(e) => updateRoot({ actorName: e.target.value })}
-              placeholder="Nom du personnage"
-            />
-            <input
-              value={block?.actorImageUrl || ''}
-              onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
-              placeholder="URL de l'image du personnage"
-            />
-            <input
-              value={block?.soundUrl || ''}
-              onChange={(e) => updateRoot({ soundUrl: e.target.value })}
-              placeholder="URL du son"
-            />
-            <label className="animation-checkbox">
-              <input
-                type="checkbox"
-                checked={block?.hiddenByDefault === true}
-                onChange={(e) => updateRoot({ hiddenByDefault: e.target.checked })}
-              />
-              Caché au départ
-            </label>
+            <input value={block?.title || ''} onChange={(e) => updateRoot({ title: e.target.value })} placeholder="Titre de l'animation" />
+            <input value={block?.actorName || ''} onChange={(e) => updateRoot({ actorName: e.target.value })} placeholder="Nom du personnage" />
+            <input value={block?.actorImageUrl || ''} onChange={(e) => updateRoot({ actorImageUrl: e.target.value })} placeholder="URL du sprite principal" />
+            <div className="animation-position-row">
+              <input type="number" value={Number(block?.actorX || 120)} onChange={(e) => updateRoot({ actorX: Number(e.target.value || 0) })} placeholder="X" />
+              <input type="number" value={Number(block?.actorY || 120)} onChange={(e) => updateRoot({ actorY: Number(e.target.value || 0) })} placeholder="Y" />
+            </div>
           </div>
-
-          <div className="animation-step-toolbar">
-            <button type="button" onClick={() => addStep('show')}>Montrer</button>
-            <button type="button" onClick={() => addStep('hide')}>Cacher</button>
-            <button type="button" onClick={() => addStep('move')}>Déplacement</button>
-            <button type="button" onClick={() => addStep('sound')}>Son</button>
-            <button type="button" onClick={() => addStep('stopAction')}>Stop action</button>
+          {!readOnly && (
+            <div className="animation-upload-card" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
+              <div className="animation-upload-title">Sprite principal</div>
+              <div className="animation-upload-note">Importe une image depuis l'ordi ou glisse-la ici.</div>
+              <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
+              <button type="button" onClick={() => actorFileInputRef.current?.click()}>Importer depuis l'ordi</button>
+            </div>
+          )}
+          <div className="animation-stage-actions">
+            <button type="button" className="animation-play-btn" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? 'Lecture...' : 'Play'}</button>
+            {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+ Nouvelle action</button>}
           </div>
+        </div>
 
-          <div className="animation-steps">
-            {(Array.isArray(block?.steps) ? block.steps : []).map((step, index) => (
-              <div key={`${step.type}-${index}`} className="animation-step-card">
-                <div className="animation-step-head">
-                  <strong>{step.label || step.type}</strong>
-                  <button type="button" onClick={() => removeStep(index)}>Supprimer</button>
-                </div>
-                <div className="animation-step-fields">
-                  <select
-                    value={step.type || 'show'}
-                    onChange={(e) => updateStep(index, {
-                      type: e.target.value,
-                      label: e.target.value === 'move'
-                        ? 'Déplacement'
-                        : e.target.value === 'show'
-                          ? 'Montrer'
-                          : e.target.value === 'hide'
-                            ? 'Cacher'
-                            : e.target.value === 'sound'
-                              ? 'Son'
-                              : 'Stop action'
-                    })}
-                  >
-                    <option value="show">Montrer</option>
-                    <option value="hide">Cacher</option>
-                    <option value="move">Déplacement</option>
-                    <option value="sound">Son</option>
-                    <option value="stopAction">Stop action</option>
-                  </select>
-                  {step.type === 'move' && (
-                    <>
-                      <input
-                        type="number"
-                        value={Number(step.x || 0)}
-                        onChange={(e) => updateStep(index, { x: Number(e.target.value || 0) })}
-                        placeholder="X"
-                      />
-                      <input
-                        type="number"
-                        value={Number(step.y || 0)}
-                        onChange={(e) => updateStep(index, { y: Number(e.target.value || 0) })}
-                        placeholder="Y"
-                      />
-                    </>
-                  )}
-                </div>
+        <div className="animation-action-stack">
+          {actions.map((action, index) => (
+            <div key={action.id} className="animation-action-card">
+              <div className="animation-action-head">
+                <strong>{index + 1}. {action.name || 'Action'}</strong>
+                {!readOnly && actions.length > 1 ? <button type="button" onClick={() => removeAction(action.id)}>Supprimer</button> : null}
               </div>
-            ))}
-          </div>
+              <div className="animation-action-fields">
+                <input value={action.name || ''} onChange={(e) => updateAction(action.id, { name: e.target.value })} placeholder="Nom de l'action" />
+                <input type="number" value={Number(action.durationMs || 1600)} onChange={(e) => updateAction(action.id, { durationMs: Number(e.target.value || 0) })} placeholder="Durée ms" />
+                <textarea value={action.speechText || ''} onChange={(e) => updateAction(action.id, { speechText: e.target.value })} placeholder="Texte à dire pendant l'action" rows={3} />
+                <input value={action.soundUrl || ''} onChange={(e) => updateAction(action.id, { soundUrl: e.target.value })} placeholder="URL du son ou audio enregistré" />
+                {!readOnly && <div className="animation-action-toolbar">
+                  <button type="button" className={recordingActionId === action.id ? 'recording' : ''} onClick={() => void toggleRecord(action.id)}>{recordingActionId === action.id ? 'REC...' : 'REC'}</button>
+                  <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Sprites ordinateur</button>
+                </div>}
+              </div>
+              {!readOnly && (
+                <div className="animation-upload-card action" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}>
+                  <div className="animation-upload-title">Sprites de l'action</div>
+                  <div className="animation-upload-note">Plusieurs images possibles. Drag and drop, import ordi, ou URL.</div>
+                  <div className="animation-url-row">
+                    <input value={action.frameUrlInput || ''} onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })} placeholder="URL d'un sprite à ajouter" />
+                    <button type="button" onClick={() => addFrameFromUrl(action.id)}>Ajouter URL</button>
+                  </div>
+                  <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
+                </div>
+              )}
+              <div className="animation-frame-strip">
+                {(action.frames || []).map((frame, frameIndex) => (
+                  <div key={`${action.id}_${frameIndex}`} className="animation-frame-thumb">
+                    <img src={frame} alt="" />
+                    {!readOnly ? <button type="button" onClick={() => removeFrame(action.id, frameIndex)}>×</button> : null}
+                  </div>
+                ))}
+                {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite dans cette action</div>}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
-
-      <div className="animation-stage-shell">
-        <div className="animation-stage">
-          <div
-            className={`animation-actor ${actorState.visible ? 'visible' : 'hidden'}`}
-            style={{
-              transform: `translate(${actorState.x}px, ${actorState.y}px)`
-            }}
-          >
-            {block?.actorImageUrl ? (
-              <img src={block.actorImageUrl} alt={block?.actorName || 'Personnage'} />
-            ) : (
-              <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>
-            )}
-            <div className="animation-actor-name">{block?.actorName || 'Personnage'}</div>
-          </div>
-        </div>
-        <button type="button" className="animation-play-btn" onClick={playAnimation} disabled={isPlaying}>
-          {isPlaying ? 'Animation en cours...' : 'Animation'}
-        </button>
       </div>
     </div>
   );
@@ -1016,7 +1082,7 @@ export default function App() {
                 </>
               )}
 
-              {block.type === 'animation' && isTeacher && (
+              {block.type === 'animation' && (
                 <AnimationBlockEditor
                   block={block}
                   onChange={(nextBlock) => {
@@ -1024,7 +1090,7 @@ export default function App() {
                     updateBlocks(nextBlocks);
                     void persistBlocks(nextBlocks);
                   }}
-                  readOnly={!user}
+                  readOnly={!isTeacher}
                 />
               )}
 
