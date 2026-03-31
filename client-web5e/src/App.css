@@ -568,9 +568,16 @@
 
 .animation-inline-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+.animation-import-notice {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 700;
+  padding-left: 4px;
 }
 
 .animation-stage-actions,
@@ -601,6 +608,16 @@
 .animation-frame-thumb button {
   background: #fff;
   color: #e25d34;
+}
+
+.animation-action-remove {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .animation-action-stack {

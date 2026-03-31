@@ -299,9 +299,10 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
-  const actorDragOffsetRef = useRef({ x: 0, y: 0 });
+  const actorDragStateRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [recordingActionId, setRecordingActionId] = useState('');
+  const [importNotice, setImportNotice] = useState('');
   const [actorState, setActorState] = useState({
     x: Number(block?.actorX || 120),
     y: Number(block?.actorY || 120),
@@ -323,8 +324,37 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     setIsPlaying(false);
   }, [block]);
 
+  useEffect(() => {
+    const onMouseMove = (event) => {
+      const state = actorDragStateRef.current;
+      if (!state) return;
+      const shellRect = overlayRef.current?.getBoundingClientRect();
+      if (!shellRect) return;
+      const nextX = Math.max(0, event.clientX - shellRect.left - state.x);
+      const nextY = Math.max(0, event.clientY - shellRect.top - state.y);
+      setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
+    };
+    const onMouseUp = () => {
+      const state = actorDragStateRef.current;
+      if (!state) return;
+      actorDragStateRef.current = null;
+      updateRoot({ actorX: Math.round(actorState.x), actorY: Math.round(actorState.y) });
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [actorState.x, actorState.y]);
+
   const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
   const updateActions = (nextActions) => onChange?.({ ...block, actions: nextActions });
+
+  const flashNotice = (message) => {
+    setImportNotice(message);
+    window.setTimeout(() => setImportNotice(''), 1800);
+  };
 
   const readFilesAsDataUrls = async (fileList) => {
     const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
@@ -337,8 +367,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   const appendFrames = async (actionId, fileList) => {
     const urls = (await readFilesAsDataUrls(fileList)).filter(Boolean);
-    if (urls.length === 0) return;
+    if (urls.length === 0) {
+      flashNotice("Import sprite impossible");
+      return;
+    }
     updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: [...(action.frames || []), ...urls] } : action));
+    flashNotice("Sprite importé");
   };
 
   const updateAction = (actionId, patch) => {
@@ -357,13 +391,6 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
     updateActions(actions.filter((action) => action.id !== actionId));
   };
 
-  const addFrameFromUrl = (actionId) => {
-    const action = actions.find((item) => item.id === actionId);
-    const safeUrl = String(action?.frameUrlInput || '').trim();
-    if (!safeUrl) return;
-    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), safeUrl], frameUrlInput: '' } : item));
-  };
-
   const removeFrame = (actionId, frameIndex) => {
     updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: (action.frames || []).filter((_, index) => index !== frameIndex) } : action));
   };
@@ -375,32 +402,41 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const startDragActor = (event) => {
     if (readOnly) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    actorDragOffsetRef.current = {
+    actorDragStateRef.current = {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top
     };
-    try {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', 'sprite');
-    } catch (_) {}
-  };
-
-  const finishDragActor = (event) => {
-    if (readOnly) return;
-    const shellRect = overlayRef.current?.getBoundingClientRect();
-    if (!shellRect) return;
-    if (event.clientX < shellRect.left || event.clientX > shellRect.right || event.clientY < shellRect.top || event.clientY > shellRect.bottom) {
-      return;
-    }
-    const nextX = Math.max(0, event.clientX - shellRect.left - actorDragOffsetRef.current.x);
-    const nextY = Math.max(0, event.clientY - shellRect.top - actorDragOffsetRef.current.y);
-    setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
-    updateRoot({ actorX: Math.round(nextX), actorY: Math.round(nextY) });
+    event.preventDefault();
   };
 
   const handleActorFile = async (fileList) => {
     const urls = await readFilesAsDataUrls(fileList);
-    if (urls[0]) updateRoot({ actorImageUrl: urls[0] });
+    if (!urls[0]) {
+      flashNotice("Import sprite impossible");
+      return;
+    }
+    updateRoot({ actorImageUrl: urls[0] });
+    flashNotice("Sprite principal importé");
+  };
+
+  const importActorFromValue = (value) => {
+    const safeValue = String(value || '').trim();
+    if (!safeValue) {
+      flashNotice("Aucune image détectée");
+      return;
+    }
+    updateRoot({ actorImageUrl: safeValue });
+    flashNotice("Sprite principal importé");
+  };
+
+  const importActionFrameFromValue = (actionId, value) => {
+    const safeValue = String(value || '').trim();
+    if (!safeValue) {
+      flashNotice("Aucune image détectée");
+      return;
+    }
+    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), safeValue], frameUrlInput: '' } : item));
+    flashNotice("Sprite importé");
   };
 
   const toggleRecord = async (actionId) => {
@@ -485,13 +521,11 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   return (
     <div className="animation-block-shell">
-      <div ref={overlayRef} className="animation-page-overlay visible" onDragOver={(e) => e.preventDefault()}>
+      <div ref={overlayRef} className="animation-page-overlay visible">
         <div
           className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
           style={{ transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)` }}
-          draggable={!readOnly}
-          onDragStart={startDragActor}
-          onDragEnd={finishDragActor}
+          onMouseDown={startDragActor}
         >
           {currentActorFrame ? <img src={currentActorFrame} alt={block?.actorName || 'Personnage'} /> : <div className="animation-actor-placeholder">{(block?.actorName || 'P').slice(0, 1)}</div>}
           <button type="button" className="animation-sprite-play" onClick={playAnimation} disabled={isPlaying}>{isPlaying ? '...' : 'Play'}</button>
@@ -510,14 +544,15 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 <input
                   value={block?.actorImageUrl || ''}
                   onChange={(e) => updateRoot({ actorImageUrl: e.target.value })}
-                  onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => updateRoot({ actorImageUrl: nextValue }))}
+                  onBlur={(e) => importActorFromValue(e.target.value)}
+                  onPaste={(e) => handleUrlOrImagePaste(e, importActorFromValue)}
                   placeholder="URL du sprite principal"
                 />
-                <button type="button" onClick={() => updateRoot({ actorImageUrl: String(block?.actorImageUrl || '').trim() })}>Importer URL</button>
                 <button type="button" onClick={() => actorFileInputRef.current?.click()}>Importer depuis l'ordi</button>
                 <input ref={actorFileInputRef} type="file" accept="image/*" className="hidden-file-input" onChange={(e) => void handleActorFile(e.target.files)} />
               </div>
             )}
+          {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
           <div className="animation-stage-actions">
             {!readOnly && <button type="button" className="animation-add-action-btn" onClick={addAction}>+ Nouvelle action</button>}
           </div>
@@ -533,7 +568,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                   <button type="button" className={recordingActionId === action.id ? 'recording' : ''} onClick={() => void toggleRecord(action.id)}>REC</button>
                   <button type="button" onClick={() => void playAnimation([action])}>Play</button>
                 </div>
-                {!readOnly && actions.length > 1 ? <button type="button" onClick={() => removeAction(action.id)}>Supprimer</button> : null}
+                {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove" onClick={() => removeAction(action.id)}>×</button> : null}
               </div>
               {action.spritesOpen && !readOnly && (
                 <div className="animation-upload-card action" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}>
@@ -541,13 +576,12 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                     <input
                       value={action.frameUrlInput || ''}
                       onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })}
-                      onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => updateAction(action.id, { frameUrlInput: nextValue }))}
+                      onBlur={(e) => importActionFrameFromValue(action.id, e.target.value)}
+                      onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => importActionFrameFromValue(action.id, nextValue))}
                       placeholder="URL d'un sprite à ajouter"
                     />
-                    <button type="button" onClick={() => addFrameFromUrl(action.id)}>Importer URL</button>
                     <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer depuis l'ordi</button>
                   </div>
-                  <input value={action.soundUrl || ''} onChange={(e) => updateAction(action.id, { soundUrl: e.target.value })} placeholder="URL du son si besoin" />
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}
