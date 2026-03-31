@@ -347,16 +347,31 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
     : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
 
   useEffect(() => {
+    const selectedAction = actions.find((action) => Number(action?.selectedFrameIndex) >= -1);
+    const selectedFrameIndex = Number(selectedAction?.selectedFrameIndex);
+    const selectedFrame = selectedFrameIndex === -1
+      ? {
+          url: String(block?.actorImageUrl || ''),
+          width: Number(block?.actorWidth || 140),
+          height: Number(block?.actorHeight || 140)
+        }
+      : (selectedFrameIndex >= 0 ? selectedAction?.frames?.[selectedFrameIndex] : null);
+    const normalizedSelectedFrame = typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame;
     setActorState({
       x: Number(block?.actorX || 120),
       y: Number(block?.actorY || 120),
-      width: Number(block?.actorWidth || 140),
-      height: Number(block?.actorHeight || 140),
-      frameUrl: String(block?.actorImageUrl || actions[0]?.frames?.[0] || ''),
+      width: Number(normalizedSelectedFrame?.width || block?.actorWidth || 140),
+      height: Number(normalizedSelectedFrame?.height || block?.actorHeight || 140),
+      frameUrl: String(
+        normalizedSelectedFrame?.url
+        || block?.actorImageUrl
+        || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url)
+        || ''
+      ),
       actionName: ''
     });
     setIsPlaying(false);
-  }, [block]);
+  }, [block, actions]);
 
   useEffect(() => {
     const onMouseMove = (event) => {
@@ -631,6 +646,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
     };
     event.preventDefault();
     event.stopPropagation();
+  };
+
+  const handleEditorImageMouseDown = (event, actionId, frameIndex) => {
+    startSpriteResize(event, actionId, frameIndex, 'se');
   };
 
   const startDragActor = (event) => {
@@ -924,6 +943,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly }) {
                               src={normalizedFrame.url}
                               alt=""
                               style={{ width: Number(normalizedFrame.width || 140), height: Number(normalizedFrame.height || 140) }}
+                              onMouseDown={(e) => handleEditorImageMouseDown(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0))}
                             />
                             <button type="button" className="animation-editor-resizer nw" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'nw')} />
                             <button type="button" className="animation-editor-resizer ne" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'ne')} />
