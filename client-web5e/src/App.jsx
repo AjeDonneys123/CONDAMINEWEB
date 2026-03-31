@@ -620,7 +620,12 @@ export default function App() {
     event.preventDefault();
     const typedLast = clean(inputLast);
     const typedFirst = clean(inputFirst);
-    if (typedLast === 'vuillet' && (typedFirst === 'jp' || typedFirst === 'jean') && clean(password) === WEB5E_TEACHER_PASSWORD) {
+    const cleanPassword = clean(password);
+    if (
+      typedLast === 'vuillet' &&
+      (typedFirst === 'jp' || typedFirst === 'jean') &&
+      (cleanPassword === WEB5E_TEACHER_PASSWORD || cleanPassword === WEB5E_EDITOR_PASSWORD)
+    ) {
       const teacherUser = {
         id: 'web5e-teacher-jp-vuillet',
         _id: 'web5e-teacher-jp-vuillet',
@@ -651,7 +656,7 @@ export default function App() {
       alert("Seuls les élèves de 5e peuvent éditer ce site.");
       return;
     }
-    if (clean(password) !== WEB5E_EDITOR_PASSWORD) {
+    if (cleanPassword !== WEB5E_EDITOR_PASSWORD) {
       alert("Mot de passe édition invalide.");
       return;
     }
@@ -675,6 +680,24 @@ export default function App() {
       alert(e.message || 'Connexion impossible.');
     }
     setLoading(false);
+  };
+
+  const handleLogout = () => {
+    window.localStorage.removeItem(WEB5E_SESSION_KEY);
+    setUser(null);
+    setSelectedProfile(null);
+    setInputClass('');
+    setInputLast('');
+    setInputFirst('');
+    setPassword('');
+    setCreatorOpen(false);
+    setLoginOpen(false);
+    setBridgeDebug({
+      fromUrl: false,
+      fromWindowName: false,
+      fromStorage: false,
+      userId: ''
+    });
   };
 
   const updateBlocks = (nextBlocks) => {
@@ -819,6 +842,9 @@ export default function App() {
                 : "Tu peux enrichir les sous-onglets définis par le professeur avec du texte, des images et des iframes."
               }
             </p>
+            <button type="button" className="secondary-btn" onClick={handleLogout}>
+              Déconnexion
+            </button>
           </div>
         )}
       </aside>
