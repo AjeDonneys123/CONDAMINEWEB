@@ -777,6 +777,56 @@
   font: inherit;
 }
 
+.animation-sprite-space {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px dashed rgba(28, 41, 67, 0.16);
+  background: #fff;
+  display: grid;
+  gap: 10px;
+}
+
+.animation-sprite-space-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.animation-sprite-space-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #1d2942;
+}
+
+.animation-sprite-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animation-sprite-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.animation-sprite-url-row input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+}
+
+.animation-sprite-drop-hint {
+  font-size: 0.76rem;
+  color: #64748b;
+  font-weight: 700;
+}
+
 .animation-upload-title {
   font-size: 0.8rem;
   font-weight: 900;
@@ -913,6 +963,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.animation-frame-strip.in-space {
+  margin-top: 0;
 }
 
 .animation-frame-thumb {

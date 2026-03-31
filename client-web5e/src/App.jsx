@@ -72,7 +72,9 @@ function createBlock(type = 'text') {
           frames: [],
           frameUrlInput: '',
           soundUrl: '',
-          spritesOpen: false
+          spritesOpen: false,
+          spriteToolsOpen: false,
+          spriteUrlOpen: false
         }
       ]
     };
@@ -101,7 +103,9 @@ function createAnimationBlockFromDraft(draft = {}) {
         frames: [],
         frameUrlInput: '',
         soundUrl: String(draft.soundUrl || '').trim(),
-        spritesOpen: false
+        spritesOpen: false,
+        spriteToolsOpen: false,
+        spriteUrlOpen: false
       }
     ]
   };
@@ -323,7 +327,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? block.actions
-    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false }];
+    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false }];
 
   useEffect(() => {
     setActorState({
@@ -427,7 +431,7 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
   const addAction = () => {
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteToolsOpen: false, spriteUrlOpen: false }
     ]);
   };
 
@@ -456,7 +460,9 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
             frames: Array.isArray(preset.frames) ? [...preset.frames] : [],
             frameUrlInput: '',
             soundUrl: '',
-            spritesOpen: false
+            spritesOpen: false,
+            spriteToolsOpen: false,
+            spriteUrlOpen: false
           }
         : action
     )));
@@ -475,6 +481,22 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
 
   const toggleSpritesOpen = (actionId) => {
     updateActions(actions.map((action) => action.id === actionId ? { ...action, spritesOpen: !action.spritesOpen } : action));
+  };
+
+  const toggleSpriteToolsOpen = (actionId) => {
+    updateActions(actions.map((action) => (
+      action.id === actionId
+        ? { ...action, spriteToolsOpen: !action.spriteToolsOpen, spriteUrlOpen: action.spriteToolsOpen ? false : action.spriteUrlOpen }
+        : action
+    )));
+  };
+
+  const toggleSpriteUrlOpen = (actionId) => {
+    updateActions(actions.map((action) => (
+      action.id === actionId
+        ? { ...action, spriteUrlOpen: !action.spriteUrlOpen }
+        : action
+    )));
   };
 
   const startDragActor = (event) => {
@@ -694,29 +716,46 @@ function AnimationBlockEditor({ block, onChange, readOnly }) {
                 {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove" onClick={() => removeAction(action.id)}>×</button> : null}
               </div>
               {action.spritesOpen && !readOnly && (
-                <div className="animation-upload-card action" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}>
-                  <div className="animation-inline-row">
-                    <input
-                      value={action.frameUrlInput || ''}
-                      onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })}
-                      onBlur={(e) => importActionFrameFromValue(action.id, e.target.value)}
-                      onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => importActionFrameFromValue(action.id, nextValue))}
-                      placeholder="URL d'un sprite à ajouter"
-                    />
-                    <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer depuis l'ordi</button>
+                <div
+                  className="animation-sprite-space"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}
+                  onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => importActionFrameFromValue(action.id, nextValue))}
+                >
+                  <div className="animation-sprite-space-head">
+                    <div className="animation-sprite-space-title">Sprites</div>
+                    <button type="button" className="icon-btn" onClick={() => toggleSpriteToolsOpen(action.id)}>+</button>
+                  </div>
+                  {action.spriteToolsOpen ? (
+                    <div className="animation-sprite-tools">
+                      <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>Importer</button>
+                      <button type="button" onClick={() => toggleSpriteUrlOpen(action.id)}>URL</button>
+                      <button type="button" className="animation-action-remove" onClick={() => updateAction(action.id, { spriteToolsOpen: false, spriteUrlOpen: false })}>×</button>
+                    </div>
+                  ) : null}
+                  {action.spriteUrlOpen ? (
+                    <div className="animation-sprite-url-row">
+                      <input
+                        value={action.frameUrlInput || ''}
+                        onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })}
+                        placeholder="URL d'un sprite"
+                      />
+                      <button type="button" onClick={() => importActionFrameFromValue(action.id, action.frameUrlInput || '')}>Injecter</button>
+                    </div>
+                  ) : null}
+                  <div className="animation-sprite-drop-hint">Colle, glisse, ou ajoute des sprites ici.</div>
+                  <div className="animation-frame-strip in-space">
+                    {(action.frames || []).map((frame, frameIndex) => (
+                      <div key={`${action.id}_${frameIndex}`} className="animation-frame-thumb">
+                        <img src={frame} alt="" />
+                        {!readOnly ? <button type="button" onClick={() => removeFrame(action.id, frameIndex)}>×</button> : null}
+                      </div>
+                    ))}
+                    {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite</div>}
                   </div>
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}
-              {action.spritesOpen && <div className="animation-frame-strip">
-                {(action.frames || []).map((frame, frameIndex) => (
-                  <div key={`${action.id}_${frameIndex}`} className="animation-frame-thumb">
-                    <img src={frame} alt="" />
-                    {!readOnly ? <button type="button" onClick={() => removeFrame(action.id, frameIndex)}>×</button> : null}
-                  </div>
-                ))}
-                {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite dans cette action</div>}
-              </div>}
             </div>
           ))}
           </div>
