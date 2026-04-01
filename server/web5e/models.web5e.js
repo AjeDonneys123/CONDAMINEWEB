@@ -22,7 +22,10 @@ const ContentBlockSchema = new mongoose.Schema({
     },
     order: { type: Number, default: 0 },
     isVisible: { type: Boolean, default: true }
-}, { _id: true });
+}, {
+    _id: true,
+    strict: false
+});
 
 const Web5eSite = getModel('Web5eSite', {
     slug: { type: String, required: true, unique: true, trim: true, lowercase: true },
