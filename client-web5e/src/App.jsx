@@ -309,77 +309,143 @@ function handleUrlOrImagePaste(event, onValue) {
   if (pastedText) onValue?.(pastedText);
 }
 
-function buildActionQrUrl({ sectionKey = '', tabKey = '', blockIndex = 0, actionId = '' } = {}) {
+function buildMobileTokenQrUrl(token = '') {
   try {
     const url = new URL(window.location.href);
-    url.searchParams.set('mobileAction', '1');
-    url.searchParams.set('section', String(sectionKey || '').trim());
-    url.searchParams.set('tab', String(tabKey || '').trim());
-    url.searchParams.set('block', String(blockIndex));
-    url.searchParams.set('action', String(actionId || '').trim());
+    url.searchParams.delete('mobileAction');
+    url.searchParams.delete('section');
+    url.searchParams.delete('tab');
+    url.searchParams.delete('block');
+    url.searchParams.delete('action');
+    url.searchParams.set('mobileActionToken', String(token || '').trim());
     return url.toString();
   } catch (_) {
     return '';
   }
 }
 
+function ActionQrCode({ actionId }) {
+  const [token, setToken] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const safeActionId = String(actionId || '').trim();
+      if (!safeActionId) {
+        setToken('');
+        return;
+      }
+      try {
+        const res = await fetch('/api/web5e/mobile-action-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actionId: safeActionId })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && data?.ok && data?.token) {
+          setToken(String(data.token || ''));
+        } else if (!cancelled) {
+          setToken('');
+        }
+      } catch (_) {
+        if (!cancelled) setToken('');
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [actionId]);
+
+  if (!token) return null;
+  const qrUrl = buildMobileTokenQrUrl(token);
+  if (!qrUrl) return null;
+
+  return (
+    <div className="animation-action-qr">
+      <img
+        src={`https://api.qrserver.com/v1/create-qr-code/?size=92x92&data=${encodeURIComponent(qrUrl)}`}
+        alt="QR action"
+      />
+    </div>
+  );
+}
+
 function MobileActionRemote({
-  sectionKey,
-  tabKey,
-  blockIndex,
-  actionId,
-  blocks,
-  entryDoc,
-  tabDoc,
-  onPersist,
-  loading
+  token
 }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sessionData, setSessionData] = useState(null);
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
   const [recording, setRecording] = useState(false);
 
-  const block = blocks?.[blockIndex] || null;
-  const action = Array.isArray(block?.actions) ? block.actions.find((item) => item.id === actionId) : null;
-  const fallbackBlockIndex = action ? blockIndex : (Array.isArray(blocks) ? blocks.findIndex((row) => Array.isArray(row?.actions) && row.actions.some((item) => item.id === actionId)) : -1);
-  const resolvedBlockIndex = action ? blockIndex : fallbackBlockIndex;
-  const resolvedBlock = action ? block : (fallbackBlockIndex >= 0 ? blocks?.[fallbackBlockIndex] : null);
-  const resolvedAction = action || (Array.isArray(resolvedBlock?.actions) ? resolvedBlock.actions.find((item) => item.id === actionId) : null);
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const safeToken = String(token || '').trim();
+      if (!safeToken) {
+        setSessionData(null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/web5e/mobile-action-session/${encodeURIComponent(safeToken)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          if (res.ok && data?.ok) {
+            setSessionData(data);
+          } else {
+            setSessionData(null);
+          }
+        }
+      } catch (_) {
+        if (!cancelled) setSessionData(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
-  const persistNextBlocks = async (nextBlocks) => {
-    if (!entryDoc?._id || !tabDoc?._id) return;
-    setSaving(true);
-    try {
-      await onPersist?.(nextBlocks);
-      setMessage('Envoye');
-      window.setTimeout(() => setMessage(''), 1600);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const blocks = Array.isArray(sessionData?.blocks) ? sessionData.blocks : [];
+  const resolvedBlockIndex = Number(sessionData?.blockIndex || 0);
+  const actionId = String(sessionData?.actionId || '').trim();
+  const resolvedBlock = blocks?.[resolvedBlockIndex] || null;
+  const resolvedAction = Array.isArray(resolvedBlock?.actions)
+    ? resolvedBlock.actions.find((item) => String(item?.id || '') === actionId)
+    : null;
 
   const appendPhotos = async (fileList) => {
     const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
     if (files.length === 0 || !resolvedBlock || !resolvedAction) return;
-    const urls = await Promise.all(files.map((file) => new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.readAsDataURL(file);
-    })));
-    const nextBlocks = blocks.map((row, rowIndex) => (
-      rowIndex === resolvedBlockIndex
-        ? {
-            ...row,
-            actions: (row.actions || []).map((item) => (
-              item.id === resolvedAction.id
-                ? { ...item, frames: [...(item.frames || []), ...urls.map((url) => createSpriteFrame(url))] }
-                : item
-            ))
-          }
-        : row
-    ));
-    await persistNextBlocks(nextBlocks);
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/web5e/mobile-action-upload/${encodeURIComponent(String(token || ''))}`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Envoi impossible');
+      const refresh = await fetch(`/api/web5e/mobile-action-session/${encodeURIComponent(String(token || ''))}`);
+      const refreshData = await refresh.json().catch(() => ({}));
+      if (refresh.ok && refreshData?.ok) setSessionData(refreshData);
+      setMessage('Envoye');
+      window.setTimeout(() => setMessage(''), 1600);
+    } catch (_) {
+      setMessage('Envoi impossible');
+      window.setTimeout(() => setMessage(''), 1600);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleRecord = async () => {
@@ -398,17 +464,26 @@ function MobileActionRemote({
         const blob = new Blob(recorderChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.onload = async () => {
-          const nextBlocks = blocks.map((row, rowIndex) => (
-            rowIndex === resolvedBlockIndex
-              ? {
-                  ...row,
-                  actions: (row.actions || []).map((item) => (
-                    item.id === resolvedAction.id ? { ...item, soundUrl: String(reader.result || '') } : item
-                  ))
-                }
-              : row
-          ));
-          await persistNextBlocks(nextBlocks);
+          setSaving(true);
+          try {
+            const res = await fetch(`/api/web5e/mobile-action-audio/${encodeURIComponent(String(token || ''))}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ soundUrl: String(reader.result || '') })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Envoi impossible');
+            const refresh = await fetch(`/api/web5e/mobile-action-session/${encodeURIComponent(String(token || ''))}`);
+            const refreshData = await refresh.json().catch(() => ({}));
+            if (refresh.ok && refreshData?.ok) setSessionData(refreshData);
+            setMessage('Envoye');
+            window.setTimeout(() => setMessage(''), 1600);
+          } catch (_) {
+            setMessage('Envoi impossible');
+            window.setTimeout(() => setMessage(''), 1600);
+          } finally {
+            setSaving(false);
+          }
         };
         reader.readAsDataURL(blob);
         stream.getTracks().forEach((track) => track.stop());
@@ -1185,12 +1260,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           {actions.map((action, index) => (
             <div key={action.id} className="animation-action-card compact">
               {!readOnly ? (
-                <div className="animation-action-qr">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=92x92&data=${encodeURIComponent(buildActionQrUrl({ sectionKey, tabKey, blockIndex, actionId: action.id }))}`}
-                    alt="QR action"
-                  />
-                </div>
+                <ActionQrCode actionId={action.id} />
               ) : null}
               <div className="animation-action-head">
                 <input
@@ -1386,7 +1456,6 @@ export default function App() {
   const [siteData, setSiteData] = useState(null);
   const [tabDocsByKey, setTabDocsByKey] = useState({});
   const [entryDocsByKey, setEntryDocsByKey] = useState({});
-  const [saveNotice, setSaveNotice] = useState('');
   const pageParams = useMemo(() => {
     try {
       return new URLSearchParams(window.location.search);
@@ -1394,13 +1463,9 @@ export default function App() {
       return new URLSearchParams();
     }
   }, []);
-  const isMobileActionMode = pageParams.get('mobileAction') === '1';
-  const mobileSectionKey = String(pageParams.get('section') || '').trim().toLowerCase();
-  const mobileTabKey = String(pageParams.get('tab') || '').trim().toLowerCase();
-  const mobileBlockIndex = Number(pageParams.get('block') || 0);
-  const mobileActionId = String(pageParams.get('action') || '').trim();
+  const mobileActionToken = String(pageParams.get('mobileActionToken') || '').trim();
+  const isMobileActionMode = Boolean(mobileActionToken);
   const [localContentReady, setLocalContentReady] = useState(!isLocalSessionMode);
-  const [publicDataLoaded, setPublicDataLoaded] = useState(false);
 
   useEffect(() => {
     if (initialLocalUser?.id) {
@@ -1455,7 +1520,6 @@ export default function App() {
         setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
       } catch (_) {
       } finally {
-        setPublicDataLoaded(true);
         if (isLocalSessionMode) setLocalContentReady(true);
       }
     };
@@ -1680,8 +1744,6 @@ export default function App() {
       if (pending.section !== activeSection || pending.tabId !== currentTabId) return;
       void persistBlocks(pending.blocks);
       pendingSaveRef.current = null;
-      setSaveNotice('Sauvegarde automatique effectuee');
-      window.setTimeout(() => setSaveNotice(''), 1800);
     }, 4000);
     return () => {
       if (autosaveIntervalRef.current) window.clearInterval(autosaveIntervalRef.current);
@@ -1773,74 +1835,8 @@ export default function App() {
   const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
   const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
 
-  const persistSpecificBlocks = async ({ sectionKey, tabKey, nextBlocks }) => {
-    const docKey = `${sectionKey}:${tabKey}`;
-    const tabDoc = tabDocsByKey[docKey];
-    const existingEntry = entryDocsByKey[docKey];
-    if (!tabDoc?._id) return;
-    try {
-      const res = await fetch('/api/web5e/entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _id: existingEntry?._id || '',
-          tabId: tabDoc._id,
-          studentId: user?.id || user?._id || '',
-          authorName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
-          title: tabDoc.title || '',
-          blocks: nextBlocks,
-          isPublished: true
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.entry) {
-        setEntryDocsByKey((prev) => ({ ...prev, [docKey]: data.entry }));
-        setContentMap((prev) => ({
-          ...prev,
-          [sectionKey]: {
-            ...(prev[sectionKey] || {}),
-            [tabKey]: nextBlocks
-          }
-        }));
-      }
-    } catch (_) {}
-  };
-
   if (isMobileActionMode) {
-    let resolvedSectionKey = mobileSectionKey;
-    let resolvedTabKey = mobileTabKey;
-    let resolvedBlocks = contentMap[mobileSectionKey]?.[mobileTabKey] || [];
-    let hasAction = Array.isArray(resolvedBlocks) && resolvedBlocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => item.id === mobileActionId));
-
-    if (!hasAction) {
-      Object.entries(contentMap || {}).some(([sectionKey, sectionTabs]) => {
-        return Object.entries(sectionTabs || {}).some(([tabKey, tabBlocks]) => {
-          const found = Array.isArray(tabBlocks) && tabBlocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => item.id === mobileActionId));
-          if (found) {
-            resolvedSectionKey = sectionKey;
-            resolvedTabKey = tabKey;
-            resolvedBlocks = tabBlocks;
-            hasAction = true;
-            return true;
-          }
-          return false;
-        });
-      });
-    }
-
-    return (
-      <MobileActionRemote
-        sectionKey={resolvedSectionKey}
-        tabKey={resolvedTabKey}
-        blockIndex={mobileBlockIndex}
-        actionId={mobileActionId}
-        blocks={resolvedBlocks}
-        entryDoc={entryDocsByKey[`${resolvedSectionKey}:${resolvedTabKey}`]}
-        tabDoc={tabDocsByKey[`${resolvedSectionKey}:${resolvedTabKey}`]}
-        onPersist={(nextBlocks) => persistSpecificBlocks({ sectionKey: resolvedSectionKey, tabKey: resolvedTabKey, nextBlocks })}
-        loading={!publicDataLoaded}
-      />
-    );
+    return <MobileActionRemote token={mobileActionToken} />;
   }
 
   return (

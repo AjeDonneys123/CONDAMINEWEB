@@ -1,5 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const multer = require('multer');
 const {
     Web5eSite,
     Web5eTab,
@@ -10,9 +14,59 @@ const {
 } = require('./models.web5e');
 
 const router = express.Router();
+const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-mobile');
+fs.mkdirSync(uploadDir, { recursive: true });
+const uploadBatch = multer({ dest: uploadDir });
 
 const normalizeSectionKey = (value = '') => String(value || '').trim().toLowerCase();
 const normalizeTabKey = (value = '') => String(value || '').trim().toLowerCase();
+const MOBILE_SECRET = String(process.env.WEB5E_MOBILE_SECRET || 'web5e-mobile-secret');
+
+function finalizeUpload(file) {
+    const ext = path.extname(file.originalname || '') || '.jpg';
+    const finalName = `${file.filename}${ext}`;
+    const finalPath = path.join(uploadDir, finalName);
+    fs.renameSync(file.path, finalPath);
+    return `/uploads/web5e-mobile/${finalName}`;
+}
+
+function signMobilePayload(payload) {
+    const json = JSON.stringify(payload);
+    const body = Buffer.from(json).toString('base64url');
+    const sig = crypto.createHmac('sha256', MOBILE_SECRET).update(body).digest('hex');
+    return `${body}.${sig}`;
+}
+
+function verifyMobileToken(token = '') {
+    const raw = String(token || '').trim();
+    const [body, sig] = raw.split('.');
+    if (!body || !sig) return null;
+    const expected = crypto.createHmac('sha256', MOBILE_SECRET).update(body).digest('hex');
+    if (expected !== sig) return null;
+    try {
+        return JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    } catch (_) {
+        return null;
+    }
+}
+
+async function resolveMobileAction(actionId = '') {
+    const site = await ensureDefaultSite();
+    const entries = await Web5eEntry.find({ siteId: site._id, isPublished: true }).lean();
+    for (const entry of entries) {
+        const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
+        for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+            const block = blocks[blockIndex];
+            const actions = Array.isArray(block?.actions) ? block.actions : [];
+            const action = actions.find((item) => String(item?.id || '') === String(actionId || '').trim());
+            if (action) {
+                const tab = await Web5eTab.findById(entry.tabId).lean();
+                return { site, entry, tab, blockIndex, block, action };
+            }
+        }
+    }
+    return null;
+}
 
 async function ensureDefaultSite() {
     let site = await Web5eSite.findOne({ slug: 'projet-5e' });
@@ -53,6 +107,106 @@ router.post('/site', async (req, res) => {
         };
         const updated = await Web5eSite.findByIdAndUpdate(site._id, { $set: payload }, { new: true }).lean();
         res.json({ ok: true, site: updated });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/mobile-action-access', async (req, res) => {
+    try {
+        const actionId = String(req.body?.actionId || '').trim();
+        if (!actionId) return res.status(400).json({ ok: false, error: 'actionId requis' });
+        const resolved = await resolveMobileAction(actionId);
+        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
+        const token = signMobilePayload({
+            actionId,
+            entryId: String(resolved.entry._id),
+            tabId: String(resolved.tab?._id || ''),
+            blockIndex: Number(resolved.blockIndex),
+            issuedAt: Date.now()
+        });
+        res.json({ ok: true, token });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/mobile-action-session/:token', async (req, res) => {
+    try {
+        const payload = verifyMobileToken(req.params.token);
+        if (!payload?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
+        const resolved = await resolveMobileAction(payload.actionId);
+        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
+        res.json({
+            ok: true,
+            actionId: String(resolved.action.id || ''),
+            blockIndex: Number(resolved.blockIndex),
+            entryId: String(resolved.entry._id),
+            tabId: String(resolved.tab?._id || ''),
+            sectionKey: String(resolved.tab?.sectionKey || ''),
+            tabKey: String(resolved.tab?.tabKey || ''),
+            blocks: resolved.entry.blocks || []
+        });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/mobile-action-audio/:token', async (req, res) => {
+    try {
+        const payload = verifyMobileToken(req.params.token);
+        if (!payload?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
+        const resolved = await resolveMobileAction(payload.actionId);
+        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
+        const soundUrl = String(req.body?.soundUrl || '').trim();
+        if (!soundUrl) return res.status(400).json({ ok: false, error: 'soundUrl requis' });
+        const doc = await Web5eEntry.findById(resolved.entry._id);
+        if (!doc) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
+        doc.blocks = (doc.blocks || []).map((block, index) => (
+            index === resolved.blockIndex
+                ? {
+                    ...block,
+                    actions: (block.actions || []).map((action) => (
+                        String(action?.id || '') === payload.actionId ? { ...action, soundUrl } : action
+                    ))
+                }
+                : block
+        ));
+        await doc.save();
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/mobile-action-upload/:token', uploadBatch.array('files', 8), async (req, res) => {
+    try {
+        const payload = verifyMobileToken(req.params.token);
+        if (!payload?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
+        const resolved = await resolveMobileAction(payload.actionId);
+        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
+        const files = Array.isArray(req.files) ? req.files : [];
+        if (!files.length) return res.status(400).json({ ok: false, error: 'Aucune photo envoyee' });
+        const urls = files.map(finalizeUpload);
+        const doc = await Web5eEntry.findById(resolved.entry._id);
+        if (!doc) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
+        doc.blocks = (doc.blocks || []).map((block, index) => (
+            index === resolved.blockIndex
+                ? {
+                    ...block,
+                    actions: (block.actions || []).map((action) => (
+                        String(action?.id || '') === payload.actionId
+                            ? {
+                                ...action,
+                                frames: [...(Array.isArray(action.frames) ? action.frames : []), ...urls.map((url) => ({ id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))]
+                              }
+                            : action
+                    ))
+                }
+                : block
+        ));
+        await doc.save();
+        res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }
