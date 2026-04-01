@@ -91,11 +91,23 @@ function createBlock(type = 'text') {
 function createPresentationSlide(index = 0) {
   return {
     id: `slide_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    title: `Slide ${index + 1}`,
     presenterName: '',
     html: '<h3>Nouveau slide</h3><p>Écris ici.</p>',
     background: '#ffffff',
-    animation: null
+    animation: null,
+    textBoxes: []
+  };
+}
+
+function createPresentationTextBox({ x = 40, y = 40, width = 220, height = 120, text = '', fontSize = 28 } = {}) {
+  return {
+    id: `textbox_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    x,
+    y,
+    width,
+    height,
+    text,
+    fontSize
   };
 }
 
@@ -104,13 +116,13 @@ function normalizePresentationBlock(block = {}) {
     ? block.slides
     : [{
         id: `slide_${Date.now()}`,
-        title: 'Slide 1',
         html: String(block?.value || '<h3>Nouveau slide</h3><p>Écris ici.</p>'),
         background: '#ffffff',
         animation: null
       }];
   return {
     ...block,
+    presentationName: String(block?.presentationName || block?.title || ''),
     groupMembers: Array.isArray(block?.groupMembers) ? block.groupMembers.map((name) => String(name || '').trim()).filter(Boolean) : [],
     groupMembersText: String(block?.groupMembersText || (Array.isArray(block?.groupMembers) ? block.groupMembers.join(', ') : '')),
     qcmQuestions: Array.isArray(block?.qcmQuestions) ? block.qcmQuestions : [],
@@ -118,11 +130,21 @@ function normalizePresentationBlock(block = {}) {
     presentationValidated: block?.presentationValidated === true,
     slides: rawSlides.map((slide, index) => ({
       id: String(slide?.id || `slide_${Date.now()}_${index}`),
-      title: String(slide?.title || `Slide ${index + 1}`),
       presenterName: String(slide?.presenterName || ''),
       html: String(slide?.html || slide?.value || ''),
       background: String(slide?.background || '#ffffff'),
-      animation: slide?.animation && typeof slide.animation === 'object' ? slide.animation : null
+      animation: slide?.animation && typeof slide.animation === 'object' ? slide.animation : null,
+      textBoxes: Array.isArray(slide?.textBoxes)
+        ? slide.textBoxes.map((box, boxIndex) => ({
+            id: String(box?.id || `textbox_${Date.now()}_${index}_${boxIndex}`),
+            x: Number(box?.x || 40),
+            y: Number(box?.y || 40),
+            width: Number(box?.width || 220),
+            height: Number(box?.height || 120),
+            text: String(box?.text || ''),
+            fontSize: Number(box?.fontSize || 28)
+          }))
+        : []
     })),
     activeSlideIndex: Math.max(0, Math.min(Number(block?.activeSlideIndex || 0), rawSlides.length - 1))
   };
@@ -770,26 +792,28 @@ function MobileActionRemote({
   );
 }
 
-function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '' }) {
+function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [] }) {
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
   const [validatedFlash, setValidatedFlash] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [activeMiniMenu, setActiveMiniMenu] = useState('');
+  const [fontSize, setFontSize] = useState(28);
+  const [drawTextMode, setDrawTextMode] = useState(false);
+  const [draftTextBox, setDraftTextBox] = useState(null);
+  const [activeTextBoxId, setActiveTextBoxId] = useState('');
   const editorRef = useRef(null);
+  const imageFileInputRef = useRef(null);
+  const canvasRef = useRef(null);
+  const drawStateRef = useRef(null);
   const activeSlide = presentation.slides[presentation.activeSlideIndex] || presentation.slides[0];
   const lastHtmlRef = useRef(String(activeSlide?.html || ''));
-  const groupMembers = useMemo(
-    () => String(presentation.groupMembersText || '')
-      .split(',')
-      .map((name) => String(name || '').trim())
-      .filter(Boolean),
-    [presentation.groupMembersText]
-  );
-  const isPresenterValid = groupMembers.some((name) => clean(name) === clean(activeSlide?.presenterName || ''));
+  const isPresenterValid = Boolean(String(activeSlide?.presenterName || '').trim());
   const slideHasContent = Boolean(String(activeSlide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
   const isActiveSlideValid = isPresenterValid && slideHasContent;
   const slidesValidCount = presentation.slides.filter((slide) => {
-    const validPresenter = groupMembers.some((name) => clean(name) === clean(slide?.presenterName || ''));
+    const validPresenter = Boolean(String(slide?.presenterName || '').trim());
     const hasContent = Boolean(String(slide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
     return validPresenter && hasContent;
   }).length;
@@ -798,10 +822,16 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     const options = Array.isArray(row?.options) ? row.options : [];
     return String(row?.question || '').trim() && options.every((option) => String(option || '').trim());
   }).length;
-  const canValidatePresentation = groupMembers.length > 0
-    && presentation.slides.length === groupMembers.length
-    && slidesValidCount === groupMembers.length
-    && qcmValidCount > 0;
+  const normalizedPresentationName = clean(presentation.presentationName || '');
+  const presentationNameAlreadyUsed = Boolean(
+    normalizedPresentationName
+    && siblingPresentationNames.some((name) => clean(name) === normalizedPresentationName)
+  );
+  const canValidatePresentation = !presentationNameAlreadyUsed
+    && normalizedPresentationName
+    && presentation.slides.length > 0
+    && slidesValidCount === presentation.slides.length
+    && qcmValidCount >= presentation.slides.length;
 
   useEffect(() => {
     const nextHtml = String(activeSlide?.html || '');
@@ -819,6 +849,17 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     const nextSlides = presentation.slides.map((slide, index) => index === slideIndex ? { ...slide, ...patch } : slide);
     patchPresentation({ slides: nextSlides });
   };
+  const patchTextBoxes = (nextTextBoxes) => {
+    patchSlide(presentation.activeSlideIndex, { textBoxes: nextTextBoxes });
+  };
+  const removeActiveTextBox = () => {
+    if (!activeTextBoxId) return false;
+    const nextTextBoxes = (activeSlide?.textBoxes || []).filter((box) => box.id !== activeTextBoxId);
+    if (nextTextBoxes.length === (activeSlide?.textBoxes || []).length) return false;
+    patchTextBoxes(nextTextBoxes);
+    setActiveTextBoxId('');
+    return true;
+  };
 
   const exec = (command, commandValue = null) => {
     document.execCommand(command, false, commandValue);
@@ -830,32 +871,130 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     exec('foreColor', color);
   };
 
-  const handleImageInsert = () => {
-    const imageUrl = window.prompt("Colle l'URL de l'image à insérer");
-    if (!imageUrl) return;
-    const safeUrl = String(imageUrl).trim();
+  const applyFontSize = (size) => {
+    const safeSize = Math.max(8, Math.min(120, Number(size) || 28));
+    setFontSize(safeSize);
+    if (activeTextBoxId) {
+      patchTextBoxes((activeSlide?.textBoxes || []).map((box) => box.id === activeTextBoxId ? { ...box, fontSize: safeSize } : box));
+      return;
+    }
+    exec('styleWithCSS', true);
+    exec('fontSize', 7);
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.querySelectorAll('font[size="7"]').forEach((node) => {
+      const span = document.createElement('span');
+      span.style.fontSize = `${safeSize}px`;
+      span.innerHTML = node.innerHTML;
+      node.replaceWith(span);
+    });
+    const nextHtml = editor.innerHTML || '';
+    lastHtmlRef.current = nextHtml;
+    patchSlide(presentation.activeSlideIndex, { html: nextHtml });
+  };
+
+  const insertImageFromUrl = (imageUrl) => {
+    const safeUrl = String(imageUrl || '').trim();
     if (!safeUrl) return;
     const html = `<img src="${safeUrl.replace(/"/g, '&quot;')}" alt="" style="max-width:320px;width:100%;height:auto;border-radius:18px;display:block;margin:18px auto;" />`;
     exec('insertHTML', html);
     const nextHtml = editorRef.current?.innerHTML || '';
     lastHtmlRef.current = nextHtml;
     patchSlide(presentation.activeSlideIndex, { html: nextHtml });
+    setImageUrlInput('');
   };
+
+  const handleImageFileImport = async (fileList) => {
+    const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      insertImageFromUrl(String(reader.result || ''));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const updateTextBox = (textBoxId, patch) => {
+    patchTextBoxes((activeSlide?.textBoxes || []).map((box) => box.id === textBoxId ? { ...box, ...patch } : box));
+  };
+
+  useEffect(() => {
+    if (!drawTextMode) {
+      drawStateRef.current = null;
+      setDraftTextBox(null);
+    }
+  }, [drawTextMode, activeSlide?.id]);
+
+  useEffect(() => {
+    const onMouseMove = (event) => {
+      const drawState = drawStateRef.current;
+      if (!drawState || !canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const currentX = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+      const currentY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
+      const x = Math.min(drawState.startX, currentX);
+      const y = Math.min(drawState.startY, currentY);
+      const width = Math.max(80, Math.abs(currentX - drawState.startX));
+      const height = Math.max(48, Math.abs(currentY - drawState.startY));
+      setDraftTextBox({ x, y, width, height });
+    };
+    const onMouseUp = () => {
+      const drawState = drawStateRef.current;
+      if (!drawState) return;
+      drawStateRef.current = null;
+      const nextBox = createPresentationTextBox({
+        x: Math.round(draftTextBox?.x ?? drawState.startX),
+        y: Math.round(draftTextBox?.y ?? drawState.startY),
+        width: Math.round(draftTextBox?.width ?? 220),
+        height: Math.round(draftTextBox?.height ?? 120),
+        fontSize
+      });
+      patchTextBoxes([...(activeSlide?.textBoxes || []), nextBox]);
+      setActiveTextBoxId(nextBox.id);
+      setDraftTextBox(null);
+      setDrawTextMode(false);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [activeSlide?.id, activeSlide?.textBoxes, draftTextBox, fontSize]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!activeTextBoxId) return;
+      const tagName = String(event.target?.tagName || '').toLowerCase();
+      const isEditable = event.target?.isContentEditable || tagName === 'input' || tagName === 'textarea';
+      if (isEditable) return;
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        removeActiveTextBox();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeTextBoxId, activeSlide?.textBoxes]);
 
   if (readOnly) {
     return (
       <div className="presentation-shell readonly">
+        <div className="public-presentation-head">
+          <div className="eyebrow">Presentation</div>
+          <h3>{presentation.presentationName || 'Presentation'}</h3>
+        </div>
         <div className="presentation-slide-tabs">
           {presentation.slides.map((slide, index) => (
             <button
               key={slide.id}
               type="button"
               className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
-              onClick={() => patchPresentation({ activeSlideIndex: index })}
-            >
-              {slide.title}
-            </button>
-          ))}
+            onClick={() => patchPresentation({ activeSlideIndex: index })}
+          >
+            {`Slide ${index + 1}`}
+          </button>
+        ))}
         </div>
         <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
           <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
@@ -882,30 +1021,6 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
 
   return (
     <div className="presentation-shell">
-      <div className="presentation-mode-tabs">
-        <button
-          type="button"
-          className={`presentation-mode-tab ${presentation.activeEditorTab !== 'qcm' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
-        >
-          Slides
-        </button>
-        <button
-          type="button"
-          className={`presentation-mode-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
-        >
-          QCM resume
-        </button>
-      </div>
-      <div className="presentation-group-row">
-        <input
-          className="presentation-group-input"
-          value={presentation.groupMembersText || ''}
-          onChange={(e) => patchPresentation({ groupMembersText: e.target.value, groupMembers: e.target.value.split(',').map((name) => String(name || '').trim()).filter(Boolean) })}
-          placeholder="Membres du groupe, separes par des virgules"
-        />
-      </div>
       {presentation.activeEditorTab === 'qcm' ? (
         <div className="presentation-qcm-panel">
           {qcmQuestions.map((question, questionIndex) => (
@@ -966,13 +1081,12 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
             onClick={() => patchPresentation({ activeSlideIndex: index })}
           >
-            {slide.title}
+            {`Slide ${index + 1}`}
           </button>
         ))}
         <button
           type="button"
-          className="presentation-slide-add"
-          disabled={!isActiveSlideValid}
+          className="presentation-slide-add presentation-slide-add-blue"
           onClick={() => patchPresentation({
             slides: [...presentation.slides, createPresentationSlide(presentation.slides.length)],
             activeSlideIndex: presentation.slides.length
@@ -982,15 +1096,18 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         </button>
         <button
           type="button"
-          className="presentation-slide-add"
+          className="presentation-slide-add presentation-slide-add-violet"
           onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
         >
           + QCM
         </button>
         <button
           type="button"
-          className="presentation-slide-add"
+          className="presentation-slide-add presentation-slide-add-red"
           onClick={() => {
+            if (removeActiveTextBox()) {
+              return;
+            }
             if (presentation.slides.length <= 1) {
               if (window.confirm('Effacer le contenu de cette presentation ?')) {
                 patchPresentation({
@@ -1013,42 +1130,61 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           Supprimer
         </button>
       </div>
-      <div className="article-toolbar">
-        <input
-          className="presentation-slide-title"
-          value={activeSlide?.title || ''}
-          onChange={(e) => patchSlide(presentation.activeSlideIndex, { title: e.target.value })}
-          placeholder="Titre du slide"
-        />
+      <div className="article-toolbar slides-toolbar">
         <input
           className="presentation-slide-title"
           value={activeSlide?.presenterName || ''}
           onChange={(e) => patchSlide(presentation.activeSlideIndex, { presenterName: e.target.value })}
           placeholder="Nom de l'exposant"
-          list={`presentation-members-${blockIndex}`}
         />
-        <datalist id={`presentation-members-${blockIndex}`}>
-          {groupMembers.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-        <select
-          value={fontFamily}
-          onChange={(e) => {
-            setFontFamily(e.target.value);
-            exec('fontName', e.target.value);
-          }}
-        >
-          {ARTICLE_FONTS.map((font) => (
-            <option key={font.value} value={font.value}>{font.label}</option>
-          ))}
-        </select>
-        <button type="button" onClick={() => exec('bold')}><strong>Gras</strong></button>
-        <button type="button" onClick={() => exec('italic')}><em>Italique</em></button>
-        <button type="button" onClick={() => exec('underline')}><u>Souligné</u></button>
-        <button type="button" onClick={() => exec('insertUnorderedList')}>Liste</button>
-        <button type="button" onClick={handleImageInsert}>Image</button>
-        <div className="article-colors">
+        <div className="slides-toolbar-primary">
+          <select
+            value={fontFamily}
+            onChange={(e) => {
+              setFontFamily(e.target.value);
+              exec('fontName', e.target.value);
+            }}
+          >
+            {ARTICLE_FONTS.map((font) => (
+              <option key={font.value} value={font.value}>{font.label}</option>
+            ))}
+          </select>
+          <button type="button" className="slides-toolbar-compact" onClick={() => applyFontSize(Math.max(8, fontSize - 2))}>-</button>
+          <input
+            className="presentation-size-input"
+            type="number"
+            min="8"
+            max="120"
+            value={fontSize}
+            onChange={(e) => setFontSize(Number(e.target.value || 28))}
+          />
+          <button type="button" className="slides-toolbar-compact" onClick={() => applyFontSize(fontSize + 2)}>+</button>
+          <button type="button" className="slides-toolbar-compact" onClick={() => exec('bold')}><strong>B</strong></button>
+          <button type="button" className="slides-toolbar-compact" onClick={() => exec('italic')}><em>I</em></button>
+          <button type="button" className="slides-toolbar-compact" onClick={() => exec('underline')}><u>U</u></button>
+          <button type="button" className="slides-toolbar-compact" onClick={() => setActiveMiniMenu((prev) => prev === 'color' ? '' : 'color')}>A</button>
+          <button type="button" className="slides-toolbar-compact" onClick={() => setActiveMiniMenu((prev) => prev === 'background' ? '' : 'background')}>Fond</button>
+          <button type="button" className={`${drawTextMode ? 'active-tool-btn' : ''}`} onClick={() => setDrawTextMode((prev) => !prev)}>Zone txt</button>
+          <button type="button" className="slides-toolbar-compact" onClick={() => setActiveMiniMenu((prev) => prev === 'image' ? '' : 'image')}>Img</button>
+          <input
+            ref={imageFileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden-file-input"
+            onChange={(e) => void handleImageFileImport(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => patchSlide(presentation.activeSlideIndex, {
+              animation: activeSlide?.animation || createAnimationBlockFromDraft({ title: `Animation slide ${presentation.activeSlideIndex + 1}` })
+            })}
+          >
+            Anim
+          </button>
+        </div>
+      </div>
+      {activeMiniMenu === 'color' ? (
+        <div className="presentation-pop-panel">
           {ARTICLE_COLORS.map((color) => (
             <button
               key={color}
@@ -1059,7 +1195,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             />
           ))}
         </div>
-        <div className="presentation-bg-colors">
+      ) : null}
+      {activeMiniMenu === 'background' ? (
+        <div className="presentation-pop-panel">
           {SLIDE_BACKGROUNDS.map((color) => (
             <button
               key={color}
@@ -1070,16 +1208,33 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             />
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => patchSlide(presentation.activeSlideIndex, {
-            animation: activeSlide?.animation || createAnimationBlockFromDraft({ title: `Animation ${activeSlide?.title || 'slide'}` })
-          })}
-        >
-          Animation slide
-        </button>
-      </div>
-      <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
+      ) : null}
+      {activeMiniMenu === 'image' ? (
+        <div className="presentation-pop-panel">
+          <input
+            className="presentation-slide-title presentation-image-url-input"
+            value={imageUrlInput}
+            onChange={(e) => setImageUrlInput(e.target.value)}
+            placeholder="URL de l'image"
+          />
+          <button type="button" onClick={() => insertImageFromUrl(imageUrlInput)}>URL image</button>
+          <button type="button" onClick={() => imageFileInputRef.current?.click()}>Importer image</button>
+        </div>
+      ) : null}
+      <div
+        ref={canvasRef}
+        className={`presentation-canvas ${drawTextMode ? 'draw-text-mode' : ''}`}
+        style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}
+        onClick={() => setActiveTextBoxId('')}
+        onMouseDown={(e) => {
+          if (!drawTextMode || !canvasRef.current || e.target !== canvasRef.current) return;
+          const rect = canvasRef.current.getBoundingClientRect();
+          const startX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+          const startY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+          drawStateRef.current = { startX, startY };
+          setDraftTextBox({ x: startX, y: startY, width: 80, height: 48 });
+        }}
+      >
         <div
           ref={editorRef}
           className="article-editor presentation-editor"
@@ -1091,6 +1246,36 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             patchSlide(presentation.activeSlideIndex, { html: nextHtml });
           }}
         />
+        {(activeSlide?.textBoxes || []).map((box) => (
+          <div
+            key={box.id}
+            className={`presentation-text-box ${activeTextBoxId === box.id ? 'active' : ''}`}
+            style={{ left: box.x, top: box.y, width: box.width, height: box.height, fontSize: `${box.fontSize || 28}px` }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              setActiveTextBoxId(box.id);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTextBoxId(box.id);
+            }}
+          >
+            <div
+              className="presentation-text-box-editor"
+              contentEditable
+              suppressContentEditableWarning
+              onFocus={() => setActiveTextBoxId(box.id)}
+              onInput={(e) => updateTextBox(box.id, { text: e.currentTarget.innerHTML })}
+              dangerouslySetInnerHTML={{ __html: box.text || '' }}
+            />
+          </div>
+        ))}
+        {draftTextBox ? (
+          <div
+            className="presentation-text-box draft"
+            style={{ left: draftTextBox.x, top: draftTextBox.y, width: draftTextBox.width, height: draftTextBox.height, fontSize: `${fontSize}px` }}
+          />
+        ) : null}
         {activeSlide?.animation ? (
           <AnimationBlockEditor
             block={activeSlide.animation}
@@ -1112,8 +1297,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       )}
       <div className="presentation-validation-bar">
         <div className="presentation-validation-status">
-          {slidesValidCount}/{groupMembers.length || 0} slides valides • {qcmValidCount} questions QCM valides
+          {slidesValidCount}/{presentation.slides.length || 0} slides valides • {qcmValidCount} questions QCM valides
         </div>
+        {presentationNameAlreadyUsed ? <div className="presentation-validation-warning">Ce nom de presentation existe deja dans cet onglet.</div> : null}
         {validatedFlash ? <div className="presentation-validated-flash">Presentation validee</div> : null}
         <button
           type="button"
@@ -1139,6 +1325,10 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
 
   return (
     <div className="public-presentation-viewer">
+      <div className="public-presentation-head">
+        <div className="eyebrow">Presentation validee</div>
+        <h3>{normalized.presentationName || 'Presentation'}</h3>
+      </div>
       <div className="presentation-slide-tabs">
         {normalized.slides.map((slide, index) => (
           <button
@@ -1147,12 +1337,20 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
             className={`presentation-slide-tab ${index === activeIndex ? 'active' : ''}`}
             onClick={() => setActiveIndex(index)}
           >
-            {slide.title}
+            {`Slide ${index + 1}`}
           </button>
         ))}
       </div>
       <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
         <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
+        {(activeSlide?.textBoxes || []).map((box) => (
+          <div
+            key={box.id}
+            className="presentation-text-box readonly"
+            style={{ left: box.x, top: box.y, width: box.width, height: box.height, fontSize: `${box.fontSize || 28}px` }}
+            dangerouslySetInnerHTML={{ __html: box.text || '' }}
+          />
+        ))}
         {activeSlide?.animation ? (
           <AnimationBlockEditor
             block={activeSlide.animation}
@@ -2406,11 +2604,33 @@ export default function App() {
   };
 
   const removeBlock = (index) => {
+    if (blocks[index]?.type === 'text') {
+      if (!window.confirm('Reinitialiser cette presentation ?')) return;
+      const nextBlocks = blocks.map((block, i) => i === index ? createBlock('text') : block);
+      updateBlocks(nextBlocks);
+      queueAutosave(nextBlocks);
+      void persistBlocks(nextBlocks);
+      return;
+    }
     if (blocks.length <= 1) return;
     const nextBlocks = blocks.filter((_, i) => i !== index);
     updateBlocks(nextBlocks);
     queueAutosave(nextBlocks);
     void persistBlocks(nextBlocks);
+  };
+
+  const deleteValidatedPresentationCard = (index) => {
+    if (!isLocalSessionMode) return;
+    if (!window.confirm('Supprimer cette carte de presentation en local ?')) return;
+    const nextBlocks = blocks.filter((_, i) => i !== index);
+    updateBlocks(nextBlocks);
+    queueAutosave(nextBlocks);
+    void persistBlocks(nextBlocks);
+    setOpenedValidatedPresentationIndex((prev) => {
+      if (prev === index) return -1;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
   };
 
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
@@ -2420,6 +2640,12 @@ export default function App() {
     .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
   const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
+  const presentationBlocks = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => block.type === 'text')
+    .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
+  const hasEmptyPresentationName = presentationBlocks.some(({ presentation }) => !String(presentation.presentationName || '').trim());
+  const visibleArticleBlocks = user ? articleBlocks : articleBlocks.filter(({ block }) => block.type !== 'text');
 
   if (isMobileActionMode) {
     return <MobileActionRemote token={mobileActionToken} />;
@@ -2569,7 +2795,13 @@ export default function App() {
           </div>
           {user && (
             <div className="toolbar">
-              <button onClick={() => addBlock('text')}>Présentation</button>
+              <button onClick={() => {
+                if (hasEmptyPresentationName) {
+                  window.alert('Donne d’abord un vrai nom a la presentation existante avant d’en creer une nouvelle.');
+                  return;
+                }
+                addBlock('text');
+              }}>Présentation</button>
               <button onClick={() => addBlock('image')}>Image</button>
               <button onClick={() => addBlock('embed')}>Iframe</button>
               <button onClick={() => addBlock('animation')}>Animation</button>
@@ -2623,20 +2855,17 @@ export default function App() {
             {validatedPresentations.map(({ presentation, index }) => (
               <article key={`validated-presentation-${index}`} className="validated-presentation-card">
                 <div className="validated-presentation-eyebrow">Presentation validee</div>
-                <h3>{presentation.slides?.[0]?.title || `Presentation ${index + 1}`}</h3>
+                <h3>{presentation.presentationName || `Presentation ${index + 1}`}</h3>
                 <div className="validated-presentation-meta">
                   <span>{presentation.slides.length} slides</span>
-                  <span>{Array.isArray(presentation.groupMembers) ? presentation.groupMembers.length : 0} membres</span>
                   <span>{Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions.length : 0} questions QCM</span>
-                </div>
-                <div className="validated-presentation-members">
-                  {(Array.isArray(presentation.groupMembers) ? presentation.groupMembers : []).map((member) => (
-                    <span key={member} className="validated-member-chip">{member}</span>
-                  ))}
                 </div>
                 <div className="validated-presentation-actions">
                   <button type="button" className="presentation-slide-add" onClick={() => setOpenedValidatedPresentationIndex(index)}>Ouvrir</button>
                   <button type="button" className="presentation-slide-add" onClick={() => setOpenedValidatedPresentationIndex(index)}>Play</button>
+                  {isLocalSessionMode ? (
+                    <button type="button" className="presentation-slide-add danger" onClick={() => deleteValidatedPresentationCard(index)}>Supprimer</button>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -2657,19 +2886,36 @@ export default function App() {
         ) : null}
 
         <div className="blocks-area public article-stage">
-          {articleBlocks.map(({ block, index }) => (
+          {visibleArticleBlocks.map(({ block, index }) => (
             <article key={`${activeSection}-${currentTabId}-${index}`} className={`block-card ${block.type === 'animation' ? 'block-card-animation' : ''}`}>
               <div className="block-head">
-                <span>
-                  {block.type === 'text'
-                    ? 'Présentation'
-                    : block.type === 'image'
-                      ? 'Image'
-                      : block.type === 'animation'
-                        ? 'Animation'
-                        : 'Iframe / Jeu'}
-                </span>
-                {user && <button onClick={() => removeBlock(index)}>Supprimer</button>}
+                {block.type === 'text' ? (
+                  <>
+                    <span>Présentation</span>
+                    {user ? (
+                      <div className="block-head-presentation-tools">
+                        <input
+                          className="presentation-name-head-input"
+                          value={normalizePresentationBlock(block).presentationName || ''}
+                          onChange={(e) => replaceBlock(index, { ...normalizePresentationBlock(block), presentationName: e.target.value, presentationValidated: false })}
+                          placeholder="Nom de la presentation"
+                        />
+                        <button onClick={() => removeBlock(index)}>Supprimer</button>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {block.type === 'image'
+                        ? 'Image'
+                        : block.type === 'animation'
+                          ? 'Animation'
+                          : 'Iframe / Jeu'}
+                    </span>
+                    {user && <button onClick={() => removeBlock(index)}>Supprimer</button>}
+                  </>
+                )}
               </div>
 
               {block.type === 'text' && (
@@ -2682,6 +2928,7 @@ export default function App() {
                   blockIndex={index}
                   tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
                   entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+                  siblingPresentationNames={presentationBlocks.filter((row) => row.index !== index).map((row) => row.presentation.presentationName)}
                 />
               )}
 
