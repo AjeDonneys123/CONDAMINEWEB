@@ -122,11 +122,16 @@ const Web5eAudio = getModel('Web5eAudio', {
 const Web5eMobileActionAccess = getModel('Web5eMobileActionAccess', {
     token: { type: String, required: true, unique: true, index: true, trim: true },
     actionId: { type: String, required: true, trim: true },
+    actionName: { type: String, default: '', trim: true },
+    scope: { type: String, enum: ['entry', 'welcome'], default: 'entry' },
+    siteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Web5eSite', default: null, index: true },
     entryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Web5eEntry', default: null, index: true },
     tabId: { type: mongoose.Schema.Types.ObjectId, ref: 'Web5eTab', default: null, index: true },
     sectionKey: { type: String, default: '', trim: true, lowercase: true },
     tabKey: { type: String, default: '', trim: true, lowercase: true },
     blockIndex: { type: Number, default: 0 },
+    pendingSoundUrl: { type: String, default: '' },
+    pendingFrames: { type: [mongoose.Schema.Types.Mixed], default: [] },
     lastIssuedAt: { type: Date, default: Date.now }
 }, 'web5e_mobile_action_access');
 

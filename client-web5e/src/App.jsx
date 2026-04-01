@@ -325,7 +325,7 @@ function buildMobileTokenQrUrl(token = '') {
   }
 }
 
-function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId }) {
+function ActionQrCode({ actionId, actionName, sectionKey, tabKey, blockIndex, tabId, entryId }) {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -353,6 +353,7 @@ function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             actionId: safeActionId,
+            actionName: String(actionName || '').trim(),
             sectionKey: String(sectionKey || '').trim(),
             tabKey: String(tabKey || '').trim(),
             blockIndex: Number(blockIndex || 0),
@@ -382,10 +383,10 @@ function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [actionId, sectionKey, tabKey, blockIndex, tabId, entryId]);
+  }, [actionId, actionName, sectionKey, tabKey, blockIndex, tabId, entryId]);
 
   if (!token) {
-    return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : (entryId ? 'QR' : 'Sauvegarde...')}</div>;
+    return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : ((entryId || sectionKey === 'welcome') ? 'QR' : 'Sauvegarde...')}</div>;
   }
   const qrUrl = buildMobileTokenQrUrl(token);
   if (!qrUrl) {
@@ -452,10 +453,11 @@ function MobileActionRemote({
   const resolvedAction = Array.isArray(resolvedBlock?.actions)
     ? resolvedBlock.actions.find((item) => String(item?.id || '') === actionId)
     : null;
+  const actionTitle = String(resolvedAction?.name || sessionData?.actionName || 'Action').trim();
 
   const appendPhotos = async (fileList) => {
     const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
-    if (files.length === 0 || !resolvedBlock || !resolvedAction) return;
+    if (files.length === 0) return;
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     setSaving(true);
@@ -532,16 +534,12 @@ function MobileActionRemote({
     return <div className="mobile-action-shell"><div className="mobile-action-card">Chargement...</div></div>;
   }
 
-  if (!resolvedBlock || !resolvedAction) {
-    return <div className="mobile-action-shell"><div className="mobile-action-card">Action introuvable.</div></div>;
-  }
-
   return (
     <div className="mobile-action-shell">
       <div className="mobile-action-card">
         <div className="eyebrow">Action mobile</div>
-        <h1>{resolvedAction.name || 'Action'}</h1>
-        <p>Ajoute du son ou des photos de sprites depuis le telephone.</p>
+        <h1>{actionTitle || 'Action'}</h1>
+        <p>{sessionData?.resolved === false ? "L'action se prepare encore. Tu peux deja envoyer le son ou les photos." : 'Ajoute du son ou des photos de sprites depuis le telephone.'}</p>
         <div className="mobile-action-buttons">
           <button type="button" className={recording ? 'mobile-rec active' : 'mobile-rec'} onClick={() => void toggleRecord()}>
             {recording ? 'Arreter micro' : 'Enregistrer micro'}
@@ -1291,7 +1289,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           {actions.map((action, index) => (
             <div key={action.id} className="animation-action-card compact">
               {!readOnly ? (
-                <ActionQrCode actionId={action.id} sectionKey={sectionKey} tabKey={tabKey} blockIndex={blockIndex} tabId={tabId} entryId={entryId} />
+                <ActionQrCode actionId={action.id} actionName={action.name} sectionKey={sectionKey} tabKey={tabKey} blockIndex={blockIndex} tabId={tabId} entryId={entryId} />
               ) : null}
               <div className="animation-action-head">
                 <input

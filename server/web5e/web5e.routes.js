@@ -37,9 +37,31 @@ async function readMobileTokenDoc(token = '') {
 
 async function resolveMobileActionFromAccess(access) {
     const safeActionId = String(access?.actionId || '').trim();
+    const safeScope = String(access?.scope || 'entry').trim();
     const safeEntryId = String(access?.entryId || '').trim();
     const safeBlockIndex = Number(access?.blockIndex || 0);
-    if (!safeActionId || !safeEntryId || !mongoose.Types.ObjectId.isValid(safeEntryId)) return null;
+    if (!safeActionId) return null;
+
+    if (safeScope === 'welcome') {
+        const site = await ensureDefaultSite();
+        const welcomeAnimation = site?.welcomeAnimation && typeof site.welcomeAnimation === 'object'
+            ? site.welcomeAnimation
+            : null;
+        const actions = Array.isArray(welcomeAnimation?.actions) ? welcomeAnimation.actions : [];
+        const action = actions.find((item) => String(item?.id || '') === safeActionId);
+        if (!action) return null;
+        return {
+            site,
+            entry: null,
+            tab: null,
+            blockIndex: 0,
+            block: welcomeAnimation,
+            action,
+            isWelcome: true
+        };
+    }
+
+    if (!safeEntryId || !mongoose.Types.ObjectId.isValid(safeEntryId)) return null;
 
     const site = await ensureDefaultSite();
     const entry = await Web5eEntry.findById(safeEntryId).lean();
@@ -114,10 +136,49 @@ router.post('/site', async (req, res) => {
 
 router.post('/mobile-action-access', async (req, res) => {
     try {
+        const site = await ensureDefaultSite();
         const actionId = String(req.body?.actionId || '').trim();
         const entryId = String(req.body?.entryId || '').trim();
         const blockIndex = Number(req.body?.blockIndex || 0);
+        const isWelcome = normalizeSectionKey(req.body?.sectionKey || '') === 'welcome';
         if (!actionId) return res.status(400).json({ ok: false, error: 'actionId requis' });
+        let access = null;
+
+        if (isWelcome) {
+            const welcomeAnimation = site?.welcomeAnimation && typeof site.welcomeAnimation === 'object'
+                ? site.welcomeAnimation
+                : null;
+            const hasActionInWelcome = Array.isArray(welcomeAnimation?.actions)
+                && welcomeAnimation.actions.some((item) => String(item?.id || '') === actionId);
+            if (!hasActionInWelcome) return res.status(404).json({ ok: false, error: 'Action introuvable' });
+            access = await Web5eMobileActionAccess.findOne({ actionId, scope: 'welcome', siteId: site._id, blockIndex: 0 });
+            if (!access) {
+                access = await Web5eMobileActionAccess.create({
+                token: crypto.randomBytes(12).toString('hex'),
+                actionId,
+                actionName: String(req.body?.actionName || '').trim(),
+                scope: 'welcome',
+                siteId: site._id,
+                    entryId: null,
+                    tabId: null,
+                    sectionKey: 'welcome',
+                    tabKey: 'header',
+                    blockIndex: 0,
+                    lastIssuedAt: new Date()
+                });
+            } else {
+                access.siteId = site._id;
+                access.actionName = String(req.body?.actionName || access.actionName || '').trim();
+                access.scope = 'welcome';
+                access.sectionKey = 'welcome';
+                access.tabKey = 'header';
+                access.blockIndex = 0;
+                access.lastIssuedAt = new Date();
+                await access.save();
+            }
+            return res.json({ ok: true, token: access.token });
+        }
+
         if (!entryId || !mongoose.Types.ObjectId.isValid(entryId)) {
             return res.status(400).json({ ok: false, error: 'entryId requis' });
         }
@@ -127,11 +188,14 @@ router.post('/mobile-action-access', async (req, res) => {
         const block = blocks[blockIndex] || null;
         const hasActionInEntry = blocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => String(item?.id || '') === actionId));
         if (!hasActionInEntry) return res.status(404).json({ ok: false, error: 'Action introuvable' });
-        let access = await Web5eMobileActionAccess.findOne({ actionId, entryId, blockIndex });
+        access = await Web5eMobileActionAccess.findOne({ actionId, entryId, blockIndex, scope: 'entry' });
         if (!access) {
             access = await Web5eMobileActionAccess.create({
                 token: crypto.randomBytes(12).toString('hex'),
                 actionId,
+                actionName: String(req.body?.actionName || '').trim(),
+                scope: 'entry',
+                siteId: site._id,
                 entryId,
                 tabId: mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || null,
                 sectionKey: normalizeSectionKey(req.body?.sectionKey || ''),
@@ -140,6 +204,9 @@ router.post('/mobile-action-access', async (req, res) => {
                 lastIssuedAt: new Date()
             });
         } else {
+            access.scope = 'entry';
+            access.siteId = site._id;
+            access.actionName = String(req.body?.actionName || access.actionName || '').trim();
             access.entryId = entryId;
             access.tabId = mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || access.tabId;
             access.sectionKey = normalizeSectionKey(req.body?.sectionKey || access.sectionKey || '');
@@ -159,16 +226,19 @@ router.get('/mobile-action-session/:token', async (req, res) => {
         const access = await readMobileTokenDoc(req.params.token);
         if (!access?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
         const resolved = await resolveMobileActionFromAccess(access);
-        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         res.json({
             ok: true,
-            actionId: String(resolved.action.id || ''),
-            blockIndex: Number(resolved.blockIndex),
-            entryId: String(resolved.entry._id),
-            tabId: String(resolved.tab?._id || ''),
-            sectionKey: String(resolved.tab?.sectionKey || ''),
-            tabKey: String(resolved.tab?.tabKey || ''),
-            blocks: resolved.entry.blocks || []
+            actionId: String(access.actionId || resolved?.action?.id || ''),
+            actionName: String(resolved?.action?.name || access.actionName || 'Action'),
+            blockIndex: Number(resolved?.blockIndex ?? access.blockIndex ?? 0),
+            entryId: resolved?.entry?._id ? String(resolved.entry._id) : String(access.entryId || ''),
+            tabId: String(resolved?.tab?._id || access.tabId || ''),
+            sectionKey: String(resolved?.tab?.sectionKey || access.sectionKey || ''),
+            tabKey: String(resolved?.tab?.tabKey || access.tabKey || ''),
+            blocks: resolved ? (resolved.isWelcome ? [resolved.block] : (resolved.entry.blocks || [])) : [],
+            pendingSoundUrl: String(access.pendingSoundUrl || ''),
+            pendingFrames: Array.isArray(access.pendingFrames) ? access.pendingFrames : [],
+            resolved: Boolean(resolved)
         });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
@@ -180,22 +250,37 @@ router.post('/mobile-action-audio/:token', async (req, res) => {
         const access = await readMobileTokenDoc(req.params.token);
         if (!access?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
         const resolved = await resolveMobileActionFromAccess(access);
-        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const soundUrl = String(req.body?.soundUrl || '').trim();
         if (!soundUrl) return res.status(400).json({ ok: false, error: 'soundUrl requis' });
-        const doc = await Web5eEntry.findById(resolved.entry._id);
-        if (!doc) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
-        doc.blocks = (doc.blocks || []).map((block, index) => (
-            index === resolved.blockIndex
-                ? {
-                    ...block,
-                    actions: (block.actions || []).map((action) => (
-                        String(action?.id || '') === access.actionId ? { ...action, soundUrl } : action
-                    ))
-                }
-                : block
-        ));
-        await doc.save();
+        access.pendingSoundUrl = soundUrl;
+        await access.save();
+        if (!resolved) return res.json({ ok: true, pending: true });
+        const doc = resolved.entry?._id ? await Web5eEntry.findById(resolved.entry._id) : null;
+        if (resolved.isWelcome) {
+            const site = await ensureDefaultSite();
+            const welcomeAnimation = site?.welcomeAnimation && typeof site.welcomeAnimation === 'object' ? site.welcomeAnimation : null;
+            if (!welcomeAnimation) return res.status(404).json({ ok: false, error: 'Animation welcome introuvable' });
+            site.welcomeAnimation = {
+                ...welcomeAnimation,
+                actions: (welcomeAnimation.actions || []).map((action) => (
+                    String(action?.id || '') === access.actionId ? { ...action, soundUrl } : action
+                ))
+            };
+            await site.save();
+        } else {
+            if (!doc) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
+            doc.blocks = (doc.blocks || []).map((block, index) => (
+                index === resolved.blockIndex
+                    ? {
+                        ...block,
+                        actions: (block.actions || []).map((action) => (
+                            String(action?.id || '') === access.actionId ? { ...action, soundUrl } : action
+                        ))
+                    }
+                    : block
+            ));
+            await doc.save();
+        }
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
@@ -207,28 +292,51 @@ router.post('/mobile-action-upload/:token', uploadBatch.array('files', 8), async
         const access = await readMobileTokenDoc(req.params.token);
         if (!access?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
         const resolved = await resolveMobileActionFromAccess(access);
-        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const files = Array.isArray(req.files) ? req.files : [];
         if (!files.length) return res.status(400).json({ ok: false, error: 'Aucune photo envoyee' });
         const urls = files.map(finalizeUpload);
-        const doc = await Web5eEntry.findById(resolved.entry._id);
-        if (!doc) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
-        doc.blocks = (doc.blocks || []).map((block, index) => (
-            index === resolved.blockIndex
-                ? {
-                    ...block,
-                    actions: (block.actions || []).map((action) => (
-                        String(action?.id || '') === access.actionId
-                            ? {
-                                ...action,
-                                frames: [...(Array.isArray(action.frames) ? action.frames : []), ...urls.map((url) => ({ id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))]
-                              }
-                            : action
-                    ))
-                }
-                : block
-        ));
-        await doc.save();
+        access.pendingFrames = [
+            ...(Array.isArray(access.pendingFrames) ? access.pendingFrames : []),
+            ...urls.map((url) => ({ id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))
+        ];
+        await access.save();
+        if (!resolved) return res.json({ ok: true, pending: true });
+        if (resolved.isWelcome) {
+            const site = await ensureDefaultSite();
+            const welcomeAnimation = site?.welcomeAnimation && typeof site.welcomeAnimation === 'object' ? site.welcomeAnimation : null;
+            if (!welcomeAnimation) return res.status(404).json({ ok: false, error: 'Animation welcome introuvable' });
+            site.welcomeAnimation = {
+                ...welcomeAnimation,
+                actions: (welcomeAnimation.actions || []).map((action) => (
+                    String(action?.id || '') === access.actionId
+                        ? {
+                            ...action,
+                            frames: [...(Array.isArray(action.frames) ? action.frames : []), ...urls.map((url) => ({ id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))]
+                        }
+                        : action
+                ))
+            };
+            await site.save();
+        } else {
+            const doc = await Web5eEntry.findById(resolved.entry._id);
+            if (!doc) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
+            doc.blocks = (doc.blocks || []).map((block, index) => (
+                index === resolved.blockIndex
+                    ? {
+                        ...block,
+                        actions: (block.actions || []).map((action) => (
+                            String(action?.id || '') === access.actionId
+                                ? {
+                                    ...action,
+                                    frames: [...(Array.isArray(action.frames) ? action.frames : []), ...urls.map((url) => ({ id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))]
+                                  }
+                                : action
+                        ))
+                    }
+                    : block
+            ));
+            await doc.save();
+        }
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
