@@ -326,15 +326,19 @@ function buildMobileTokenQrUrl(token = '') {
 
 function ActionQrCode({ actionId }) {
   const [token, setToken] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId = null;
     const run = async () => {
       const safeActionId = String(actionId || '').trim();
       if (!safeActionId) {
         setToken('');
+        setLoading(false);
         return;
       }
+      setLoading(true);
       try {
         const res = await fetch('/api/web5e/mobile-action-access', {
           method: 'POST',
@@ -344,22 +348,34 @@ function ActionQrCode({ actionId }) {
         const data = await res.json().catch(() => ({}));
         if (!cancelled && res.ok && data?.ok && data?.token) {
           setToken(String(data.token || ''));
+          setLoading(false);
         } else if (!cancelled) {
           setToken('');
+          setLoading(false);
+          timeoutId = window.setTimeout(run, 4000);
         }
       } catch (_) {
-        if (!cancelled) setToken('');
+        if (!cancelled) {
+          setToken('');
+          setLoading(false);
+          timeoutId = window.setTimeout(run, 4000);
+        }
       }
     };
     run();
     return () => {
       cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
     };
   }, [actionId]);
 
-  if (!token) return null;
+  if (!token) {
+    return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : 'QR'}</div>;
+  }
   const qrUrl = buildMobileTokenQrUrl(token);
-  if (!qrUrl) return null;
+  if (!qrUrl) {
+    return <div className="animation-action-qr animation-action-qr-placeholder">QR</div>;
+  }
 
   return (
     <div className="animation-action-qr">

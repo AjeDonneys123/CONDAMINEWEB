@@ -1346,6 +1346,14 @@
   display: block;
 }
 
+.animation-action-qr-placeholder {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #6a7a96;
+  background: #f8fbff;
+  border-style: dashed;
+}
+
 .animation-action-card.compact .animation-action-head {
   margin-bottom: 6px;
   display: block;
