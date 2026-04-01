@@ -798,8 +798,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     return String(row?.question || '').trim() && options.every((option) => String(option || '').trim());
   }).length;
   const canValidatePresentation = groupMembers.length > 0
-    && slidesValidCount >= groupMembers.length
-    && qcmValidCount >= presentation.slides.length;
+    && presentation.slides.length === groupMembers.length
+    && slidesValidCount === groupMembers.length
+    && qcmValidCount > 0;
 
   useEffect(() => {
     const nextHtml = String(activeSlide?.html || '');
@@ -975,6 +976,38 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         >
           + Slide
         </button>
+        <button
+          type="button"
+          className="presentation-slide-add"
+          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+        >
+          + QCM
+        </button>
+        <button
+          type="button"
+          className="presentation-slide-add"
+          onClick={() => {
+            if (presentation.slides.length <= 1) {
+              if (window.confirm('Effacer le contenu de cette presentation ?')) {
+                patchPresentation({
+                  slides: [createPresentationSlide(0)],
+                  activeSlideIndex: 0,
+                  qcmQuestions: [],
+                  presentationValidated: false
+                });
+              }
+              return;
+            }
+            const nextSlides = presentation.slides.filter((_, index) => index !== presentation.activeSlideIndex);
+            patchPresentation({
+              slides: nextSlides,
+              activeSlideIndex: Math.max(0, Math.min(presentation.activeSlideIndex, nextSlides.length - 1)),
+              presentationValidated: false
+            });
+          }}
+        >
+          Supprimer
+        </button>
       </div>
       <div className="article-toolbar">
         <input
@@ -1072,7 +1105,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       )}
       <div className="presentation-validation-bar">
         <div className="presentation-validation-status">
-          {slidesValidCount}/{Math.max(groupMembers.length, 1)} slides valides • {qcmValidCount}/{presentation.slides.length} questions QCM valides
+          {slidesValidCount}/{groupMembers.length || 0} slides valides • {qcmValidCount} questions QCM valides
         </div>
         <button
           type="button"
