@@ -342,6 +342,10 @@ function MobileActionRemote({
 
   const block = blocks?.[blockIndex] || null;
   const action = Array.isArray(block?.actions) ? block.actions.find((item) => item.id === actionId) : null;
+  const fallbackBlockIndex = action ? blockIndex : (Array.isArray(blocks) ? blocks.findIndex((row) => Array.isArray(row?.actions) && row.actions.some((item) => item.id === actionId)) : -1);
+  const resolvedBlockIndex = action ? blockIndex : fallbackBlockIndex;
+  const resolvedBlock = action ? block : (fallbackBlockIndex >= 0 ? blocks?.[fallbackBlockIndex] : null);
+  const resolvedAction = action || (Array.isArray(resolvedBlock?.actions) ? resolvedBlock.actions.find((item) => item.id === actionId) : null);
 
   const persistNextBlocks = async (nextBlocks) => {
     if (!entryDoc?._id || !tabDoc?._id) return;
@@ -357,18 +361,18 @@ function MobileActionRemote({
 
   const appendPhotos = async (fileList) => {
     const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
-    if (files.length === 0 || !block || !action) return;
+    if (files.length === 0 || !resolvedBlock || !resolvedAction) return;
     const urls = await Promise.all(files.map((file) => new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
       reader.readAsDataURL(file);
     })));
     const nextBlocks = blocks.map((row, rowIndex) => (
-      rowIndex === blockIndex
+      rowIndex === resolvedBlockIndex
         ? {
             ...row,
             actions: (row.actions || []).map((item) => (
-              item.id === actionId
+              item.id === resolvedAction.id
                 ? { ...item, frames: [...(item.frames || []), ...urls.map((url) => createSpriteFrame(url))] }
                 : item
             ))
@@ -395,11 +399,11 @@ function MobileActionRemote({
         const reader = new FileReader();
         reader.onload = async () => {
           const nextBlocks = blocks.map((row, rowIndex) => (
-            rowIndex === blockIndex
+            rowIndex === resolvedBlockIndex
               ? {
                   ...row,
                   actions: (row.actions || []).map((item) => (
-                    item.id === actionId ? { ...item, soundUrl: String(reader.result || '') } : item
+                    item.id === resolvedAction.id ? { ...item, soundUrl: String(reader.result || '') } : item
                   ))
                 }
               : row
@@ -422,7 +426,7 @@ function MobileActionRemote({
     return <div className="mobile-action-shell"><div className="mobile-action-card">Chargement...</div></div>;
   }
 
-  if (!block || !action) {
+  if (!resolvedBlock || !resolvedAction) {
     return <div className="mobile-action-shell"><div className="mobile-action-card">Action introuvable.</div></div>;
   }
 
@@ -430,7 +434,7 @@ function MobileActionRemote({
     <div className="mobile-action-shell">
       <div className="mobile-action-card">
         <div className="eyebrow">Action mobile</div>
-        <h1>{action.name || 'Action'}</h1>
+        <h1>{resolvedAction.name || 'Action'}</h1>
         <p>Ajoute du son ou des photos de sprites depuis le telephone.</p>
         <div className="mobile-action-buttons">
           <button type="button" className={recording ? 'mobile-rec active' : 'mobile-rec'} onClick={() => void toggleRecord()}>
