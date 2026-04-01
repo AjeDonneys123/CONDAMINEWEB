@@ -145,20 +145,14 @@ router.post('/mobile-action-access', async (req, res) => {
         let access = null;
 
         if (isWelcome) {
-            const welcomeAnimation = site?.welcomeAnimation && typeof site.welcomeAnimation === 'object'
-                ? site.welcomeAnimation
-                : null;
-            const hasActionInWelcome = Array.isArray(welcomeAnimation?.actions)
-                && welcomeAnimation.actions.some((item) => String(item?.id || '') === actionId);
-            if (!hasActionInWelcome) return res.status(404).json({ ok: false, error: 'Action introuvable' });
             access = await Web5eMobileActionAccess.findOne({ actionId, scope: 'welcome', siteId: site._id, blockIndex: 0 });
             if (!access) {
                 access = await Web5eMobileActionAccess.create({
-                token: crypto.randomBytes(12).toString('hex'),
-                actionId,
-                actionName: String(req.body?.actionName || '').trim(),
-                scope: 'welcome',
-                siteId: site._id,
+                    token: crypto.randomBytes(12).toString('hex'),
+                    actionId,
+                    actionName: String(req.body?.actionName || '').trim(),
+                    scope: 'welcome',
+                    siteId: site._id,
                     entryId: null,
                     tabId: null,
                     sectionKey: 'welcome',
@@ -179,15 +173,9 @@ router.post('/mobile-action-access', async (req, res) => {
             return res.json({ ok: true, token: access.token });
         }
 
-        if (!entryId || !mongoose.Types.ObjectId.isValid(entryId)) {
-            return res.status(400).json({ ok: false, error: 'entryId requis' });
-        }
-        const entry = await Web5eEntry.findById(entryId).lean();
-        if (!entry) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
-        const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
-        const block = blocks[blockIndex] || null;
-        const hasActionInEntry = blocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => String(item?.id || '') === actionId));
-        if (!hasActionInEntry) return res.status(404).json({ ok: false, error: 'Action introuvable' });
+        const entry = entryId && mongoose.Types.ObjectId.isValid(entryId)
+            ? await Web5eEntry.findById(entryId).lean()
+            : null;
         access = await Web5eMobileActionAccess.findOne({ actionId, entryId, blockIndex, scope: 'entry' });
         if (!access) {
             access = await Web5eMobileActionAccess.create({
@@ -196,7 +184,7 @@ router.post('/mobile-action-access', async (req, res) => {
                 actionName: String(req.body?.actionName || '').trim(),
                 scope: 'entry',
                 siteId: site._id,
-                entryId,
+                entryId: entry?._id || null,
                 tabId: mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || null,
                 sectionKey: normalizeSectionKey(req.body?.sectionKey || ''),
                 tabKey: normalizeTabKey(req.body?.tabKey || ''),
@@ -207,7 +195,7 @@ router.post('/mobile-action-access', async (req, res) => {
             access.scope = 'entry';
             access.siteId = site._id;
             access.actionName = String(req.body?.actionName || access.actionName || '').trim();
-            access.entryId = entryId;
+            access.entryId = entry?._id || access.entryId || null;
             access.tabId = mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || access.tabId;
             access.sectionKey = normalizeSectionKey(req.body?.sectionKey || access.sectionKey || '');
             access.tabKey = normalizeTabKey(req.body?.tabKey || access.tabKey || '');
