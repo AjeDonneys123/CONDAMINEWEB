@@ -116,11 +116,23 @@ const Web5eAudio = getModel('Web5eAudio', {
     }
 }, 'web5e_audio');
 
+const Web5eMobileActionAccess = getModel('Web5eMobileActionAccess', {
+    token: { type: String, required: true, unique: true, index: true, trim: true },
+    actionId: { type: String, required: true, trim: true },
+    entryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Web5eEntry', default: null, index: true },
+    tabId: { type: mongoose.Schema.Types.ObjectId, ref: 'Web5eTab', default: null, index: true },
+    sectionKey: { type: String, default: '', trim: true, lowercase: true },
+    tabKey: { type: String, default: '', trim: true, lowercase: true },
+    blockIndex: { type: Number, default: 0 },
+    lastIssuedAt: { type: Date, default: Date.now }
+}, 'web5e_mobile_action_access');
+
 module.exports = {
     Web5eSite,
     Web5eTab,
     Web5eEntry,
     Web5eActor,
     Web5eAnimation,
-    Web5eAudio
+    Web5eAudio,
+    Web5eMobileActionAccess
 };

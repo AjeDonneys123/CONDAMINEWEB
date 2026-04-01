@@ -313,11 +313,12 @@ function buildMobileTokenQrUrl(token = '') {
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete('mobileAction');
+    url.searchParams.delete('mobileActionToken');
     url.searchParams.delete('section');
     url.searchParams.delete('tab');
     url.searchParams.delete('block');
     url.searchParams.delete('action');
-    url.searchParams.set('mobileActionToken', String(token || '').trim());
+    url.searchParams.set('m', String(token || '').trim());
     return url.toString();
   } catch (_) {
     return '';
@@ -1486,7 +1487,7 @@ export default function App() {
       return new URLSearchParams();
     }
   }, []);
-  const mobileActionToken = String(pageParams.get('mobileActionToken') || '').trim();
+  const mobileActionToken = String(pageParams.get('m') || pageParams.get('mobileActionToken') || '').trim();
   const isMobileActionMode = Boolean(mobileActionToken);
   const [localContentReady, setLocalContentReady] = useState(!isLocalSessionMode);
 
