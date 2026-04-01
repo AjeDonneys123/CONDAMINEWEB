@@ -331,7 +331,8 @@ function MobileActionRemote({
   blocks,
   entryDoc,
   tabDoc,
-  onPersist
+  onPersist,
+  loading
 }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -416,6 +417,10 @@ function MobileActionRemote({
       recorder.start();
     } catch (_) {}
   };
+
+  if (loading) {
+    return <div className="mobile-action-shell"><div className="mobile-action-card">Chargement...</div></div>;
+  }
 
   if (!block || !action) {
     return <div className="mobile-action-shell"><div className="mobile-action-card">Action introuvable.</div></div>;
@@ -1391,6 +1396,7 @@ export default function App() {
   const mobileBlockIndex = Number(pageParams.get('block') || 0);
   const mobileActionId = String(pageParams.get('action') || '').trim();
   const [localContentReady, setLocalContentReady] = useState(!isLocalSessionMode);
+  const [publicDataLoaded, setPublicDataLoaded] = useState(false);
 
   useEffect(() => {
     if (initialLocalUser?.id) {
@@ -1445,6 +1451,7 @@ export default function App() {
         setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
       } catch (_) {
       } finally {
+        setPublicDataLoaded(true);
         if (isLocalSessionMode) setLocalContentReady(true);
       }
     };
@@ -1807,6 +1814,7 @@ export default function App() {
         entryDoc={entryDocsByKey[`${mobileSectionKey}:${mobileTabKey}`]}
         tabDoc={tabDocsByKey[`${mobileSectionKey}:${mobileTabKey}`]}
         onPersist={(nextBlocks) => persistSpecificBlocks({ sectionKey: mobileSectionKey, tabKey: mobileTabKey, nextBlocks })}
+        loading={!publicDataLoaded}
       />
     );
   }
