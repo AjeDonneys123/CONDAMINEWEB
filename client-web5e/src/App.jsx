@@ -447,6 +447,7 @@ function MobileActionRemote({
   const [recordError, setRecordError] = useState('');
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
+  const audioCaptureInputRef = useRef(null);
   const [recording, setRecording] = useState(false);
 
   useEffect(() => {
@@ -538,7 +539,7 @@ function MobileActionRemote({
   };
 
   const appendMedia = async (fileList) => {
-    const sourceFiles = Array.from(fileList || []).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'));
+    const sourceFiles = Array.from(fileList || []).filter((file) => file.type.startsWith('video/'));
     if (sourceFiles.length === 0) return;
     const files = (await Promise.all(sourceFiles.map(fileToUpload))).filter(Boolean);
     if (files.length === 0) {
@@ -569,6 +570,39 @@ function MobileActionRemote({
     }
   };
 
+  const sendSoundDataUrl = async (soundUrl) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/web5e/mobile-action-audio/${encodeURIComponent(String(token || ''))}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soundUrl: String(soundUrl || '') })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Envoi impossible');
+      const refresh = await fetch(`/api/web5e/mobile-action-session/${encodeURIComponent(String(token || ''))}`);
+      const refreshData = await refresh.json().catch(() => ({}));
+      if (refresh.ok && refreshData?.ok) setSessionData(refreshData);
+      setMessage('Envoye');
+      window.setTimeout(() => setMessage(''), 1600);
+    } catch (_) {
+      setMessage('Envoi impossible');
+      window.setTimeout(() => setMessage(''), 1600);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCapturedAudio = async (fileList) => {
+    const file = Array.from(fileList || []).find((item) => item.type.startsWith('audio/'));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      await sendSoundDataUrl(String(reader.result || ''));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const toggleRecord = async () => {
     if (recording && recorderRef.current) {
       recorderRef.current.stop();
@@ -588,26 +622,7 @@ function MobileActionRemote({
         const blob = new Blob(recorderChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.onload = async () => {
-          setSaving(true);
-          try {
-            const res = await fetch(`/api/web5e/mobile-action-audio/${encodeURIComponent(String(token || ''))}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ soundUrl: String(reader.result || '') })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Envoi impossible');
-            const refresh = await fetch(`/api/web5e/mobile-action-session/${encodeURIComponent(String(token || ''))}`);
-            const refreshData = await refresh.json().catch(() => ({}));
-            if (refresh.ok && refreshData?.ok) setSessionData(refreshData);
-            setMessage('Envoye');
-            window.setTimeout(() => setMessage(''), 1600);
-          } catch (_) {
-            setMessage('Envoi impossible');
-            window.setTimeout(() => setMessage(''), 1600);
-          } finally {
-            setSaving(false);
-          }
+          await sendSoundDataUrl(String(reader.result || ''));
         };
         reader.readAsDataURL(blob);
         stream.getTracks().forEach((track) => track.stop());
@@ -619,7 +634,8 @@ function MobileActionRemote({
       setRecording(true);
       recorder.start();
     } catch (error) {
-      setRecordError(String(error?.message || 'Micro inaccessible'));
+      setRecordError(String(error?.message || 'Micro direct inaccessible'));
+      audioCaptureInputRef.current?.click?.();
     }
   };
 
@@ -638,10 +654,11 @@ function MobileActionRemote({
             {recording ? 'Arreter micro' : 'Enregistrer micro'}
           </button>
           <label className="mobile-upload-btn">
-            Camera / video
-            <input type="file" accept="image/*,video/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendMedia(e.target.files)} />
+            Envoyer une video
+            <input type="file" accept="video/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendMedia(e.target.files)} />
           </label>
         </div>
+        <input ref={audioCaptureInputRef} type="file" accept="audio/*" capture className="hidden-file-input" onChange={(e) => void handleCapturedAudio(e.target.files)} />
         {recordError ? <div className="mobile-action-status">{recordError}</div> : null}
         {saving ? <div className="mobile-action-status">Envoi...</div> : null}
         {message ? <div className="mobile-action-status">{message}</div> : null}
