@@ -127,7 +127,7 @@ router.post('/mobile-action-access', async (req, res) => {
         const block = blocks[blockIndex] || null;
         const hasActionInEntry = blocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => String(item?.id || '') === actionId));
         if (!hasActionInEntry) return res.status(404).json({ ok: false, error: 'Action introuvable' });
-        let access = await Web5eMobileActionAccess.findOne({ actionId });
+        let access = await Web5eMobileActionAccess.findOne({ actionId, entryId, blockIndex });
         if (!access) {
             access = await Web5eMobileActionAccess.create({
                 token: crypto.randomBytes(12).toString('hex'),
@@ -144,7 +144,7 @@ router.post('/mobile-action-access', async (req, res) => {
             access.tabId = mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || access.tabId;
             access.sectionKey = normalizeSectionKey(req.body?.sectionKey || access.sectionKey || '');
             access.tabKey = normalizeTabKey(req.body?.tabKey || access.tabKey || '');
-            access.blockIndex = block ? blockIndex : access.blockIndex;
+            access.blockIndex = blockIndex;
             access.lastIssuedAt = new Date();
             await access.save();
         }
