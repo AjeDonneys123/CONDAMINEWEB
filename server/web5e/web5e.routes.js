@@ -35,69 +35,33 @@ async function readMobileTokenDoc(token = '') {
     return Web5eMobileActionAccess.findOne({ token: safeToken });
 }
 
-async function resolveMobileAction(actionId = '') {
-    const site = await ensureDefaultSite();
-    const entries = await Web5eEntry.find({ siteId: site._id, isPublished: true }).lean();
-    for (const entry of entries) {
-        const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
-        for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
-            const block = blocks[blockIndex];
-            const actions = Array.isArray(block?.actions) ? block.actions : [];
-            const action = actions.find((item) => String(item?.id || '') === String(actionId || '').trim());
-            if (action) {
-                const tab = await Web5eTab.findById(entry.tabId).lean();
-                return { site, entry, tab, blockIndex, block, action };
-            }
-        }
-    }
-    return null;
-}
-
-async function resolveMobileActionFromPayload(payload = {}) {
-    const safeActionId = String(payload?.actionId || '').trim();
-    const safeEntryId = String(payload?.entryId || '').trim();
-    const safeTabId = String(payload?.tabId || '').trim();
-    const safeBlockIndex = Number(payload?.blockIndex);
-    const safeSectionKey = normalizeSectionKey(payload?.sectionKey || '');
-    const safeTabKey = normalizeTabKey(payload?.tabKey || '');
-
-    if (safeActionId) {
-        const direct = await resolveMobileAction(safeActionId);
-        if (direct) return direct;
-    }
+async function resolveMobileActionFromAccess(access) {
+    const safeActionId = String(access?.actionId || '').trim();
+    const safeEntryId = String(access?.entryId || '').trim();
+    const safeBlockIndex = Number(access?.blockIndex || 0);
+    if (!safeActionId || !safeEntryId || !mongoose.Types.ObjectId.isValid(safeEntryId)) return null;
 
     const site = await ensureDefaultSite();
-    let entry = null;
-    let tab = null;
-
-    if (safeEntryId && mongoose.Types.ObjectId.isValid(safeEntryId)) {
-        entry = await Web5eEntry.findById(safeEntryId).lean();
-        if (entry?.tabId) tab = await Web5eTab.findById(entry.tabId).lean();
-    }
-
-    if (!entry && safeTabId && mongoose.Types.ObjectId.isValid(safeTabId)) {
-        tab = await Web5eTab.findById(safeTabId).lean();
-        entry = await Web5eEntry.findOne({ tabId: safeTabId }).sort({ updatedAt: -1 }).lean();
-    }
-
-    if (!entry && safeSectionKey && safeTabKey) {
-        tab = await Web5eTab.findOne({ siteId: site._id, sectionKey: safeSectionKey, tabKey: safeTabKey }).lean();
-        if (tab?._id) entry = await Web5eEntry.findOne({ tabId: tab._id }).sort({ updatedAt: -1 }).lean();
-    }
-
+    const entry = await Web5eEntry.findById(safeEntryId).lean();
     if (!entry) return null;
-    if (!tab && entry?.tabId) tab = await Web5eTab.findById(entry.tabId).lean();
-
+    const tab = entry?.tabId ? await Web5eTab.findById(entry.tabId).lean() : null;
     const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
-    const indexedCandidates = Number.isFinite(safeBlockIndex) ? [safeBlockIndex] : [];
-    const candidateIndexes = [...indexedCandidates, ...blocks.map((_, index) => index).filter((index) => !indexedCandidates.includes(index))];
+    const block = blocks[safeBlockIndex] || null;
+    const exactAction = Array.isArray(block?.actions)
+        ? block.actions.find((item) => String(item?.id || '') === safeActionId)
+        : null;
 
-    for (const blockIndex of candidateIndexes) {
-        const block = blocks[blockIndex];
-        const actions = Array.isArray(block?.actions) ? block.actions : [];
-        const action = actions.find((item) => String(item?.id || '') === safeActionId) || actions[0];
+    if (block && exactAction) {
+        return { site, entry, tab, blockIndex: safeBlockIndex, block, action: exactAction };
+    }
+
+    for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+        const row = blocks[blockIndex];
+        const action = Array.isArray(row?.actions)
+            ? row.actions.find((item) => String(item?.id || '') === safeActionId)
+            : null;
         if (action) {
-            return { site, entry, tab, blockIndex, block, action };
+            return { site, entry, tab, blockIndex, block: row, action };
         }
     }
 
@@ -151,25 +115,36 @@ router.post('/site', async (req, res) => {
 router.post('/mobile-action-access', async (req, res) => {
     try {
         const actionId = String(req.body?.actionId || '').trim();
+        const entryId = String(req.body?.entryId || '').trim();
+        const blockIndex = Number(req.body?.blockIndex || 0);
         if (!actionId) return res.status(400).json({ ok: false, error: 'actionId requis' });
+        if (!entryId || !mongoose.Types.ObjectId.isValid(entryId)) {
+            return res.status(400).json({ ok: false, error: 'entryId requis' });
+        }
+        const entry = await Web5eEntry.findById(entryId).lean();
+        if (!entry) return res.status(404).json({ ok: false, error: 'Entree introuvable' });
+        const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
+        const block = blocks[blockIndex] || null;
+        const hasActionInEntry = blocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => String(item?.id || '') === actionId));
+        if (!hasActionInEntry) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         let access = await Web5eMobileActionAccess.findOne({ actionId });
         if (!access) {
             access = await Web5eMobileActionAccess.create({
                 token: crypto.randomBytes(12).toString('hex'),
                 actionId,
-                entryId: mongoose.Types.ObjectId.isValid(String(req.body?.entryId || '')) ? req.body.entryId : null,
-                tabId: mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : null,
+                entryId,
+                tabId: mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || null,
                 sectionKey: normalizeSectionKey(req.body?.sectionKey || ''),
                 tabKey: normalizeTabKey(req.body?.tabKey || ''),
-                blockIndex: Number(req.body?.blockIndex || 0),
+                blockIndex,
                 lastIssuedAt: new Date()
             });
         } else {
-            access.entryId = mongoose.Types.ObjectId.isValid(String(req.body?.entryId || '')) ? req.body.entryId : access.entryId;
-            access.tabId = mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : access.tabId;
+            access.entryId = entryId;
+            access.tabId = mongoose.Types.ObjectId.isValid(String(req.body?.tabId || '')) ? req.body.tabId : entry?.tabId || access.tabId;
             access.sectionKey = normalizeSectionKey(req.body?.sectionKey || access.sectionKey || '');
             access.tabKey = normalizeTabKey(req.body?.tabKey || access.tabKey || '');
-            access.blockIndex = Number(req.body?.blockIndex || access.blockIndex || 0);
+            access.blockIndex = block ? blockIndex : access.blockIndex;
             access.lastIssuedAt = new Date();
             await access.save();
         }
@@ -183,7 +158,7 @@ router.get('/mobile-action-session/:token', async (req, res) => {
     try {
         const access = await readMobileTokenDoc(req.params.token);
         if (!access?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
-        const resolved = await resolveMobileActionFromPayload(access);
+        const resolved = await resolveMobileActionFromAccess(access);
         if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         res.json({
             ok: true,
@@ -204,7 +179,7 @@ router.post('/mobile-action-audio/:token', async (req, res) => {
     try {
         const access = await readMobileTokenDoc(req.params.token);
         if (!access?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
-        const resolved = await resolveMobileActionFromPayload(access);
+        const resolved = await resolveMobileActionFromAccess(access);
         if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const soundUrl = String(req.body?.soundUrl || '').trim();
         if (!soundUrl) return res.status(400).json({ ok: false, error: 'soundUrl requis' });
@@ -231,7 +206,7 @@ router.post('/mobile-action-upload/:token', uploadBatch.array('files', 8), async
     try {
         const access = await readMobileTokenDoc(req.params.token);
         if (!access?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
-        const resolved = await resolveMobileActionFromPayload(access);
+        const resolved = await resolveMobileActionFromAccess(access);
         if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const files = Array.isArray(req.files) ? req.files : [];
         if (!files.length) return res.status(400).json({ ok: false, error: 'Aucune photo envoyee' });
