@@ -334,9 +334,16 @@ function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId
     let timeoutId = null;
     const run = async () => {
       const safeActionId = String(actionId || '').trim();
+      const safeEntryId = String(entryId || '').trim();
       if (!safeActionId) {
         setToken('');
         setLoading(false);
+        return;
+      }
+      if (!safeEntryId) {
+        setToken('');
+        setLoading(false);
+        timeoutId = window.setTimeout(run, 1500);
         return;
       }
       setLoading(true);
@@ -350,7 +357,7 @@ function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId
             tabKey: String(tabKey || '').trim(),
             blockIndex: Number(blockIndex || 0),
             tabId: String(tabId || '').trim(),
-            entryId: String(entryId || '').trim()
+            entryId: safeEntryId
           })
         });
         const data = await res.json().catch(() => ({}));
@@ -378,7 +385,7 @@ function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId
   }, [actionId, sectionKey, tabKey, blockIndex, tabId, entryId]);
 
   if (!token) {
-    return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : 'QR'}</div>;
+    return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : (entryId ? 'QR' : 'Sauvegarde...')}</div>;
   }
   const qrUrl = buildMobileTokenQrUrl(token);
   if (!qrUrl) {
