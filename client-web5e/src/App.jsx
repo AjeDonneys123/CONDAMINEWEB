@@ -1807,17 +1807,37 @@ export default function App() {
   };
 
   if (isMobileActionMode) {
-    const remoteBlocks = contentMap[mobileSectionKey]?.[mobileTabKey] || [];
+    let resolvedSectionKey = mobileSectionKey;
+    let resolvedTabKey = mobileTabKey;
+    let resolvedBlocks = contentMap[mobileSectionKey]?.[mobileTabKey] || [];
+    let hasAction = Array.isArray(resolvedBlocks) && resolvedBlocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => item.id === mobileActionId));
+
+    if (!hasAction) {
+      Object.entries(contentMap || {}).some(([sectionKey, sectionTabs]) => {
+        return Object.entries(sectionTabs || {}).some(([tabKey, tabBlocks]) => {
+          const found = Array.isArray(tabBlocks) && tabBlocks.some((row) => Array.isArray(row?.actions) && row.actions.some((item) => item.id === mobileActionId));
+          if (found) {
+            resolvedSectionKey = sectionKey;
+            resolvedTabKey = tabKey;
+            resolvedBlocks = tabBlocks;
+            hasAction = true;
+            return true;
+          }
+          return false;
+        });
+      });
+    }
+
     return (
       <MobileActionRemote
-        sectionKey={mobileSectionKey}
-        tabKey={mobileTabKey}
+        sectionKey={resolvedSectionKey}
+        tabKey={resolvedTabKey}
         blockIndex={mobileBlockIndex}
         actionId={mobileActionId}
-        blocks={remoteBlocks}
-        entryDoc={entryDocsByKey[`${mobileSectionKey}:${mobileTabKey}`]}
-        tabDoc={tabDocsByKey[`${mobileSectionKey}:${mobileTabKey}`]}
-        onPersist={(nextBlocks) => persistSpecificBlocks({ sectionKey: mobileSectionKey, tabKey: mobileTabKey, nextBlocks })}
+        blocks={resolvedBlocks}
+        entryDoc={entryDocsByKey[`${resolvedSectionKey}:${resolvedTabKey}`]}
+        tabDoc={tabDocsByKey[`${resolvedSectionKey}:${resolvedTabKey}`]}
+        onPersist={(nextBlocks) => persistSpecificBlocks({ sectionKey: resolvedSectionKey, tabKey: resolvedTabKey, nextBlocks })}
         loading={!publicDataLoaded}
       />
     );
