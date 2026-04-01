@@ -29,6 +29,7 @@ const Web5eSite = getModel('Web5eSite', {
     title: { type: String, default: 'Projet 5e' },
     subtitle: { type: String, default: '' },
     isPublic: { type: Boolean, default: true },
+    welcomeAnimation: { type: mongoose.Schema.Types.Mixed, default: null },
     ownerTeacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', default: null },
     sectionOrder: { type: [String], default: ['eau', 'energie'] },
     theme: {

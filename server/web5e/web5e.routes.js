@@ -48,6 +48,7 @@ router.post('/site', async (req, res) => {
             title: String(req.body?.title || site.title || '').trim() || 'Projet 5e',
             subtitle: String(req.body?.subtitle || site.subtitle || '').trim(),
             isPublic: req.body?.isPublic !== false,
+            welcomeAnimation: req.body?.welcomeAnimation && typeof req.body.welcomeAnimation === 'object' ? req.body.welcomeAnimation : null,
             sectionOrder: Array.isArray(req.body?.sectionOrder) ? req.body.sectionOrder.map(normalizeSectionKey).filter(Boolean) : site.sectionOrder
         };
         const updated = await Web5eSite.findByIdAndUpdate(site._id, { $set: payload }, { new: true }).lean();

@@ -27,7 +27,7 @@
   font-weight: 900;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #ff6b3d;
+  color: #f97316;
 }
 
 .login-toggle {
@@ -257,6 +257,66 @@
   max-width: 1400px;
 }
 
+.hero.hero-simple {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin: 24px auto 18px;
+  max-width: 1400px;
+  padding: 0;
+  position: relative;
+  min-height: 260px;
+}
+
+.hero-simple-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hero-simple-title {
+  margin: 0;
+  font-size: clamp(2.8rem, 7vw, 5.6rem);
+  line-height: 0.95;
+  color: #1d2942;
+}
+
+.hero-editor-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.hero-editor-actions button {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: #1f2944;
+  color: white;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(28, 41, 67, 0.12);
+}
+
+.header-welcome-panel {
+  max-width: 520px;
+}
+
+.page-welcome-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  min-height: 100vh;
+}
+
+.page-welcome-stage .animation-block-shell,
+.page-welcome-stage .animation-page-overlay,
+.page-welcome-stage .article-animation-instance {
+  min-height: 100vh;
+}
+
 .hero-copy,
 .hero-card,
 .section-panel {
@@ -311,12 +371,45 @@
   margin: 0 auto 18px;
 }
 
+.section-tabs.section-tabs-large {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .section-tab {
   padding: 16px 24px;
   background: rgba(255, 255, 255, 0.78);
   font-size: 1.15rem;
   font-weight: 900;
   cursor: pointer;
+}
+
+.section-tabs-large .section-tab {
+  min-height: 150px;
+  display: grid;
+  align-content: space-between;
+  text-align: left;
+  border-radius: 28px;
+  padding: 24px 26px;
+  box-shadow: 0 18px 48px rgba(215, 124, 64, 0.08);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.section-tabs-large .section-tab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 60px rgba(215, 124, 64, 0.12);
+}
+
+.section-tab-title {
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+  font-weight: 900;
+}
+
+.section-tab-subtitle {
+  max-width: 520px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #5a6a83;
 }
 
 .section-tab.active.water {
@@ -329,6 +422,11 @@
   background: linear-gradient(135deg, #ffd15c, #f97316);
   color: white;
   border-color: transparent;
+}
+
+.section-tab.active.energy .section-tab-subtitle,
+.section-tab.active.water .section-tab-subtitle {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .section-panel {
@@ -710,13 +808,17 @@
   color: #e25d34;
 }
 
-.animation-action-head button.active.recording {
+.animation-action-head button.active.recording,
+.animation-action-toolbar-row button.active.recording,
+.animation-compact-actions button.active.recording {
   background: #dc2626;
   color: #fff;
   border-color: #dc2626;
 }
 
-.animation-action-head button.active.playing {
+.animation-action-head button.active.playing,
+.animation-action-toolbar-row button.active.playing,
+.animation-compact-actions button.active.playing {
   background: #1d4ed8;
   color: #fff;
   border-color: #1d4ed8;
@@ -957,6 +1059,26 @@
   color: #1d2942;
 }
 
+.animation-sprite-adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animation-sprite-adjust-row span {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #1d2942;
+}
+
+.animation-sprite-adjust-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 6px;
+  align-items: center;
+  justify-items: center;
+}
+
 .animation-editor-resizer {
   position: absolute;
   width: 14px;
@@ -1035,6 +1157,13 @@
   pointer-events: auto;
 }
 
+.animation-page-actor-figure {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .animation-page-actor.draggable {
   cursor: grab;
 }
@@ -1043,7 +1172,7 @@
   cursor: grabbing;
 }
 
-.animation-page-actor img {
+.animation-page-actor-figure img {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -1193,6 +1322,28 @@
 .animation-action-card.compact {
   padding: 10px 12px;
   pointer-events: auto;
+  position: relative;
+  padding-right: 112px;
+}
+
+.animation-action-qr {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 92px;
+  height: 92px;
+  border-radius: 14px;
+  background: white;
+  border: 1px solid rgba(28, 41, 67, 0.1);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.animation-action-qr img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .animation-action-card.compact .animation-action-head {
@@ -1257,6 +1408,60 @@
   font-weight: 700;
 }
 
+.mobile-action-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.mobile-action-card {
+  width: min(100%, 520px);
+  padding: 24px;
+  border-radius: 28px;
+  border: 1px solid rgba(28, 41, 67, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 50px rgba(28, 41, 67, 0.12);
+  display: grid;
+  gap: 14px;
+}
+
+.mobile-action-card h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: #1d2942;
+}
+
+.mobile-action-card p,
+.mobile-action-status {
+  margin: 0;
+  color: #54647d;
+  font-weight: 700;
+}
+
+.mobile-action-buttons {
+  display: grid;
+  gap: 10px;
+}
+
+.mobile-rec,
+.mobile-upload-btn {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  border-radius: 18px;
+  padding: 16px 18px;
+  background: #1f2944;
+  color: white;
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+}
+
+.mobile-rec.active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
 .embed-frame-shell {
   background: white;
   border-style: solid;
@@ -1275,6 +1480,11 @@
     grid-template-columns: 1fr;
   }
 
+  .hero-simple-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .section-head,
   .name-row,
   .toolbar,
@@ -1287,22 +1497,14 @@
     flex-direction: column;
   }
 
+  .section-tabs.section-tabs-large {
+    grid-template-columns: 1fr;
+  }
+
   .login-panel {
     left: 20px;
     right: 20px;
     width: auto;
-  }
-
-  .creator-toggle {
-    top: 72px;
-    right: 20px;
-  }
-
-  .creator-panel {
-    left: 20px;
-    right: 20px;
-    width: auto;
-    top: 126px;
   }
 
   .animation-block-shell {
