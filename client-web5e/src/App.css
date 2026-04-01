@@ -1473,6 +1473,10 @@
   border-color: #dc2626;
 }
 
+.mobile-audio-preview {
+  width: 100%;
+}
+
 .embed-frame-shell {
   background: white;
   border-style: solid;

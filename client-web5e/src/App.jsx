@@ -457,10 +457,34 @@ function MobileActionRemote({
   const [loading, setLoading] = useState(true);
   const [sessionData, setSessionData] = useState(null);
   const [recordError, setRecordError] = useState('');
+  const [micStatus, setMicStatus] = useState('unknown');
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState('');
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
   const audioCaptureInputRef = useRef(null);
   const [recording, setRecording] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const readPermission = async () => {
+      try {
+        if (!navigator.permissions?.query) return;
+        const result = await navigator.permissions.query({ name: 'microphone' });
+        if (!cancelled) {
+          setMicStatus(result.state || 'unknown');
+          result.onchange = () => setMicStatus(result.state || 'unknown');
+        }
+      } catch (_) {}
+    };
+    readPermission();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+  }, [audioPreviewUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -608,6 +632,8 @@ function MobileActionRemote({
   const handleCapturedAudio = async (fileList) => {
     const file = Array.from(fileList || []).find((item) => item.type.startsWith('audio/'));
     if (!file) return;
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+    setAudioPreviewUrl(URL.createObjectURL(file));
     const reader = new FileReader();
     reader.onload = async () => {
       await sendSoundDataUrl(String(reader.result || ''));
@@ -622,7 +648,10 @@ function MobileActionRemote({
     }
     try {
       setRecordError('');
+      setMessage('');
+      setMicStatus('prompt');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicStatus('granted');
       const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? { mimeType: 'audio/webm;codecs=opus' }
         : undefined);
@@ -632,6 +661,8 @@ function MobileActionRemote({
       };
       recorder.onstop = async () => {
         const blob = new Blob(recorderChunksRef.current, { type: 'audio/webm' });
+        if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+        setAudioPreviewUrl(URL.createObjectURL(blob));
         const reader = new FileReader();
         reader.onload = async () => {
           await sendSoundDataUrl(String(reader.result || ''));
@@ -646,6 +677,7 @@ function MobileActionRemote({
       setRecording(true);
       recorder.start();
     } catch (error) {
+      setMicStatus('denied');
       setRecordError(String(error?.message || 'Micro direct inaccessible'));
       audioCaptureInputRef.current?.click?.();
     }
@@ -670,7 +702,15 @@ function MobileActionRemote({
             <input type="file" accept="image/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendMedia(e.target.files)} />
           </label>
         </div>
+        <div className="mobile-action-status">
+          {micStatus === 'granted' ? 'Micro autorise' : micStatus === 'denied' ? 'Micro refuse par le navigateur' : 'Appuie sur Enregistrer micro pour demander l’autorisation'}
+        </div>
         <input ref={audioCaptureInputRef} type="file" accept="audio/*" capture className="hidden-file-input" onChange={(e) => void handleCapturedAudio(e.target.files)} />
+        {audioPreviewUrl ? (
+          <audio controls className="mobile-audio-preview" src={audioPreviewUrl}>
+            <track kind="captions" />
+          </audio>
+        ) : null}
         {recordError ? <div className="mobile-action-status">{recordError}</div> : null}
         {saving ? <div className="mobile-action-status">Envoi...</div> : null}
         {message ? <div className="mobile-action-status">{message}</div> : null}
