@@ -324,7 +324,7 @@ function buildMobileTokenQrUrl(token = '') {
   }
 }
 
-function ActionQrCode({ actionId }) {
+function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId }) {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -343,7 +343,14 @@ function ActionQrCode({ actionId }) {
         const res = await fetch('/api/web5e/mobile-action-access', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actionId: safeActionId })
+          body: JSON.stringify({
+            actionId: safeActionId,
+            sectionKey: String(sectionKey || '').trim(),
+            tabKey: String(tabKey || '').trim(),
+            blockIndex: Number(blockIndex || 0),
+            tabId: String(tabId || '').trim(),
+            entryId: String(entryId || '').trim()
+          })
         });
         const data = await res.json().catch(() => ({}));
         if (!cancelled && res.ok && data?.ok && data?.token) {
@@ -367,7 +374,7 @@ function ActionQrCode({ actionId }) {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [actionId]);
+  }, [actionId, sectionKey, tabKey, blockIndex, tabId, entryId]);
 
   if (!token) {
     return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : 'QR'}</div>;
@@ -642,7 +649,7 @@ function formatContributionName(name = '') {
   return `${firstName} ${lastName.slice(0, 3)}`;
 }
 
-function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey = '', tabKey = '', blockIndex = 0 }) {
+function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '' }) {
   const overlayRef = useRef(null);
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
@@ -1276,7 +1283,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           {actions.map((action, index) => (
             <div key={action.id} className="animation-action-card compact">
               {!readOnly ? (
-                <ActionQrCode actionId={action.id} />
+                <ActionQrCode actionId={action.id} sectionKey={sectionKey} tabKey={tabKey} blockIndex={blockIndex} tabId={tabId} entryId={entryId} />
               ) : null}
               <div className="animation-action-head">
                 <input
@@ -2134,6 +2141,8 @@ export default function App() {
                     sectionKey={activeSection}
                     tabKey={currentTabId}
                     blockIndex={index}
+                    tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+                    entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
                     readOnly={!isTeacher}
                   />
                 </div>

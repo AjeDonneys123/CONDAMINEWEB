@@ -68,6 +68,57 @@ async function resolveMobileAction(actionId = '') {
     return null;
 }
 
+async function resolveMobileActionFromPayload(payload = {}) {
+    const safeActionId = String(payload?.actionId || '').trim();
+    const safeEntryId = String(payload?.entryId || '').trim();
+    const safeTabId = String(payload?.tabId || '').trim();
+    const safeBlockIndex = Number(payload?.blockIndex);
+    const safeSectionKey = normalizeSectionKey(payload?.sectionKey || '');
+    const safeTabKey = normalizeTabKey(payload?.tabKey || '');
+
+    if (safeActionId) {
+        const direct = await resolveMobileAction(safeActionId);
+        if (direct) return direct;
+    }
+
+    const site = await ensureDefaultSite();
+    let entry = null;
+    let tab = null;
+
+    if (safeEntryId && mongoose.Types.ObjectId.isValid(safeEntryId)) {
+        entry = await Web5eEntry.findById(safeEntryId).lean();
+        if (entry?.tabId) tab = await Web5eTab.findById(entry.tabId).lean();
+    }
+
+    if (!entry && safeTabId && mongoose.Types.ObjectId.isValid(safeTabId)) {
+        tab = await Web5eTab.findById(safeTabId).lean();
+        entry = await Web5eEntry.findOne({ tabId: safeTabId }).sort({ updatedAt: -1 }).lean();
+    }
+
+    if (!entry && safeSectionKey && safeTabKey) {
+        tab = await Web5eTab.findOne({ siteId: site._id, sectionKey: safeSectionKey, tabKey: safeTabKey }).lean();
+        if (tab?._id) entry = await Web5eEntry.findOne({ tabId: tab._id }).sort({ updatedAt: -1 }).lean();
+    }
+
+    if (!entry) return null;
+    if (!tab && entry?.tabId) tab = await Web5eTab.findById(entry.tabId).lean();
+
+    const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
+    const indexedCandidates = Number.isFinite(safeBlockIndex) ? [safeBlockIndex] : [];
+    const candidateIndexes = [...indexedCandidates, ...blocks.map((_, index) => index).filter((index) => !indexedCandidates.includes(index))];
+
+    for (const blockIndex of candidateIndexes) {
+        const block = blocks[blockIndex];
+        const actions = Array.isArray(block?.actions) ? block.actions : [];
+        const action = actions.find((item) => String(item?.id || '') === safeActionId) || actions[0];
+        if (action) {
+            return { site, entry, tab, blockIndex, block, action };
+        }
+    }
+
+    return null;
+}
+
 async function ensureDefaultSite() {
     let site = await Web5eSite.findOne({ slug: 'projet-5e' });
     if (!site) {
@@ -116,13 +167,13 @@ router.post('/mobile-action-access', async (req, res) => {
     try {
         const actionId = String(req.body?.actionId || '').trim();
         if (!actionId) return res.status(400).json({ ok: false, error: 'actionId requis' });
-        const resolved = await resolveMobileAction(actionId);
-        if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const token = signMobilePayload({
             actionId,
-            entryId: String(resolved.entry._id),
-            tabId: String(resolved.tab?._id || ''),
-            blockIndex: Number(resolved.blockIndex),
+            entryId: String(req.body?.entryId || '').trim(),
+            tabId: String(req.body?.tabId || '').trim(),
+            sectionKey: normalizeSectionKey(req.body?.sectionKey || ''),
+            tabKey: normalizeTabKey(req.body?.tabKey || ''),
+            blockIndex: Number(req.body?.blockIndex || 0),
             issuedAt: Date.now()
         });
         res.json({ ok: true, token });
@@ -135,7 +186,7 @@ router.get('/mobile-action-session/:token', async (req, res) => {
     try {
         const payload = verifyMobileToken(req.params.token);
         if (!payload?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
-        const resolved = await resolveMobileAction(payload.actionId);
+        const resolved = await resolveMobileActionFromPayload(payload);
         if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         res.json({
             ok: true,
@@ -156,7 +207,7 @@ router.post('/mobile-action-audio/:token', async (req, res) => {
     try {
         const payload = verifyMobileToken(req.params.token);
         if (!payload?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
-        const resolved = await resolveMobileAction(payload.actionId);
+        const resolved = await resolveMobileActionFromPayload(payload);
         if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const soundUrl = String(req.body?.soundUrl || '').trim();
         if (!soundUrl) return res.status(400).json({ ok: false, error: 'soundUrl requis' });
@@ -183,7 +234,7 @@ router.post('/mobile-action-upload/:token', uploadBatch.array('files', 8), async
     try {
         const payload = verifyMobileToken(req.params.token);
         if (!payload?.actionId) return res.status(400).json({ ok: false, error: 'Token invalide' });
-        const resolved = await resolveMobileAction(payload.actionId);
+        const resolved = await resolveMobileActionFromPayload(payload);
         if (!resolved) return res.status(404).json({ ok: false, error: 'Action introuvable' });
         const files = Array.isArray(req.files) ? req.files : [];
         if (!files.length) return res.status(400).json({ ok: false, error: 'Aucune photo envoyee' });
