@@ -138,6 +138,18 @@ const WEB5E_EDITOR_PASSWORD = 'condamine';
 const WEB5E_TEACHER_PASSWORD = 'a';
 const WEB5E_DIRECT_STUDENT_PREFIX = 'web5e-direct-student';
 
+function resolveWeb5eAssetUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('blob:') || raw.startsWith('data:')) return raw;
+  if (raw.startsWith('/uploads/')) {
+    if (typeof window !== 'undefined' && String(window.location.hostname || '').includes('vercel.app')) {
+      return `https://hgeoentraineur.onrender.com${raw}`;
+    }
+  }
+  return raw;
+}
+
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
   return {
@@ -539,7 +551,7 @@ function MobileActionRemote({
   };
 
   const appendMedia = async (fileList) => {
-    const sourceFiles = Array.from(fileList || []).filter((file) => file.type.startsWith('video/'));
+    const sourceFiles = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
     if (sourceFiles.length === 0) return;
     const files = (await Promise.all(sourceFiles.map(fileToUpload))).filter(Boolean);
     if (files.length === 0) {
@@ -654,8 +666,8 @@ function MobileActionRemote({
             {recording ? 'Arreter micro' : 'Enregistrer micro'}
           </button>
           <label className="mobile-upload-btn">
-            Envoyer une video
-            <input type="file" accept="video/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendMedia(e.target.files)} />
+            Scanner / photo
+            <input type="file" accept="image/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendMedia(e.target.files)} />
           </label>
         </div>
         <input ref={audioCaptureInputRef} type="file" accept="audio/*" capture className="hidden-file-input" onChange={(e) => void handleCapturedAudio(e.target.files)} />
@@ -1358,10 +1370,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       }
     : (selectedFrameIndex >= 0 ? selectedAction?.frames?.[selectedFrameIndex] : null);
   const normalizedSelectedFrame = typeof selectedFrameData === 'string' ? createSpriteFrame(selectedFrameData) : selectedFrameData;
-  const currentActorFrame = actorState.frameUrl || block?.actorImageUrl || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url) || '';
+  const currentActorFrame = resolveWeb5eAssetUrl(actorState.frameUrl || block?.actorImageUrl || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url) || '');
   const actorRenderWidth = Number(normalizedSelectedFrame?.width || actorState.width || block?.actorWidth || 140);
   const actorRenderHeight = Number(normalizedSelectedFrame?.height || actorState.height || block?.actorHeight || 140);
-  const actorRenderFrame = String((isPlaying || playingActionId) ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || ''));
+  const actorRenderFrame = resolveWeb5eAssetUrl(String((isPlaying || playingActionId) ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || '')));
 
   return (
     <div className="animation-block-shell">
@@ -1482,12 +1494,12 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                         className={`animation-frame-thumb origin ${Number(action.selectedFrameIndex) === -1 ? 'selected' : ''}`}
                         onClick={() => selectOriginalActor(action.id)}
                       >
-                        <img src={block.actorImageUrl} alt="" />
+                        <img src={resolveWeb5eAssetUrl(block.actorImageUrl)} alt="" />
                       </div>
                     ) : null}
                     {(action.frames || []).map((frame, frameIndex) => (
                       <div key={`${action.id}_${frameIndex}`} className={`animation-frame-thumb ${frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : ''}`} onClick={() => selectFrame(action.id, frameIndex)}>
-                        <img src={typeof frame === 'string' ? frame : frame?.url} alt="" />
+                        <img src={resolveWeb5eAssetUrl(typeof frame === 'string' ? frame : frame?.url)} alt="" />
                         {!readOnly ? <button type="button" onClick={(e) => { e.stopPropagation(); removeFrame(action.id, frameIndex); }}>×</button> : null}
                       </div>
                     ))}
@@ -2229,7 +2241,7 @@ export default function App() {
                       placeholder="Colle l'URL de l'image"
                     />
                   )}
-                  {block.value ? <img src={block.value} alt="" className="preview-image" /> : <div className="preview-placeholder">Aucune image ajoutée</div>}
+                  {block.value ? <img src={resolveWeb5eAssetUrl(block.value)} alt="" className="preview-image" /> : <div className="preview-placeholder">Aucune image ajoutée</div>}
                 </>
               )}
 
