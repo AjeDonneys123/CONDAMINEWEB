@@ -611,6 +611,146 @@
   gap: 12px;
 }
 
+.presentation-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.presentation-mode-tabs,
+.presentation-group-row,
+.presentation-validation-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.presentation-mode-tab,
+.presentation-qcm-correct {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.presentation-mode-tab.active,
+.presentation-qcm-correct.active {
+  background: #1f2944;
+  color: white;
+}
+
+.presentation-group-input {
+  min-width: min(100%, 520px);
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+}
+
+.presentation-slide-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.presentation-slide-tab,
+.presentation-slide-add {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.presentation-slide-tab.active {
+  background: #1f2944;
+  color: white;
+}
+
+.presentation-slide-title {
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+  font-weight: 800;
+}
+
+.presentation-bg-colors {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.presentation-canvas {
+  min-height: 340px;
+  padding: 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.presentation-qcm-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.presentation-qcm-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.presentation-qcm-card input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+}
+
+.presentation-qcm-options {
+  display: grid;
+  gap: 8px;
+}
+
+.presentation-qcm-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.presentation-editor {
+  min-height: 260px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.presentation-validation-status {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #54647d;
+}
+
+.disabled-btn {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .article-toolbar {
   display: flex;
   flex-wrap: wrap;

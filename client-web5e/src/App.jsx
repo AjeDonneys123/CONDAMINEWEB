@@ -83,7 +83,56 @@ function createBlock(type = 'text') {
   }
   return {
     type,
-    value: type === 'text' ? '<h3>Nouveau bloc</h3><p>Écris ici.</p>' : ''
+    value: type === 'text' ? '<h3>Nouveau slide</h3><p>Écris ici.</p>' : ''
+  };
+}
+
+function createPresentationSlide(index = 0) {
+  return {
+    id: `slide_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    title: `Slide ${index + 1}`,
+    presenterName: '',
+    html: '<h3>Nouveau slide</h3><p>Écris ici.</p>',
+    background: '#ffffff',
+    animation: null
+  };
+}
+
+function normalizePresentationBlock(block = {}) {
+  const rawSlides = Array.isArray(block?.slides) && block.slides.length > 0
+    ? block.slides
+    : [{
+        id: `slide_${Date.now()}`,
+        title: 'Slide 1',
+        html: String(block?.value || '<h3>Nouveau slide</h3><p>Écris ici.</p>'),
+        background: '#ffffff',
+        animation: null
+      }];
+  return {
+    ...block,
+    groupMembers: Array.isArray(block?.groupMembers) ? block.groupMembers.map((name) => String(name || '').trim()).filter(Boolean) : [],
+    groupMembersText: String(block?.groupMembersText || (Array.isArray(block?.groupMembers) ? block.groupMembers.join(', ') : '')),
+    qcmQuestions: Array.isArray(block?.qcmQuestions) ? block.qcmQuestions : [],
+    activeEditorTab: String(block?.activeEditorTab || 'slides') === 'qcm' ? 'qcm' : 'slides',
+    presentationValidated: block?.presentationValidated === true,
+    slides: rawSlides.map((slide, index) => ({
+      id: String(slide?.id || `slide_${Date.now()}_${index}`),
+      title: String(slide?.title || `Slide ${index + 1}`),
+      presenterName: String(slide?.presenterName || ''),
+      html: String(slide?.html || slide?.value || ''),
+      background: String(slide?.background || '#ffffff'),
+      animation: slide?.animation && typeof slide.animation === 'object' ? slide.animation : null
+    })),
+    activeSlideIndex: Math.max(0, Math.min(Number(block?.activeSlideIndex || 0), rawSlides.length - 1))
+  };
+}
+
+function createQcmQuestion(index = 0) {
+  return {
+    id: `qcm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    question: `Question ${index + 1}`,
+    options: ['', '', '', ''],
+    correctIndex: 0
   };
 }
 
@@ -133,7 +182,8 @@ const ARTICLE_FONTS = [
   { value: 'Courier New', label: 'Courier' }
 ];
 
-const ARTICLE_COLORS = ['#1d2942', '#0ea5e9', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
+const ARTICLE_COLORS = ['#1d2942', '#0b3b91', '#0ea5e9', '#dc2626', '#eab308', '#ec4899', '#f97316', '#16a34a', '#7c3aed'];
+const SLIDE_BACKGROUNDS = ['#ffffff', '#eff6ff', '#fef3c7', '#fee2e2', '#ecfccb', '#f5f3ff', '#1d2942'];
 const WEB5E_EDITOR_PASSWORD = 'condamine';
 const WEB5E_TEACHER_PASSWORD = 'a';
 const WEB5E_DIRECT_STUDENT_PREFIX = 'web5e-direct-student';
@@ -719,14 +769,39 @@ function MobileActionRemote({
   );
 }
 
-function ArticleEditor({ value, onChange, readOnly }) {
+function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '' }) {
+  const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
   const editorRef = useRef(null);
-  const lastHtmlRef = useRef(String(value || ''));
+  const activeSlide = presentation.slides[presentation.activeSlideIndex] || presentation.slides[0];
+  const lastHtmlRef = useRef(String(activeSlide?.html || ''));
+  const groupMembers = useMemo(
+    () => String(presentation.groupMembersText || '')
+      .split(',')
+      .map((name) => String(name || '').trim())
+      .filter(Boolean),
+    [presentation.groupMembersText]
+  );
+  const isPresenterValid = groupMembers.some((name) => clean(name) === clean(activeSlide?.presenterName || ''));
+  const slideHasContent = Boolean(String(activeSlide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+  const isActiveSlideValid = isPresenterValid && slideHasContent;
+  const slidesValidCount = presentation.slides.filter((slide) => {
+    const validPresenter = groupMembers.some((name) => clean(name) === clean(slide?.presenterName || ''));
+    const hasContent = Boolean(String(slide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+    return validPresenter && hasContent;
+  }).length;
+  const qcmQuestions = Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions : [];
+  const qcmValidCount = qcmQuestions.filter((row) => {
+    const options = Array.isArray(row?.options) ? row.options : [];
+    return String(row?.question || '').trim() && options.every((option) => String(option || '').trim());
+  }).length;
+  const canValidatePresentation = groupMembers.length > 0
+    && slidesValidCount >= groupMembers.length
+    && qcmValidCount >= presentation.slides.length;
 
   useEffect(() => {
-    const nextHtml = String(value || '');
+    const nextHtml = String(activeSlide?.html || '');
     const editor = editorRef.current;
     lastHtmlRef.current = nextHtml;
     if (!editor) return;
@@ -734,7 +809,13 @@ function ArticleEditor({ value, onChange, readOnly }) {
     if (editor.innerHTML !== nextHtml) {
       editor.innerHTML = nextHtml;
     }
-  }, [value]);
+  }, [activeSlide?.id, activeSlide?.html]);
+
+  const patchPresentation = (patch) => onChange?.({ ...presentation, ...patch });
+  const patchSlide = (slideIndex, patch) => {
+    const nextSlides = presentation.slides.map((slide, index) => index === slideIndex ? { ...slide, ...patch } : slide);
+    patchPresentation({ slides: nextSlides });
+  };
 
   const exec = (command, commandValue = null) => {
     document.execCommand(command, false, commandValue);
@@ -755,16 +836,164 @@ function ArticleEditor({ value, onChange, readOnly }) {
     exec('insertHTML', html);
     const nextHtml = editorRef.current?.innerHTML || '';
     lastHtmlRef.current = nextHtml;
-    onChange?.(nextHtml);
+    patchSlide(presentation.activeSlideIndex, { html: nextHtml });
   };
 
   if (readOnly) {
-    return <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: value || '' }} />;
+    return (
+      <div className="presentation-shell readonly">
+        <div className="presentation-slide-tabs">
+          {presentation.slides.map((slide, index) => (
+            <button
+              key={slide.id}
+              type="button"
+              className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
+              onClick={() => patchPresentation({ activeSlideIndex: index })}
+            >
+              {slide.title}
+            </button>
+          ))}
+        </div>
+        <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
+          <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
+          {activeSlide?.animation ? (
+            <AnimationBlockEditor
+              block={activeSlide.animation}
+              onChange={() => {}}
+              onRemove={() => {}}
+              readOnly
+              sectionKey={sectionKey}
+              tabKey={tabKey}
+              blockIndex={blockIndex}
+              tabId={tabId}
+              entryId={entryId}
+            />
+          ) : null}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="article-editor-shell">
+    <div className="presentation-shell">
+      <div className="presentation-mode-tabs">
+        <button
+          type="button"
+          className={`presentation-mode-tab ${presentation.activeEditorTab !== 'qcm' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
+        >
+          Slides
+        </button>
+        <button
+          type="button"
+          className={`presentation-mode-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+        >
+          QCM resume
+        </button>
+      </div>
+      <div className="presentation-group-row">
+        <input
+          className="presentation-group-input"
+          value={presentation.groupMembersText || ''}
+          onChange={(e) => patchPresentation({ groupMembersText: e.target.value, groupMembers: e.target.value.split(',').map((name) => String(name || '').trim()).filter(Boolean) })}
+          placeholder="Membres du groupe, separes par des virgules"
+        />
+      </div>
+      {presentation.activeEditorTab === 'qcm' ? (
+        <div className="presentation-qcm-panel">
+          {qcmQuestions.map((question, questionIndex) => (
+            <div key={question.id} className="presentation-qcm-card">
+              <input
+                value={question.question}
+                onChange={(e) => patchPresentation({
+                  qcmQuestions: qcmQuestions.map((row, index) => index === questionIndex ? { ...row, question: e.target.value } : row)
+                })}
+                placeholder={`Question ${questionIndex + 1}`}
+              />
+              <div className="presentation-qcm-options">
+                {(question.options || ['', '', '', '']).map((option, optionIndex) => (
+                  <div key={`${question.id}_${optionIndex}`} className="presentation-qcm-option">
+                    <input
+                      value={option}
+                      onChange={(e) => patchPresentation({
+                        qcmQuestions: qcmQuestions.map((row, index) => (
+                          index === questionIndex
+                            ? {
+                                ...row,
+                                options: (row.options || ['', '', '', '']).map((entry, idx) => idx === optionIndex ? e.target.value : entry)
+                              }
+                            : row
+                        ))
+                      })}
+                      placeholder={`Reponse ${optionIndex + 1}`}
+                    />
+                    <button
+                      type="button"
+                      className={Number(question.correctIndex || 0) === optionIndex ? 'presentation-qcm-correct active' : 'presentation-qcm-correct'}
+                      onClick={() => patchPresentation({
+                        qcmQuestions: qcmQuestions.map((row, index) => index === questionIndex ? { ...row, correctIndex: optionIndex } : row)
+                      })}
+                    >
+                      Bonne
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => patchPresentation({ qcmQuestions: [...qcmQuestions, createQcmQuestion(qcmQuestions.length)] })}
+          >
+            + Question QCM
+          </button>
+        </div>
+      ) : (
+        <>
+      <div className="presentation-slide-tabs">
+        {presentation.slides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
+            onClick={() => patchPresentation({ activeSlideIndex: index })}
+          >
+            {slide.title}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="presentation-slide-add"
+          disabled={!isActiveSlideValid}
+          onClick={() => patchPresentation({
+            slides: [...presentation.slides, createPresentationSlide(presentation.slides.length)],
+            activeSlideIndex: presentation.slides.length
+          })}
+        >
+          + Slide
+        </button>
+      </div>
       <div className="article-toolbar">
+        <input
+          className="presentation-slide-title"
+          value={activeSlide?.title || ''}
+          onChange={(e) => patchSlide(presentation.activeSlideIndex, { title: e.target.value })}
+          placeholder="Titre du slide"
+        />
+        <input
+          className="presentation-slide-title"
+          value={activeSlide?.presenterName || ''}
+          onChange={(e) => patchSlide(presentation.activeSlideIndex, { presenterName: e.target.value })}
+          placeholder="Nom de l'exposant"
+          list={`presentation-members-${blockIndex}`}
+        />
+        <datalist id={`presentation-members-${blockIndex}`}>
+          {groupMembers.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
         <select
           value={fontFamily}
           onChange={(e) => {
@@ -792,18 +1021,67 @@ function ArticleEditor({ value, onChange, readOnly }) {
             />
           ))}
         </div>
+        <div className="presentation-bg-colors">
+          {SLIDE_BACKGROUNDS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className="article-color-dot"
+              style={{ background: color, borderColor: color === '#ffffff' ? '#cbd5e1' : '#ffffff' }}
+              onClick={() => patchSlide(presentation.activeSlideIndex, { background: color })}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => patchSlide(presentation.activeSlideIndex, {
+            animation: activeSlide?.animation || createAnimationBlockFromDraft({ title: `Animation ${activeSlide?.title || 'slide'}` })
+          })}
+        >
+          Animation slide
+        </button>
       </div>
-      <div
-        ref={editorRef}
-        className="article-editor"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={(e) => {
-          const nextHtml = e.currentTarget.innerHTML;
-          lastHtmlRef.current = nextHtml;
-          onChange?.(nextHtml);
-        }}
-      />
+      <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
+        <div
+          ref={editorRef}
+          className="article-editor presentation-editor"
+          contentEditable
+          suppressContentEditableWarning
+          onInput={(e) => {
+            const nextHtml = e.currentTarget.innerHTML;
+            lastHtmlRef.current = nextHtml;
+            patchSlide(presentation.activeSlideIndex, { html: nextHtml });
+          }}
+        />
+        {activeSlide?.animation ? (
+          <AnimationBlockEditor
+            block={activeSlide.animation}
+            onChange={(nextAnimation) => patchSlide(presentation.activeSlideIndex, { animation: nextAnimation })}
+            onRemove={() => patchSlide(presentation.activeSlideIndex, { animation: null })}
+            readOnly={false}
+            sectionKey={sectionKey}
+            tabKey={tabKey}
+            blockIndex={blockIndex}
+            tabId={tabId}
+            entryId={entryId}
+          />
+        ) : null}
+      </div>
+      </>
+      )}
+      <div className="presentation-validation-bar">
+        <div className="presentation-validation-status">
+          {slidesValidCount}/{Math.max(groupMembers.length, 1)} slides valides • {qcmValidCount}/{presentation.slides.length} questions QCM valides
+        </div>
+        <button
+          type="button"
+          className={`primary-btn ${canValidatePresentation ? '' : 'disabled-btn'}`}
+          disabled={!canValidatePresentation}
+          onClick={() => patchPresentation({ presentationValidated: true })}
+        >
+          Valider ma presentation
+        </button>
+      </div>
     </div>
   );
 }
@@ -2035,8 +2313,8 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const updateBlock = (index, value) => {
-    const nextBlocks = blocks.map((block, i) => i === index ? { ...block, value } : block);
+  const replaceBlock = (index, nextBlock) => {
+    const nextBlocks = blocks.map((block, i) => i === index ? nextBlock : block);
     updateBlocks(nextBlocks);
     queueAutosave(nextBlocks);
     void persistBlocks(nextBlocks);
@@ -2199,7 +2477,7 @@ export default function App() {
           </div>
           {user && (
             <div className="toolbar">
-              <button onClick={() => addBlock('text')}>Article</button>
+              <button onClick={() => addBlock('text')}>Présentation</button>
               <button onClick={() => addBlock('image')}>Image</button>
               <button onClick={() => addBlock('embed')}>Iframe</button>
               <button onClick={() => addBlock('animation')}>Animation</button>
@@ -2254,7 +2532,7 @@ export default function App() {
               <div className="block-head">
                 <span>
                   {block.type === 'text'
-                    ? 'Article'
+                    ? 'Présentation'
                     : block.type === 'image'
                       ? 'Image'
                       : block.type === 'animation'
@@ -2265,10 +2543,15 @@ export default function App() {
               </div>
 
               {block.type === 'text' && (
-                <ArticleEditor
-                  value={block.value}
-                  onChange={(nextValue) => updateBlock(index, nextValue)}
+                <PresentationEditor
+                  block={block}
+                  onChange={(nextBlock) => replaceBlock(index, nextBlock)}
                   readOnly={!user}
+                  sectionKey={activeSection}
+                  tabKey={currentTabId}
+                  blockIndex={index}
+                  tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+                  entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
                 />
               )}
 
@@ -2277,7 +2560,7 @@ export default function App() {
                   {user && (
                     <input
                       value={block.value}
-                      onChange={(e) => updateBlock(index, e.target.value)}
+                      onChange={(e) => replaceBlock(index, { ...block, value: e.target.value })}
                       placeholder="Colle l'URL de l'image"
                     />
                   )}
@@ -2290,7 +2573,7 @@ export default function App() {
                   {user && (
                     <input
                       value={block.value}
-                      onChange={(e) => updateBlock(index, e.target.value)}
+                      onChange={(e) => replaceBlock(index, { ...block, value: e.target.value })}
                       placeholder="Colle l'URL d'un site, jeu ou Google Sites"
                     />
                   )}
