@@ -1323,15 +1323,16 @@
   padding: 10px 12px;
   pointer-events: auto;
   position: relative;
-  padding-right: 112px;
+  padding-right: 152px;
 }
 
 .animation-action-qr {
   position: absolute;
   top: 10px;
   right: 10px;
-  width: 92px;
-  height: 92px;
+  width: 132px;
+  height: 132px;
+  padding: 8px;
   border-radius: 14px;
   background: white;
   border: 1px solid rgba(28, 41, 67, 0.1);
@@ -1344,6 +1345,8 @@
   width: 100%;
   height: 100%;
   display: block;
+  background: white;
+  border-radius: 8px;
 }
 
 .animation-action-qr-placeholder {

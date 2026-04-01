@@ -387,7 +387,7 @@ function ActionQrCode({ actionId, sectionKey, tabKey, blockIndex, tabId, entryId
   return (
     <div className="animation-action-qr">
       <img
-        src={`https://api.qrserver.com/v1/create-qr-code/?size=92x92&data=${encodeURIComponent(qrUrl)}`}
+        src={`https://api.qrserver.com/v1/create-qr-code/?size=116x116&ecc=M&qzone=2&data=${encodeURIComponent(qrUrl)}`}
         alt="QR action"
       />
     </div>
