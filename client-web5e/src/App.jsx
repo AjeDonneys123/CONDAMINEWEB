@@ -872,6 +872,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               entryId={entryId}
             />
           ) : null}
+          {activeSlide?.presenterName ? (
+            <div className="presentation-slide-signature">Par {String(activeSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+          ) : null}
         </div>
       </div>
     );
@@ -1101,6 +1104,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             entryId={entryId}
           />
         ) : null}
+        {activeSlide?.presenterName ? (
+          <div className="presentation-slide-signature">Par {String(activeSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+        ) : null}
       </div>
       </>
       )}
@@ -1121,6 +1127,45 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         >
           Valider ma presentation
         </button>
+      </div>
+    </div>
+  );
+}
+
+function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '' }) {
+  const normalized = useMemo(() => normalizePresentationBlock(presentation), [presentation]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeSlide = normalized.slides[activeIndex] || normalized.slides[0];
+
+  return (
+    <div className="public-presentation-viewer">
+      <div className="presentation-slide-tabs">
+        {normalized.slides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            className={`presentation-slide-tab ${index === activeIndex ? 'active' : ''}`}
+            onClick={() => setActiveIndex(index)}
+          >
+            {slide.title}
+          </button>
+        ))}
+      </div>
+      <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
+        <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
+        {activeSlide?.animation ? (
+          <AnimationBlockEditor
+            block={activeSlide.animation}
+            onChange={() => {}}
+            onRemove={() => {}}
+            readOnly
+            sectionKey={sectionKey}
+            tabKey={tabKey}
+            blockIndex={blockIndex}
+            tabId={tabId}
+            entryId={entryId}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -2371,6 +2416,10 @@ export default function App() {
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
   const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
   const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
+  const validatedPresentations = articleBlocks
+    .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
+    .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
+  const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
 
   if (isMobileActionMode) {
     return <MobileActionRemote token={mobileActionToken} />;
@@ -2568,6 +2617,44 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        {validatedPresentations.length > 0 ? (
+          <div className="validated-presentations-grid">
+            {validatedPresentations.map(({ presentation, index }) => (
+              <article key={`validated-presentation-${index}`} className="validated-presentation-card">
+                <div className="validated-presentation-eyebrow">Presentation validee</div>
+                <h3>{presentation.slides?.[0]?.title || `Presentation ${index + 1}`}</h3>
+                <div className="validated-presentation-meta">
+                  <span>{presentation.slides.length} slides</span>
+                  <span>{Array.isArray(presentation.groupMembers) ? presentation.groupMembers.length : 0} membres</span>
+                  <span>{Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions.length : 0} questions QCM</span>
+                </div>
+                <div className="validated-presentation-members">
+                  {(Array.isArray(presentation.groupMembers) ? presentation.groupMembers : []).map((member) => (
+                    <span key={member} className="validated-member-chip">{member}</span>
+                  ))}
+                </div>
+                <div className="validated-presentation-actions">
+                  <button type="button" className="presentation-slide-add" onClick={() => setOpenedValidatedPresentationIndex(index)}>Ouvrir</button>
+                  <button type="button" className="presentation-slide-add" onClick={() => setOpenedValidatedPresentationIndex(index)}>Play</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+
+        {openedValidatedPresentationIndex >= 0 && validatedPresentations[openedValidatedPresentationIndex] ? (
+          <div className="validated-presentation-opened">
+            <PublicPresentationViewer
+              presentation={validatedPresentations[openedValidatedPresentationIndex].presentation}
+              sectionKey={activeSection}
+              tabKey={currentTabId}
+              blockIndex={validatedPresentations[openedValidatedPresentationIndex].index}
+              tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+              entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+            />
+          </div>
+        ) : null}
 
         <div className="blocks-area public article-stage">
           {articleBlocks.map(({ block, index }) => (
