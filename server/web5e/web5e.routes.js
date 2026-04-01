@@ -331,6 +331,19 @@ router.post('/mobile-action-upload/:token', uploadBatch.array('files', 8), async
     }
 });
 
+router.post('/mobile-action-consume/:token', async (req, res) => {
+    try {
+        const access = await readMobileTokenDoc(req.params.token);
+        if (!access) return res.status(404).json({ ok: false, error: 'Token introuvable' });
+        access.pendingSoundUrl = '';
+        access.pendingFrames = [];
+        await access.save();
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/tabs', async (req, res) => {
     try {
         const site = await ensureDefaultSite();

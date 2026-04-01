@@ -325,7 +325,7 @@ function buildMobileTokenQrUrl(token = '') {
   }
 }
 
-function ActionQrCode({ actionId, actionName, sectionKey, tabKey, blockIndex, tabId, entryId }) {
+function ActionQrCode({ actionId, actionName, sectionKey, tabKey, blockIndex, tabId, entryId, onPendingMedia }) {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -340,7 +340,7 @@ function ActionQrCode({ actionId, actionName, sectionKey, tabKey, blockIndex, ta
         setLoading(false);
         return;
       }
-      if (!safeEntryId) {
+      if (!safeEntryId && String(sectionKey || '').trim() !== 'welcome') {
         setToken('');
         setLoading(false);
         timeoutId = window.setTimeout(run, 1500);
@@ -385,6 +385,40 @@ function ActionQrCode({ actionId, actionName, sectionKey, tabKey, blockIndex, ta
     };
   }, [actionId, actionName, sectionKey, tabKey, blockIndex, tabId, entryId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId = null;
+    const poll = async () => {
+      const safeToken = String(token || '').trim();
+      if (!safeToken) return;
+      try {
+        const res = await fetch(`/api/web5e/mobile-action-session/${encodeURIComponent(safeToken)}`);
+        const data = await res.json().catch(() => ({}));
+        const pendingFrames = Array.isArray(data?.pendingFrames) ? data.pendingFrames : [];
+        const pendingSoundUrl = String(data?.pendingSoundUrl || '').trim();
+        if (!cancelled && (pendingFrames.length > 0 || pendingSoundUrl)) {
+          const consumed = await onPendingMedia?.({
+            token: safeToken,
+            actionId: String(actionId || '').trim(),
+            pendingFrames,
+            pendingSoundUrl
+          });
+          if (consumed) {
+            await fetch(`/api/web5e/mobile-action-consume/${encodeURIComponent(safeToken)}`, { method: 'POST' });
+          }
+        }
+      } catch (_) {}
+    };
+    if (token) {
+      poll();
+      intervalId = window.setInterval(poll, 4000);
+    }
+    return () => {
+      cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [token, actionId, onPendingMedia]);
+
   if (!token) {
     return <div className="animation-action-qr animation-action-qr-placeholder">{loading ? 'QR...' : ((entryId || sectionKey === 'welcome') ? 'QR' : 'Sauvegarde...')}</div>;
   }
@@ -410,6 +444,7 @@ function MobileActionRemote({
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sessionData, setSessionData] = useState(null);
+  const [recordError, setRecordError] = useState('');
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
   const [recording, setRecording] = useState(false);
@@ -455,9 +490,62 @@ function MobileActionRemote({
     : null;
   const actionTitle = String(resolvedAction?.name || sessionData?.actionName || 'Action').trim();
 
-  const appendPhotos = async (fileList) => {
-    const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
-    if (files.length === 0) return;
+  const fileToUpload = async (file) => {
+    if (file.type.startsWith('image/')) return file;
+    if (!file.type.startsWith('video/')) return null;
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      const objectUrl = URL.createObjectURL(file);
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      video.src = objectUrl;
+      video.onloadeddata = () => {
+        try {
+          video.currentTime = Math.min(0.15, Number(video.duration || 0));
+        } catch (_) {}
+      };
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, video.videoWidth || 1);
+          canvas.height = Math.max(1, video.videoHeight || 1);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            URL.revokeObjectURL(objectUrl);
+            resolve(null);
+            return;
+          }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => {
+            URL.revokeObjectURL(objectUrl);
+            if (!blob) {
+              resolve(null);
+              return;
+            }
+            resolve(new File([blob], `${file.name || 'capture'}.png`, { type: 'image/png' }));
+          }, 'image/png');
+        } catch (_) {
+          URL.revokeObjectURL(objectUrl);
+          resolve(null);
+        }
+      };
+      video.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(null);
+      };
+    });
+  };
+
+  const appendMedia = async (fileList) => {
+    const sourceFiles = Array.from(fileList || []).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'));
+    if (sourceFiles.length === 0) return;
+    const files = (await Promise.all(sourceFiles.map(fileToUpload))).filter(Boolean);
+    if (files.length === 0) {
+      setMessage('Capture impossible');
+      window.setTimeout(() => setMessage(''), 1600);
+      return;
+    }
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     setSaving(true);
@@ -487,8 +575,11 @@ function MobileActionRemote({
       return;
     }
     try {
+      setRecordError('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? { mimeType: 'audio/webm;codecs=opus' }
+        : undefined);
       recorderChunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data?.size) recorderChunksRef.current.push(event.data);
@@ -527,7 +618,9 @@ function MobileActionRemote({
       recorderRef.current = recorder;
       setRecording(true);
       recorder.start();
-    } catch (_) {}
+    } catch (error) {
+      setRecordError(String(error?.message || 'Micro inaccessible'));
+    }
   };
 
   if (loading) {
@@ -539,16 +632,17 @@ function MobileActionRemote({
       <div className="mobile-action-card">
         <div className="eyebrow">Action mobile</div>
         <h1>{actionTitle || 'Action'}</h1>
-        <p>{sessionData?.resolved === false ? "L'action se prepare encore. Tu peux deja envoyer le son ou les photos." : 'Ajoute du son ou des photos de sprites depuis le telephone.'}</p>
+        <p>{sessionData?.resolved === false ? "L'action se prepare encore. Tu peux deja envoyer le son ou les captures." : 'Ajoute du son ou des captures de sprites depuis le telephone.'}</p>
         <div className="mobile-action-buttons">
           <button type="button" className={recording ? 'mobile-rec active' : 'mobile-rec'} onClick={() => void toggleRecord()}>
             {recording ? 'Arreter micro' : 'Enregistrer micro'}
           </button>
           <label className="mobile-upload-btn">
-            Envoyer des photos
-            <input type="file" accept="image/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendPhotos(e.target.files)} />
+            Camera / video
+            <input type="file" accept="image/*,video/*" capture="environment" multiple className="hidden-file-input" onChange={(e) => void appendMedia(e.target.files)} />
           </label>
         </div>
+        {recordError ? <div className="mobile-action-status">{recordError}</div> : null}
         {saving ? <div className="mobile-action-status">Envoi...</div> : null}
         {message ? <div className="mobile-action-status">{message}</div> : null}
       </div>
@@ -987,6 +1081,33 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     )));
   };
 
+  const applyPendingMedia = async ({ token, actionId, pendingFrames, pendingSoundUrl }) => {
+    const action = actions.find((item) => item.id === actionId);
+    if (!action) return false;
+    const existingUrls = new Set((Array.isArray(action.frames) ? action.frames : []).map((frame) => String((typeof frame === 'string' ? frame : frame?.url) || '')));
+    const incomingFrames = (Array.isArray(pendingFrames) ? pendingFrames : []).filter((frame) => {
+      const url = String(frame?.url || '');
+      return url && !existingUrls.has(url);
+    });
+    const nextSoundUrl = String(pendingSoundUrl || '').trim();
+    const shouldMerge = incomingFrames.length > 0 || (nextSoundUrl && nextSoundUrl !== String(action.soundUrl || '').trim());
+    if (!shouldMerge) {
+      await fetch(`/api/web5e/mobile-action-consume/${encodeURIComponent(String(token || ''))}`, { method: 'POST' }).catch(() => {});
+      return false;
+    }
+    const nextActions = actions.map((item) => (
+      item.id === actionId
+        ? {
+            ...item,
+            soundUrl: nextSoundUrl || item.soundUrl || '',
+            frames: [...(Array.isArray(item.frames) ? item.frames : []), ...incomingFrames]
+          }
+        : item
+    ));
+    updateActions(nextActions);
+    return true;
+  };
+
   const nudgeFrame = (actionId, frameIndex, deltaX, deltaY) => {
     const action = actions.find((item) => item.id === actionId);
     const frame = action?.frames?.[frameIndex];
@@ -1289,7 +1410,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           {actions.map((action, index) => (
             <div key={action.id} className="animation-action-card compact">
               {!readOnly ? (
-                <ActionQrCode actionId={action.id} actionName={action.name} sectionKey={sectionKey} tabKey={tabKey} blockIndex={blockIndex} tabId={tabId} entryId={entryId} />
+                <ActionQrCode actionId={action.id} actionName={action.name} sectionKey={sectionKey} tabKey={tabKey} blockIndex={blockIndex} tabId={tabId} entryId={entryId} onPendingMedia={applyPendingMedia} />
               ) : null}
               <div className="animation-action-head">
                 <input
