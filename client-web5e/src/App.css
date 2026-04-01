@@ -755,6 +755,15 @@
   color: #54647d;
 }
 
+.presentation-validated-flash {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #16a34a;
+  color: white;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.22);
+}
+
 .disabled-btn {
   opacity: 0.45;
   cursor: not-allowed;

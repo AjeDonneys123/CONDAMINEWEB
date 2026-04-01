@@ -774,6 +774,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
+  const [validatedFlash, setValidatedFlash] = useState(false);
   const editorRef = useRef(null);
   const activeSlide = presentation.slides[presentation.activeSlideIndex] || presentation.slides[0];
   const lastHtmlRef = useRef(String(activeSlide?.html || ''));
@@ -1107,11 +1108,16 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         <div className="presentation-validation-status">
           {slidesValidCount}/{groupMembers.length || 0} slides valides • {qcmValidCount} questions QCM valides
         </div>
+        {validatedFlash ? <div className="presentation-validated-flash">Presentation validee</div> : null}
         <button
           type="button"
           className={`primary-btn ${canValidatePresentation ? '' : 'disabled-btn'}`}
           disabled={!canValidatePresentation}
-          onClick={() => patchPresentation({ presentationValidated: true })}
+          onClick={() => {
+            patchPresentation({ presentationValidated: true });
+            setValidatedFlash(true);
+            window.setTimeout(() => setValidatedFlash(false), 1000);
+          }}
         >
           Valider ma presentation
         </button>
