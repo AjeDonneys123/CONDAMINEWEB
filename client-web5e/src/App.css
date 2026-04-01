@@ -462,6 +462,15 @@
   color: #ff6b3d;
 }
 
+.site-version-tag {
+  margin-top: 6px;
+  font-size: .82rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #1d2942;
+}
+
 .section-head h2 {
   margin: 8px 0 0;
   max-width: 760px;

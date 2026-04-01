@@ -3,6 +3,7 @@ import './App.css';
 
 const WEB5E_SESSION_KEY = 'web5eBridgeSession';
 const WEB5E_LOCAL_CONTENT_KEY = 'web5eLocalContentV1';
+const WEB5E_VERSION_NAME = 'Orion Slides';
 
 const SECTION_CONFIG = {
   eau: {
@@ -2397,7 +2398,10 @@ export default function App() {
 
       <header className="hero hero-simple">
         <div className="hero-simple-top">
-          <div className="eyebrow">Projet 5e</div>
+          <div>
+            <div className="eyebrow">Projet 5e</div>
+            <div className="site-version-tag">Version {WEB5E_VERSION_NAME}</div>
+          </div>
           {user ? (
             <div className="hero-editor-actions">
               <button onClick={() => setWelcomeAnimationOpen((prev) => !prev)}>Animation welcome</button>
