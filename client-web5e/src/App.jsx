@@ -818,6 +818,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     return validPresenter && hasContent;
   }).length;
   const qcmQuestions = Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions : [];
+  const hasQcmTab = qcmQuestions.length > 0 || presentation.activeEditorTab === 'qcm';
   const qcmValidCount = qcmQuestions.filter((row) => {
     const options = Array.isArray(row?.options) ? row.options : [];
     return String(row?.question || '').trim() && options.every((option) => String(option || '').trim());
@@ -991,36 +992,135 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               type="button"
               className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
             onClick={() => patchPresentation({ activeSlideIndex: index })}
-          >
+            >
             {`Slide ${index + 1}`}
           </button>
         ))}
-        </div>
-        <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
-          <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
-          {activeSlide?.animation ? (
-            <AnimationBlockEditor
-              block={activeSlide.animation}
-              onChange={() => {}}
-              onRemove={() => {}}
-              readOnly
-              sectionKey={sectionKey}
-              tabKey={tabKey}
-              blockIndex={blockIndex}
-              tabId={tabId}
-              entryId={entryId}
-            />
-          ) : null}
-          {activeSlide?.presenterName ? (
-            <div className="presentation-slide-signature">Par {String(activeSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+          {hasQcmTab ? (
+            <button
+              type="button"
+              className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
+              onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+            >
+              QCM
+            </button>
           ) : null}
         </div>
+        {presentation.activeEditorTab === 'qcm' ? (
+          <div className="presentation-qcm-panel">
+            {qcmQuestions.map((question, questionIndex) => (
+              <div key={question.id} className="presentation-qcm-card">
+                <input value={question.question} readOnly placeholder={`Question ${questionIndex + 1}`} />
+                <div className="presentation-qcm-options">
+                  {(question.options || ['', '', '', '']).map((option, optionIndex) => (
+                    <div key={`${question.id}_${optionIndex}`} className="presentation-qcm-option">
+                      <input value={option} readOnly placeholder={`Reponse ${optionIndex + 1}`} />
+                      <button
+                        type="button"
+                        className={Number(question.correctIndex || 0) === optionIndex ? 'presentation-qcm-correct active' : 'presentation-qcm-correct'}
+                      >
+                        Bonne
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
+            <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
+            {activeSlide?.animation ? (
+              <AnimationBlockEditor
+                block={activeSlide.animation}
+                onChange={() => {}}
+                onRemove={() => {}}
+                readOnly
+                sectionKey={sectionKey}
+                tabKey={tabKey}
+                blockIndex={blockIndex}
+                tabId={tabId}
+                entryId={entryId}
+              />
+            ) : null}
+            {activeSlide?.presenterName ? (
+              <div className="presentation-slide-signature">Par {String(activeSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+            ) : null}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="presentation-shell">
+      <div className="presentation-slide-tabs">
+        {presentation.slides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
+            onClick={() => patchPresentation({ activeSlideIndex: index, activeEditorTab: 'slides' })}
+          >
+            {`Slide ${index + 1}`}
+          </button>
+        ))}
+        {hasQcmTab ? (
+          <button
+            type="button"
+            className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
+            onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+          >
+            QCM
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="presentation-slide-add presentation-slide-add-blue"
+          onClick={() => patchPresentation({
+            slides: [...presentation.slides, createPresentationSlide(presentation.slides.length)],
+            activeSlideIndex: presentation.slides.length,
+            activeEditorTab: 'slides'
+          })}
+        >
+          + Slide
+        </button>
+        <button
+          type="button"
+          className="presentation-slide-add presentation-slide-add-violet"
+          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+        >
+          + QCM
+        </button>
+        <button
+          type="button"
+          className="presentation-slide-add presentation-slide-add-red"
+          onClick={() => {
+            if (removeActiveTextBox()) {
+              return;
+            }
+            if (presentation.slides.length <= 1) {
+              if (window.confirm('Effacer le contenu de cette presentation ?')) {
+                patchPresentation({
+                  slides: [createPresentationSlide(0)],
+                  activeSlideIndex: 0,
+                  qcmQuestions: [],
+                  presentationValidated: false
+                });
+              }
+              return;
+            }
+            const nextSlides = presentation.slides.filter((_, index) => index !== presentation.activeSlideIndex);
+            patchPresentation({
+              slides: nextSlides,
+              activeSlideIndex: Math.max(0, Math.min(presentation.activeSlideIndex, nextSlides.length - 1)),
+              presentationValidated: false
+            });
+          }}
+        >
+          Supprimer
+        </button>
+      </div>
       {presentation.activeEditorTab === 'qcm' ? (
         <div className="presentation-qcm-panel">
           {qcmQuestions.map((question, questionIndex) => (
@@ -1073,63 +1173,6 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         </div>
       ) : (
         <>
-      <div className="presentation-slide-tabs">
-        {presentation.slides.map((slide, index) => (
-          <button
-            key={slide.id}
-            type="button"
-            className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
-            onClick={() => patchPresentation({ activeSlideIndex: index })}
-          >
-            {`Slide ${index + 1}`}
-          </button>
-        ))}
-        <button
-          type="button"
-          className="presentation-slide-add presentation-slide-add-blue"
-          onClick={() => patchPresentation({
-            slides: [...presentation.slides, createPresentationSlide(presentation.slides.length)],
-            activeSlideIndex: presentation.slides.length
-          })}
-        >
-          + Slide
-        </button>
-        <button
-          type="button"
-          className="presentation-slide-add presentation-slide-add-violet"
-          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
-        >
-          + QCM
-        </button>
-        <button
-          type="button"
-          className="presentation-slide-add presentation-slide-add-red"
-          onClick={() => {
-            if (removeActiveTextBox()) {
-              return;
-            }
-            if (presentation.slides.length <= 1) {
-              if (window.confirm('Effacer le contenu de cette presentation ?')) {
-                patchPresentation({
-                  slides: [createPresentationSlide(0)],
-                  activeSlideIndex: 0,
-                  qcmQuestions: [],
-                  presentationValidated: false
-                });
-              }
-              return;
-            }
-            const nextSlides = presentation.slides.filter((_, index) => index !== presentation.activeSlideIndex);
-            patchPresentation({
-              slides: nextSlides,
-              activeSlideIndex: Math.max(0, Math.min(presentation.activeSlideIndex, nextSlides.length - 1)),
-              presentationValidated: false
-            });
-          }}
-        >
-          Supprimer
-        </button>
-      </div>
       <div className="article-toolbar slides-toolbar">
         <input
           className="presentation-slide-title"
@@ -1318,10 +1361,66 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   );
 }
 
-function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '' }) {
+function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', mode = 'browse' }) {
   const normalized = useMemo(() => normalizePresentationBlock(presentation), [presentation]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState('slides');
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState([]);
+  const [quizCompleted, setQuizCompleted] = useState(false);
+  const [slideshowStep, setSlideshowStep] = useState(0);
   const activeSlide = normalized.slides[activeIndex] || normalized.slides[0];
+  const qcmQuestions = Array.isArray(normalized.qcmQuestions) ? normalized.qcmQuestions : [];
+  const hasQcmTab = qcmQuestions.length > 0;
+  const isSlideshow = mode === 'slideshow';
+  const totalSteps = normalized.slides.length + (hasQcmTab ? 1 : 0);
+  const showingQcm = isSlideshow ? (hasQcmTab && slideshowStep === normalized.slides.length) : activeTab === 'qcm';
+  const slideshowSlide = normalized.slides[Math.min(slideshowStep, Math.max(0, normalized.slides.length - 1))] || normalized.slides[0];
+  const visibleSlide = isSlideshow ? slideshowSlide : activeSlide;
+  const quizQuestion = qcmQuestions[quizIndex] || null;
+  const quizScore = quizAnswers.filter((entry) => entry?.isCorrect).length;
+  const quizPassed = quizCompleted && quizScore === qcmQuestions.length && qcmQuestions.length > 0;
+
+  useEffect(() => {
+    setQuizIndex(0);
+    setQuizAnswers([]);
+    setQuizCompleted(false);
+  }, [normalized.presentationName, qcmQuestions.length]);
+
+  useEffect(() => {
+    setSlideshowStep(0);
+    setActiveIndex(0);
+    setActiveTab('slides');
+  }, [normalized.presentationName, normalized.slides.length, isSlideshow]);
+
+  const restartQuiz = () => {
+    setQuizIndex(0);
+    setQuizAnswers([]);
+    setQuizCompleted(false);
+  };
+
+  const submitQuizAnswer = (optionIndex) => {
+    if (!quizQuestion || quizCompleted) return;
+    const correctIndex = Number(quizQuestion.correctIndex || 0);
+    const chosenAnswer = String((quizQuestion.options || [])[optionIndex] || '').trim();
+    const correctAnswer = String((quizQuestion.options || [])[correctIndex] || '').trim();
+    const isCorrect = optionIndex === correctIndex;
+    const nextAnswers = [
+      ...quizAnswers,
+      {
+        questionId: quizQuestion.id,
+        isCorrect,
+        chosenAnswer,
+        correctAnswer
+      }
+    ];
+    setQuizAnswers(nextAnswers);
+    if (quizIndex >= qcmQuestions.length - 1) {
+      setQuizCompleted(true);
+      return;
+    }
+    setQuizIndex((prev) => prev + 1);
+  };
 
   return (
     <div className="public-presentation-viewer">
@@ -1329,42 +1428,130 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
         <div className="eyebrow">Presentation validee</div>
         <h3>{normalized.presentationName || 'Presentation'}</h3>
       </div>
-      <div className="presentation-slide-tabs">
-        {normalized.slides.map((slide, index) => (
+      {isSlideshow ? (
+        <div className="slideshow-nav">
           <button
-            key={slide.id}
             type="button"
-            className={`presentation-slide-tab ${index === activeIndex ? 'active' : ''}`}
-            onClick={() => setActiveIndex(index)}
+            className="presentation-slide-add"
+            onClick={() => setSlideshowStep((prev) => Math.max(0, prev - 1))}
+            disabled={slideshowStep <= 0}
           >
-            {`Slide ${index + 1}`}
+            Diapo precedente
           </button>
-        ))}
-      </div>
-      <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
-        <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
-        {(activeSlide?.textBoxes || []).map((box) => (
-          <div
-            key={box.id}
-            className="presentation-text-box readonly"
-            style={{ left: box.x, top: box.y, width: box.width, height: box.height, fontSize: `${box.fontSize || 28}px` }}
-            dangerouslySetInnerHTML={{ __html: box.text || '' }}
-          />
-        ))}
-        {activeSlide?.animation ? (
-          <AnimationBlockEditor
-            block={activeSlide.animation}
-            onChange={() => {}}
-            onRemove={() => {}}
-            readOnly
-            sectionKey={sectionKey}
-            tabKey={tabKey}
-            blockIndex={blockIndex}
-            tabId={tabId}
-            entryId={entryId}
-          />
-        ) : null}
-      </div>
+          <div className="slideshow-progress">
+            {showingQcm ? `Etape ${totalSteps}/${totalSteps} : QCM` : `Diapo ${slideshowStep + 1}/${totalSteps}`}
+          </div>
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => setSlideshowStep((prev) => Math.min(totalSteps - 1, prev + 1))}
+            disabled={showingQcm || slideshowStep >= totalSteps - 1}
+          >
+            Diapo suivante
+          </button>
+        </div>
+      ) : (
+        <div className="presentation-slide-tabs">
+          {normalized.slides.map((slide, index) => (
+            <button
+              key={slide.id}
+              type="button"
+              className={`presentation-slide-tab ${activeTab === 'slides' && index === activeIndex ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('slides');
+                setActiveIndex(index);
+              }}
+            >
+              {`Slide ${index + 1}`}
+            </button>
+          ))}
+          {hasQcmTab ? (
+            <button
+              type="button"
+              className={`presentation-slide-tab ${activeTab === 'qcm' ? 'active' : ''}`}
+              onClick={() => setActiveTab('qcm')}
+            >
+              QCM
+            </button>
+          ) : null}
+        </div>
+      )}
+      {showingQcm ? (
+        <div className="public-quiz-shell">
+          {quizCompleted ? (
+            <div className={`public-quiz-result ${quizPassed ? 'success' : 'failure'}`}>
+              <div className="public-quiz-kicker">Quiz termine</div>
+              <h4>{quizPassed ? 'Tu as reussi le quiz' : 'Tu n as pas reussi le quiz'}</h4>
+              <p>
+                Score: {quizScore}/{qcmQuestions.length}
+              </p>
+              {quizPassed ? null : (
+                <div className="public-quiz-corrections">
+                  {quizAnswers.filter((entry) => !entry.isCorrect).map((entry, index) => (
+                    <div key={`${entry.questionId}_${index}`} className="public-quiz-correction">
+                      La reponse etait : {entry.correctAnswer || 'Aucune reponse definie'}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button type="button" className="public-quiz-restart" onClick={restartQuiz}>
+                Retour au debut du quiz
+              </button>
+            </div>
+          ) : quizQuestion ? (
+            <div className="public-quiz-card">
+              <div className="public-quiz-progress">Question {quizIndex + 1} / {qcmQuestions.length}</div>
+              <h4>{quizQuestion.question || `Question ${quizIndex + 1}`}</h4>
+              <div className="public-quiz-options">
+                {(quizQuestion.options || ['', '', '', '']).map((option, optionIndex) => (
+                  <button
+                    key={`${quizQuestion.id}_${optionIndex}`}
+                    type="button"
+                    className="public-quiz-option"
+                    onClick={() => submitQuizAnswer(optionIndex)}
+                  >
+                    <span className="public-quiz-option-letter">{String.fromCharCode(65 + optionIndex)}</span>
+                    <span>{option || `Reponse ${optionIndex + 1}`}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="public-quiz-result failure">
+              <div className="public-quiz-kicker">Quiz indisponible</div>
+              <h4>Aucune question QCM disponible</h4>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="presentation-canvas" style={{ background: visibleSlide?.background || '#ffffff', color: visibleSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
+          <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: visibleSlide?.html || '' }} />
+          {(visibleSlide?.textBoxes || []).map((box) => (
+            <div
+              key={box.id}
+              className="presentation-text-box readonly"
+              style={{ left: box.x, top: box.y, width: box.width, height: box.height, fontSize: `${box.fontSize || 28}px` }}
+              dangerouslySetInnerHTML={{ __html: box.text || '' }}
+            />
+          ))}
+          {visibleSlide?.animation ? (
+            <AnimationBlockEditor
+              block={visibleSlide.animation}
+              onChange={() => {}}
+              onRemove={() => {}}
+              readOnly
+              sectionKey={sectionKey}
+              tabKey={tabKey}
+              blockIndex={blockIndex}
+              tabId={tabId}
+              entryId={entryId}
+            />
+          ) : null}
+          {visibleSlide?.presenterName ? (
+            <div className="presentation-slide-signature">Par {String(visibleSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -2639,13 +2826,23 @@ export default function App() {
   const validatedPresentations = articleBlocks
     .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
+  const studentHasValidatedPresentation = !isTeacher && validatedPresentations.length > 0;
   const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
+  const [openedValidatedPresentationMode, setOpenedValidatedPresentationMode] = useState('browse');
+  const [editingPresentationBlockIndex, setEditingPresentationBlockIndex] = useState(-1);
   const presentationBlocks = blocks
     .map((block, index) => ({ block, index }))
     .filter(({ block }) => block.type === 'text')
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
   const hasEmptyPresentationName = presentationBlocks.some(({ presentation }) => !String(presentation.presentationName || '').trim());
-  const visibleArticleBlocks = user ? articleBlocks : articleBlocks.filter(({ block }) => block.type !== 'text');
+  const visibleArticleBlocks = user
+    ? articleBlocks.filter(({ block, index }) => {
+        if (block.type !== 'text') return true;
+        if (isTeacher) return true;
+        if (!studentHasValidatedPresentation) return true;
+        return index === editingPresentationBlockIndex;
+      })
+    : articleBlocks.filter(({ block }) => block.type !== 'text');
 
   if (isMobileActionMode) {
     return <MobileActionRemote token={mobileActionToken} />;
@@ -2800,6 +2997,10 @@ export default function App() {
                   window.alert('Donne d’abord un vrai nom a la presentation existante avant d’en creer une nouvelle.');
                   return;
                 }
+                if (studentHasValidatedPresentation) {
+                  window.alert('Tu as deja valide une presentation ici. Tu peux modifier celle que tu as terminee, mais pas en creer une deuxieme.');
+                  return;
+                }
                 addBlock('text');
               }}>Présentation</button>
               <button onClick={() => addBlock('image')}>Image</button>
@@ -2861,8 +3062,47 @@ export default function App() {
                   <span>{Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions.length : 0} questions QCM</span>
                 </div>
                 <div className="validated-presentation-actions">
-                  <button type="button" className="presentation-slide-add" onClick={() => setOpenedValidatedPresentationIndex(index)}>Ouvrir</button>
-                  <button type="button" className="presentation-slide-add" onClick={() => setOpenedValidatedPresentationIndex(index)}>Play</button>
+                  <button
+                    type="button"
+                    className="presentation-slide-add"
+                    onClick={() => {
+                      setOpenedValidatedPresentationMode('browse');
+                      setOpenedValidatedPresentationIndex(index);
+                    }}
+                  >
+                    Ouvrir
+                  </button>
+                  <button
+                    type="button"
+                    className="presentation-slide-add"
+                    onClick={() => {
+                      setOpenedValidatedPresentationMode('slideshow');
+                      setOpenedValidatedPresentationIndex(index);
+                    }}
+                  >
+                    Diapo
+                  </button>
+                  {user ? (
+                    <button
+                      type="button"
+                      className="presentation-slide-add"
+                      onClick={() => {
+                        const targetBlockIndex = validatedPresentations[index].index;
+                        const targetBlock = blocks[targetBlockIndex];
+                        if (targetBlock?.type === 'text') {
+                          replaceBlock(targetBlockIndex, {
+                            ...normalizePresentationBlock(targetBlock),
+                            presentationValidated: false
+                          });
+                        }
+                        setEditingPresentationBlockIndex(targetBlockIndex);
+                        setOpenedValidatedPresentationMode('browse');
+                        setOpenedValidatedPresentationIndex(-1);
+                      }}
+                    >
+                      Modifie
+                    </button>
+                  ) : null}
                   {isLocalSessionMode ? (
                     <button type="button" className="presentation-slide-add danger" onClick={() => deleteValidatedPresentationCard(index)}>Supprimer</button>
                   ) : null}
@@ -2881,6 +3121,7 @@ export default function App() {
               blockIndex={validatedPresentations[openedValidatedPresentationIndex].index}
               tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
               entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+              mode={openedValidatedPresentationMode}
             />
           </div>
         ) : null}
