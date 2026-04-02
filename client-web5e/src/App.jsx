@@ -368,6 +368,11 @@ function constrainTimelineActions(rawActions = []) {
   return next;
 }
 
+function snapTimelineSeconds(value = 0, step = 0.1) {
+  const safeStep = Math.max(0.01, Number(step || 0.1));
+  return Math.round(Number(value || 0) / safeStep) * safeStep;
+}
+
 const ARTICLE_FONTS = [
   { value: 'Arial', label: 'Arial' },
   { value: 'Georgia', label: 'Georgia' },
@@ -2298,15 +2303,16 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         const seconds = ratio * Math.max(1, Number(timelineDrag.totalSec || 1));
         if (timelineDrag.mode === 'seek') {
           const audio = audioTimelineRef.current;
-          setAudioCurrentTimeSec(seconds);
-          if (audio) audio.currentTime = seconds;
+          const snappedSeconds = snapTimelineSeconds(seconds);
+          setAudioCurrentTimeSec(snappedSeconds);
+          if (audio) audio.currentTime = snappedSeconds;
         } else if (timelineDrag.mode === 'move') {
           const targetIndex = actions.findIndex((action) => String(action.id || '') === String(timelineDrag.actionId || ''));
           if (targetIndex < 0) return;
           const previousEnd = targetIndex > 0
             ? Number(actions[targetIndex - 1]?.startSec || 0) + Number(actions[targetIndex - 1]?.durationSec || 0)
             : 0;
-          const nextStartSec = Math.max(previousEnd, seconds - Number(timelineDrag.offsetSec || 0));
+          const nextStartSec = snapTimelineSeconds(Math.max(previousEnd, seconds - Number(timelineDrag.offsetSec || 0)));
           const nextActions = actions.map((action, index) => (
             index === targetIndex ? { ...action, startSec: nextStartSec } : action
           ));
@@ -2320,11 +2326,11 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           const maxDuration = nextNeighbor
             ? Math.max(minDuration, (Number(nextNeighbor.startSec || 0) + Number(nextNeighbor.durationSec || 0)) - Number(current.startSec || 0) - minDuration)
             : Math.max(minDuration, totalTimelineSec - Number(current.startSec || 0));
-          const nextDuration = Math.max(minDuration, Math.min(maxDuration, seconds - Number(timelineDrag.startSec || 0)));
+          const nextDuration = snapTimelineSeconds(Math.max(minDuration, Math.min(maxDuration, seconds - Number(timelineDrag.startSec || 0))));
           const nextActions = actions.map((action, index) => {
             if (index === targetIndex) return { ...action, durationSec: nextDuration };
             if (index === targetIndex + 1) {
-              const nextStart = Number(current.startSec || 0) + nextDuration;
+              const nextStart = snapTimelineSeconds(Number(current.startSec || 0) + nextDuration);
               const nextEnd = Number(action.startSec || 0) + Number(action.durationSec || 0);
               return {
                 ...action,
@@ -2896,7 +2902,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
             <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
               <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={toggleTimelinePlayback}>{isPlaying ? 'Pause' : 'Play'}</button>
               <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
-              <button type="button" onClick={() => void toggleAudioRecord()}>{recordingAudio ? 'Stop rec' : 'Rec'}</button>
+              <button type="button" className={`animation-rec-btn ${recordingAudio ? 'active' : ''}`} onClick={() => void toggleAudioRecord()}>{recordingAudio ? '■' : 'Rec'}</button>
               <button type="button" onClick={importRecordedAudio}>Importer</button>
               {!readOnly ? <button type="button" className="animation-action-remove" onClick={onRemove}>×</button> : null}
             </div>

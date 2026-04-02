@@ -273,18 +273,28 @@ router.post('/:id/presenter-recording-settings', async (req, res) => {
         const row = await Expose.findById(exposeId);
         if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
 
-        const entries = Array.isArray(row.presentations) ? [...row.presentations] : [];
-        const idx = entries.findIndex((p) => String(p.studentId) === studentId && clean(p.presentationTitle) === clean(presentationTitle));
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+        const idx = entries.findIndex((p) => String(p?.studentId || '') === studentId && clean(p?.presentationTitle) === clean(presentationTitle));
         if (idx < 0) return res.status(404).json({ error: 'Présentation élève introuvable' });
 
         entries[idx] = {
-            ...entries[idx]?.toObject?.(),
             ...entries[idx],
             recordingPitch,
             updatedAt: new Date()
         };
         row.presentations = entries;
         await row.save();
+
+        await injectPresenterAudioIntoWeb5e({
+            presentationTitle: entries[idx].presentationTitle,
+            presenterName: String(entries[idx].presenterName || ''),
+            slideNumber: Math.max(1, Number(entries[idx].presenterSlideNumber || 1)),
+            soundUrl: String(entries[idx].recordingUrl || ''),
+            soundPitch: recordingPitch
+        });
+
         res.json({ ok: true, presentation: entries[idx] });
     } catch (e) {
         res.status(500).json({ error: e.message });
