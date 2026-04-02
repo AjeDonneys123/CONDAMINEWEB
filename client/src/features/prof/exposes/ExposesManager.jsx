@@ -55,12 +55,15 @@ export default function ExposesManager({ globalClass }) {
     const [recording, setRecording] = useState(false);
     const [recordingSec, setRecordingSec] = useState(0);
     const [uploadingRecording, setUploadingRecording] = useState(false);
+    const [playingPreview, setPlayingPreview] = useState(false);
+    const [savingPitch, setSavingPitch] = useState(false);
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
     const chunksRef = React.useRef([]);
     const startedAtRef = React.useRef(0);
     const timerRef = React.useRef(null);
+    const previewAudioRef = React.useRef(null);
 
     const loadData = async () => {
         setLoading(true);
@@ -89,6 +92,12 @@ export default function ExposesManager({ globalClass }) {
     useEffect(() => { loadData(); }, [globalClass]);
     useEffect(() => () => {
         if (timerRef.current) clearInterval(timerRef.current);
+        if (previewAudioRef.current) {
+            try {
+                previewAudioRef.current.pause();
+            } catch (_) {}
+            previewAudioRef.current = null;
+        }
         if (streamRef.current) {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
@@ -162,6 +171,7 @@ export default function ExposesManager({ globalClass }) {
             fd.append('presenterName', String(meta.presenterName || ''));
             fd.append('slideNumber', String(meta.slideNumber || 1));
             fd.append('recordingDurationSec', String(Math.max(1, Number(recordingSec || 0))));
+            fd.append('recordingPitch', String(Math.max(0.5, Math.min(2, Number(meta.recordingPitch || 1)))));
             fd.append('audio', blob, `expose_${Date.now()}.webm`);
             const res = await fetch(`/api/exposes/${encodeURIComponent(String(selected._id))}/presenter-recording`, {
                 method: 'POST',
@@ -211,6 +221,61 @@ export default function ExposesManager({ globalClass }) {
         if (recorderRef.current && recorderRef.current.state !== 'inactive') {
             recorderRef.current.stop();
         }
+    };
+
+    const savePitch = async (meta, nextPitch) => {
+        if (!selected?._id || !meta?.studentId || !meta?.presentationTitle) return;
+        setSavingPitch(true);
+        try {
+            const res = await fetch(`/api/exposes/${encodeURIComponent(String(selected._id))}/presenter-recording-settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: String(meta.studentId || ''),
+                    presentationTitle: String(meta.presentationTitle || ''),
+                    recordingPitch: nextPitch
+                })
+            });
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Echec sauvegarde pitch');
+            await loadData();
+        } catch (e) {
+            alert(e.message || 'Echec sauvegarde pitch');
+        } finally {
+            setSavingPitch(false);
+        }
+    };
+
+    const togglePreview = () => {
+        const url = String(selectedRecorder?.recordingUrl || '').trim();
+        if (!url) return;
+        if (previewAudioRef.current) {
+            try {
+                previewAudioRef.current.pause();
+                previewAudioRef.current.currentTime = 0;
+            } catch (_) {}
+            previewAudioRef.current = null;
+            setPlayingPreview(false);
+            return;
+        }
+        try {
+            const audio = new Audio(url);
+            audio.playbackRate = Math.max(0.5, Math.min(2, Number(selectedRecorder?.recordingPitch || 1)));
+            audio.onended = () => {
+                previewAudioRef.current = null;
+                setPlayingPreview(false);
+            };
+            audio.onerror = () => {
+                previewAudioRef.current = null;
+                setPlayingPreview(false);
+            };
+            previewAudioRef.current = audio;
+            setPlayingPreview(true);
+            audio.play().catch(() => {
+                previewAudioRef.current = null;
+                setPlayingPreview(false);
+            });
+        } catch (_) {}
     };
 
     const deletePresentationGroup = async (presentationTitle = '') => {
@@ -354,7 +419,9 @@ export default function ExposesManager({ globalClass }) {
                                                                 presentationTitle: g.presentationTitle,
                                                                 presenterName,
                                                                 slideNumber,
-                                                                studentLabel: fullName
+                                                                studentLabel: fullName,
+                                                                recordingUrl: String(p.recordingUrl || ''),
+                                                                recordingPitch: Math.max(0.5, Math.min(2, Number(p.recordingPitch || 1)))
                                                             });
                                                             setRecordingSec(Number(p.recordingDurationSec || 0));
                                                         }}
@@ -400,8 +467,43 @@ export default function ExposesManager({ globalClass }) {
                                                             Stop
                                                         </button>
                                                     )}
+                                                    <button
+                                                        type="button"
+                                                        className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase disabled:opacity-40"
+                                                        onClick={togglePreview}
+                                                        disabled={!String(selectedRecorder.recordingUrl || '').trim()}
+                                                    >
+                                                        {playingPreview ? 'Stop lecture' : 'Lecture'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
+                                                        onClick={() => {
+                                                            const nextPitch = Math.max(0.5, Math.min(2, Number(selectedRecorder.recordingPitch || 1) - 0.1));
+                                                            setSelectedRecorder((prev) => prev ? { ...prev, recordingPitch: nextPitch } : prev);
+                                                            void savePitch(selectedRecorder, nextPitch);
+                                                        }}
+                                                        disabled={savingPitch}
+                                                    >
+                                                        Pitch -
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
+                                                        onClick={() => {
+                                                            const nextPitch = Math.max(0.5, Math.min(2, Number(selectedRecorder.recordingPitch || 1) + 0.1));
+                                                            setSelectedRecorder((prev) => prev ? { ...prev, recordingPitch: nextPitch } : prev);
+                                                            void savePitch(selectedRecorder, nextPitch);
+                                                        }}
+                                                        disabled={savingPitch}
+                                                    >
+                                                        Pitch +
+                                                    </button>
                                                     <div className="text-[12px] font-black text-slate-600">
                                                         {recording ? `Enregistrement ${recordingSec}s` : (uploadingRecording ? 'Envoi...' : `Dernière durée ${recordingSec || 0}s`)}
+                                                    </div>
+                                                    <div className="text-[12px] font-black text-slate-600">
+                                                        Pitch {Number(selectedRecorder.recordingPitch || 1).toFixed(1)}
                                                     </div>
                                                 </div>
                                             </div>

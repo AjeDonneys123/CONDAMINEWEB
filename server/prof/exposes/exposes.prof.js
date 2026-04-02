@@ -16,7 +16,7 @@ const clean = (value = '') => String(value || '')
     .toLowerCase()
     .replace(/\s+/g, ' ');
 
-function createDefaultAnimationBlock(soundUrl = '') {
+function createDefaultAnimationBlock(soundUrl = '', soundPitch = 1) {
     return {
         type: 'animation',
         title: 'Animation importee',
@@ -33,6 +33,7 @@ function createDefaultAnimationBlock(soundUrl = '') {
             frames: [],
             frameUrlInput: '',
             soundUrl: String(soundUrl || '').trim(),
+            soundPitch: Math.max(0.5, Math.min(2, Number(soundPitch || 1))),
             spritesOpen: false,
             spriteUrlOpen: false,
             spriteEditorOpen: false,
@@ -41,11 +42,12 @@ function createDefaultAnimationBlock(soundUrl = '') {
     };
 }
 
-async function injectPresenterAudioIntoWeb5e({ presentationTitle = '', presenterName = '', slideNumber = 0, soundUrl = '' }) {
+async function injectPresenterAudioIntoWeb5e({ presentationTitle = '', presenterName = '', slideNumber = 0, soundUrl = '', soundPitch = 1 }) {
     const safeTitle = clean(presentationTitle);
     const safePresenter = clean(presenterName);
     const safeSlideNumber = Math.max(1, Number(slideNumber || 0));
     const safeSoundUrl = String(soundUrl || '').trim();
+    const safeSoundPitch = Math.max(0.5, Math.min(2, Number(soundPitch || 1)));
     if (!safeTitle || !safePresenter || !safeSoundUrl || !safeSlideNumber) return { updated: false };
 
     const entries = await Web5eEntry.find({ isPublished: true });
@@ -64,12 +66,12 @@ async function injectPresenterAudioIntoWeb5e({ presentationTitle = '', presenter
                 touched = true;
                 const currentAnimation = slide?.animation && typeof slide.animation === 'object'
                     ? slide.animation
-                    : createDefaultAnimationBlock(safeSoundUrl);
+                    : createDefaultAnimationBlock(safeSoundUrl, safeSoundPitch);
                 const currentActions = Array.isArray(currentAnimation.actions) ? currentAnimation.actions : [];
                 const parlerIndex = currentActions.findIndex((action) => clean(action?.name || '') === 'parler');
                 const nextActions = parlerIndex >= 0
                     ? currentActions.map((action, actionIndex) => (
-                        actionIndex === parlerIndex ? { ...action, soundUrl: safeSoundUrl } : action
+                        actionIndex === parlerIndex ? { ...action, soundUrl: safeSoundUrl, soundPitch: safeSoundPitch } : action
                     ))
                     : [{
                         id: `action_${Date.now()}`,
@@ -77,6 +79,7 @@ async function injectPresenterAudioIntoWeb5e({ presentationTitle = '', presenter
                         frames: [],
                         frameUrlInput: '',
                         soundUrl: safeSoundUrl,
+                        soundPitch: safeSoundPitch,
                         spritesOpen: false,
                         spriteUrlOpen: false,
                         spriteEditorOpen: false,
@@ -189,6 +192,7 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
         const presenterName = String(req.body?.presenterName || '').trim();
         const slideNumber = Math.max(1, Number(req.body?.slideNumber || 0));
         const recordingDurationSec = Math.max(0, Number(req.body?.recordingDurationSec || 0));
+        const recordingPitch = Math.max(0.5, Math.min(2, Number(req.body?.recordingPitch || 1)));
 
         if (!exposeId) return res.status(400).json({ error: 'id requis' });
         if (!studentId) return res.status(400).json({ error: 'studentId requis' });
@@ -225,6 +229,7 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
             slidesText: String(previous?.slidesText || ''),
             recordingUrl,
             recordingDurationSec,
+            recordingPitch,
             presenterName,
             presenterSlideNumber: slideNumber,
             createdAt: previous?.createdAt || now,
@@ -239,7 +244,8 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
             presentationTitle,
             presenterName,
             slideNumber,
-            soundUrl: recordingUrl
+            soundUrl: recordingUrl,
+            soundPitch: recordingPitch
         });
 
         res.json({
@@ -248,6 +254,38 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
             web5eLinked: Boolean(injection.updated),
             warning: uploadWarning || null
         });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:id/presenter-recording-settings', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const studentId = String(req.body?.studentId || '').trim();
+        const presentationTitle = String(req.body?.presentationTitle || '').trim();
+        const recordingPitch = Math.max(0.5, Math.min(2, Number(req.body?.recordingPitch || 1)));
+
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!studentId) return res.status(400).json({ error: 'studentId requis' });
+        if (!presentationTitle) return res.status(400).json({ error: 'presentationTitle requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const entries = Array.isArray(row.presentations) ? [...row.presentations] : [];
+        const idx = entries.findIndex((p) => String(p.studentId) === studentId && clean(p.presentationTitle) === clean(presentationTitle));
+        if (idx < 0) return res.status(404).json({ error: 'Présentation élève introuvable' });
+
+        entries[idx] = {
+            ...entries[idx]?.toObject?.(),
+            ...entries[idx],
+            recordingPitch,
+            updatedAt: new Date()
+        };
+        row.presentations = entries;
+        await row.save();
+        res.json({ ok: true, presentation: entries[idx] });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

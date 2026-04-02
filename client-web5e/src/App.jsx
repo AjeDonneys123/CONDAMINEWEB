@@ -114,7 +114,6 @@ function createBlock(type = 'text') {
       actorY: 120,
       actorWidth: 140,
       actorHeight: 140,
-      savedActions: [],
       actions: [
         {
           id: `action_${Date.now()}`,
@@ -122,6 +121,7 @@ function createBlock(type = 'text') {
           frames: [],
           frameUrlInput: '',
           soundUrl: '',
+          soundPitch: 1,
           spritesOpen: false,
           spriteUrlOpen: false,
           spriteEditorOpen: false,
@@ -307,7 +307,6 @@ function createAnimationBlockFromDraft(draft = {}) {
     actorY: 120,
     actorWidth: 140,
     actorHeight: 140,
-    savedActions: [],
     actions: [
       {
         id: `action_${Date.now()}`,
@@ -315,6 +314,9 @@ function createAnimationBlockFromDraft(draft = {}) {
         frames: [],
         frameUrlInput: '',
         soundUrl: String(draft.soundUrl || '').trim(),
+        soundPitch: Math.max(0.5, Math.min(2, Number(draft.soundPitch || 1))),
+        startSec: 0,
+        durationSec: Math.max(0.5, Number(draft.durationSec || 2)),
         spritesOpen: false,
         spriteUrlOpen: false,
         spriteEditorOpen: false,
@@ -334,6 +336,36 @@ function createSpriteFrame(url = '') {
     offsetX: 0,
     offsetY: 0
   };
+}
+
+function normalizeTimelineActions(rawActions = []) {
+  let cursor = 0;
+  return (Array.isArray(rawActions) ? rawActions : []).map((action) => {
+    const durationSec = Math.max(0.5, Number(action?.durationSec || 2));
+    const startSec = Number.isFinite(Number(action?.startSec))
+      ? Math.max(0, Number(action.startSec))
+      : cursor;
+    cursor = Math.max(cursor, startSec + durationSec);
+    return {
+      ...action,
+      soundPitch: Math.max(0.5, Math.min(2, Number(action?.soundPitch || 1))),
+      startSec,
+      durationSec
+    };
+  });
+}
+
+function constrainTimelineActions(rawActions = []) {
+  const actions = normalizeTimelineActions(rawActions);
+  if (!actions.length) return actions;
+  const next = actions.map((action) => ({ ...action }));
+  next[0].startSec = Math.max(0, Number(next[0].startSec || 0));
+  for (let index = 1; index < next.length; index += 1) {
+    const previous = next[index - 1];
+    const minStart = Number(previous.startSec || 0) + Number(previous.durationSec || 0);
+    next[index].startSec = Math.max(minStart, Number(next[index].startSec || 0));
+  }
+  return next;
 }
 
 const ARTICLE_FONTS = [
@@ -2043,16 +2075,22 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
+  const audioTimelineRef = useRef(null);
+  const timelineDragRef = useRef(null);
   const actorDragStateRef = useRef(null);
   const actorResizeStateRef = useRef(null);
   const spriteResizeStateRef = useRef(null);
   const actionLoopStopRef = useRef({ stop: false, actionId: '' });
+  const actionLoopIntervalRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingActionId, setPlayingActionId] = useState('');
-  const [recordingActionId, setRecordingActionId] = useState('');
+  const [recordingAudio, setRecordingAudio] = useState(false);
   const [importNotice, setImportNotice] = useState('');
-  const [loadMenuOpen, setLoadMenuOpen] = useState(false);
   const [actionNameDrafts, setActionNameDrafts] = useState({});
+  const [audioDurationSec, setAudioDurationSec] = useState(0);
+  const [audioCurrentTimeSec, setAudioCurrentTimeSec] = useState(0);
+  const [selectedActionId, setSelectedActionId] = useState('');
+  const [loopFrameState, setLoopFrameState] = useState({ actionId: '', frameIndex: -1 });
   const [actorState, setActorState] = useState({
     x: Number(block?.actorX || 120),
     y: Number(block?.actorY || 120),
@@ -2063,8 +2101,18 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   });
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
-    ? block.actions
-    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
+    ? normalizeTimelineActions(block.actions)
+    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', soundPitch: 1, startSec: 0, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
+  const baseAudioUrl = String(actions.find((action) => String(action?.soundUrl || '').trim())?.soundUrl || '').trim();
+  const totalTimelineSec = Math.max(
+    1,
+    Number(audioDurationSec || 0),
+    ...actions.map((action) => Number(action?.startSec || 0) + Number(action?.durationSec || 0))
+  );
+  const activeTimelineAction = actions.find((action) => (
+    audioCurrentTimeSec >= Number(action?.startSec || 0)
+    && audioCurrentTimeSec <= Number(action?.startSec || 0) + Number(action?.durationSec || 0)
+  )) || null;
 
   useEffect(() => {
     setActionNameDrafts((prev) => {
@@ -2079,6 +2127,17 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   }, [actions.map((action) => action.id).join('|')]);
 
   useEffect(() => {
+    if (!actions.length) {
+      setSelectedActionId('');
+      return;
+    }
+    const exists = actions.some((action) => String(action.id || '') === String(selectedActionId || ''));
+    if (!exists) {
+      setSelectedActionId(String(actions[0]?.id || ''));
+    }
+  }, [actions.map((action) => action.id).join('|'), selectedActionId]);
+
+  useEffect(() => {
     const timeout = window.setTimeout(() => {
       const hasDiff = actions.some((action) => String(action.name || '') !== String(actionNameDrafts[action.id] ?? ''));
       if (!hasDiff) return;
@@ -2091,6 +2150,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   }, [actionNameDrafts]);
 
   useEffect(() => {
+    if (isPlaying || playingActionId) return;
     const selectedAction = actions.find((action) => Number(action?.selectedFrameIndex) >= -1);
     const selectedFrameIndex = Number(selectedAction?.selectedFrameIndex);
     const selectedFrame = selectedFrameIndex === -1
@@ -2117,8 +2177,72 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       ),
       actionName: ''
     });
-    setIsPlaying(false);
-  }, [block, actions]);
+  }, [block, actions, isPlaying, playingActionId]);
+
+  useEffect(() => {
+    const audio = audioTimelineRef.current;
+    if (!audio) return undefined;
+    const syncAudioState = () => {
+      setAudioDurationSec(Number.isFinite(audio.duration) ? audio.duration : 0);
+      setAudioCurrentTimeSec(Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
+      setIsPlaying(!audio.paused && !audio.ended);
+    };
+    const onLoaded = () => syncAudioState();
+    const onTimeUpdate = () => syncAudioState();
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setAudioCurrentTimeSec(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended', onEnded);
+    syncAudioState();
+    return () => {
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, [baseAudioUrl]);
+
+  useEffect(() => () => {
+    if (actionLoopIntervalRef.current) {
+      window.clearInterval(actionLoopIntervalRef.current);
+      actionLoopIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    if (!activeTimelineAction) {
+      setLoopFrameState({ actionId: '', frameIndex: -1 });
+      setActorState((prev) => ({ ...prev, actionName: '' }));
+      return;
+    }
+    const audio = audioTimelineRef.current;
+    if (audio) {
+      audio.playbackRate = Math.max(0.5, Math.min(2, Number(activeTimelineAction?.soundPitch || 1)));
+    }
+    const action = activeTimelineAction;
+    const frames = Array.isArray(action.frames) && action.frames.length > 0
+      ? action.frames.map((frame) => (typeof frame === 'string' ? frame : frame?.url)).filter(Boolean)
+      : [block?.actorImageUrl].filter(Boolean);
+    if (!frames.length) return;
+    const startSec = Number(action.startSec || 0);
+    const elapsedSec = Math.max(0, Number(audioCurrentTimeSec || 0) - startSec);
+    const frameIndex = frames.length <= 1 ? 0 : (Math.floor(elapsedSec / 0.18) % frames.length);
+    setLoopFrameState({ actionId: String(action.id || ''), frameIndex });
+    setActorState((prev) => ({
+      ...prev,
+      frameUrl: String(frames[frameIndex] || block?.actorImageUrl || ''),
+      actionName: action.name || 'Action'
+    }));
+  }, [isPlaying, audioCurrentTimeSec, activeTimelineAction?.id, block?.actorImageUrl]);
 
   useEffect(() => {
     const onMouseMove = (event) => {
@@ -2166,6 +2290,53 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           });
         }
       }
+      const timelineDrag = timelineDragRef.current;
+      if (timelineDrag) {
+        const shellRect = timelineDrag.container?.getBoundingClientRect?.();
+        if (!shellRect || shellRect.width <= 0) return;
+        const ratio = Math.max(0, Math.min(1, (event.clientX - shellRect.left) / shellRect.width));
+        const seconds = ratio * Math.max(1, Number(timelineDrag.totalSec || 1));
+        if (timelineDrag.mode === 'seek') {
+          const audio = audioTimelineRef.current;
+          setAudioCurrentTimeSec(seconds);
+          if (audio) audio.currentTime = seconds;
+        } else if (timelineDrag.mode === 'move') {
+          const targetIndex = actions.findIndex((action) => String(action.id || '') === String(timelineDrag.actionId || ''));
+          if (targetIndex < 0) return;
+          const previousEnd = targetIndex > 0
+            ? Number(actions[targetIndex - 1]?.startSec || 0) + Number(actions[targetIndex - 1]?.durationSec || 0)
+            : 0;
+          const nextStartSec = Math.max(previousEnd, seconds - Number(timelineDrag.offsetSec || 0));
+          const nextActions = actions.map((action, index) => (
+            index === targetIndex ? { ...action, startSec: nextStartSec } : action
+          ));
+          updateActions(nextActions);
+        } else if (timelineDrag.mode === 'resize') {
+          const targetIndex = actions.findIndex((action) => String(action.id || '') === String(timelineDrag.actionId || ''));
+          if (targetIndex < 0) return;
+          const current = actions[targetIndex];
+          const nextNeighbor = actions[targetIndex + 1] || null;
+          const minDuration = 0.5;
+          const maxDuration = nextNeighbor
+            ? Math.max(minDuration, (Number(nextNeighbor.startSec || 0) + Number(nextNeighbor.durationSec || 0)) - Number(current.startSec || 0) - minDuration)
+            : Math.max(minDuration, totalTimelineSec - Number(current.startSec || 0));
+          const nextDuration = Math.max(minDuration, Math.min(maxDuration, seconds - Number(timelineDrag.startSec || 0)));
+          const nextActions = actions.map((action, index) => {
+            if (index === targetIndex) return { ...action, durationSec: nextDuration };
+            if (index === targetIndex + 1) {
+              const nextStart = Number(current.startSec || 0) + nextDuration;
+              const nextEnd = Number(action.startSec || 0) + Number(action.durationSec || 0);
+              return {
+                ...action,
+                startSec: nextStart,
+                durationSec: Math.max(minDuration, nextEnd - nextStart)
+              };
+            }
+            return action;
+          });
+          updateActions(nextActions);
+        }
+      }
     };
     const onMouseUp = () => {
       const dragState = actorDragStateRef.current;
@@ -2186,6 +2357,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       if (spriteResizeStateRef.current) {
         spriteResizeStateRef.current = null;
       }
+      if (timelineDragRef.current) {
+        timelineDragRef.current = null;
+      }
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -2193,12 +2367,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [actorState.x, actorState.y, actorState.width, actorState.height, actions]);
+  }, [actorState.x, actorState.y, actorState.width, actorState.height, actions, totalTimelineSec]);
 
-  const savedActions = Array.isArray(block?.savedActions) ? block.savedActions : [];
-  const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions, savedActions });
-  const updateActions = (nextActions) => onChange?.({ ...block, actions: nextActions });
-  const updateSavedActions = (nextSavedActions) => onChange?.({ ...block, actions, savedActions: nextSavedActions });
+  const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
+  const updateActions = (nextActions) => onChange?.({ ...block, actions: constrainTimelineActions(nextActions) });
 
   const flashNotice = (message) => {
     setImportNotice(message);
@@ -2228,60 +2400,31 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     updateActions(actions.map((action) => action.id === actionId ? { ...action, ...patch } : action));
   };
 
+  const updateSharedAudio = (soundUrl, soundPitch = null) => {
+    const safeUrl = String(soundUrl || '').trim();
+    updateActions(actions.map((action) => ({
+      ...action,
+      soundUrl: safeUrl,
+      soundPitch: soundPitch == null ? Math.max(0.5, Math.min(2, Number(action.soundPitch || 1))) : Math.max(0.5, Math.min(2, Number(soundPitch || 1)))
+    })));
+  };
+
   const addAction = () => {
+    const lastAction = actions[actions.length - 1];
+    const nextStartSec = Math.max(0, Number(lastAction?.startSec || 0) + Number(lastAction?.durationSec || 0));
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: '', spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, startSec: nextStartSec, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
     ]);
-  };
-
-  const saveActionPreset = (action) => {
-    if (!action?.id) return;
-    const nextPreset = {
-      id: `saved_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      name: String(action.name || 'Action').trim() || 'Action',
-      frames: Array.isArray(action.frames) ? action.frames.map((frame) => ({
-        id: `saved_frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        url: typeof frame === 'string' ? frame : String(frame?.url || ''),
-        width: Number(frame?.width || 140),
-        height: Number(frame?.height || 140),
-        scale: Number(frame?.scale || 1),
-        offsetX: Number(frame?.offsetX || 0),
-        offsetY: Number(frame?.offsetY || 0)
-      })).filter((frame) => frame.url) : []
-    };
-    const withoutSameName = savedActions.filter((item) => clean(item.name) !== clean(nextPreset.name));
-    updateSavedActions([...withoutSameName, nextPreset]);
-    flashNotice('Action chargeable ajoutée');
-  };
-
-  const loadSavedAction = (presetId) => {
-    const preset = savedActions.find((item) => item.id === presetId);
-    if (!preset) return;
-    const targetActionId = actions[0]?.id;
-    if (!targetActionId) return;
-    updateActions(actions.map((action) => (
-      action.id === targetActionId
-        ? {
-            ...action,
-            name: preset.name,
-            frames: Array.isArray(preset.frames) ? [...preset.frames] : [],
-            frameUrlInput: '',
-            soundUrl: '',
-            spritesOpen: false,
-            spriteUrlOpen: false,
-            spriteEditorOpen: false,
-            selectedFrameIndex: 0
-          }
-        : action
-    )));
-    setLoadMenuOpen(false);
-    flashNotice('Action chargée');
   };
 
   const removeAction = (actionId) => {
     if (actions.length <= 1) return;
     updateActions(actions.filter((action) => action.id !== actionId));
+    if (String(selectedActionId || '') === String(actionId || '')) {
+      const fallback = actions.find((action) => String(action.id || '') !== String(actionId || ''));
+      setSelectedActionId(String(fallback?.id || ''));
+    }
   };
 
   const removeFrame = (actionId, frameIndex) => {
@@ -2389,6 +2532,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         ? {
             ...item,
             soundUrl: nextSoundUrl || item.soundUrl || '',
+            soundPitch: Math.max(0.5, Math.min(2, Number(item.soundPitch || 1))),
             frames: [...(Array.isArray(item.frames) ? item.frames : []), ...incomingFrames]
           }
         : item
@@ -2518,8 +2662,8 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     flashNotice("Sprite importé");
   };
 
-  const toggleRecord = async (actionId) => {
-    if (recordingActionId === actionId && recorderRef.current) {
+  const toggleAudioRecord = async () => {
+    if (recordingAudio && recorderRef.current) {
       recorderRef.current.stop();
       return;
     }
@@ -2533,22 +2677,55 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       recorder.onstop = () => {
         const blob = new Blob(recorderChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
-        reader.onload = () => updateAction(actionId, { soundUrl: String(reader.result || '') });
+        reader.onload = () => updateSharedAudio(String(reader.result || ''));
         reader.readAsDataURL(blob);
         stream.getTracks().forEach((track) => track.stop());
         recorderRef.current = null;
         recorderChunksRef.current = [];
-        setRecordingActionId('');
+        setRecordingAudio(false);
       };
       recorderRef.current = recorder;
-      setRecordingActionId(actionId);
+      setRecordingAudio(true);
       recorder.start();
     } catch (_) {}
   };
 
-  const playAnimation = async (customActions = null) => {
-    if (isPlaying) return;
-    setIsPlaying(true);
+  const importRecordedAudio = () => {
+    const existingAudio = String(block?.actions?.find((action) => String(action?.soundUrl || '').trim())?.soundUrl || '').trim();
+    if (!existingAudio) {
+      flashNotice("Aucun audio en base");
+      return;
+    }
+    updateSharedAudio(existingAudio, block?.actions?.find((action) => String(action?.soundUrl || '').trim())?.soundPitch || 1);
+    flashNotice("Audio importé");
+  };
+
+  const toggleTimelinePlayback = async () => {
+    const audio = audioTimelineRef.current;
+    if (!audio || !baseAudioUrl) return;
+    if (!audio.paused) {
+      audio.pause();
+      return;
+    }
+    try {
+      if (audio.currentTime >= Math.max(0, Number(audio.duration || totalTimelineSec || 0)) - 0.05) {
+        audio.currentTime = 0;
+        setAudioCurrentTimeSec(0);
+      }
+      audio.playbackRate = Math.max(0.5, Math.min(2, Number(activeTimelineAction?.soundPitch || actions[0]?.soundPitch || 1)));
+      await audio.play();
+    } catch (_) {}
+  };
+
+  const seekTimeline = (nextTime) => {
+    const audio = audioTimelineRef.current;
+    const safeTime = Math.max(0, Math.min(totalTimelineSec, Number(nextTime || 0)));
+    setAudioCurrentTimeSec(safeTime);
+    if (audio) audio.currentTime = safeTime;
+  };
+
+  const playAnimation = async (customActions = null, options = {}) => {
+    const withAudio = options.withAudio !== false;
     const sequence = Array.isArray(customActions) && customActions.length > 0 ? customActions : actions;
     for (const action of sequence) {
       const frames = Array.isArray(action.frames) && action.frames.length > 0
@@ -2568,10 +2745,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         }, 180);
       }
       let audio = null;
-      if (action.soundUrl) {
+      if (withAudio && action.soundUrl) {
         try {
           audio = new Audio(action.soundUrl);
-          audio.playbackRate = 1.12;
+          audio.playbackRate = Math.max(0.5, Math.min(2, Number(action.soundPitch || 1)));
           audio.play().catch(() => {});
         } catch (_) {}
       }
@@ -2596,25 +2773,54 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       }
     }
     setActorState((prev) => ({ ...prev, actionName: '' }));
-    setIsPlaying(false);
   };
 
   const toggleActionLoop = async (action) => {
     if (!action?.id) return;
     if (playingActionId === action.id) {
+      if (actionLoopIntervalRef.current) {
+        window.clearInterval(actionLoopIntervalRef.current);
+        actionLoopIntervalRef.current = null;
+      }
       actionLoopStopRef.current = { stop: true, actionId: action.id };
       setPlayingActionId('');
+      setLoopFrameState({ actionId: '', frameIndex: -1 });
       return;
     }
-    if (isPlaying) return;
+    if (actionLoopIntervalRef.current) {
+      window.clearInterval(actionLoopIntervalRef.current);
+      actionLoopIntervalRef.current = null;
+    }
     actionLoopStopRef.current = { stop: false, actionId: action.id };
     setPlayingActionId(action.id);
-    while (!actionLoopStopRef.current.stop && actionLoopStopRef.current.actionId === action.id) {
-      // eslint-disable-next-line no-await-in-loop
-      await playAnimation([action]);
+    setSelectedActionId(String(action.id || ''));
+    const frames = Array.isArray(action.frames) && action.frames.length > 0
+      ? action.frames.map((frame) => (typeof frame === 'string' ? frame : frame?.url)).filter(Boolean)
+      : [block?.actorImageUrl].filter(Boolean);
+    if (!frames.length) return;
+    let frameIndex = 0;
+    setLoopFrameState({ actionId: String(action.id || ''), frameIndex: 0 });
+    setActorState((prev) => ({
+      ...prev,
+      frameUrl: String(frames[0] || block?.actorImageUrl || ''),
+      actionName: action.name || 'Action'
+    }));
+    if (frames.length === 1) {
+      actionLoopIntervalRef.current = window.setInterval(() => {
+        setLoopFrameState({ actionId: String(action.id || ''), frameIndex: 0 });
+        setActorState((prev) => ({ ...prev, frameUrl: String(frames[0] || ''), actionName: action.name || 'Action' }));
+      }, 240);
+      return;
     }
-    setPlayingActionId('');
-    actionLoopStopRef.current = { stop: false, actionId: '' };
+    actionLoopIntervalRef.current = window.setInterval(() => {
+      frameIndex = (frameIndex + 1) % frames.length;
+      setLoopFrameState({ actionId: String(action.id || ''), frameIndex });
+      setActorState((prev) => ({
+        ...prev,
+        frameUrl: String(frames[frameIndex] || ''),
+        actionName: action.name || 'Action'
+      }));
+    }, 180);
   };
 
   const selectedAction = actions.find((action) => Number(action?.selectedFrameIndex) >= -1) || null;
@@ -2631,9 +2837,19 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     : (selectedFrameIndex >= 0 ? selectedAction?.frames?.[selectedFrameIndex] : null);
   const normalizedSelectedFrame = typeof selectedFrameData === 'string' ? createSpriteFrame(selectedFrameData) : selectedFrameData;
   const currentActorFrame = resolveWeb5eAssetUrl(actorState.frameUrl || block?.actorImageUrl || (typeof actions[0]?.frames?.[0] === 'string' ? actions[0]?.frames?.[0] : actions[0]?.frames?.[0]?.url) || '');
+  const playingLoopAction = actions.find((action) => String(action.id || '') === String(playingActionId || '')) || null;
+  const loopStateAction = actions.find((action) => String(action.id || '') === String(loopFrameState.actionId || '')) || null;
+  const playingLoopFrame = loopStateAction && Number(loopFrameState.frameIndex) >= 0
+    ? loopStateAction.frames?.[loopFrameState.frameIndex]
+    : null;
+  const normalizedPlayingLoopFrame = typeof playingLoopFrame === 'string' ? createSpriteFrame(playingLoopFrame) : playingLoopFrame;
   const actorRenderWidth = Number(normalizedSelectedFrame?.width || actorState.width || block?.actorWidth || 140);
   const actorRenderHeight = Number(normalizedSelectedFrame?.height || actorState.height || block?.actorHeight || 140);
-  const actorRenderFrame = resolveWeb5eAssetUrl(String((isPlaying || playingActionId) ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || '')));
+  const actorRenderFrame = resolveWeb5eAssetUrl(String(
+    String(loopFrameState.actionId || '')
+      ? (normalizedPlayingLoopFrame?.url || currentActorFrame || '')
+      : ((isPlaying ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || '')) || '')
+  ));
   const safePresentationNumber = Math.max(1, Number(block?.presentationNumber || presentationNumber || 1));
   const safeSlideNumber = Math.max(1, Number(block?.slideNumber || slideNumber || 1));
   const animationCode = `${safePresentationNumber}${safeSlideNumber}`;
@@ -2657,6 +2873,8 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
               <img
                 src={actorRenderFrame}
                 alt={block?.actorName || 'Personnage'}
+                draggable={false}
+                onDragStart={(event) => event.preventDefault()}
                 style={{
                   transform: `translate(${Number(normalizedSelectedFrame?.offsetX || 0)}px, ${Number(normalizedSelectedFrame?.offsetY || 0)}px) scale(${Number(normalizedSelectedFrame?.scale || 1)})`
                 }}
@@ -2673,37 +2891,98 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           </div>
         </div>
         <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + actorState.width + 12)}px, ${Number(actorState.y)}px)` }}>
+          {baseAudioUrl ? <audio ref={audioTimelineRef} src={baseAudioUrl} preload="metadata" /> : null}
           {!readOnly && (
             <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
-              <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={playAnimation}>{isPlaying ? '■' : '▶'}</button>
+              <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={toggleTimelinePlayback}>{isPlaying ? 'Pause' : 'Play'}</button>
               <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
-              <div className={`animation-load-menu-shell ${loadMenuOpen ? 'open' : ''}`}>
-                <button type="button" onClick={() => setLoadMenuOpen((prev) => !prev)}>Charger</button>
-                {loadMenuOpen ? (
-                  <div className="animation-load-menu">
-                    {savedActions.length === 0 ? (
-                      <div className="animation-load-empty">Aucune action</div>
-                    ) : (
-                      savedActions.map((item) => (
-                        <button key={item.id} type="button" className="animation-load-item" onClick={() => loadSavedAction(item.id)}>
-                          {item.name}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                ) : null}
-              </div>
+              <button type="button" onClick={() => void toggleAudioRecord()}>{recordingAudio ? 'Stop rec' : 'Rec'}</button>
+              <button type="button" onClick={importRecordedAudio}>Importer</button>
               {!readOnly ? <button type="button" className="animation-action-remove" onClick={onRemove}>×</button> : null}
             </div>
           )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
+          <div className="animation-timeline-shell">
+            <div className="animation-timeline-topline">
+              <span>Audio</span>
+              <span>{audioCurrentTimeSec.toFixed(1)}s / {totalTimelineSec.toFixed(1)}s</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={Math.max(0.1, totalTimelineSec)}
+              step="0.01"
+              value={Math.min(totalTimelineSec, audioCurrentTimeSec)}
+              onChange={(e) => seekTimeline(e.target.value)}
+              className="animation-audio-scrubber"
+            />
+            <div
+              className="animation-sequence-track"
+              onMouseDown={(event) => {
+                timelineDragRef.current = {
+                  mode: 'seek',
+                  container: event.currentTarget,
+                  totalSec: totalTimelineSec
+                };
+              }}
+            >
+              <div
+                className="animation-sequence-playhead"
+                style={{ left: `${(Math.min(totalTimelineSec, audioCurrentTimeSec) / Math.max(totalTimelineSec, 0.1)) * 100}%` }}
+              />
+              {actions.map((action, index) => {
+                const left = (Number(action.startSec || 0) / Math.max(totalTimelineSec, 0.1)) * 100;
+                const width = (Number(action.durationSec || 0.5) / Math.max(totalTimelineSec, 0.1)) * 100;
+                const isActive = String(selectedActionId || activeTimelineAction?.id || '') === String(action.id || '');
+                const colorHue = (index * 67) % 360;
+                return (
+                  <div
+                    key={`timeline_${action.id}`}
+                    className={`animation-sequence-segment ${isActive ? 'active' : ''}`}
+                    style={{
+                      left: `${left}%`,
+                      width: `${Math.max(width, 4)}%`,
+                      background: `hsl(${colorHue} 62% 34%)`
+                    }}
+                    onMouseDown={(event) => {
+                      event.stopPropagation();
+                      setSelectedActionId(String(action.id || ''));
+                      timelineDragRef.current = {
+                        mode: 'move',
+                        actionId: action.id,
+                        container: event.currentTarget.parentElement,
+                        totalSec: totalTimelineSec,
+                        offsetSec: ((event.clientX - event.currentTarget.getBoundingClientRect().left) / Math.max(event.currentTarget.getBoundingClientRect().width, 1)) * Number(action.durationSec || 0.5),
+                        durationSec: Number(action.durationSec || 0.5)
+                      };
+                    }}
+                  >
+                    <span>{action.name || `Action ${index + 1}`}</span>
+                    <button
+                      type="button"
+                      className="animation-sequence-resize"
+                      onMouseDown={(event) => {
+                        event.stopPropagation();
+                        timelineDragRef.current = {
+                          mode: 'resize',
+                          actionId: action.id,
+                          container: event.currentTarget.parentElement.parentElement,
+                          totalSec: totalTimelineSec,
+                          startSec: Number(action.startSec || 0)
+                        };
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="animation-action-stack compact">
-          {actions.map((action, index) => (
+          {actions.filter((action) => String(action.id || '') === String(selectedActionId || '')).map((action) => {
+            const index = actions.findIndex((row) => String(row.id || '') === String(action.id || ''));
+            return (
             <div key={action.id} className="animation-action-card compact">
-              {!readOnly ? (
-                <ActionQrCode actionId={action.id} actionName={action.name} sectionKey={sectionKey} tabKey={tabKey} blockIndex={blockIndex} tabId={tabId} entryId={entryId} onPendingMedia={applyPendingMedia} />
-              ) : null}
               <div className="animation-action-head">
                 <input
                   value={actionNameDrafts[action.id] ?? action.name ?? ''}
@@ -2718,9 +2997,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
               </div>
               <div className="animation-action-toolbar-row">
                 <div className="animation-compact-actions">
-                  <button type="button" className="icon-btn" onClick={() => saveActionPreset(action)}>+</button>
                   <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
-                  <button type="button" className={recordingActionId === action.id ? 'recording active icon-btn' : 'icon-btn'} onClick={() => void toggleRecord(action.id)}>●</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
                 {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove small" onClick={(e) => { e.stopPropagation(); removeAction(action.id); }}>×</button> : null}
@@ -2761,7 +3038,15 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                       </div>
                     ) : null}
                     {(action.frames || []).map((frame, frameIndex) => (
-                      <div key={`${action.id}_${frameIndex}`} className={`animation-frame-thumb ${frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : ''}`} onClick={() => selectFrame(action.id, frameIndex)}>
+                      <div
+                        key={`${action.id}_${frameIndex}`}
+                        className={`animation-frame-thumb ${
+                          String(playingActionId || '') === String(action.id || '')
+                            ? (String(loopFrameState.actionId || '') === String(action.id || '') && Number(loopFrameState.frameIndex) === frameIndex ? 'selected' : '')
+                            : (frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : '')
+                        }`}
+                        onClick={() => selectFrame(action.id, frameIndex)}
+                      >
                         <img src={resolveWeb5eAssetUrl(typeof frame === 'string' ? frame : frame?.url)} alt="" />
                         {!readOnly ? <button type="button" onClick={(e) => { e.stopPropagation(); removeFrame(action.id, frameIndex); }}>×</button> : null}
                       </div>
@@ -2842,7 +3127,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                 );
               })() : null}
             </div>
-          ))}
+          )})}
           </div>
         </div>
       </div>

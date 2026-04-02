@@ -1531,7 +1531,7 @@
 .animation-editor.compact-floating {
   position: absolute;
   z-index: 220;
-  width: 260px;
+  width: 320px;
   padding: 10px;
   gap: 8px;
   border-radius: 18px;
@@ -1593,6 +1593,90 @@
   color: #64748b;
   font-weight: 700;
   padding-left: 4px;
+}
+
+.animation-timeline-shell {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(28, 41, 67, 0.1);
+}
+
+.animation-timeline-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #58677f;
+}
+
+.animation-audio-scrubber {
+  width: 100%;
+}
+
+.animation-sequence-track {
+  position: relative;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #eef2ff, #e2e8f0);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.animation-sequence-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef4444;
+  z-index: 3;
+  transform: translateX(-1px);
+}
+
+.animation-sequence-segment {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: #1f2944;
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(31, 41, 68, 0.18);
+  z-index: 2;
+  user-select: none;
+}
+
+.animation-sequence-segment.active {
+  background: #f97316;
+}
+
+.animation-sequence-segment span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.animation-sequence-resize {
+  width: 10px;
+  min-width: 10px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.38);
+  cursor: ew-resize;
 }
 
 .animation-stage-actions,
@@ -1976,6 +2060,8 @@
   gap: 10px;
   transition: transform 0.18s linear;
   pointer-events: auto;
+  touch-action: none;
+  user-select: none;
 }
 
 .animation-page-actor-figure {
@@ -1999,6 +2085,8 @@
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 18px 28px rgba(29, 41, 66, 0.22));
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .animation-actor-placeholder {
@@ -2144,7 +2232,7 @@
   padding: 10px 12px;
   pointer-events: auto;
   position: relative;
-  padding-right: 152px;
+  padding-right: 12px;
 }
 
 .animation-action-qr {
