@@ -57,6 +57,7 @@ export default function ExposesManager({ globalClass }) {
     const [uploadingRecording, setUploadingRecording] = useState(false);
     const [playingPreview, setPlayingPreview] = useState(false);
     const [savingPitch, setSavingPitch] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -77,6 +78,14 @@ export default function ExposesManager({ globalClass }) {
                 return String(a?.firstName || '').localeCompare(String(b?.firstName || ''), 'fr', { sensitivity: 'base' });
             });
     }, [students, globalClass]);
+    const filteredStudents = useMemo(() => {
+        const safeSearch = norm(searchTerm || '');
+        if (!safeSearch) return classStudents;
+        return classStudents.filter((student) => {
+            const label = norm(`${student?.firstName || ''} ${student?.lastName || ''}`);
+            return label.includes(safeSearch);
+        });
+    }, [classStudents, searchTerm]);
 
     const loadData = async () => {
         setLoading(true);
@@ -414,19 +423,24 @@ export default function ExposesManager({ globalClass }) {
                     </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3 mb-4">
-                    <div className="text-slate-400 font-black">🔎 Trouver un élève de la classe...</div>
+                    <input
+                        className="w-full bg-transparent outline-none text-slate-700 font-black"
+                        placeholder="🔎 Trouver un élève de la classe..."
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                    />
                 </div>
                 <div className="overflow-auto">
-                    <div className="min-w-[960px]">
-                        <div className="grid gap-3 mb-3" style={{ gridTemplateColumns: `repeat(${exposeGridCols}, minmax(120px, 1fr))` }}>
+                    <div className="min-w-[720px]">
+                        <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: `repeat(${exposeGridCols}, minmax(92px, 1fr))` }}>
                             {Array.from({ length: exposeGridCols }).map((_, idx) => (
-                                <div key={`hdr_${idx}`} className="text-center text-[12px] font-black uppercase text-slate-400">
+                                <div key={`hdr_${idx}`} className="text-center text-[11px] font-black uppercase text-slate-400">
                                     Col {idx + 1}
                                 </div>
                             ))}
                         </div>
-                        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${exposeGridCols}, minmax(120px, 1fr))` }}>
-                            {classStudents.map((student) => {
+                        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${exposeGridCols}, minmax(92px, 1fr))` }}>
+                            {filteredStudents.map((student) => {
                                 const studentId = String(student?._id || '');
                                 const exposePresentation = (activeExpose?.presentations || []).find((row) => String(row?.studentId || '') === studentId) || null;
                                 const active = String(selectedRecorder?.studentId || '') === studentId;
@@ -438,35 +452,30 @@ export default function ExposesManager({ globalClass }) {
                                             setSelectedRecorder(buildRecorderState(student, exposePresentation));
                                             setRecordingSec(Number(exposePresentation?.recordingDurationSec || 0));
                                         }}
-                                        className={`rounded-[18px] border p-3 min-h-[126px] shadow-sm transition-all ${
+                                        className={`rounded-[16px] border px-2 py-3 min-h-[108px] shadow-sm transition-all ${
                                             active
                                                 ? 'bg-rose-50 border-rose-300'
                                                 : (hasAudio ? 'bg-orange-50 border-orange-200 hover:bg-orange-100' : 'bg-white border-slate-200 hover:bg-slate-50')
                                         }`}
                                     >
-                                        <div className="flex items-center justify-center gap-2 text-[10px] font-black min-h-[14px]">
-                                            <span className="text-red-500">0</span>
-                                            <span className="text-violet-500">0</span>
-                                            <span className="text-emerald-500">{hasAudio ? '1' : '0'}</span>
-                                        </div>
-                                        <div className="text-[28px] leading-none mt-2">{String(student.gender || '').toUpperCase() === 'F' ? '👧' : '👦'}</div>
-                                        <div className="mt-2 text-[14px] font-black text-slate-700 leading-tight">
+                                        <div className="text-[24px] leading-none">{String(student.gender || '').toUpperCase() === 'F' ? '👧' : '👦'}</div>
+                                        <div className="mt-2 text-[13px] font-black text-slate-700 leading-tight">
                                             {student.firstName}
-                                            <br />
-                                            {String(student.lastName || '').slice(0, 1)}.
                                         </div>
-                                        <div className="mt-2 flex items-center justify-center gap-2 text-[12px] font-black">
-                                            <span className="text-red-500">✖0</span>
-                                            <span className="text-emerald-500">☆{hasAudio ? '1' : '0'}</span>
+                                        <div className="text-[11px] font-black text-slate-500 leading-tight">
+                                            {student.lastName}
+                                        </div>
+                                        <div className={`mt-2 text-[10px] font-black ${hasAudio ? 'text-orange-600' : 'text-slate-300'}`}>
+                                            {hasAudio ? 'audio ok' : ''}
                                         </div>
                                     </button>
                                 );
                             })}
                         </div>
                     </div>
-                    {!loading && classStudents.length === 0 && (
+                    {!loading && filteredStudents.length === 0 && (
                         <div className="text-xs text-slate-400 font-bold p-4">
-                            Aucun élève trouvé pour cette classe.
+                            Aucun élève trouvé.
                         </div>
                     )}
                     {loading && <div className="text-xs text-indigo-500 font-black p-4">Chargement...</div>}
