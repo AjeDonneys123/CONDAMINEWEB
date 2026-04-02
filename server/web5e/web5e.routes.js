@@ -125,10 +125,23 @@ router.post('/site', async (req, res) => {
             subtitle: String(req.body?.subtitle || site.subtitle || '').trim(),
             isPublic: req.body?.isPublic !== false,
             welcomeAnimation: req.body?.welcomeAnimation && typeof req.body.welcomeAnimation === 'object' ? req.body.welcomeAnimation : null,
+            voteBoard: req.body?.voteBoard && typeof req.body.voteBoard === 'object' ? req.body.voteBoard : site.voteBoard || null,
             sectionOrder: Array.isArray(req.body?.sectionOrder) ? req.body.sectionOrder.map(normalizeSectionKey).filter(Boolean) : site.sectionOrder
         };
         const updated = await Web5eSite.findByIdAndUpdate(site._id, { $set: payload }, { new: true }).lean();
         res.json({ ok: true, site: updated });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/votes', async (req, res) => {
+    try {
+        const site = await ensureDefaultSite();
+        const voteBoard = req.body?.voteBoard && typeof req.body.voteBoard === 'object' ? req.body.voteBoard : null;
+        if (!voteBoard) return res.status(400).json({ ok: false, error: 'voteBoard requis' });
+        const updated = await Web5eSite.findByIdAndUpdate(site._id, { $set: { voteBoard } }, { new: true }).lean();
+        res.json({ ok: true, voteBoard: updated.voteBoard || null, site: updated });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }

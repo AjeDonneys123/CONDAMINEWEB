@@ -60,6 +60,129 @@
   box-shadow: 0 16px 40px rgba(26, 41, 71, 0.12);
 }
 
+.vote-panel {
+  position: fixed;
+  top: 74px;
+  right: 20px;
+  width: min(980px, calc(100vw - 40px));
+  max-height: calc(100vh - 100px);
+  overflow: auto;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 60px rgba(26, 41, 71, 0.18);
+  z-index: 60;
+}
+
+.vote-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.vote-panel-head button {
+  border: none;
+  background: transparent;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.vote-grid.names {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.vote-grid.mascots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.vote-column {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.vote-column h4 {
+  margin: 0;
+}
+
+.vote-options,
+.vote-image-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.vote-option,
+.vote-image-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.vote-option.active,
+.vote-image-option.active {
+  border-color: #1f2944;
+  background: #eef2ff;
+}
+
+.vote-proposal-row {
+  display: flex;
+  gap: 8px;
+}
+
+.vote-proposal-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+}
+
+.vote-proposal-row button {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vote-image-option {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.vote-image-option img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+@media (max-width: 900px) {
+  .vote-grid.names,
+  .vote-grid.mascots {
+    grid-template-columns: 1fr;
+  }
+}
+
 .login-panel {
   position: fixed;
   top: 74px;
@@ -637,6 +760,15 @@
   pointer-events: none;
 }
 
+.animation-meta-line {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
 .article-animation-remove {
   position: absolute;
   top: 12px;
@@ -725,6 +857,65 @@
   gap: 12px;
 }
 
+.presentation-create-card,
+.presentation-setup-card {
+  width: 100%;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 34px rgba(28, 41, 67, 0.08);
+}
+
+.presentation-create-card {
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.presentation-setup-card {
+  display: grid;
+  gap: 12px;
+}
+
+.presentation-setup-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-weight: 900;
+  color: #1d2942;
+}
+
+.presentation-setup-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.presentation-presenter-short-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  font: inherit;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .presentation-setup-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.presentation-setup-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
 .presentation-mode-tabs,
 .presentation-group-row,
 .presentation-validation-bar {
@@ -732,6 +923,13 @@
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.presentation-canva-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .presentation-mode-tab,
@@ -963,6 +1161,68 @@
   padding: 12px 0;
 }
 
+.canva-live-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.canva-live-note {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 247, 237, 0.96);
+  border: 1px solid rgba(249, 115, 22, 0.16);
+  color: #9a3412;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.canva-live-frame-shell {
+  min-height: clamp(360px, 52vw, 640px);
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(28, 41, 67, 0.08);
+  background: white;
+  box-shadow: 0 20px 44px rgba(28, 41, 67, 0.08);
+  position: relative;
+}
+
+.canva-live-frame {
+  width: 100%;
+  min-height: clamp(360px, 52vw, 640px);
+  border: none;
+  display: block;
+  background: white;
+}
+
+.canva-live-animation-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.canva-live-lock-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: transparent;
+}
+
+.canva-live-presenter-badge {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 5;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(29, 41, 66, 0.9);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+}
+
 .public-quiz-card,
 .public-quiz-result {
   width: min(100%, 920px);
@@ -1105,10 +1365,10 @@
 .presentation-slide-signature {
   margin-top: 12px;
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.72;
+  opacity: 0.9;
 }
 
 .presentation-validation-status {

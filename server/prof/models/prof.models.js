@@ -223,6 +223,8 @@ const Models = {
                 slidesText: { type: String, default: '' },
                 recordingUrl: { type: String, default: '' },
                 recordingDurationSec: { type: Number, default: 0 },
+                presenterName: { type: String, default: '' },
+                presenterSlideNumber: { type: Number, default: 0 },
                 createdAt: Date,
                 updatedAt: Date
             }],

@@ -53,6 +53,54 @@ const DEFAULT_CONTENT = {
   }
 };
 
+const VOTE_NAME_CATEGORIES = [
+  { key: 'site_name', label: 'Nom du site' },
+  { key: 'water_mascot_name', label: "Mascotte de l'eau" },
+  { key: 'energy_mascot_name', label: "Mascotte de l'energie" }
+];
+
+const VOTE_MASCOT_CATEGORIES = [
+  { key: 'water_mascot_image', label: "Mascotte de l'eau" },
+  { key: 'energy_mascot_image', label: "Mascotte de l'energie" }
+];
+
+function createDefaultVoteBoard() {
+  return {
+    names: {
+      site_name: [],
+      water_mascot_name: [],
+      energy_mascot_name: []
+    },
+    mascots: {
+      water_mascot_image: [],
+      energy_mascot_image: []
+    },
+    votesByUser: {}
+  };
+}
+
+function normalizeVoteBoard(raw = null) {
+  const base = createDefaultVoteBoard();
+  const board = raw && typeof raw === 'object' ? raw : {};
+  return {
+    names: {
+      site_name: Array.isArray(board?.names?.site_name) ? board.names.site_name : base.names.site_name,
+      water_mascot_name: Array.isArray(board?.names?.water_mascot_name) ? board.names.water_mascot_name : base.names.water_mascot_name,
+      energy_mascot_name: Array.isArray(board?.names?.energy_mascot_name) ? board.names.energy_mascot_name : base.names.energy_mascot_name
+    },
+    mascots: {
+      water_mascot_image: Array.isArray(board?.mascots?.water_mascot_image) ? board.mascots.water_mascot_image : base.mascots.water_mascot_image,
+      energy_mascot_image: Array.isArray(board?.mascots?.energy_mascot_image) ? board.mascots.energy_mascot_image : base.mascots.energy_mascot_image
+    },
+    votesByUser: board?.votesByUser && typeof board.votesByUser === 'object' ? board.votesByUser : {}
+  };
+}
+
+function countVotesForOption(voteBoard, categoryKey, optionId) {
+  const votesByUser = voteBoard?.votesByUser && typeof voteBoard.votesByUser === 'object' ? voteBoard.votesByUser : {};
+  return Object.values(votesByUser).filter((row) => String(row?.[categoryKey] || '') === String(optionId || '')).length;
+}
+
 const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 function createBlock(type = 'text') {
@@ -92,12 +140,14 @@ function createPresentationSlide(index = 0) {
   return {
     id: `slide_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     presenterName: '',
-    html: '<h3>Nouveau slide</h3><p>Écris ici.</p>',
+    html: DEFAULT_PRESENTATION_SLIDE_HTML,
     background: '#ffffff',
     animation: null,
     textBoxes: []
   };
 }
+
+const DEFAULT_PRESENTATION_SLIDE_HTML = '<h3>Nouveau slide</h3><p>Écris ici.</p>';
 
 function createPresentationTextBox({ x = 40, y = 40, width = 220, height = 120, text = '', fontSize = 28 } = {}) {
   return {
@@ -111,24 +161,112 @@ function createPresentationTextBox({ x = 40, y = 40, width = 220, height = 120, 
   };
 }
 
+function createPresentationSlideHtmlFromImage(imageUrl = '') {
+  const safeUrl = String(imageUrl || '').trim().replace(/"/g, '&quot;');
+  if (!safeUrl) return DEFAULT_PRESENTATION_SLIDE_HTML;
+  return `<img src="${safeUrl}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;margin:0 auto;border-radius:18px;" />`;
+}
+
+function createPresentationSlideHtmlFromPdf(pdfUrl = '', fileName = 'Document PDF') {
+  const safeUrl = String(pdfUrl || '').trim().replace(/"/g, '&quot;');
+  const safeName = String(fileName || 'Document PDF').trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (!safeUrl) return DEFAULT_PRESENTATION_SLIDE_HTML;
+  return `
+    <div style="display:flex;flex-direction:column;gap:12px;height:100%;">
+      <div style="font-weight:800;font-size:18px;">${safeName}</div>
+      <iframe
+        src="${safeUrl}"
+        title="${safeName}"
+        style="width:100%;height:100%;min-height:420px;border:none;border-radius:18px;background:white;"
+      ></iframe>
+    </div>
+  `;
+}
+
+function normalizeCanvaLiveUrl(rawUrl = '') {
+  const value = String(rawUrl || '').trim();
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (url.hostname.includes('canva.com')) {
+      if (!url.searchParams.has('embed')) {
+        url.searchParams.set('embed', '1');
+      }
+      return url.toString();
+    }
+  } catch (_) {}
+  return value;
+}
+
+function syncPresentationSlidesWithCount(slides = [], requestedCount = 0) {
+  const count = Math.max(0, Number(requestedCount || 0));
+  const currentSlides = Array.isArray(slides) ? slides : [];
+  if (count <= 0) return currentSlides;
+  if (currentSlides.length === count) return currentSlides;
+  if (currentSlides.length > count) return currentSlides.slice(0, count);
+  const nextSlides = [...currentSlides];
+  while (nextSlides.length < count) {
+    nextSlides.push(createPresentationSlide(nextSlides.length));
+  }
+  return nextSlides;
+}
+
+function extractSlideNumberFromUrl(rawUrl = '') {
+  const value = String(rawUrl || '').trim();
+  if (!value) return null;
+  const hashMatch = value.match(/#(\d+)\s*$/);
+  if (hashMatch) {
+    const parsed = Number(hashMatch[1]);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+  return null;
+}
+
+function injectSlideNumberIntoUrl(rawUrl = '', slideNumber = 1) {
+  const value = String(rawUrl || '').trim();
+  const safeSlide = Math.max(1, Number(slideNumber || 1));
+  if (!value) return '';
+  if (/#\d+\s*$/.test(value)) {
+    return value.replace(/#\d+\s*$/, `#${safeSlide}`);
+  }
+  return `${value}#${safeSlide}`;
+}
+
+function formatPresenterLabel(name = '') {
+  return String(name || '').trim().replace(/\s+/g, ' ');
+}
+
+function attachAnimationMetadata(animation = null, presentationNumber = 0, slideNumber = 0) {
+  if (!animation || typeof animation !== 'object') return animation;
+  return {
+    ...animation,
+    presentationNumber: Math.max(1, Number(presentationNumber || 1)),
+    slideNumber: Math.max(1, Number(slideNumber || 1))
+  };
+}
+
 function normalizePresentationBlock(block = {}) {
   const rawSlides = Array.isArray(block?.slides) && block.slides.length > 0
     ? block.slides
     : [{
         id: `slide_${Date.now()}`,
-        html: String(block?.value || '<h3>Nouveau slide</h3><p>Écris ici.</p>'),
+        html: String(block?.value || DEFAULT_PRESENTATION_SLIDE_HTML),
         background: '#ffffff',
         animation: null
       }];
   return {
     ...block,
     presentationName: String(block?.presentationName || block?.title || ''),
+    canvaLiveUrl: normalizeCanvaLiveUrl(block?.canvaLiveUrl || ''),
+    canvaSlideCount: Math.max(0, Number(block?.canvaSlideCount || 0)),
     groupMembers: Array.isArray(block?.groupMembers) ? block.groupMembers.map((name) => String(name || '').trim()).filter(Boolean) : [],
     groupMembersText: String(block?.groupMembersText || (Array.isArray(block?.groupMembers) ? block.groupMembers.join(', ') : '')),
     qcmQuestions: Array.isArray(block?.qcmQuestions) ? block.qcmQuestions : [],
-    activeEditorTab: String(block?.activeEditorTab || 'slides') === 'qcm' ? 'qcm' : 'slides',
+    activeEditorTab: ['presentation', 'slides', 'qcm', 'animation'].includes(String(block?.activeEditorTab || 'slides'))
+      ? String(block?.activeEditorTab || 'slides')
+      : 'slides',
     presentationValidated: block?.presentationValidated === true,
-    slides: rawSlides.map((slide, index) => ({
+    slides: syncPresentationSlidesWithCount(rawSlides.map((slide, index) => ({
       id: String(slide?.id || `slide_${Date.now()}_${index}`),
       presenterName: String(slide?.presenterName || ''),
       html: String(slide?.html || slide?.value || ''),
@@ -145,8 +283,8 @@ function normalizePresentationBlock(block = {}) {
             fontSize: Number(box?.fontSize || 28)
           }))
         : []
-    })),
-    activeSlideIndex: Math.max(0, Math.min(Number(block?.activeSlideIndex || 0), rawSlides.length - 1))
+    })), Math.max(0, Number(block?.canvaSlideCount || 0))),
+    activeSlideIndex: Math.max(0, Math.min(Number(block?.activeSlideIndex || 0), Math.max(0, syncPresentationSlidesWithCount(rawSlides, Math.max(0, Number(block?.canvaSlideCount || 0))).length - 1)))
   };
 }
 
@@ -792,12 +930,18 @@ function MobileActionRemote({
   );
 }
 
-function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [] }) {
+function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0 }) {
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupName, setSetupName] = useState(String(presentation.presentationName || ''));
+  const [setupSlideCount, setSetupSlideCount] = useState(1);
+  const [setupPresenters, setSetupPresenters] = useState(['']);
   const [fontFamily, setFontFamily] = useState('Arial');
   const [selectedColor, setSelectedColor] = useState('#1d2942');
   const [validatedFlash, setValidatedFlash] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [canvaLiveUrlInput, setCanvaLiveUrlInput] = useState(String(presentation.canvaLiveUrl || ''));
+  const [editorCanvaStep, setEditorCanvaStep] = useState(1);
   const [activeMiniMenu, setActiveMiniMenu] = useState('');
   const [fontSize, setFontSize] = useState(28);
   const [drawTextMode, setDrawTextMode] = useState(false);
@@ -805,6 +949,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const [activeTextBoxId, setActiveTextBoxId] = useState('');
   const editorRef = useRef(null);
   const imageFileInputRef = useRef(null);
+  const slidesImportInputRef = useRef(null);
   const canvasRef = useRef(null);
   const drawStateRef = useRef(null);
   const activeSlide = presentation.slides[presentation.activeSlideIndex] || presentation.slides[0];
@@ -833,6 +978,17 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     && presentation.slides.length > 0
     && slidesValidCount === presentation.slides.length
     && qcmValidCount >= presentation.slides.length;
+  const currentEditorCanvaSlide = presentation.slides[Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1))] || null;
+  const currentEditorCanvaSlideIndex = Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1));
+  const isPresentationUnconfigured = !String(presentation.presentationName || '').trim()
+    && Math.max(0, Number(presentation.canvaSlideCount || 0)) === 0;
+
+  useEffect(() => {
+    if (!isPresentationUnconfigured) return;
+    setSetupName('');
+    setSetupSlideCount(1);
+    setSetupPresenters(['']);
+  }, [isPresentationUnconfigured]);
 
   useEffect(() => {
     const nextHtml = String(activeSlide?.html || '');
@@ -844,6 +1000,21 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       editor.innerHTML = nextHtml;
     }
   }, [activeSlide?.id, activeSlide?.html]);
+
+  useEffect(() => {
+    setCanvaLiveUrlInput(String(presentation.canvaLiveUrl || ''));
+  }, [presentation.canvaLiveUrl]);
+
+  useEffect(() => {
+    setEditorCanvaStep(1);
+  }, [presentation.canvaLiveUrl, presentation.canvaSlideCount]);
+  const detectedEditorCanvaStep = extractSlideNumberFromUrl(presentation.canvaLiveUrl);
+
+  useEffect(() => {
+    if (detectedEditorCanvaStep) {
+      setEditorCanvaStep(detectedEditorCanvaStep);
+    }
+  }, [detectedEditorCanvaStep]);
 
   const patchPresentation = (patch) => onChange?.({ ...presentation, ...patch });
   const patchSlide = (slideIndex, patch) => {
@@ -915,8 +1086,71 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     reader.readAsDataURL(file);
   };
 
+  const handleSlidesImport = async (fileList) => {
+    const files = Array.from(fileList || []).filter((row) => row.type.startsWith('image/') || row.type === 'application/pdf' || /\.pdf$/i.test(row.name || ''));
+    if (files.length === 0) return;
+    const importedSlides = await Promise.all(files.map((file, index) => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        if (!result) {
+          resolve(null);
+          return;
+        }
+        const html = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')
+          ? createPresentationSlideHtmlFromPdf(result, file.name || `PDF ${index + 1}`)
+          : createPresentationSlideHtmlFromImage(result);
+        resolve({
+          ...createPresentationSlide(presentation.slides.length + index),
+          html
+        });
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    })));
+    const normalizedImportedSlides = importedSlides.filter(Boolean);
+    if (normalizedImportedSlides.length === 0) return;
+    const currentSlideIsDefault = presentation.slides.length === 1
+      && !String(activeSlide?.presenterName || '').trim()
+      && String(activeSlide?.html || '').trim() === DEFAULT_PRESENTATION_SLIDE_HTML;
+    const nextSlides = currentSlideIsDefault
+      ? normalizedImportedSlides
+      : [...presentation.slides, ...normalizedImportedSlides];
+    patchPresentation({
+      slides: nextSlides,
+      activeSlideIndex: currentSlideIsDefault ? 0 : presentation.slides.length,
+      activeEditorTab: 'slides',
+      presentationValidated: false
+    });
+    if (slidesImportInputRef.current) {
+      slidesImportInputRef.current.value = '';
+    }
+  };
+
   const updateTextBox = (textBoxId, patch) => {
     patchTextBoxes((activeSlide?.textBoxes || []).map((box) => box.id === textBoxId ? { ...box, ...patch } : box));
+  };
+
+  const updateSetupCount = (nextCountRaw) => {
+    const nextCount = Math.max(1, Number(nextCountRaw || 1));
+    setSetupSlideCount(nextCount);
+    setSetupPresenters((prev) => Array.from({ length: nextCount }, (_, index) => String(prev[index] || '')));
+  };
+
+  const createPresentationFromSetup = () => {
+    const nextSlides = syncPresentationSlidesWithCount([], setupSlideCount).map((slide, index) => ({
+      ...slide,
+      presenterName: String(setupPresenters[index] || '').trim()
+    }));
+    patchPresentation({
+      presentationName: String(setupName || '').trim(),
+      canvaSlideCount: setupSlideCount,
+      slides: nextSlides,
+      activeSlideIndex: 0,
+      activeEditorTab: 'slides',
+      presentationValidated: false
+    });
+    setSetupOpen(false);
   };
 
   useEffect(() => {
@@ -1032,7 +1266,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
             {activeSlide?.animation ? (
               <AnimationBlockEditor
-                block={activeSlide.animation}
+                block={attachAnimationMetadata(activeSlide.animation, presentationNumber, presentation.activeSlideIndex + 1)}
                 onChange={() => {}}
                 onRemove={() => {}}
                 readOnly
@@ -1041,11 +1275,62 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                 blockIndex={blockIndex}
                 tabId={tabId}
                 entryId={entryId}
+                presentationNumber={presentationNumber}
+                slideNumber={presentation.activeSlideIndex + 1}
               />
             ) : null}
             {activeSlide?.presenterName ? (
-              <div className="presentation-slide-signature">Par {String(activeSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+              <div className="presentation-slide-signature">Presentateur: {formatPresenterLabel(activeSlide.presenterName)}</div>
             ) : null}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isPresentationUnconfigured) {
+    return (
+      <div className="presentation-shell">
+        {!setupOpen ? (
+          <button type="button" className="presentation-create-card" onClick={() => setSetupOpen(true)}>
+            Nouvelle presentation
+          </button>
+        ) : (
+          <div className="presentation-setup-card">
+            <input
+              className="presentation-slide-title"
+              value={setupName}
+              onChange={(e) => setSetupName(e.target.value)}
+              placeholder="Nom de la presentation"
+            />
+            <label className="presentation-setup-label">
+              <span>Nombre de slides:</span>
+              <input
+                className="presentation-size-input"
+                type="number"
+                min="1"
+                max="300"
+                value={setupSlideCount}
+                onChange={(e) => updateSetupCount(e.target.value)}
+              />
+            </label>
+            <div className="presentation-setup-list">
+              {setupPresenters.map((value, index) => (
+                <input
+                  key={`setup-presenter-${index}`}
+                  className="presentation-presenter-short-input"
+                  value={value}
+                  onChange={(e) => setSetupPresenters((prev) => prev.map((entry, entryIndex) => entryIndex === index ? e.target.value : entry))}
+                  placeholder={`Nom presentateur slide ${index + 1}`}
+                />
+              ))}
+            </div>
+            <div className="presentation-setup-actions">
+              <button type="button" className="presentation-slide-add" onClick={() => setSetupOpen(false)}>Annuler</button>
+              <button type="button" className="presentation-slide-add presentation-slide-add-blue" disabled={!String(setupName || '').trim()} onClick={createPresentationFromSetup}>
+                Creer
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1055,72 +1340,194 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   return (
     <div className="presentation-shell">
       <div className="presentation-slide-tabs">
-        {presentation.slides.map((slide, index) => (
-          <button
-            key={slide.id}
-            type="button"
-            className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
-            onClick={() => patchPresentation({ activeSlideIndex: index, activeEditorTab: 'slides' })}
-          >
-            {`Slide ${index + 1}`}
-          </button>
-        ))}
-        {hasQcmTab ? (
-          <button
-            type="button"
-            className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
-            onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
-          >
-            QCM
-          </button>
-        ) : null}
         <button
           type="button"
-          className="presentation-slide-add presentation-slide-add-blue"
-          onClick={() => patchPresentation({
-            slides: [...presentation.slides, createPresentationSlide(presentation.slides.length)],
-            activeSlideIndex: presentation.slides.length,
-            activeEditorTab: 'slides'
-          })}
+          className={`presentation-slide-tab ${presentation.activeEditorTab === 'slides' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
         >
-          + Slide
+          Slides
         </button>
         <button
           type="button"
-          className="presentation-slide-add presentation-slide-add-violet"
+          className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
           onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
         >
-          + QCM
+          Quizz
+        </button>
+        <button
+          type="button"
+          className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'animation' })}
+        >
+          Animation
         </button>
         <button
           type="button"
           className="presentation-slide-add presentation-slide-add-red"
           onClick={() => {
-            if (removeActiveTextBox()) {
-              return;
-            }
-            if (presentation.slides.length <= 1) {
-              if (window.confirm('Effacer le contenu de cette presentation ?')) {
-                patchPresentation({
-                  slides: [createPresentationSlide(0)],
-                  activeSlideIndex: 0,
-                  qcmQuestions: [],
-                  presentationValidated: false
-                });
-              }
-              return;
-            }
-            const nextSlides = presentation.slides.filter((_, index) => index !== presentation.activeSlideIndex);
-            patchPresentation({
-              slides: nextSlides,
-              activeSlideIndex: Math.max(0, Math.min(presentation.activeSlideIndex, nextSlides.length - 1)),
-              presentationValidated: false
-            });
+            if (!window.confirm('Supprimer cette presentation ?')) return;
+            onChange?.(createBlock('text'));
           }}
         >
           Supprimer
         </button>
       </div>
+      <div className="presentation-canva-row">
+        <input
+          className="presentation-slide-title"
+          value={presentation.presentationName || ''}
+          onChange={(e) => patchPresentation({ presentationName: e.target.value, presentationValidated: false })}
+          placeholder="Nom de la presentation"
+        />
+      </div>
+      {presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation' ? (
+      <div className="presentation-canva-row">
+        <input
+          className="presentation-slide-title"
+          value={canvaLiveUrlInput}
+          onChange={(e) => setCanvaLiveUrlInput(e.target.value)}
+          placeholder="Lien Canva live (optionnel)"
+        />
+        <label className="presentation-setup-label">
+          <span>Nombre de slides:</span>
+          <input
+            className="presentation-size-input"
+            type="number"
+            min="0"
+            max="300"
+            value={presentation.canvaSlideCount || 0}
+            onChange={(e) => {
+              const nextCount = Math.max(0, Number(e.target.value || 0));
+              const nextSlides = syncPresentationSlidesWithCount(presentation.slides, nextCount);
+              patchPresentation({
+                canvaSlideCount: nextCount,
+                slides: nextSlides,
+                activeSlideIndex: Math.min(presentation.activeSlideIndex, Math.max(0, nextSlides.length - 1)),
+                presentationValidated: false
+              });
+            }}
+            title="Nombre de slides Canva"
+          />
+        </label>
+      </div>
+      ) : null}
+      {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation') && presentation.canvaLiveUrl ? (
+        <div className="canva-live-shell">
+          {presentation.activeEditorTab === 'animation' && !currentEditorCanvaSlide?.animation ? (
+            <div className="presentation-setup-actions">
+              <button
+                type="button"
+                className="presentation-slide-add presentation-slide-add-violet"
+                onClick={() => patchSlide(currentEditorCanvaSlideIndex, {
+                  animation: attachAnimationMetadata(
+                    createAnimationBlockFromDraft({ title: `Animation slide ${editorCanvaStep}` }),
+                    presentationNumber,
+                    editorCanvaStep
+                  )
+                })}
+              >
+                Creer animation pour la slide {editorCanvaStep}
+              </button>
+            </div>
+          ) : null}
+          <div className="slideshow-nav">
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => {
+                const nextStep = Math.max(1, editorCanvaStep - 1);
+                const nextUrl = injectSlideNumberIntoUrl(presentation.canvaLiveUrl, nextStep);
+                setEditorCanvaStep(nextStep);
+                setCanvaLiveUrlInput(nextUrl);
+                patchPresentation({
+                  canvaLiveUrl: nextUrl,
+                  presentationValidated: false
+                });
+              }}
+              disabled={editorCanvaStep <= 1}
+            >
+              Diapo precedente
+            </button>
+            <div className="slideshow-progress">
+              {presentation.canvaSlideCount > 0 ? `Canva live ${editorCanvaStep}/${presentation.canvaSlideCount}` : `Canva live ${editorCanvaStep}`}
+            </div>
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => {
+                const nextStep = presentation.canvaSlideCount > 0
+                  ? Math.min(presentation.canvaSlideCount, editorCanvaStep + 1)
+                  : editorCanvaStep + 1;
+                const nextUrl = injectSlideNumberIntoUrl(presentation.canvaLiveUrl, nextStep);
+                setEditorCanvaStep(nextStep);
+                setCanvaLiveUrlInput(nextUrl);
+                patchPresentation({
+                  canvaLiveUrl: nextUrl,
+                  presentationValidated: false
+                });
+              }}
+              disabled={presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount}
+            >
+              Diapo suivante
+            </button>
+          </div>
+          <div className="canva-live-note">
+            {`Canva live ${editorCanvaStep}/${presentation.canvaSlideCount || editorCanvaStep}.`}
+            {` Presentation ${Math.max(1, Number(presentationNumber || 1))} • Slide ${editorCanvaStep}.`}
+            {currentEditorCanvaSlide?.presenterName ? ` Exposant: ${currentEditorCanvaSlide.presenterName}.` : ''}
+          </div>
+          <div className="canva-live-frame-shell">
+            <iframe
+              src={presentation.canvaLiveUrl}
+              title={`canva-live-editor-${presentation.presentationName || 'presentation'}`}
+              className="canva-live-frame"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allow="fullscreen"
+            />
+            <div className="canva-live-lock-overlay" aria-hidden="true" />
+            {currentEditorCanvaSlide?.presenterName ? (
+              <div className="canva-live-presenter-badge">
+                {formatPresenterLabel(currentEditorCanvaSlide.presenterName)}
+              </div>
+            ) : null}
+            {presentation.activeEditorTab === 'animation' && currentEditorCanvaSlide?.animation ? (
+              <div className="canva-live-animation-layer">
+                <AnimationBlockEditor
+                  block={attachAnimationMetadata(currentEditorCanvaSlide.animation, presentationNumber, editorCanvaStep)}
+                  onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep) })}
+                  onRemove={() => patchSlide(currentEditorCanvaSlideIndex, { animation: null })}
+                  readOnly={false}
+                  sectionKey={sectionKey}
+                  tabKey={tabKey}
+                  blockIndex={blockIndex}
+                  tabId={tabId}
+                  entryId={entryId}
+                  presentationNumber={presentationNumber}
+                  slideNumber={editorCanvaStep}
+                />
+              </div>
+            ) : null}
+          </div>
+          <a className="presentation-slide-add" href={presentation.canvaLiveUrl} target="_blank" rel="noreferrer">
+            Ouvrir Canva dans un nouvel onglet
+          </a>
+        </div>
+      ) : null}
+      {presentation.activeEditorTab === 'slides' && presentation.canvaSlideCount > 0 ? (
+        <div className="presentation-qcm-panel">
+          {presentation.slides.slice(0, presentation.canvaSlideCount).map((slide, slideIndex) => (
+            <div key={slide.id} className="presentation-qcm-card">
+              <input
+                className="presentation-presenter-short-input"
+                value={slide.presenterName || ''}
+                onChange={(e) => patchSlide(slideIndex, { presenterName: e.target.value })}
+                placeholder={`Nom presentateur slide ${slideIndex + 1}`}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
       {presentation.activeEditorTab === 'qcm' ? (
         <div className="presentation-qcm-panel">
           {qcmQuestions.map((question, questionIndex) => (
@@ -1171,60 +1578,19 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             + Question QCM
           </button>
         </div>
-      ) : (
+      ) : presentation.activeEditorTab === 'slides' ? (
         <>
-      <div className="article-toolbar slides-toolbar">
-        <input
-          className="presentation-slide-title"
-          value={activeSlide?.presenterName || ''}
-          onChange={(e) => patchSlide(presentation.activeSlideIndex, { presenterName: e.target.value })}
-          placeholder="Nom de l'exposant"
-        />
-        <div className="slides-toolbar-primary">
-          <select
-            value={fontFamily}
-            onChange={(e) => {
-              setFontFamily(e.target.value);
-              exec('fontName', e.target.value);
-            }}
-          >
-            {ARTICLE_FONTS.map((font) => (
-              <option key={font.value} value={font.value}>{font.label}</option>
-            ))}
-          </select>
-          <button type="button" className="slides-toolbar-compact" onClick={() => applyFontSize(Math.max(8, fontSize - 2))}>-</button>
-          <input
-            className="presentation-size-input"
-            type="number"
-            min="8"
-            max="120"
-            value={fontSize}
-            onChange={(e) => setFontSize(Number(e.target.value || 28))}
-          />
-          <button type="button" className="slides-toolbar-compact" onClick={() => applyFontSize(fontSize + 2)}>+</button>
-          <button type="button" className="slides-toolbar-compact" onClick={() => exec('bold')}><strong>B</strong></button>
-          <button type="button" className="slides-toolbar-compact" onClick={() => exec('italic')}><em>I</em></button>
-          <button type="button" className="slides-toolbar-compact" onClick={() => exec('underline')}><u>U</u></button>
-          <button type="button" className="slides-toolbar-compact" onClick={() => setActiveMiniMenu((prev) => prev === 'color' ? '' : 'color')}>A</button>
-          <button type="button" className="slides-toolbar-compact" onClick={() => setActiveMiniMenu((prev) => prev === 'background' ? '' : 'background')}>Fond</button>
-          <button type="button" className={`${drawTextMode ? 'active-tool-btn' : ''}`} onClick={() => setDrawTextMode((prev) => !prev)}>Zone txt</button>
-          <button type="button" className="slides-toolbar-compact" onClick={() => setActiveMiniMenu((prev) => prev === 'image' ? '' : 'image')}>Img</button>
-          <input
-            ref={imageFileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden-file-input"
-            onChange={(e) => void handleImageFileImport(e.target.files)}
-          />
-          <button
-            type="button"
-            onClick={() => patchSlide(presentation.activeSlideIndex, {
-              animation: activeSlide?.animation || createAnimationBlockFromDraft({ title: `Animation slide ${presentation.activeSlideIndex + 1}` })
-            })}
-          >
-            Anim
-          </button>
-        </div>
+      <div className="presentation-setup-actions">
+        <button
+          type="button"
+          className="presentation-slide-add presentation-slide-add-violet"
+          onClick={() => patchPresentation({
+            canvaLiveUrl: normalizeCanvaLiveUrl(canvaLiveUrlInput),
+            presentationValidated: false
+          })}
+        >
+          Enregistrer Canva
+        </button>
       </div>
       {activeMiniMenu === 'color' ? (
         <div className="presentation-pop-panel">
@@ -1333,11 +1699,11 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           />
         ) : null}
         {activeSlide?.presenterName ? (
-          <div className="presentation-slide-signature">Par {String(activeSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+          <div className="presentation-slide-signature">Presentateur: {formatPresenterLabel(activeSlide.presenterName)}</div>
         ) : null}
       </div>
       </>
-      )}
+      ) : null}
       <div className="presentation-validation-bar">
         <div className="presentation-validation-status">
           {slidesValidCount}/{presentation.slides.length || 0} slides valides • {qcmValidCount} questions QCM valides
@@ -1361,7 +1727,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   );
 }
 
-function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', mode = 'browse' }) {
+function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', mode = 'browse', presentationNumber = 0 }) {
   const normalized = useMemo(() => normalizePresentationBlock(presentation), [presentation]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTab, setActiveTab] = useState('slides');
@@ -1369,10 +1735,18 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
   const [quizAnswers, setQuizAnswers] = useState([]);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [slideshowStep, setSlideshowStep] = useState(0);
+  const [canvaStep, setCanvaStep] = useState(1);
+  const [canvaRuntimeUrl, setCanvaRuntimeUrl] = useState(normalized.canvaLiveUrl || '');
+  const [canvaPlaying, setCanvaPlaying] = useState(mode === 'canva');
   const activeSlide = normalized.slides[activeIndex] || normalized.slides[0];
   const qcmQuestions = Array.isArray(normalized.qcmQuestions) ? normalized.qcmQuestions : [];
   const hasQcmTab = qcmQuestions.length > 0;
   const isSlideshow = mode === 'slideshow';
+  const isCanvaLive = mode === 'canva';
+  const hasCanvaLive = Boolean(normalized.canvaLiveUrl);
+  const detectedCanvaStep = extractSlideNumberFromUrl(normalized.canvaLiveUrl);
+  const canvaBaseStep = detectedCanvaStep || 1;
+  const currentCanvaSlide = normalized.slides[Math.max(0, Math.min(canvaStep - 1, normalized.slides.length - 1))] || null;
   const totalSteps = normalized.slides.length + (hasQcmTab ? 1 : 0);
   const showingQcm = isSlideshow ? (hasQcmTab && slideshowStep === normalized.slides.length) : activeTab === 'qcm';
   const slideshowSlide = normalized.slides[Math.min(slideshowStep, Math.max(0, normalized.slides.length - 1))] || normalized.slides[0];
@@ -1392,6 +1766,25 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
     setActiveIndex(0);
     setActiveTab('slides');
   }, [normalized.presentationName, normalized.slides.length, isSlideshow]);
+
+  useEffect(() => {
+    setCanvaStep(1);
+  }, [normalized.presentationName, normalized.canvaLiveUrl, normalized.canvaSlideCount]);
+
+  useEffect(() => {
+    if (detectedCanvaStep) {
+      setCanvaStep(detectedCanvaStep);
+    }
+  }, [detectedCanvaStep]);
+
+  useEffect(() => {
+    const baseStep = detectedCanvaStep || 1;
+    setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, baseStep));
+  }, [normalized.canvaLiveUrl, detectedCanvaStep]);
+
+  useEffect(() => {
+    setCanvaPlaying(mode === 'canva');
+  }, [mode, normalized.presentationName]);
 
   const restartQuiz = () => {
     setQuizIndex(0);
@@ -1428,7 +1821,57 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
         <div className="eyebrow">Presentation validee</div>
         <h3>{normalized.presentationName || 'Presentation'}</h3>
       </div>
-      {isSlideshow ? (
+      {isCanvaLive ? (
+        <div className="slideshow-nav">
+          <button
+            type="button"
+            className={`presentation-slide-add ${canvaPlaying ? 'presentation-slide-add-red' : ''}`}
+            onClick={() => {
+              if (canvaPlaying) {
+                setCanvaPlaying(false);
+                setCanvaStep(canvaBaseStep);
+                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, canvaBaseStep));
+                return;
+              }
+              setCanvaPlaying(true);
+              setCanvaStep(1);
+              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, 1));
+            }}
+          >
+            {canvaPlaying ? 'Stop' : 'Play'}
+          </button>
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => {
+              const nextStep = Math.max(1, canvaStep - 1);
+              setCanvaStep(nextStep);
+              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+            }}
+            disabled={!canvaPlaying || canvaStep <= 1}
+          >
+            Diapo precedente
+          </button>
+          <div className="slideshow-progress">
+            {normalized.canvaSlideCount > 0 ? `Canva live ${canvaStep}/${normalized.canvaSlideCount}` : `Canva live ${canvaStep}`}
+            {currentCanvaSlide?.presenterName ? ` • ${currentCanvaSlide.presenterName}` : ''}
+          </div>
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => {
+              const nextStep = normalized.canvaSlideCount > 0
+                ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
+                : canvaStep + 1;
+              setCanvaStep(nextStep);
+              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+            }}
+            disabled={!canvaPlaying || (normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount)}
+          >
+            Diapo suivante
+          </button>
+        </div>
+      ) : isSlideshow ? (
         <div className="slideshow-nav">
           <button
             type="button"
@@ -1476,7 +1919,34 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           ) : null}
         </div>
       )}
-      {showingQcm ? (
+      {isCanvaLive ? (
+        <div className="canva-live-shell">
+          <div className="canva-live-note">
+            Slide detectee depuis l URL : {detectedCanvaStep || '?'}.
+            URL runtime : {canvaRuntimeUrl || normalized.canvaLiveUrl || 'aucune'}.
+            {currentCanvaSlide?.presenterName ? ` Exposant: ${currentCanvaSlide.presenterName}.` : ''}
+          </div>
+          <div className="canva-live-frame-shell">
+            <iframe
+              src={canvaRuntimeUrl || normalized.canvaLiveUrl}
+              title={`canva-live-${normalized.presentationName || 'presentation'}`}
+              className="canva-live-frame"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allow="fullscreen"
+            />
+            <div className="canva-live-lock-overlay" aria-hidden="true" />
+            {currentCanvaSlide?.presenterName ? (
+              <div className="canva-live-presenter-badge">
+                {formatPresenterLabel(currentCanvaSlide.presenterName)}
+              </div>
+            ) : null}
+          </div>
+          <a className="presentation-slide-add" href={canvaRuntimeUrl || normalized.canvaLiveUrl} target="_blank" rel="noreferrer">
+            Ouvrir Canva dans un nouvel onglet
+          </a>
+        </div>
+      ) : showingQcm ? (
         <div className="public-quiz-shell">
           {quizCompleted ? (
             <div className={`public-quiz-result ${quizPassed ? 'success' : 'failure'}`}>
@@ -1536,7 +2006,7 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           ))}
           {visibleSlide?.animation ? (
             <AnimationBlockEditor
-              block={visibleSlide.animation}
+              block={attachAnimationMetadata(visibleSlide.animation, presentationNumber, (isSlideshow ? slideshowStep : activeIndex) + 1)}
               onChange={() => {}}
               onRemove={() => {}}
               readOnly
@@ -1545,10 +2015,12 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
               blockIndex={blockIndex}
               tabId={tabId}
               entryId={entryId}
+              presentationNumber={presentationNumber}
+              slideNumber={(isSlideshow ? slideshowStep : activeIndex) + 1}
             />
           ) : null}
           {visibleSlide?.presenterName ? (
-            <div className="presentation-slide-signature">Par {String(visibleSlide.presenterName || '').trim().split(/\s+/)[0] || ''}</div>
+            <div className="presentation-slide-signature">Presentateur: {formatPresenterLabel(visibleSlide.presenterName)}</div>
           ) : null}
         </div>
       )}
@@ -1566,7 +2038,7 @@ function formatContributionName(name = '') {
   return `${firstName} ${lastName.slice(0, 3)}`;
 }
 
-function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '' }) {
+function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', presentationNumber = 0, slideNumber = 0 }) {
   const overlayRef = useRef(null);
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
@@ -2162,6 +2634,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const actorRenderWidth = Number(normalizedSelectedFrame?.width || actorState.width || block?.actorWidth || 140);
   const actorRenderHeight = Number(normalizedSelectedFrame?.height || actorState.height || block?.actorHeight || 140);
   const actorRenderFrame = resolveWeb5eAssetUrl(String((isPlaying || playingActionId) ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || '')));
+  const safePresentationNumber = Math.max(1, Number(block?.presentationNumber || presentationNumber || 1));
+  const safeSlideNumber = Math.max(1, Number(block?.slideNumber || slideNumber || 1));
+  const animationCode = `${safePresentationNumber}${safeSlideNumber}`;
 
   return (
     <div className="animation-block-shell">
@@ -2173,7 +2648,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           }}
           onMouseDown={startDragActor}
         >
-          <div className="animation-actor-name top">{block?.actorName || 'Personnage'}</div>
+          <div className="animation-actor-name top">{animationCode}</div>
           <div
             className="animation-page-actor-figure"
             style={{ width: actorRenderWidth, height: actorRenderHeight }}
@@ -2371,6 +2846,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           </div>
         </div>
       </div>
+      <div className="animation-meta-line">
+        {`Presentation ${safePresentationNumber} • Slide ${safeSlideNumber}`}
+      </div>
     </div>
   );
 }
@@ -2416,6 +2894,13 @@ export default function App() {
   const [welcomeAnimationDraft, setWelcomeAnimationDraft] = useState({
     title: '',
     actorImageUrl: ''
+  });
+  const [voteOpen, setVoteOpen] = useState(false);
+  const [voteTab, setVoteTab] = useState('names');
+  const [voteDrafts, setVoteDrafts] = useState({
+    site_name: '',
+    water_mascot_name: '',
+    energy_mascot_name: ''
   });
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
@@ -2823,6 +3308,9 @@ export default function App() {
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
   const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
   const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
+  const voteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
+  const currentUserVoteKey = String(user?.id || user?._id || '').trim();
+  const currentUserVotes = currentUserVoteKey ? (voteBoard.votesByUser[currentUserVoteKey] || {}) : {};
   const validatedPresentations = articleBlocks
     .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
@@ -2844,6 +3332,62 @@ export default function App() {
       })
     : articleBlocks.filter(({ block }) => block.type !== 'text');
 
+  const persistVoteBoard = async (nextVoteBoard) => {
+    const res = await fetch('/api/web5e/votes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voteBoard: nextVoteBoard })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data?.error || 'Erreur vote');
+    setSiteData((prev) => ({ ...(prev || {}), voteBoard: data.voteBoard || nextVoteBoard }));
+  };
+
+  const saveVoteSelection = async (categoryKey, optionId) => {
+    if (!currentUserVoteKey) return;
+    const nextVoteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
+    nextVoteBoard.votesByUser[currentUserVoteKey] = {
+      ...(nextVoteBoard.votesByUser[currentUserVoteKey] || {}),
+      [categoryKey]: String(optionId || '')
+    };
+    await persistVoteBoard(nextVoteBoard);
+  };
+
+  const addVoteNameProposal = async (categoryKey) => {
+    if (!currentUserVoteKey) return;
+    const value = String(voteDrafts[categoryKey] || '').trim();
+    if (!value) return;
+    const nextVoteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
+    const existingProposal = (nextVoteBoard.names[categoryKey] || []).find((row) => String(row?.proposedBy || '') === currentUserVoteKey);
+    if (existingProposal) return;
+    nextVoteBoard.names[categoryKey] = [
+      ...(nextVoteBoard.names[categoryKey] || []),
+      { id: `vote_${categoryKey}_${Date.now()}`, label: value, proposedBy: currentUserVoteKey }
+    ];
+    await persistVoteBoard(nextVoteBoard);
+    setVoteDrafts((prev) => ({ ...prev, [categoryKey]: '' }));
+  };
+
+  const addVoteMascotProposal = async (categoryKey, fileList) => {
+    if (!currentUserVoteKey) return;
+    const nextVoteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
+    const existingProposal = (nextVoteBoard.mascots[categoryKey] || []).find((row) => String(row?.proposedBy || '') === currentUserVoteKey);
+    if (existingProposal) return;
+    const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
+    if (!file) return;
+    const dataUrl = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    });
+    if (!dataUrl) return;
+    nextVoteBoard.mascots[categoryKey] = [
+      ...(nextVoteBoard.mascots[categoryKey] || []),
+      { id: `vote_${categoryKey}_${Date.now()}`, imageUrl: dataUrl, proposedBy: currentUserVoteKey }
+    ];
+    await persistVoteBoard(nextVoteBoard);
+  };
+
   if (isMobileActionMode) {
     return <MobileActionRemote token={mobileActionToken} />;
   }
@@ -2853,6 +3397,11 @@ export default function App() {
       <button className="login-toggle" onClick={() => setLoginOpen((prev) => !prev)}>
         {user ? `${user.firstName} ${user.lastName}` : 'Connexion élève'}
       </button>
+      {user && !isTeacher ? (
+        <button className="creator-toggle" onClick={() => setVoteOpen((prev) => !prev)}>
+          Vote
+        </button>
+      ) : null}
       <aside className={`login-panel ${loginOpen ? 'open' : ''}`}>
         <div className="login-panel-head">
           <div>
@@ -2950,6 +3499,70 @@ export default function App() {
           </div>
         ) : null}
       </header>
+      {voteOpen && user && !isTeacher ? (
+        <section className="vote-panel">
+          <div className="vote-panel-head">
+            <div>
+              <div className="eyebrow">Vote eleve</div>
+              <strong>Choisis tes noms et mascottes</strong>
+            </div>
+            <button type="button" onClick={() => setVoteOpen(false)}>×</button>
+          </div>
+          <div className="presentation-slide-tabs">
+            <button type="button" className={`presentation-slide-tab ${voteTab === 'names' ? 'active' : ''}`} onClick={() => setVoteTab('names')}>Noms</button>
+            <button type="button" className={`presentation-slide-tab ${voteTab === 'mascots' ? 'active' : ''}`} onClick={() => setVoteTab('mascots')}>Mascotes</button>
+          </div>
+          {voteTab === 'names' ? (
+            <div className="vote-grid names">
+              {VOTE_NAME_CATEGORIES.map((category) => {
+                const options = voteBoard.names[category.key] || [];
+                const alreadyProposed = options.some((row) => String(row?.proposedBy || '') === currentUserVoteKey);
+                return (
+                  <div key={category.key} className="vote-column">
+                    <h4>{category.label}</h4>
+                    <div className="vote-options">
+                      {options.map((option) => (
+                        <button key={option.id} type="button" className={`vote-option ${currentUserVotes[category.key] === option.id ? 'active' : ''}`} onClick={() => void saveVoteSelection(category.key, option.id)}>
+                          <span>{option.label}</span>
+                          <strong>{countVotesForOption(voteBoard, category.key, option.id)}</strong>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="vote-proposal-row">
+                      <input value={voteDrafts[category.key] || ''} onChange={(e) => setVoteDrafts((prev) => ({ ...prev, [category.key]: e.target.value }))} placeholder={`Proposer ${category.label}`} />
+                      <button type="button" disabled={alreadyProposed} onClick={() => void addVoteNameProposal(category.key)}>Ajouter</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="vote-grid mascots">
+              {VOTE_MASCOT_CATEGORIES.map((category) => {
+                const options = voteBoard.mascots[category.key] || [];
+                const alreadyProposed = options.some((row) => String(row?.proposedBy || '') === currentUserVoteKey);
+                return (
+                  <div key={category.key} className="vote-column">
+                    <h4>{category.label}</h4>
+                    <div className="vote-image-grid">
+                      {options.map((option) => (
+                        <button key={option.id} type="button" className={`vote-image-option ${currentUserVotes[category.key] === option.id ? 'active' : ''}`} onClick={() => void saveVoteSelection(category.key, option.id)}>
+                          <img src={option.imageUrl} alt="" />
+                          <strong>{countVotesForOption(voteBoard, category.key, option.id)}</strong>
+                        </button>
+                      ))}
+                    </div>
+                    <label className="presentation-slide-add">
+                      Ajouter image
+                      <input type="file" accept="image/*" className="hidden-file-input" disabled={alreadyProposed} onChange={(e) => void addVoteMascotProposal(category.key, e.target.files)} />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {siteData?.welcomeAnimation ? (
         <div className="page-welcome-stage">
@@ -3082,6 +3695,18 @@ export default function App() {
                   >
                     Diapo
                   </button>
+                  {presentation.canvaLiveUrl ? (
+                    <button
+                      type="button"
+                      className="presentation-slide-add"
+                      onClick={() => {
+                        setOpenedValidatedPresentationMode('canva');
+                        setOpenedValidatedPresentationIndex(index);
+                      }}
+                    >
+                      Play
+                    </button>
+                  ) : null}
                   {user ? (
                     <button
                       type="button"
@@ -3122,6 +3747,7 @@ export default function App() {
               tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
               entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
               mode={openedValidatedPresentationMode}
+              presentationNumber={openedValidatedPresentationIndex + 1}
             />
           </div>
         ) : null}
@@ -3170,6 +3796,7 @@ export default function App() {
                   tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
                   entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
                   siblingPresentationNames={presentationBlocks.filter((row) => row.index !== index).map((row) => row.presentation.presentationName)}
+                  presentationNumber={Math.max(1, presentationBlocks.findIndex((row) => row.index === index) + 1)}
                 />
               )}
 
