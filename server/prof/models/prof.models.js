@@ -226,6 +226,7 @@ const Models = {
                 recordingPitch: { type: Number, default: 1 },
                 presenterName: { type: String, default: '' },
                 presenterSlideNumber: { type: Number, default: 0 },
+                selectedForPresenter: { type: Boolean, default: false },
                 createdAt: Date,
                 updatedAt: Date
             }],

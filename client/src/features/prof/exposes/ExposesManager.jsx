@@ -55,7 +55,7 @@ export default function ExposesManager({ globalClass }) {
     const [recording, setRecording] = useState(false);
     const [recordingSec, setRecordingSec] = useState(0);
     const [uploadingRecording, setUploadingRecording] = useState(false);
-    const [playingPreview, setPlayingPreview] = useState(false);
+    const [previewingRecordingId, setPreviewingRecordingId] = useState('');
     const [savingPitch, setSavingPitch] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -65,7 +65,6 @@ export default function ExposesManager({ globalClass }) {
     const startedAtRef = React.useRef(0);
     const timerRef = React.useRef(null);
     const previewAudioRef = React.useRef(null);
-    const previewRestartRef = React.useRef(false);
     const exposeGridCols = 6;
 
     const classStudents = useMemo(() => {
@@ -126,18 +125,6 @@ export default function ExposesManager({ globalClass }) {
         }
     }, []);
 
-    const chapterById = useMemo(() => {
-        const m = new Map();
-        (chapters || []).forEach((ch) => m.set(String(ch._id), ch));
-        return m;
-    }, [chapters]);
-
-    const studentNameById = useMemo(() => {
-        const m = new Map();
-        (students || []).forEach((s) => m.set(String(s._id), `${s.firstName || ''} ${s.lastName || ''}`.trim()));
-        return m;
-    }, [students]);
-
     const filtered = useMemo(() => {
         const key = norm(globalClass || '');
         return (rows || []).filter((x) => {
@@ -154,26 +141,28 @@ export default function ExposesManager({ globalClass }) {
 
     const selected = filtered.find((x) => String(x._id) === String(selectedId)) || null;
     const activeExpose = selected || null;
-    const buildRecorderState = React.useCallback((student, exposePresentation) => ({
-        studentId: String(student?._id || ''),
-        presentationTitle: String(exposePresentation?.presentationTitle || `${globalClass} - ${student?.firstName || ''} ${student?.lastName || ''}`).trim(),
-        presenterName: `${student?.firstName || ''} ${student?.lastName || ''}`.trim(),
-        slideNumber: Math.max(1, Number(exposePresentation?.presenterSlideNumber || guessSlideNumberFromText(exposePresentation?.slidesText || '1'))),
-        studentLabel: `${student?.firstName || ''} ${student?.lastName || ''}`.trim(),
-        recordingUrl: String(exposePresentation?.recordingUrl || ''),
-        recordingPitch: Math.max(0.5, Math.min(2, Number(exposePresentation?.recordingPitch || 1)))
-    }), [globalClass]);
-
-    const grouped = useMemo(() => {
-        const map = new Map();
-        const list = selected?.presentations || [];
-        list.forEach((p, idx) => {
-            const title = String(p?.presentationTitle || '').trim() || 'Sans titre';
-            if (!map.has(title)) map.set(title, []);
-            map.get(title).push({ ...p, _idx: idx });
-        });
-        return [...map.entries()].map(([presentationTitle, items]) => ({ presentationTitle, items }));
-    }, [selected]);
+    const buildRecorderState = React.useCallback((student, expose) => {
+        const studentId = String(student?._id || '');
+        const recordings = (expose?.presentations || [])
+            .filter((row) => String(row?.studentId || '') === studentId && String(row?.recordingUrl || '').trim())
+            .sort((a, b) => {
+                if (Boolean(a?.selectedForPresenter) !== Boolean(b?.selectedForPresenter)) {
+                    return a?.selectedForPresenter ? -1 : 1;
+                }
+                return new Date(b?.updatedAt || b?.createdAt || 0).getTime() - new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+            });
+        const selectedEntry = recordings.find((row) => row?.selectedForPresenter) || recordings[0] || null;
+        return {
+            studentId,
+            studentLabel: `${student?.firstName || ''} ${student?.lastName || ''}`.trim(),
+            presentationTitle: String(selectedEntry?.presentationTitle || `${globalClass} - ${student?.firstName || ''} ${student?.lastName || ''}`).trim(),
+            presenterName: String(selectedEntry?.presenterName || `${student?.firstName || ''} ${student?.lastName || ''}`).trim(),
+            slideNumber: Math.max(1, Number(selectedEntry?.presenterSlideNumber || guessSlideNumberFromText(selectedEntry?.slidesText || '1'))),
+            recordingPitch: Math.max(0.5, Math.min(2, Number(selectedEntry?.recordingPitch || 1))),
+            recordings,
+            selectedRecordingId: String(selectedEntry?._id || '')
+        };
+    }, [globalClass]);
 
     const studentsById = useMemo(() => {
         const map = new Map();
@@ -185,21 +174,10 @@ export default function ExposesManager({ globalClass }) {
         if (!selectedRecorder?.studentId) return;
         const student = studentsById.get(String(selectedRecorder.studentId));
         if (!student) return;
-        const exposePresentation = (activeExpose?.presentations || []).find((row) => String(row?.studentId || '') === String(selectedRecorder.studentId)) || null;
-        setSelectedRecorder((prev) => {
-            if (!prev) return prev;
-            const next = buildRecorderState(student, exposePresentation);
-            return {
-                ...prev,
-                presentationTitle: next.presentationTitle,
-                presenterName: next.presenterName,
-                slideNumber: next.slideNumber,
-                studentLabel: next.studentLabel,
-                recordingUrl: next.recordingUrl,
-                recordingPitch: next.recordingPitch
-            };
-        });
-        setRecordingSec(Number(exposePresentation?.recordingDurationSec || 0));
+        const next = buildRecorderState(student, activeExpose);
+        setSelectedRecorder(next);
+        const selectedEntry = next.recordings.find((row) => String(row?._id || '') === String(next.selectedRecordingId)) || next.recordings[0] || null;
+        setRecordingSec(Number(selectedEntry?.recordingDurationSec || 0));
     }, [activeExpose, studentsById, selectedRecorder?.studentId, buildRecorderState]);
 
     const stopRecordingState = () => {
@@ -274,8 +252,7 @@ export default function ExposesManager({ globalClass }) {
                 } catch (_) {}
                 previewAudioRef.current = null;
             }
-            setPlayingPreview(false);
-            setSelectedRecorder((prev) => prev ? { ...prev, recordingUrl: '' } : prev);
+            setPreviewingRecordingId('');
             setRecordingSec(0);
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -310,8 +287,8 @@ export default function ExposesManager({ globalClass }) {
         }
     };
 
-    const savePitch = async (meta, nextPitch) => {
-        if (!meta?.studentId || !meta?.presentationTitle) return;
+    const savePitch = async (recordingEntryId, nextPitch) => {
+        if (!recordingEntryId) return;
         setSavingPitch(true);
         try {
             const expose = await ensureActiveExpose();
@@ -319,8 +296,7 @@ export default function ExposesManager({ globalClass }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    studentId: String(meta.studentId || ''),
-                    presentationTitle: String(meta.presentationTitle || ''),
+                    recordingEntryId: String(recordingEntryId || ''),
                     recordingPitch: nextPitch
                 })
             });
@@ -334,82 +310,107 @@ export default function ExposesManager({ globalClass }) {
         }
     };
 
-    const togglePreview = () => {
-        const url = String(selectedRecorder?.recordingUrl || '').trim();
+    const togglePreview = (recordingEntry, explicitPitch = null) => {
+        const entryId = String(recordingEntry?._id || '');
+        const url = String(recordingEntry?.recordingUrl || '').trim();
         if (!url) return;
+        if (previewAudioRef.current && String(previewingRecordingId || '') === entryId) {
+            try {
+                previewAudioRef.current.pause();
+                previewAudioRef.current.currentTime = 0;
+            } catch (_) {}
+            previewAudioRef.current = null;
+            setPreviewingRecordingId('');
+            return;
+        }
         if (previewAudioRef.current) {
             try {
                 previewAudioRef.current.pause();
                 previewAudioRef.current.currentTime = 0;
             } catch (_) {}
             previewAudioRef.current = null;
-            setPlayingPreview(false);
-            return;
         }
         try {
             const audio = new Audio(url);
-            const nextRate = Math.max(0.5, Math.min(2, Number(selectedRecorder?.recordingPitch || 1)));
+            const nextRate = Math.max(0.5, Math.min(2, Number(explicitPitch ?? recordingEntry?.recordingPitch ?? 1)));
             audio.playbackRate = nextRate;
             try { audio.preservesPitch = false; } catch (_) {}
             try { audio.mozPreservesPitch = false; } catch (_) {}
             try { audio.webkitPreservesPitch = false; } catch (_) {}
             audio.onended = () => {
                 previewAudioRef.current = null;
-                setPlayingPreview(false);
-                if (previewRestartRef.current) {
-                    previewRestartRef.current = false;
-                    setTimeout(() => togglePreview(), 0);
-                }
+                setPreviewingRecordingId('');
             };
             audio.onerror = () => {
                 previewAudioRef.current = null;
-                setPlayingPreview(false);
-                previewRestartRef.current = false;
+                setPreviewingRecordingId('');
             };
             previewAudioRef.current = audio;
-            setPlayingPreview(true);
+            setPreviewingRecordingId(entryId);
             audio.play().catch(() => {
                 previewAudioRef.current = null;
-                setPlayingPreview(false);
-                previewRestartRef.current = false;
+                setPreviewingRecordingId('');
             });
         } catch (_) {}
     };
 
-    const applyPitchPreset = (preset) => {
-        if (!selectedRecorder) return;
+    const applyPitchPreset = (recordingEntry, preset) => {
+        if (!recordingEntry?._id) return;
         const map = {
             vite: 1.75,
-            lent: 0.8,
-            robot: 0.62
+            lent: 0.8
         };
         const nextPitch = Math.max(0.5, Math.min(2, Number(map[preset] || 1)));
-        setSelectedRecorder((prev) => prev ? { ...prev, recordingPitch: nextPitch } : prev);
-        if (previewAudioRef.current) {
-            previewRestartRef.current = true;
-            togglePreview();
-        }
-        void savePitch(selectedRecorder, nextPitch);
+        setSelectedRecorder((prev) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                recordings: (prev.recordings || []).map((row) => (
+                    String(row?._id || '') === String(recordingEntry._id) ? { ...row, recordingPitch: nextPitch } : row
+                ))
+            };
+        });
+        void savePitch(recordingEntry._id, nextPitch);
     };
 
-    const deletePresentationGroup = async (presentationTitle = '') => {
-        if (!selected?._id) return;
-        const title = String(presentationTitle || '').trim();
-        if (!title) return;
-        const ok = window.confirm(`Supprimer le groupe de présentation "${title}" ?`);
+    const selectRecording = async (recordingEntryId) => {
+        if (!recordingEntryId || !activeExpose?._id) return;
+        try {
+            const res = await fetch(`/api/exposes/${encodeURIComponent(String(activeExpose._id))}/presenter-recording-select`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recordingEntryId })
+            });
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Selection impossible');
+            await loadData();
+        } catch (e) {
+            alert(e.message || 'Selection impossible');
+        }
+    };
+
+    const deleteRecording = async (recordingEntryId) => {
+        if (!recordingEntryId || !activeExpose?._id) return;
+        const ok = window.confirm('Supprimer cet audio ?');
         if (!ok) return;
         try {
             const res = await fetch(
-                `/api/exposes/${encodeURIComponent(String(selected._id))}/presentation-group?title=${encodeURIComponent(title)}`,
+                `/api/exposes/${encodeURIComponent(String(activeExpose._id))}/presenter-recording/${encodeURIComponent(String(recordingEntryId))}`,
                 { method: 'DELETE' }
             );
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err?.error || 'Suppression impossible');
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Suppression impossible');
+            if (String(previewingRecordingId || '') === String(recordingEntryId) && previewAudioRef.current) {
+                try {
+                    previewAudioRef.current.pause();
+                    previewAudioRef.current.currentTime = 0;
+                } catch (_) {}
+                previewAudioRef.current = null;
+                setPreviewingRecordingId('');
             }
             await loadData();
         } catch (e) {
-            alert(`Erreur suppression groupe: ${e.message}`);
+            alert(e.message || 'Suppression impossible');
         }
     };
 
@@ -442,15 +443,19 @@ export default function ExposesManager({ globalClass }) {
                         <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${exposeGridCols}, minmax(92px, 1fr))` }}>
                             {filteredStudents.map((student) => {
                                 const studentId = String(student?._id || '');
-                                const exposePresentation = (activeExpose?.presentations || []).find((row) => String(row?.studentId || '') === studentId) || null;
+                                const studentRecordings = (activeExpose?.presentations || []).filter((row) => (
+                                    String(row?.studentId || '') === studentId && String(row?.recordingUrl || '').trim()
+                                ));
                                 const active = String(selectedRecorder?.studentId || '') === studentId;
-                                const hasAudio = String(exposePresentation?.recordingUrl || '').trim();
+                                const hasAudio = studentRecordings.length > 0;
                                 return (
                                     <button
                                         key={studentId}
                                         onClick={() => {
-                                            setSelectedRecorder(buildRecorderState(student, exposePresentation));
-                                            setRecordingSec(Number(exposePresentation?.recordingDurationSec || 0));
+                                            const next = buildRecorderState(student, activeExpose);
+                                            setSelectedRecorder(next);
+                                            const selectedEntry = next.recordings.find((row) => String(row?._id || '') === String(next.selectedRecordingId)) || next.recordings[0] || null;
+                                            setRecordingSec(Number(selectedEntry?.recordingDurationSec || 0));
                                         }}
                                         className={`rounded-[16px] border px-2 py-3 min-h-[108px] shadow-sm transition-all ${
                                             active
@@ -466,7 +471,7 @@ export default function ExposesManager({ globalClass }) {
                                             {student.lastName}
                                         </div>
                                         <div className={`mt-2 text-[10px] font-black ${hasAudio ? 'text-orange-600' : 'text-slate-300'}`}>
-                                            {hasAudio ? 'audio ok' : ''}
+                                            {hasAudio ? `${studentRecordings.length} audio${studentRecordings.length > 1 ? 's' : ''}` : ''}
                                         </div>
                                     </button>
                                 );
@@ -484,14 +489,12 @@ export default function ExposesManager({ globalClass }) {
 
             {selectedRecorder && (
                 <div className="fixed inset-0 z-[140] bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-6">
-                    <div className="w-full max-w-5xl rounded-[30px] border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                    <div className="w-full max-w-4xl rounded-[30px] border border-slate-200 bg-white shadow-2xl overflow-hidden">
                         <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50 flex items-center justify-between gap-4">
                             <div>
                                 <div className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-500">Studio Audio Exposé</div>
                                 <div className="text-3xl font-black uppercase text-slate-800 mt-1">{selectedRecorder.studentLabel}</div>
-                                <div className="text-[11px] font-black uppercase text-slate-400 mt-1">
-                                    {globalClass || 'CLASSE'} • Slide {selectedRecorder.slideNumber}
-                                </div>
+                                <div className="text-[11px] font-black uppercase text-slate-400 mt-1">{globalClass || 'CLASSE'}</div>
                             </div>
                             <button
                                 type="button"
@@ -501,166 +504,121 @@ export default function ExposesManager({ globalClass }) {
                                 ×
                             </button>
                         </div>
-                        <div className="p-6">
-                            <div className="rounded-[28px] border border-indigo-100 bg-gradient-to-br from-white to-indigo-50 overflow-hidden">
-                                <div className="px-5 py-4 border-b border-indigo-100 flex items-center justify-between gap-4">
-                                    <input
-                                        readOnly
-                                        value={`${selectedRecorder.studentLabel || 'audio'}.webm`}
-                                        className="w-full max-w-[320px] px-4 py-3 rounded-2xl border border-slate-200 bg-white font-black text-slate-700 outline-none"
-                                    />
-                                    <div className="flex items-center gap-3">
+                        <div className="p-6 space-y-5">
+                            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    {!recording ? (
                                         <button
                                             type="button"
-                                            className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
-                                            onClick={() => setSelectedRecorder(null)}
+                                            className="px-5 py-3 rounded-2xl bg-red-500 text-white font-black text-[12px] uppercase shadow-lg"
+                                            onClick={() => void startRecording()}
+                                            disabled={uploadingRecording}
                                         >
-                                            Quitter
+                                            Rec
                                         </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-black text-[12px] uppercase shadow-lg"
+                                            onClick={stopRecording}
+                                        >
+                                            Stop
+                                        </button>
+                                    )}
+                                    <div className="px-4 py-3 rounded-2xl bg-white border border-slate-200 text-[12px] font-black text-slate-600">
+                                        {recording ? `Enregistrement ${recordingSec}s` : (uploadingRecording ? 'Envoi...' : 'Prêt')}
+                                    </div>
+                                    <div className="text-[12px] font-black text-slate-500">
+                                        {selectedRecorder.presenterName || selectedRecorder.studentLabel} • Slide {selectedRecorder.slideNumber}
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 xl:grid-cols-[1.45fr_0.85fr] gap-0">
-                                    <div className="p-5 border-r border-indigo-100">
-                                        <div className="rounded-[24px] border border-indigo-100 bg-[#f7f1ff] min-h-[360px] p-5 relative overflow-hidden">
-                                            <div className="absolute left-5 top-5 px-3 py-2 rounded-xl bg-slate-800 text-white text-[12px] font-black">
-                                                DIAGNOSTIC:
-                                                <br />
-                                                AUDIO OK: {Number(recordingSec || 0).toFixed(1)}s
-                                            </div>
-                                            <div className="h-full w-full flex items-center justify-center">
-                                                <div className="w-full">
-                                                    <div className="relative h-[220px] rounded-[22px] bg-white/60 border border-indigo-100 overflow-hidden">
-                                                        <div className="absolute inset-x-0 top-1/2 h-[1px] bg-fuchsia-400/70" />
-                                                        <div
-                                                            className="absolute top-0 bottom-0 w-[3px] bg-red-500"
-                                                            style={{ left: `${Math.max(0, Math.min(100, (Number(recordingSec || 0) > 0 ? 100 : 0)))}%` }}
-                                                        />
-                                                        <div className="absolute inset-0 flex items-center gap-[2px] px-10">
-                                                            {Array.from({ length: 70 }).map((_, idx) => {
-                                                                const base = String(selectedRecorder.recordingUrl || '').trim()
-                                                                    ? (Math.sin(idx * 0.55) * 0.5 + 0.5)
-                                                                    : 0.08;
-                                                                const amp = Math.max(0.08, base);
-                                                                return (
-                                                                    <div
-                                                                        key={`bar_${idx}`}
-                                                                        className="flex-1 rounded-full bg-fuchsia-500/75"
-                                                                        style={{ height: `${22 + amp * 120}px` }}
-                                                                    />
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                    {String(selectedRecorder.recordingUrl || '').trim() ? (
-                                                        <audio key={`${selectedRecorder.recordingUrl}_${selectedRecorder.recordingPitch}`} controls className="w-full mt-5">
-                                                            <source src={selectedRecorder.recordingUrl} />
-                                                        </audio>
-                                                    ) : (
-                                                        <div className="mt-5 text-sm font-black text-slate-400">Aucun audio enregistré.</div>
-                                                    )}
+                            </div>
+
+                            <div className="space-y-3">
+                                {(selectedRecorder.recordings || []).length === 0 && (
+                                    <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-black text-slate-400">
+                                        Aucun audio enregistré.
+                                    </div>
+                                )}
+                                {(selectedRecorder.recordings || []).map((recordingEntry, index) => {
+                                    const isSelected = Boolean(recordingEntry?.selectedForPresenter);
+                                    const isPreviewing = String(previewingRecordingId || '') === String(recordingEntry?._id || '');
+                                    return (
+                                        <div
+                                            key={String(recordingEntry?._id || `recording_${index}`)}
+                                            className={`rounded-[22px] border px-4 py-4 flex flex-wrap items-center gap-3 ${
+                                                isSelected ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-white'
+                                            }`}
+                                        >
+                                            <div className="min-w-[170px]">
+                                                <div className="text-sm font-black text-slate-800">
+                                                    Slide {Math.max(1, Number(recordingEntry?.presenterSlideNumber || selectedRecorder.slideNumber || 1))}
+                                                </div>
+                                                <div className="text-[11px] font-black uppercase text-slate-500 mt-1">
+                                                    {Number(recordingEntry?.recordingDurationSec || 0)}s
+                                                    {isSelected ? ' • sélectionné' : ''}
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div className="p-5 bg-white">
-                                        <div className="text-sm font-black text-slate-800">{selectedRecorder.studentLabel}</div>
-                                        <div className="text-[11px] font-black uppercase text-slate-500 mt-1">
-                                            {selectedRecorder.presentationTitle} • Slide {selectedRecorder.slideNumber}
-                                        </div>
-                                        <div className="mt-6 flex items-center gap-4">
-                                            <button
-                                                type="button"
-                                                className="w-20 h-20 rounded-full bg-gradient-to-br from-fuchsia-500 to-violet-600 text-white text-3xl shadow-lg flex items-center justify-center"
-                                                onClick={togglePreview}
-                                                disabled={!String(selectedRecorder.recordingUrl || '').trim()}
-                                            >
-                                                {playingPreview ? '■' : '▶'}
-                                            </button>
-                                            {!recording ? (
+                                            <div className="flex flex-wrap items-center gap-2 ml-auto">
                                                 <button
                                                     type="button"
-                                                    className="w-20 h-20 rounded-full bg-red-500 text-white font-black text-[14px] uppercase shadow-lg"
-                                                    onClick={() => void startRecording()}
-                                                    disabled={uploadingRecording}
+                                                    className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]"
+                                                    onClick={() => togglePreview(recordingEntry)}
                                                 >
-                                                    Rec
+                                                    {isPreviewing ? 'Stop' : 'Play'}
                                                 </button>
-                                            ) : (
                                                 <button
                                                     type="button"
-                                                    className="w-20 h-20 rounded-full bg-slate-900 text-white font-black text-[14px] uppercase shadow-lg"
-                                                    onClick={stopRecording}
+                                                    className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]"
+                                                    onClick={() => {
+                                                        applyPitchPreset(recordingEntry, 'vite');
+                                                        togglePreview(recordingEntry, 1.75);
+                                                    }}
+                                                    disabled={savingPitch}
                                                 >
-                                                    Stop
+                                                    Vite
                                                 </button>
-                                            )}
-                                        </div>
-                                        <div className="mt-6 grid grid-cols-3 gap-3">
-                                            <button
-                                                type="button"
-                                                className="px-4 py-4 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase"
-                                                onClick={() => applyPitchPreset('vite')}
-                                            >
-                                                Vite
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="px-4 py-4 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase"
-                                                onClick={() => applyPitchPreset('lent')}
-                                            >
-                                                Lent
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="px-4 py-4 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase"
-                                                onClick={() => applyPitchPreset('robot')}
-                                            >
-                                                Robot
-                                            </button>
-                                        </div>
-                                        <div className="mt-4 grid grid-cols-2 gap-3">
-                                            <button
-                                                type="button"
-                                                className="px-4 py-4 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
-                                                onClick={() => {
-                                                    const nextPitch = Math.max(0.5, Math.min(2, Number(selectedRecorder.recordingPitch || 1) - 0.1));
-                                                    setSelectedRecorder((prev) => prev ? { ...prev, recordingPitch: nextPitch } : prev);
-                                                    if (previewAudioRef.current) {
-                                                        previewRestartRef.current = true;
-                                                        togglePreview();
-                                                    }
-                                                    void savePitch(selectedRecorder, nextPitch);
-                                                }}
-                                                disabled={savingPitch}
-                                            >
-                                                Pitch -
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="px-4 py-4 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
-                                                onClick={() => {
-                                                    const nextPitch = Math.max(0.5, Math.min(2, Number(selectedRecorder.recordingPitch || 1) + 0.1));
-                                                    setSelectedRecorder((prev) => prev ? { ...prev, recordingPitch: nextPitch } : prev);
-                                                    if (previewAudioRef.current) {
-                                                        previewRestartRef.current = true;
-                                                        togglePreview();
-                                                    }
-                                                    void savePitch(selectedRecorder, nextPitch);
-                                                }}
-                                                disabled={savingPitch}
-                                            >
-                                                Pitch +
-                                            </button>
-                                        </div>
-                                        <div className="mt-6 grid grid-cols-2 gap-3 text-[12px] font-black text-slate-600">
-                                            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
-                                                {recording ? `Enregistrement ${recordingSec}s` : (uploadingRecording ? 'Envoi...' : `Dernière durée ${recordingSec || 0}s`)}
-                                            </div>
-                                            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
-                                                Pitch {Number(selectedRecorder.recordingPitch || 1).toFixed(1)}
+                                                <button
+                                                    type="button"
+                                                    className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]"
+                                                    onClick={() => {
+                                                        applyPitchPreset(recordingEntry, 'lent');
+                                                        togglePreview(recordingEntry, 0.8);
+                                                    }}
+                                                    disabled={savingPitch}
+                                                >
+                                                    Lent
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`px-4 py-2 rounded-2xl font-black text-[12px] ${
+                                                        isSelected
+                                                            ? 'bg-indigo-600 text-white'
+                                                            : 'border border-slate-200 bg-white text-slate-700'
+                                                    }`}
+                                                    onClick={() => void selectRecording(recordingEntry?._id)}
+                                                >
+                                                    {isSelected ? 'Choisi' : 'Choisir'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="w-10 h-10 rounded-full border border-red-200 bg-red-50 text-red-600 font-black"
+                                                    onClick={() => void deleteRecording(recordingEntry?._id)}
+                                                >
+                                                    X
+                                                </button>
                                             </div>
                                         </div>
-                                    </div>
+                                    );
+                                })}
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
+                                        onClick={() => setSelectedRecorder(null)}
+                                    >
+                                        Quitter
+                                    </button>
                                 </div>
                             </div>
                         </div>

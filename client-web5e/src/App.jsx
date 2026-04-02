@@ -236,12 +236,24 @@ function formatPresenterLabel(name = '') {
   return String(name || '').trim().replace(/\s+/g, ' ');
 }
 
-function attachAnimationMetadata(animation = null, presentationNumber = 0, slideNumber = 0) {
+function splitPresenterName(name = '') {
+  const normalized = formatPresenterLabel(name);
+  if (!normalized) return { firstName: '', lastName: '' };
+  const parts = normalized.split(' ');
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ') || ''
+  };
+}
+
+function attachAnimationMetadata(animation = null, presentationNumber = 0, slideNumber = 0, presentationName = '', presenterName = '') {
   if (!animation || typeof animation !== 'object') return animation;
   return {
     ...animation,
     presentationNumber: Math.max(1, Number(presentationNumber || 1)),
-    slideNumber: Math.max(1, Number(slideNumber || 1))
+    slideNumber: Math.max(1, Number(slideNumber || 1)),
+    presentationName: String(presentationName || '').trim(),
+    presenterName: String(presenterName || '').trim()
   };
 }
 
@@ -976,7 +988,7 @@ function MobileActionRemote({
   );
 }
 
-function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0 }) {
+function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [] }) {
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupName, setSetupName] = useState(String(presentation.presentationName || ''));
@@ -993,6 +1005,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const [drawTextMode, setDrawTextMode] = useState(false);
   const [draftTextBox, setDraftTextBox] = useState(null);
   const [activeTextBoxId, setActiveTextBoxId] = useState('');
+  const [presenterSearchTarget, setPresenterSearchTarget] = useState(null);
   const editorRef = useRef(null);
   const imageFileInputRef = useRef(null);
   const slidesImportInputRef = useRef(null);
@@ -1028,6 +1041,29 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const currentEditorCanvaSlideIndex = Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1));
   const isPresentationUnconfigured = !String(presentation.presentationName || '').trim()
     && Math.max(0, Number(presentation.canvaSlideCount || 0)) === 0;
+  const presenterSuggestions = useMemo(() => {
+    const seen = new Set();
+    return (Array.isArray(allUsersData) ? allUsersData : [])
+      .filter((row) => row?.type === 'student')
+      .filter((row) => /^5/.test(String(row?.className || '').trim()))
+      .map((row) => formatPresenterLabel(`${String(row?.firstName || '').trim()} ${String(row?.lastName || '').trim()}`))
+      .filter(Boolean)
+      .filter((name) => {
+        const key = clean(name);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+  }, [allUsersData]);
+  const filteredPresenterSuggestions = useMemo(() => {
+    if (!presenterSearchTarget?.value) return [];
+    const typed = clean(presenterSearchTarget.value);
+    if (!typed) return [];
+    return presenterSuggestions
+      .filter((name) => clean(name).includes(typed))
+      .slice(0, 6);
+  }, [presenterSuggestions, presenterSearchTarget]);
 
   useEffect(() => {
     if (!isPresentationUnconfigured) return;
@@ -1199,6 +1235,17 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     setSetupOpen(false);
   };
 
+  const applyPresenterSuggestion = (nextName) => {
+    const safeName = formatPresenterLabel(nextName);
+    if (!safeName || !presenterSearchTarget) return;
+    if (presenterSearchTarget.type === 'setup') {
+      setSetupPresenters((prev) => prev.map((entry, entryIndex) => entryIndex === presenterSearchTarget.index ? safeName : entry));
+    } else if (presenterSearchTarget.type === 'slide') {
+      patchSlide(presenterSearchTarget.index, { presenterName: safeName });
+    }
+    setPresenterSearchTarget(null);
+  };
+
   useEffect(() => {
     if (!drawTextMode) {
       drawStateRef.current = null;
@@ -1312,7 +1359,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
             {activeSlide?.animation ? (
               <AnimationBlockEditor
-                block={attachAnimationMetadata(activeSlide.animation, presentationNumber, presentation.activeSlideIndex + 1)}
+                block={attachAnimationMetadata(activeSlide.animation, presentationNumber, presentation.activeSlideIndex + 1, presentation.presentationName, activeSlide?.presenterName)}
                 onChange={() => {}}
                 onRemove={() => {}}
                 readOnly
@@ -1362,13 +1409,40 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             </label>
             <div className="presentation-setup-list">
               {setupPresenters.map((value, index) => (
-                <input
-                  key={`setup-presenter-${index}`}
-                  className="presentation-presenter-short-input"
-                  value={value}
-                  onChange={(e) => setSetupPresenters((prev) => prev.map((entry, entryIndex) => entryIndex === index ? e.target.value : entry))}
-                  placeholder={`Nom presentateur slide ${index + 1}`}
-                />
+                <div key={`setup-presenter-${index}`} className="presentation-presenter-field">
+                  <input
+                    className="presentation-presenter-short-input"
+                    value={value}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setSetupPresenters((prev) => prev.map((entry, entryIndex) => entryIndex === index ? nextValue : entry));
+                      setPresenterSearchTarget({ type: 'setup', index, value: nextValue });
+                    }}
+                    onFocus={(e) => setPresenterSearchTarget({ type: 'setup', index, value: e.target.value })}
+                    onBlur={() => window.setTimeout(() => setPresenterSearchTarget((prev) => (
+                      prev?.type === 'setup' && prev?.index === index ? null : prev
+                    )), 120)}
+                    placeholder={`Nom presentateur slide ${index + 1}`}
+                  />
+                  {presenterSearchTarget?.type === 'setup' && presenterSearchTarget?.index === index && filteredPresenterSuggestions.length > 0 ? (
+                    <div className="suggestions presenter-suggestions">
+                      {filteredPresenterSuggestions.map((name) => {
+                        const parts = splitPresenterName(name);
+                        return (
+                          <button
+                            key={`setup-${index}-${name}`}
+                            type="button"
+                            className={`suggestion ${clean(value) === clean(name) ? 'selected' : ''}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => applyPresenterSuggestion(name)}
+                          >
+                            <span>{parts.firstName} <strong>{parts.lastName || ''}</strong></span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </div>
             <div className="presentation-setup-actions">
@@ -1468,7 +1542,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   animation: attachAnimationMetadata(
                     createAnimationBlockFromDraft({ title: `Animation slide ${editorCanvaStep}` }),
                     presentationNumber,
-                    editorCanvaStep
+                    editorCanvaStep,
+                    presentation.presentationName,
+                    currentEditorCanvaSlide?.presenterName
                   )
                 })}
               >
@@ -1540,8 +1616,8 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             {presentation.activeEditorTab === 'animation' && currentEditorCanvaSlide?.animation ? (
               <div className="canva-live-animation-layer">
                 <AnimationBlockEditor
-                  block={attachAnimationMetadata(currentEditorCanvaSlide.animation, presentationNumber, editorCanvaStep)}
-                  onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep) })}
+                  block={attachAnimationMetadata(currentEditorCanvaSlide.animation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName)}
+                  onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName) })}
                   onRemove={() => patchSlide(currentEditorCanvaSlideIndex, { animation: null })}
                   readOnly={false}
                   sectionKey={sectionKey}
@@ -1564,12 +1640,40 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         <div className="presentation-qcm-panel">
           {presentation.slides.slice(0, presentation.canvaSlideCount).map((slide, slideIndex) => (
             <div key={slide.id} className="presentation-qcm-card">
-              <input
-                className="presentation-presenter-short-input"
-                value={slide.presenterName || ''}
-                onChange={(e) => patchSlide(slideIndex, { presenterName: e.target.value })}
-                placeholder={`Nom presentateur slide ${slideIndex + 1}`}
-              />
+              <div className="presentation-presenter-field">
+                <input
+                  className="presentation-presenter-short-input"
+                  value={slide.presenterName || ''}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    patchSlide(slideIndex, { presenterName: nextValue });
+                    setPresenterSearchTarget({ type: 'slide', index: slideIndex, value: nextValue });
+                  }}
+                  onFocus={(e) => setPresenterSearchTarget({ type: 'slide', index: slideIndex, value: e.target.value })}
+                  onBlur={() => window.setTimeout(() => setPresenterSearchTarget((prev) => (
+                    prev?.type === 'slide' && prev?.index === slideIndex ? null : prev
+                  )), 120)}
+                  placeholder={`Nom presentateur slide ${slideIndex + 1}`}
+                />
+                {presenterSearchTarget?.type === 'slide' && presenterSearchTarget?.index === slideIndex && filteredPresenterSuggestions.length > 0 ? (
+                  <div className="suggestions presenter-suggestions">
+                    {filteredPresenterSuggestions.map((name) => {
+                      const parts = splitPresenterName(name);
+                      return (
+                        <button
+                          key={`slide-${slideIndex}-${name}`}
+                          type="button"
+                          className={`suggestion ${clean(slide.presenterName || '') === clean(name) ? 'selected' : ''}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyPresenterSuggestion(name)}
+                        >
+                          <span>{parts.firstName} <strong>{parts.lastName || ''}</strong></span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
@@ -2052,7 +2156,7 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           ))}
           {visibleSlide?.animation ? (
             <AnimationBlockEditor
-              block={attachAnimationMetadata(visibleSlide.animation, presentationNumber, (isSlideshow ? slideshowStep : activeIndex) + 1)}
+              block={attachAnimationMetadata(visibleSlide.animation, presentationNumber, (isSlideshow ? slideshowStep : activeIndex) + 1, normalized.presentationName, visibleSlide?.presenterName)}
               onChange={() => {}}
               onRemove={() => {}}
               readOnly
@@ -2100,6 +2204,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const [playingActionId, setPlayingActionId] = useState('');
   const [recordingAudio, setRecordingAudio] = useState(false);
   const [importNotice, setImportNotice] = useState('');
+  const [importDebug, setImportDebug] = useState(null);
+  const [importOptions, setImportOptions] = useState([]);
+  const [selectedImportId, setSelectedImportId] = useState('');
   const [actionNameDrafts, setActionNameDrafts] = useState({});
   const [audioDurationSec, setAudioDurationSec] = useState(0);
   const [audioCurrentTimeSec, setAudioCurrentTimeSec] = useState(0);
@@ -2178,7 +2285,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         }
       : (selectedFrameIndex >= 0 ? selectedAction?.frames?.[selectedFrameIndex] : null);
     const normalizedSelectedFrame = typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame;
-    setActorState({
+    const nextActorState = {
       x: Number(block?.actorX || 120),
       y: Number(block?.actorY || 120),
       width: Number(normalizedSelectedFrame?.width || block?.actorWidth || 140),
@@ -2190,7 +2297,17 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         || ''
       ),
       actionName: ''
-    });
+    };
+    setActorState((prev) => (
+      prev.x === nextActorState.x
+      && prev.y === nextActorState.y
+      && prev.width === nextActorState.width
+      && prev.height === nextActorState.height
+      && prev.frameUrl === nextActorState.frameUrl
+      && prev.actionName === nextActorState.actionName
+        ? prev
+        : nextActorState
+    ));
   }, [block, actions, isPlaying, playingActionId]);
 
   useEffect(() => {
@@ -2706,25 +2823,94 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   };
 
   const importRecordedAudio = async () => {
-    let latestAudio = extractSharedAudioMeta(block);
+    const currentAudio = extractSharedAudioMeta(block);
+    let availableAudios = [];
+    let debugPayload = null;
     try {
-      if (entryId) {
-        const res = await fetch('/api/web5e/public');
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data?.ok) {
-          const matchingEntry = (Array.isArray(data.entries) ? data.entries : []).find((entry) => String(entry?._id || '') === String(entryId || ''));
-          const latestBlock = matchingEntry?.blocks?.[Number(blockIndex || 0)] || null;
-          if (latestBlock?.type === 'animation') {
-            latestAudio = extractSharedAudioMeta(latestBlock);
-          }
+      const presentationTitle = String(block?.presentationName || '').trim();
+      const presenterName = String(block?.presenterName || '').trim();
+      debugPayload = {
+        presentationTitle,
+        presenterName,
+        slideNumber: Math.max(1, Number(slideNumber || 1)),
+        currentAudioUrl: String(currentAudio.soundUrl || '').trim(),
+        backupAudioUrl: ''
+      };
+      if (presenterName) {
+        const backupRes = await fetch(
+          `/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`
+        );
+        const backupData = await backupRes.json().catch(() => ({}));
+        if (backupRes.ok && backupData?.ok) {
+          const rows = Array.isArray(backupData?.recordings) && backupData.recordings.length > 0
+            ? backupData.recordings
+            : (backupData?.recordingUrl ? [backupData] : []);
+          availableAudios = rows
+            .map((row, index) => ({
+              id: String(row?.id || `audio_${index}`),
+              soundUrl: String(row?.recordingUrl || '').trim(),
+              soundPitch: Math.max(0.5, Math.min(2, Number(row?.recordingPitch || 1))),
+              slideNumber: Math.max(1, Number(row?.slideNumber || 1)),
+              durationSec: Math.max(0, Number(row?.durationSec || 0)),
+              selected: row?.selected === true
+            }))
+            .filter((row) => row.soundUrl);
+          const firstAudio = availableAudios[0] || null;
+          debugPayload = {
+            ...debugPayload,
+            backupAudioUrl: String(firstAudio?.soundUrl || ''),
+            backupPitch: Math.max(0.5, Math.min(2, Number(firstAudio?.soundPitch || 1))),
+            backupSlideNumber: Math.max(1, Number(firstAudio?.slideNumber || 1)),
+            backupCount: availableAudios.length
+          };
         }
       }
     } catch (_) {}
-    if (!latestAudio.soundUrl) {
+    setImportDebug(debugPayload);
+    setImportOptions(availableAudios);
+    setSelectedImportId(String(availableAudios[0]?.id || ''));
+    if (!availableAudios.length) {
       flashNotice("Aucun audio CondaWeb");
       return;
     }
-    updateSharedAudio(latestAudio.soundUrl, latestAudio.soundPitch);
+    flashNotice(`${availableAudios.length} audio${availableAudios.length > 1 ? 's' : ''} trouvé${availableAudios.length > 1 ? 's' : ''}`);
+  };
+
+  const applyImportedAudio = async () => {
+    const currentAudio = extractSharedAudioMeta(block);
+    const nextAudio = importOptions.find((row) => String(row.id || '') === String(selectedImportId || '')) || importOptions[0] || null;
+    if (!nextAudio?.soundUrl) {
+      flashNotice("Aucun audio selectionne");
+      return;
+    }
+    if (String(currentAudio.soundUrl || '').trim() === String(nextAudio.soundUrl || '').trim()
+      && Math.abs(Number(currentAudio.soundPitch || 1) - Number(nextAudio.soundPitch || 1)) < 0.001) {
+      flashNotice("Backup deja charge");
+      return;
+    }
+    try {
+      const probe = await fetch(nextAudio.soundUrl, { method: 'HEAD' });
+      if (!probe.ok) {
+        flashNotice("Backup audio introuvable");
+        return;
+      }
+    } catch (_) {
+      flashNotice("Backup audio inaccessible");
+      return;
+    }
+    const audio = audioTimelineRef.current;
+    if (audio) {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (_) {}
+    }
+    setIsPlaying(false);
+    setAudioCurrentTimeSec(0);
+    updateSharedAudio('', nextAudio.soundPitch);
+    window.setTimeout(() => {
+      updateSharedAudio(nextAudio.soundUrl, nextAudio.soundPitch);
+    }, 0);
     flashNotice("Audio CondaWeb importé");
   };
 
@@ -2925,11 +3111,50 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
               <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={toggleTimelinePlayback}>{isPlaying ? 'Pause' : 'Play'}</button>
               <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
               <button type="button" className={`animation-rec-btn ${recordingAudio ? 'active' : ''}`} onClick={() => void toggleAudioRecord()}>{recordingAudio ? '■' : 'Rec'}</button>
-              <button type="button" onClick={importRecordedAudio}>Importer</button>
+              <button type="button" onClick={importOptions.length > 0 ? applyImportedAudio : importRecordedAudio}>Choisir</button>
               {!readOnly ? <button type="button" className="animation-action-remove" onClick={onRemove}>×</button> : null}
             </div>
           )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
+          {importDebug ? (
+            <div className="animation-import-notice" style={{ whiteSpace: 'normal' }}>
+              Import debug: slide {importDebug.slideNumber} • {importDebug.presenterName || 'sans presentateur'}
+              <br />
+              current: {importDebug.currentAudioUrl || 'aucun'}
+              <br />
+              backup: {importDebug.backupAudioUrl || 'aucun'}
+              {importDebug.backupCount ? (
+                <>
+                  <br />
+                  liste: {importDebug.backupCount}
+                </>
+              ) : null}
+            </div>
+          ) : null}
+          {importOptions.length > 0 ? (
+            <div className="animation-import-notice" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {importOptions.map((option, index) => {
+                const isSelected = String(selectedImportId || '') === String(option.id || '');
+                return (
+                  <button
+                    key={String(option.id || `import_option_${index}`)}
+                    type="button"
+                    onClick={() => setSelectedImportId(String(option.id || ''))}
+                    style={{
+                      textAlign: 'left',
+                      border: isSelected ? '2px solid #4f46e5' : '1px solid #cbd5e1',
+                      background: isSelected ? '#eef2ff' : '#fff',
+                      borderRadius: '12px',
+                      padding: '8px 10px',
+                      fontWeight: 800
+                    }}
+                  >
+                    slide {option.slideNumber} • {option.durationSec}s {option.selected ? '• choisi prof' : ''}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="animation-timeline-shell">
             <div className="animation-timeline-topline">
               <span>Audio</span>
@@ -4110,6 +4335,7 @@ export default function App() {
                   entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
                   siblingPresentationNames={presentationBlocks.filter((row) => row.index !== index).map((row) => row.presentation.presentationName)}
                   presentationNumber={Math.max(1, presentationBlocks.findIndex((row) => row.index === index) + 1)}
+                  allUsersData={allUsersData}
                 />
               )}
 

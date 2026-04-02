@@ -903,6 +903,25 @@
   font-weight: 700;
 }
 
+.presentation-presenter-field {
+  position: relative;
+}
+
+.presenter-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px;
+  border-radius: 14px;
+  background: white;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  box-shadow: 0 18px 40px rgba(17, 24, 39, 0.12);
+}
+
 @media (max-width: 720px) {
   .presentation-setup-list {
     grid-template-columns: 1fr;

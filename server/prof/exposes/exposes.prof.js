@@ -112,6 +112,53 @@ router.get('/all', async (req, res) => {
     }
 });
 
+router.get('/presenter-backup', async (req, res) => {
+    try {
+        const presenterName = String(req.query?.presenterName || '').trim();
+        if (!presenterName) return res.status(400).json({ ok: false, error: 'presenterName requis' });
+
+        const exposes = await Expose.find({}).sort({ date: -1 }).lean();
+        for (const expose of exposes) {
+            const presentations = Array.isArray(expose?.presentations) ? expose.presentations : [];
+            const matches = presentations
+                .filter((row) => (
+                    clean(row?.presenterName || '') === clean(presenterName)
+                    && String(row?.recordingUrl || '').trim()
+                ))
+                .sort((a, b) => {
+                    if (Boolean(a?.selectedForPresenter) !== Boolean(b?.selectedForPresenter)) {
+                        return a?.selectedForPresenter ? -1 : 1;
+                    }
+                    return new Date(b?.updatedAt || b?.createdAt || 0).getTime() - new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+                });
+            const match = matches[0];
+            if (match) {
+                return res.json({
+                    ok: true,
+                    recordingUrl: String(match.recordingUrl || '').trim(),
+                    recordingPitch: Math.max(0.5, Math.min(2, Number(match.recordingPitch || 1))),
+                    presentationTitle: String(match.presentationTitle || ''),
+                    presenterName: String(match.presenterName || ''),
+                    slideNumber: Math.max(1, Number(match.presenterSlideNumber || 1)),
+                    recordings: matches.map((row) => ({
+                        id: String(row?._id || ''),
+                        recordingUrl: String(row?.recordingUrl || '').trim(),
+                        recordingPitch: Math.max(0.5, Math.min(2, Number(row?.recordingPitch || 1))),
+                        presentationTitle: String(row?.presentationTitle || ''),
+                        presenterName: String(row?.presenterName || ''),
+                        slideNumber: Math.max(1, Number(row?.presenterSlideNumber || 1)),
+                        durationSec: Math.max(0, Number(row?.recordingDurationSec || 0)),
+                        selected: row?.selectedForPresenter === true
+                    }))
+                });
+            }
+        }
+        return res.status(404).json({ ok: false, error: 'Backup introuvable' });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.get('/:id', async (req, res) => {
     try {
         const row = await Expose.findById(req.params.id).lean();
@@ -219,25 +266,29 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
         if (!recordingUrl) return res.status(400).json({ error: uploadWarning || 'audio requis' });
 
         const now = new Date();
-        const entries = Array.isArray(row.presentations) ? [...row.presentations] : [];
-        const idx = entries.findIndex((p) => String(p.studentId) === studentId && clean(p.presentationTitle) === clean(presentationTitle));
-        const previous = idx >= 0 ? entries[idx] : null;
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+        const nextEntries = entries.map((entry) => {
+            if (clean(entry?.presenterName || '') !== clean(presenterName)) return entry;
+            return { ...entry, selectedForPresenter: false };
+        });
         const nextEntry = {
             studentId,
-            presentationTitle: presentationTitle || String(previous?.presentationTitle || ''),
-            canvasUrl: String(previous?.canvasUrl || ''),
-            slidesText: String(previous?.slidesText || ''),
+            presentationTitle,
+            canvasUrl: '',
+            slidesText: '',
             recordingUrl,
             recordingDurationSec,
             recordingPitch,
             presenterName,
             presenterSlideNumber: slideNumber,
-            createdAt: previous?.createdAt || now,
+            selectedForPresenter: true,
+            createdAt: now,
             updatedAt: now
         };
-        if (idx >= 0) entries[idx] = { ...previous?.toObject?.(), ...nextEntry };
-        else entries.push(nextEntry);
-        row.presentations = entries;
+        nextEntries.push(nextEntry);
+        row.presentations = nextEntries;
         await row.save();
 
         const injection = await injectPresenterAudioIntoWeb5e({
@@ -250,7 +301,7 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
 
         res.json({
             ok: true,
-            presentation: nextEntry,
+            presentation: row.presentations[row.presentations.length - 1],
             web5eLinked: Boolean(injection.updated),
             warning: uploadWarning || null
         });
@@ -262,13 +313,11 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
 router.post('/:id/presenter-recording-settings', async (req, res) => {
     try {
         const exposeId = String(req.params.id || '').trim();
-        const studentId = String(req.body?.studentId || '').trim();
-        const presentationTitle = String(req.body?.presentationTitle || '').trim();
+        const recordingEntryId = String(req.body?.recordingEntryId || '').trim();
         const recordingPitch = Math.max(0.5, Math.min(2, Number(req.body?.recordingPitch || 1)));
 
         if (!exposeId) return res.status(400).json({ error: 'id requis' });
-        if (!studentId) return res.status(400).json({ error: 'studentId requis' });
-        if (!presentationTitle) return res.status(400).json({ error: 'presentationTitle requis' });
+        if (!recordingEntryId) return res.status(400).json({ error: 'recordingEntryId requis' });
 
         const row = await Expose.findById(exposeId);
         if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
@@ -276,7 +325,7 @@ router.post('/:id/presenter-recording-settings', async (req, res) => {
         const entries = Array.isArray(row.presentations)
             ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
             : [];
-        const idx = entries.findIndex((p) => String(p?.studentId || '') === studentId && clean(p?.presentationTitle) === clean(presentationTitle));
+        const idx = entries.findIndex((p) => String(p?._id || '') === recordingEntryId);
         if (idx < 0) return res.status(404).json({ error: 'Présentation élève introuvable' });
 
         entries[idx] = {
@@ -287,15 +336,113 @@ router.post('/:id/presenter-recording-settings', async (req, res) => {
         row.presentations = entries;
         await row.save();
 
-        await injectPresenterAudioIntoWeb5e({
-            presentationTitle: entries[idx].presentationTitle,
-            presenterName: String(entries[idx].presenterName || ''),
-            slideNumber: Math.max(1, Number(entries[idx].presenterSlideNumber || 1)),
-            soundUrl: String(entries[idx].recordingUrl || ''),
-            soundPitch: recordingPitch
-        });
+        if (entries[idx]?.selectedForPresenter === true) {
+            await injectPresenterAudioIntoWeb5e({
+                presentationTitle: entries[idx].presentationTitle,
+                presenterName: String(entries[idx].presenterName || ''),
+                slideNumber: Math.max(1, Number(entries[idx].presenterSlideNumber || 1)),
+                soundUrl: String(entries[idx].recordingUrl || ''),
+                soundPitch: recordingPitch
+            });
+        }
 
         res.json({ ok: true, presentation: entries[idx] });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:id/presenter-recording-select', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const recordingEntryId = String(req.body?.recordingEntryId || '').trim();
+
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!recordingEntryId) return res.status(400).json({ error: 'recordingEntryId requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+        const idx = entries.findIndex((p) => String(p?._id || '') === recordingEntryId);
+        if (idx < 0) return res.status(404).json({ error: 'Audio introuvable' });
+
+        const presenterKey = clean(entries[idx]?.presenterName || '');
+        const nextEntries = entries.map((entry, entryIndex) => {
+            if (clean(entry?.presenterName || '') !== presenterKey) return entry;
+            return {
+                ...entry,
+                selectedForPresenter: entryIndex === idx,
+                updatedAt: entryIndex === idx ? new Date() : entry.updatedAt
+            };
+        });
+        row.presentations = nextEntries;
+        await row.save();
+
+        await injectPresenterAudioIntoWeb5e({
+            presentationTitle: nextEntries[idx].presentationTitle,
+            presenterName: String(nextEntries[idx].presenterName || ''),
+            slideNumber: Math.max(1, Number(nextEntries[idx].presenterSlideNumber || 1)),
+            soundUrl: String(nextEntries[idx].recordingUrl || ''),
+            soundPitch: Math.max(0.5, Math.min(2, Number(nextEntries[idx].recordingPitch || 1)))
+        });
+
+        res.json({ ok: true, presentation: nextEntries[idx] });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/:id/presenter-recording/:recordingEntryId', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const recordingEntryId = String(req.params.recordingEntryId || '').trim();
+
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!recordingEntryId) return res.status(400).json({ error: 'recordingEntryId requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+        const idx = entries.findIndex((p) => String(p?._id || '') === recordingEntryId);
+        if (idx < 0) return res.status(404).json({ error: 'Audio introuvable' });
+
+        const target = entries[idx];
+        const presenterKey = clean(target?.presenterName || '');
+        const remaining = entries.filter((entry) => String(entry?._id || '') !== recordingEntryId);
+        const siblings = remaining
+            .filter((entry) => clean(entry?.presenterName || '') === presenterKey)
+            .sort((a, b) => new Date(b?.updatedAt || b?.createdAt || 0).getTime() - new Date(a?.updatedAt || a?.createdAt || 0).getTime());
+        let nextSelectedEntry = null;
+        if (target?.selectedForPresenter === true && siblings.length > 0 && !siblings.some((entry) => entry?.selectedForPresenter === true)) {
+            const nextSelectedId = String(siblings[0]?._id || '');
+            for (let i = 0; i < remaining.length; i += 1) {
+                if (String(remaining[i]?._id || '') === nextSelectedId) {
+                    remaining[i] = { ...remaining[i], selectedForPresenter: true, updatedAt: new Date() };
+                    nextSelectedEntry = remaining[i];
+                    break;
+                }
+            }
+        }
+        row.presentations = remaining;
+        await row.save();
+
+        if (nextSelectedEntry) {
+            await injectPresenterAudioIntoWeb5e({
+                presentationTitle: nextSelectedEntry.presentationTitle,
+                presenterName: String(nextSelectedEntry.presenterName || ''),
+                slideNumber: Math.max(1, Number(nextSelectedEntry.presenterSlideNumber || 1)),
+                soundUrl: String(nextSelectedEntry.recordingUrl || ''),
+                soundPitch: Math.max(0.5, Math.min(2, Number(nextSelectedEntry.recordingPitch || 1)))
+            });
+        }
+
+        res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
