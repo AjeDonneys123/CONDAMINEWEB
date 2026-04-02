@@ -398,6 +398,15 @@ function resolveWeb5eAssetUrl(url) {
   return raw;
 }
 
+function extractSharedAudioMeta(animationBlock = null) {
+  const actions = Array.isArray(animationBlock?.actions) ? animationBlock.actions : [];
+  const sourceAction = actions.find((action) => String(action?.soundUrl || '').trim()) || null;
+  return {
+    soundUrl: String(sourceAction?.soundUrl || '').trim(),
+    soundPitch: Math.max(0.5, Math.min(2, Number(sourceAction?.soundPitch || 1)))
+  };
+}
+
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
   return {
@@ -2696,14 +2705,27 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     } catch (_) {}
   };
 
-  const importRecordedAudio = () => {
-    const existingAudio = String(block?.actions?.find((action) => String(action?.soundUrl || '').trim())?.soundUrl || '').trim();
-    if (!existingAudio) {
-      flashNotice("Aucun audio en base");
+  const importRecordedAudio = async () => {
+    let latestAudio = extractSharedAudioMeta(block);
+    try {
+      if (entryId) {
+        const res = await fetch('/api/web5e/public');
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.ok) {
+          const matchingEntry = (Array.isArray(data.entries) ? data.entries : []).find((entry) => String(entry?._id || '') === String(entryId || ''));
+          const latestBlock = matchingEntry?.blocks?.[Number(blockIndex || 0)] || null;
+          if (latestBlock?.type === 'animation') {
+            latestAudio = extractSharedAudioMeta(latestBlock);
+          }
+        }
+      }
+    } catch (_) {}
+    if (!latestAudio.soundUrl) {
+      flashNotice("Aucun audio CondaWeb");
       return;
     }
-    updateSharedAudio(existingAudio, block?.actions?.find((action) => String(action?.soundUrl || '').trim())?.soundPitch || 1);
-    flashNotice("Audio importé");
+    updateSharedAudio(latestAudio.soundUrl, latestAudio.soundPitch);
+    flashNotice("Audio CondaWeb importé");
   };
 
   const toggleTimelinePlayback = async () => {
