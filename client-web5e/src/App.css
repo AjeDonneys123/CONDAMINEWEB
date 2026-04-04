@@ -935,6 +935,22 @@
   margin-top: 6px;
 }
 
+.presentation-editor-head {
+  display: grid;
+  gap: 12px;
+}
+
+.presentation-editor-field {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+  color: #1d2942;
+}
+
+.presentation-editor-field span {
+  font-size: 0.95rem;
+}
+
 .presentation-mode-tabs,
 .presentation-group-row,
 .presentation-validation-bar {
@@ -1001,6 +1017,24 @@
   font-size: 0.9rem;
   font-weight: 900;
   color: #54647d;
+}
+
+.slideshow-progress-editor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex: 1 1 320px;
+  flex-wrap: wrap;
+}
+
+.slideshow-progress-presenter-label {
+  color: #9a3412;
+}
+
+.slideshow-progress-presenter-field {
+  min-width: min(360px, 100%);
+  flex: 1 1 320px;
 }
 
 .presentation-slide-tab,
@@ -1185,20 +1219,15 @@
   gap: 14px;
 }
 
-.canva-live-note {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 247, 237, 0.96);
-  border: 1px solid rgba(249, 115, 22, 0.16);
-  color: #9a3412;
-  font-size: 0.92rem;
-  font-weight: 700;
+.presentation-presenter-field-compact .presentation-presenter-short-input {
+  background: rgba(255, 255, 255, 0.96);
+  min-height: 44px;
 }
 
 .canva-live-frame-shell {
   min-height: clamp(360px, 52vw, 640px);
   border-radius: 24px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(28, 41, 67, 0.08);
   background: white;
   box-shadow: 0 20px 44px rgba(28, 41, 67, 0.08);
@@ -1211,6 +1240,7 @@
   border: none;
   display: block;
   background: white;
+  border-radius: 24px;
 }
 
 .canva-live-animation-layer {
@@ -1549,12 +1579,23 @@
 
 .animation-editor.compact-floating {
   position: absolute;
-  z-index: 220;
+  z-index: 420;
   width: 320px;
   padding: 10px;
   gap: 8px;
   border-radius: 18px;
   box-shadow: 0 14px 28px rgba(28, 41, 67, 0.12);
+  pointer-events: auto;
+  overflow: visible;
+}
+
+.animation-readonly-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 420;
+  display: flex;
+  gap: 8px;
   pointer-events: auto;
 }
 
@@ -1598,6 +1639,81 @@
   align-items: center;
   gap: 8px;
   position: relative;
+}
+
+.animation-audio-menu-shell {
+  position: relative;
+}
+
+.animation-audio-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 260;
+  width: 240px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  box-shadow: 0 14px 28px rgba(28, 41, 67, 0.14);
+}
+
+.animation-audio-menu-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.animation-audio-option-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.animation-audio-option {
+  text-align: left;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-weight: 800;
+}
+
+.animation-audio-option.active {
+  border: 2px solid #4f46e5;
+  background: #eef2ff;
+}
+
+.animation-gemini-btn {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.animation-speed-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-weight: 900;
+  color: #334155;
+}
+
+.animation-speed-controls-inline {
+  margin-left: auto;
+}
+
+.animation-speed-controls span {
+  min-width: 44px;
+  text-align: center;
+  font-size: 0.78rem;
 }
 
 .animation-inline-row.compact input,
@@ -1995,6 +2111,53 @@
   cursor: se-resize;
 }
 
+.animation-sprite-editor-canvas {
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 10px 20px rgba(28, 41, 67, 0.16));
+  cursor: se-resize;
+}
+
+.animation-sprite-editor-canvas.eraser-active {
+  cursor: none;
+}
+
+.animation-eraser-cursor {
+  position: absolute;
+  border: 2px solid #ef4444;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+}
+
+.animation-eraser-toggle {
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.animation-eraser-size-btn {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  font-size: 0.76rem;
+}
+
+.animation-eraser-size-readout {
+  min-width: 22px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #475569;
+}
+
+.animation-scissors-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  font-size: 0.82rem;
+}
+
 .animation-sprite-editor-controls {
   display: grid;
   gap: 10px;
@@ -2010,13 +2173,155 @@
 .animation-sprite-adjust-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .animation-sprite-adjust-row span {
   font-size: 0.76rem;
   font-weight: 800;
   color: #1d2942;
+}
+
+.animation-slice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.animation-slice-window {
+  width: min(900px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+}
+
+.animation-slice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.animation-slice-help {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.animation-slice-mode-row {
+  display: flex;
+  gap: 8px;
+}
+
+.animation-slice-mode-row button {
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: white;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.animation-slice-mode-row button.active {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.animation-slice-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.animation-slice-preview {
+  position: relative;
+  min-height: 320px;
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+    linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f8fafc 75%),
+    linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+  cursor: crosshair;
+}
+
+.animation-slice-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.animation-slice-box {
+  position: absolute;
+  border: 2px solid rgba(249, 115, 22, 0.95);
+  background: rgba(249, 115, 22, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.75);
+  cursor: move;
+  padding: 0;
+  border-radius: 12px;
+}
+
+.animation-slice-box.draft {
+  opacity: 0.6;
+}
+
+.animation-slice-box.selected {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.95), 0 0 0 2px rgba(37, 99, 235, 0.24);
+}
+
+.animation-slice-box-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: #fff;
+  border: 2px solid #60a5fa;
+  box-shadow: 0 4px 10px rgba(28, 41, 67, 0.16);
+  pointer-events: auto;
+}
+
+.animation-slice-box-handle.nw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.animation-slice-box-handle.ne {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.animation-slice-box-handle.sw {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.animation-slice-box-handle.se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+
+.animation-slice-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .animation-sprite-adjust-grid {
@@ -2116,6 +2421,11 @@
 
 .animation-page-actor.draggable {
   cursor: grab;
+}
+
+.animation-page-actor.selected .animation-page-actor-figure {
+  border-radius: 20px;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.35), 0 0 0 1px #1d4ed8 inset;
 }
 
 .animation-page-actor.draggable:active {
@@ -2223,6 +2533,7 @@
   overflow: hidden;
   border: 1px solid rgba(28, 41, 67, 0.12);
   background: white;
+  cursor: grab;
 }
 
 .animation-frame-thumb.selected {

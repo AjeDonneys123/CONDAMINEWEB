@@ -147,7 +147,7 @@ function createPresentationSlide(index = 0) {
   };
 }
 
-const DEFAULT_PRESENTATION_SLIDE_HTML = '<h3>Nouveau slide</h3><p>Écris ici.</p>';
+const DEFAULT_PRESENTATION_SLIDE_HTML = '';
 
 function createPresentationTextBox({ x = 40, y = 40, width = 220, height = 120, text = '', fontSize = 28 } = {}) {
   return {
@@ -354,6 +354,7 @@ function normalizeTimelineActions(rawActions = []) {
   let cursor = 0;
   return (Array.isArray(rawActions) ? rawActions : []).map((action) => {
     const durationSec = Math.max(0.5, Number(action?.durationSec || 2));
+    const frameDurationSec = Math.max(0.05, Math.min(1.5, Number(action?.frameDurationSec || 0.18)));
     const startSec = Number.isFinite(Number(action?.startSec))
       ? Math.max(0, Number(action.startSec))
       : cursor;
@@ -361,6 +362,7 @@ function normalizeTimelineActions(rawActions = []) {
     return {
       ...action,
       soundPitch: Math.max(0.5, Math.min(2, Number(action?.soundPitch || 1))),
+      frameDurationSec,
       startSec,
       durationSec
     };
@@ -1006,6 +1008,8 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const [draftTextBox, setDraftTextBox] = useState(null);
   const [activeTextBoxId, setActiveTextBoxId] = useState('');
   const [presenterSearchTarget, setPresenterSearchTarget] = useState(null);
+  const pendingAnimationSpriteInputRef = useRef(null);
+  const pendingAnimationSpriteTargetRef = useRef({ slideIndex: -1, slideNumber: 0 });
   const editorRef = useRef(null);
   const imageFileInputRef = useRef(null);
   const slidesImportInputRef = useRef(null);
@@ -1013,14 +1017,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const drawStateRef = useRef(null);
   const activeSlide = presentation.slides[presentation.activeSlideIndex] || presentation.slides[0];
   const lastHtmlRef = useRef(String(activeSlide?.html || ''));
-  const isPresenterValid = Boolean(String(activeSlide?.presenterName || '').trim());
   const slideHasContent = Boolean(String(activeSlide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-  const isActiveSlideValid = isPresenterValid && slideHasContent;
-  const slidesValidCount = presentation.slides.filter((slide) => {
-    const validPresenter = Boolean(String(slide?.presenterName || '').trim());
-    const hasContent = Boolean(String(slide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-    return validPresenter && hasContent;
-  }).length;
   const qcmQuestions = Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions : [];
   const hasQcmTab = qcmQuestions.length > 0 || presentation.activeEditorTab === 'qcm';
   const qcmValidCount = qcmQuestions.filter((row) => {
@@ -1032,11 +1029,6 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     normalizedPresentationName
     && siblingPresentationNames.some((name) => clean(name) === normalizedPresentationName)
   );
-  const canValidatePresentation = !presentationNameAlreadyUsed
-    && normalizedPresentationName
-    && presentation.slides.length > 0
-    && slidesValidCount === presentation.slides.length
-    && qcmValidCount >= presentation.slides.length;
   const currentEditorCanvaSlide = presentation.slides[Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1))] || null;
   const currentEditorCanvaSlideIndex = Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1));
   const isPresentationUnconfigured = !String(presentation.presentationName || '').trim()
@@ -1056,6 +1048,22 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       })
       .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
   }, [allUsersData]);
+  const isValidPresenterSelection = (value = '') => {
+    const normalized = clean(value);
+    return Boolean(normalized) && presenterSuggestions.some((name) => clean(name) === normalized);
+  };
+  const isPresenterValid = isValidPresenterSelection(activeSlide?.presenterName || '');
+  const isActiveSlideValid = isPresenterValid && slideHasContent;
+  const slidesValidCount = presentation.slides.filter((slide) => {
+    const validPresenter = isValidPresenterSelection(slide?.presenterName || '');
+    const hasContent = Boolean(String(slide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+    return validPresenter && hasContent;
+  }).length;
+  const canValidatePresentation = !presentationNameAlreadyUsed
+    && normalizedPresentationName
+    && presentation.slides.length > 0
+    && slidesValidCount === presentation.slides.length
+    && qcmValidCount >= presentation.slides.length;
   const filteredPresenterSuggestions = useMemo(() => {
     if (!presenterSearchTarget?.value) return [];
     const typed = clean(presenterSearchTarget.value);
@@ -1088,6 +1096,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   }, [presentation.canvaLiveUrl]);
 
   useEffect(() => {
+    const normalizedUrl = normalizeCanvaLiveUrl(canvaLiveUrlInput);
+    if (normalizedUrl === String(presentation.canvaLiveUrl || '')) return;
+    patchPresentation({
+      canvaLiveUrl: normalizedUrl,
+      presentationValidated: false
+    });
+  }, [canvaLiveUrlInput]);
+
+  useEffect(() => {
     setEditorCanvaStep(1);
   }, [presentation.canvaLiveUrl, presentation.canvaSlideCount]);
   const detectedEditorCanvaStep = extractSlideNumberFromUrl(presentation.canvaLiveUrl);
@@ -1103,6 +1120,42 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     const nextSlides = presentation.slides.map((slide, index) => index === slideIndex ? { ...slide, ...patch } : slide);
     patchPresentation({ slides: nextSlides });
   };
+  const renderPresenterSelector = (slide, slideIndex, compact = false) => (
+    <div className={`presentation-presenter-field ${compact ? 'presentation-presenter-field-compact' : ''}`}>
+      <input
+        className="presentation-presenter-short-input"
+        value={slide?.presenterName || ''}
+        onChange={(e) => {
+          const nextValue = e.target.value;
+          patchSlide(slideIndex, { presenterName: nextValue });
+          setPresenterSearchTarget({ type: 'slide', index: slideIndex, value: nextValue });
+        }}
+        onFocus={(e) => setPresenterSearchTarget({ type: 'slide', index: slideIndex, value: e.target.value })}
+        onBlur={() => window.setTimeout(() => setPresenterSearchTarget((prev) => (
+          prev?.type === 'slide' && prev?.index === slideIndex ? null : prev
+        )), 120)}
+        placeholder="Choisir un eleve de 5e"
+      />
+      {presenterSearchTarget?.type === 'slide' && presenterSearchTarget?.index === slideIndex && filteredPresenterSuggestions.length > 0 ? (
+        <div className="suggestions presenter-suggestions">
+          {filteredPresenterSuggestions.map((name) => {
+            const parts = splitPresenterName(name);
+            return (
+              <button
+                key={`slide-${slideIndex}-${name}`}
+                type="button"
+                className={`suggestion ${clean(slide?.presenterName || '') === clean(name) ? 'selected' : ''}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyPresenterSuggestion(name)}
+              >
+                <span>{parts.firstName} <strong>{parts.lastName || ''}</strong></span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
   const patchTextBoxes = (nextTextBoxes) => {
     patchSlide(presentation.activeSlideIndex, { textBoxes: nextTextBoxes });
   };
@@ -1245,6 +1298,66 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     }
     setPresenterSearchTarget(null);
   };
+  const ensureCurrentCanvaSlideAnimation = () => {
+    if (presentation.activeEditorTab !== 'animation') return;
+    if (!presentation.canvaLiveUrl) return;
+    if (!currentEditorCanvaSlide || currentEditorCanvaSlide.animation) return;
+    patchSlide(currentEditorCanvaSlideIndex, {
+      animation: attachAnimationMetadata(
+        createAnimationBlockFromDraft({ title: `Animation slide ${editorCanvaStep}` }),
+        presentationNumber,
+        editorCanvaStep,
+        presentation.presentationName,
+        currentEditorCanvaSlide?.presenterName
+      )
+    });
+  };
+  const openAnimationTab = () => {
+    patchPresentation({ activeEditorTab: 'animation' });
+    const slide = currentEditorCanvaSlide;
+    const needsSprite = !String(slide?.animation?.actorImageUrl || '').trim();
+    if (!needsSprite) return;
+    pendingAnimationSpriteTargetRef.current = {
+      slideIndex: currentEditorCanvaSlideIndex,
+      slideNumber: editorCanvaStep
+    };
+    window.setTimeout(() => pendingAnimationSpriteInputRef.current?.click(), 0);
+  };
+  const handlePendingAnimationSpriteImport = async (fileList) => {
+    const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
+    if (!file) return;
+    const { slideIndex, slideNumber } = pendingAnimationSpriteTargetRef.current;
+    if (slideIndex < 0) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const nextUrl = String(reader.result || '');
+      if (!nextUrl) return;
+      const baseAnimation = presentation.slides[slideIndex]?.animation
+        ? attachAnimationMetadata(
+            presentation.slides[slideIndex].animation,
+            presentationNumber,
+            slideNumber || (slideIndex + 1),
+            presentation.presentationName,
+            presentation.slides[slideIndex]?.presenterName
+          )
+        : attachAnimationMetadata(
+            createAnimationBlockFromDraft({ title: `Animation slide ${slideNumber || (slideIndex + 1)}` }),
+            presentationNumber,
+            slideNumber || (slideIndex + 1),
+            presentation.presentationName,
+            presentation.slides[slideIndex]?.presenterName
+          );
+      patchSlide(slideIndex, {
+        animation: {
+          ...baseAnimation,
+          actorImageUrl: nextUrl
+        }
+      });
+      pendingAnimationSpriteTargetRef.current = { slideIndex: -1, slideNumber: 0 };
+      if (pendingAnimationSpriteInputRef.current) pendingAnimationSpriteInputRef.current.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (!drawTextMode) {
@@ -1252,6 +1365,10 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       setDraftTextBox(null);
     }
   }, [drawTextMode, activeSlide?.id]);
+
+  useEffect(() => {
+    ensureCurrentCanvaSlideAnimation();
+  }, [presentation.activeEditorTab, presentation.canvaLiveUrl, currentEditorCanvaSlideIndex, editorCanvaStep]);
 
   useEffect(() => {
     const onMouseMove = (event) => {
@@ -1312,14 +1429,18 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           <div className="eyebrow">Presentation</div>
           <h3>{presentation.presentationName || 'Presentation'}</h3>
         </div>
-        <div className="presentation-slide-tabs">
-          {presentation.slides.map((slide, index) => (
-            <button
-              key={slide.id}
-              type="button"
-              className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
-            onClick={() => patchPresentation({ activeSlideIndex: index })}
-            >
+      <div className="presentation-slide-tabs">
+        {presentation.slides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
+            onClick={() => {
+              if (index > presentation.activeSlideIndex && !isPresenterValid) return;
+              patchPresentation({ activeSlideIndex: index });
+            }}
+            disabled={index > presentation.activeSlideIndex && !isPresenterValid}
+          >
             {`Slide ${index + 1}`}
           </button>
         ))}
@@ -1459,99 +1580,84 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
 
   return (
     <div className="presentation-shell">
-      <div className="presentation-slide-tabs">
-        <button
-          type="button"
-          className={`presentation-slide-tab ${presentation.activeEditorTab === 'slides' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
-        >
-          Slides
-        </button>
-        <button
-          type="button"
-          className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
-        >
-          Quizz
-        </button>
-        <button
-          type="button"
-          className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'animation' })}
-        >
-          Animation
-        </button>
-        <button
-          type="button"
-          className="presentation-slide-add presentation-slide-add-red"
-          onClick={() => {
-            if (!window.confirm('Supprimer cette presentation ?')) return;
-            onChange?.(createBlock('text'));
-          }}
-        >
-          Supprimer
-        </button>
-      </div>
-      <div className="presentation-canva-row">
+      <div className="presentation-editor-head">
         <input
-          className="presentation-slide-title"
-          value={presentation.presentationName || ''}
-          onChange={(e) => patchPresentation({ presentationName: e.target.value, presentationValidated: false })}
-          placeholder="Nom de la presentation"
+          ref={pendingAnimationSpriteInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden-file-input"
+          onChange={(e) => void handlePendingAnimationSpriteImport(e.target.files)}
         />
+        {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation') ? (
+          <>
+            <label className="presentation-editor-field">
+              <span>Lien Canva :</span>
+              <input
+                className="presentation-slide-title"
+                value={canvaLiveUrlInput}
+                onChange={(e) => setCanvaLiveUrlInput(e.target.value)}
+                placeholder="Coller le lien Canva"
+              />
+            </label>
+            <label className="presentation-editor-field">
+              <span>Nombre de slides :</span>
+              <input
+                className="presentation-size-input"
+                type="number"
+                min="0"
+                max="300"
+                value={presentation.canvaSlideCount || 0}
+                onChange={(e) => {
+                  const nextCount = Math.max(0, Number(e.target.value || 0));
+                  const nextSlides = syncPresentationSlidesWithCount(presentation.slides, nextCount);
+                  patchPresentation({
+                    canvaSlideCount: nextCount,
+                    slides: nextSlides,
+                    activeSlideIndex: Math.min(presentation.activeSlideIndex, Math.max(0, nextSlides.length - 1)),
+                    presentationValidated: false
+                  });
+                }}
+                title="Nombre de slides Canva"
+              />
+            </label>
+          </>
+        ) : null}
       </div>
-      {presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation' ? (
-      <div className="presentation-canva-row">
-        <input
-          className="presentation-slide-title"
-          value={canvaLiveUrlInput}
-          onChange={(e) => setCanvaLiveUrlInput(e.target.value)}
-          placeholder="Lien Canva live (optionnel)"
-        />
-        <label className="presentation-setup-label">
-          <span>Nombre de slides:</span>
-          <input
-            className="presentation-size-input"
-            type="number"
-            min="0"
-            max="300"
-            value={presentation.canvaSlideCount || 0}
-            onChange={(e) => {
-              const nextCount = Math.max(0, Number(e.target.value || 0));
-              const nextSlides = syncPresentationSlidesWithCount(presentation.slides, nextCount);
-              patchPresentation({
-                canvaSlideCount: nextCount,
-                slides: nextSlides,
-                activeSlideIndex: Math.min(presentation.activeSlideIndex, Math.max(0, nextSlides.length - 1)),
-                presentationValidated: false
-              });
-            }}
-            title="Nombre de slides Canva"
-          />
-        </label>
-      </div>
-      ) : null}
       {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation') && presentation.canvaLiveUrl ? (
         <div className="canva-live-shell">
-          {presentation.activeEditorTab === 'animation' && !currentEditorCanvaSlide?.animation ? (
-            <div className="presentation-setup-actions">
-              <button
-                type="button"
-                className="presentation-slide-add presentation-slide-add-violet"
-                onClick={() => patchSlide(currentEditorCanvaSlideIndex, {
-                  animation: attachAnimationMetadata(
-                    createAnimationBlockFromDraft({ title: `Animation slide ${editorCanvaStep}` }),
-                    presentationNumber,
-                    editorCanvaStep,
-                    presentation.presentationName,
-                    currentEditorCanvaSlide?.presenterName
-                  )
-                })}
-              >
-                Creer animation pour la slide {editorCanvaStep}
-              </button>
-            </div>
-          ) : null}
+          <div className="presentation-slide-tabs">
+            <button
+              type="button"
+              className={`presentation-slide-tab ${presentation.activeEditorTab === 'slides' ? 'active' : ''}`}
+              onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
+            >
+              Slides
+            </button>
+            <button
+              type="button"
+              className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
+              onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+            >
+              Quizz
+            </button>
+            <button
+              type="button"
+              className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
+              onClick={openAnimationTab}
+            >
+              Animation
+            </button>
+            <button
+              type="button"
+              className="presentation-slide-add presentation-slide-add-red"
+              onClick={() => {
+                if (!window.confirm('Supprimer cette presentation ?')) return;
+                onChange?.(createBlock('text'));
+              }}
+            >
+              Supprimer
+            </button>
+          </div>
           <div className="slideshow-nav">
             <button
               type="button"
@@ -1570,13 +1676,20 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             >
               Diapo precedente
             </button>
-            <div className="slideshow-progress">
-              {presentation.canvaSlideCount > 0 ? `Canva live ${editorCanvaStep}/${presentation.canvaSlideCount}` : `Canva live ${editorCanvaStep}`}
+            <div className="slideshow-progress slideshow-progress-editor">
+              <span>
+                {presentation.canvaSlideCount > 0 ? `Canva live ${editorCanvaStep}/${presentation.canvaSlideCount}` : `Canva live ${editorCanvaStep}`}
+              </span>
+              <span className="slideshow-progress-presenter-label">Exposant de ce slide :</span>
+              <div className="slideshow-progress-presenter-field">
+                {renderPresenterSelector(currentEditorCanvaSlide, currentEditorCanvaSlideIndex, true)}
+              </div>
             </div>
             <button
               type="button"
               className="presentation-slide-add"
               onClick={() => {
+                if (!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '')) return;
                 const nextStep = presentation.canvaSlideCount > 0
                   ? Math.min(presentation.canvaSlideCount, editorCanvaStep + 1)
                   : editorCanvaStep + 1;
@@ -1588,15 +1701,10 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   presentationValidated: false
                 });
               }}
-              disabled={presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount}
+              disabled={!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '') || (presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount)}
             >
               Diapo suivante
             </button>
-          </div>
-          <div className="canva-live-note">
-            {`Canva live ${editorCanvaStep}/${presentation.canvaSlideCount || editorCanvaStep}.`}
-            {` Presentation ${Math.max(1, Number(presentationNumber || 1))} • Slide ${editorCanvaStep}.`}
-            {currentEditorCanvaSlide?.presenterName ? ` Exposant: ${currentEditorCanvaSlide.presenterName}.` : ''}
           </div>
           <div className="canva-live-frame-shell">
             <iframe
@@ -1634,48 +1742,6 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           <a className="presentation-slide-add" href={presentation.canvaLiveUrl} target="_blank" rel="noreferrer">
             Ouvrir Canva dans un nouvel onglet
           </a>
-        </div>
-      ) : null}
-      {presentation.activeEditorTab === 'slides' && presentation.canvaSlideCount > 0 ? (
-        <div className="presentation-qcm-panel">
-          {presentation.slides.slice(0, presentation.canvaSlideCount).map((slide, slideIndex) => (
-            <div key={slide.id} className="presentation-qcm-card">
-              <div className="presentation-presenter-field">
-                <input
-                  className="presentation-presenter-short-input"
-                  value={slide.presenterName || ''}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    patchSlide(slideIndex, { presenterName: nextValue });
-                    setPresenterSearchTarget({ type: 'slide', index: slideIndex, value: nextValue });
-                  }}
-                  onFocus={(e) => setPresenterSearchTarget({ type: 'slide', index: slideIndex, value: e.target.value })}
-                  onBlur={() => window.setTimeout(() => setPresenterSearchTarget((prev) => (
-                    prev?.type === 'slide' && prev?.index === slideIndex ? null : prev
-                  )), 120)}
-                  placeholder={`Nom presentateur slide ${slideIndex + 1}`}
-                />
-                {presenterSearchTarget?.type === 'slide' && presenterSearchTarget?.index === slideIndex && filteredPresenterSuggestions.length > 0 ? (
-                  <div className="suggestions presenter-suggestions">
-                    {filteredPresenterSuggestions.map((name) => {
-                      const parts = splitPresenterName(name);
-                      return (
-                        <button
-                          key={`slide-${slideIndex}-${name}`}
-                          type="button"
-                          className={`suggestion ${clean(slide.presenterName || '') === clean(name) ? 'selected' : ''}`}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => applyPresenterSuggestion(name)}
-                        >
-                          <span>{parts.firstName} <strong>{parts.lastName || ''}</strong></span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
         </div>
       ) : null}
       {presentation.activeEditorTab === 'qcm' ? (
@@ -1730,16 +1796,37 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
         </div>
       ) : presentation.activeEditorTab === 'slides' ? (
         <>
-      <div className="presentation-setup-actions">
+      <div className="presentation-slide-tabs">
         <button
           type="button"
-          className="presentation-slide-add presentation-slide-add-violet"
-          onClick={() => patchPresentation({
-            canvaLiveUrl: normalizeCanvaLiveUrl(canvaLiveUrlInput),
-            presentationValidated: false
-          })}
+          className={`presentation-slide-tab ${presentation.activeEditorTab === 'slides' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
         >
-          Enregistrer Canva
+          Slides
+        </button>
+        <button
+          type="button"
+          className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
+        >
+          Quizz
+        </button>
+        <button
+          type="button"
+          className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
+          onClick={() => patchPresentation({ activeEditorTab: 'animation' })}
+        >
+          Animation
+        </button>
+        <button
+          type="button"
+          className="presentation-slide-add presentation-slide-add-red"
+          onClick={() => {
+            if (!window.confirm('Supprimer cette presentation ?')) return;
+            onChange?.(createBlock('text'));
+          }}
+        >
+          Supprimer
         </button>
       </div>
       {activeMiniMenu === 'color' ? (
@@ -1780,78 +1867,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           <button type="button" onClick={() => imageFileInputRef.current?.click()}>Importer image</button>
         </div>
       ) : null}
-      <div
-        ref={canvasRef}
-        className={`presentation-canvas ${drawTextMode ? 'draw-text-mode' : ''}`}
-        style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}
-        onClick={() => setActiveTextBoxId('')}
-        onMouseDown={(e) => {
-          if (!drawTextMode || !canvasRef.current || e.target !== canvasRef.current) return;
-          const rect = canvasRef.current.getBoundingClientRect();
-          const startX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-          const startY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
-          drawStateRef.current = { startX, startY };
-          setDraftTextBox({ x: startX, y: startY, width: 80, height: 48 });
-        }}
-      >
-        <div
-          ref={editorRef}
-          className="article-editor presentation-editor"
-          contentEditable
-          suppressContentEditableWarning
-          onInput={(e) => {
-            const nextHtml = e.currentTarget.innerHTML;
-            lastHtmlRef.current = nextHtml;
-            patchSlide(presentation.activeSlideIndex, { html: nextHtml });
-          }}
-        />
-        {(activeSlide?.textBoxes || []).map((box) => (
-          <div
-            key={box.id}
-            className={`presentation-text-box ${activeTextBoxId === box.id ? 'active' : ''}`}
-            style={{ left: box.x, top: box.y, width: box.width, height: box.height, fontSize: `${box.fontSize || 28}px` }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              setActiveTextBoxId(box.id);
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveTextBoxId(box.id);
-            }}
-          >
-            <div
-              className="presentation-text-box-editor"
-              contentEditable
-              suppressContentEditableWarning
-              onFocus={() => setActiveTextBoxId(box.id)}
-              onInput={(e) => updateTextBox(box.id, { text: e.currentTarget.innerHTML })}
-              dangerouslySetInnerHTML={{ __html: box.text || '' }}
-            />
-          </div>
-        ))}
-        {draftTextBox ? (
-          <div
-            className="presentation-text-box draft"
-            style={{ left: draftTextBox.x, top: draftTextBox.y, width: draftTextBox.width, height: draftTextBox.height, fontSize: `${fontSize}px` }}
-          />
-        ) : null}
-        {activeSlide?.animation ? (
-          <AnimationBlockEditor
-            block={activeSlide.animation}
-            onChange={(nextAnimation) => patchSlide(presentation.activeSlideIndex, { animation: nextAnimation })}
-            onRemove={() => patchSlide(presentation.activeSlideIndex, { animation: null })}
-            readOnly={false}
-            sectionKey={sectionKey}
-            tabKey={tabKey}
-            blockIndex={blockIndex}
-            tabId={tabId}
-            entryId={entryId}
-          />
-        ) : null}
-        {activeSlide?.presenterName ? (
-          <div className="presentation-slide-signature">Presentateur: {formatPresenterLabel(activeSlide.presenterName)}</div>
-        ) : null}
-      </div>
+      {!presentation.canvaLiveUrl ? renderPresenterSelector(activeSlide, presentation.activeSlideIndex) : null}
       </>
       ) : null}
       <div className="presentation-validation-bar">
@@ -2198,6 +2214,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const actorDragStateRef = useRef(null);
   const actorResizeStateRef = useRef(null);
   const spriteResizeStateRef = useRef(null);
+  const spriteDragStateRef = useRef({ actionId: '', frameIndex: -1 });
   const actionLoopStopRef = useRef({ stop: false, actionId: '' });
   const actionLoopIntervalRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -2207,6 +2224,19 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const [importDebug, setImportDebug] = useState(null);
   const [importOptions, setImportOptions] = useState([]);
   const [selectedImportId, setSelectedImportId] = useState('');
+  const [audioMenuOpen, setAudioMenuOpen] = useState(false);
+  const audioMenuCloseTimerRef = useRef(null);
+  const [eraserActive, setEraserActive] = useState(false);
+  const [eraserSize, setEraserSize] = useState(24);
+  const [eraserCursor, setEraserCursor] = useState({ visible: false, x: 0, y: 0 });
+  const [sliceToolOpen, setSliceToolOpen] = useState(false);
+  const [sliceBoxes, setSliceBoxes] = useState([]);
+  const [sliceSource, setSliceSource] = useState(null);
+  const [sliceSourceSize, setSliceSourceSize] = useState({ width: 0, height: 0 });
+  const [sliceCreateMode, setSliceCreateMode] = useState(false);
+  const [sliceDraftBox, setSliceDraftBox] = useState(null);
+  const [selectedSliceBoxId, setSelectedSliceBoxId] = useState('');
+  const sliceDragRef = useRef({ id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' });
   const [actionNameDrafts, setActionNameDrafts] = useState({});
   const [audioDurationSec, setAudioDurationSec] = useState(0);
   const [audioCurrentTimeSec, setAudioCurrentTimeSec] = useState(0);
@@ -2220,6 +2250,14 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     frameUrl: String(block?.actorImageUrl || ''),
     actionName: ''
   });
+  const spriteEditorCanvasRef = useRef(null);
+  const spriteEditorEraseStateRef = useRef(false);
+  const spriteEditorDirtyRef = useRef(null);
+  const slicePreviewRef = useRef(null);
+  const openGeminiPopup = () => {
+    if (typeof window === 'undefined') return;
+    window.open('https://gemini.google.com/app', 'web5e-gemini', 'popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes');
+  };
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? normalizeTimelineActions(block.actions)
@@ -2234,6 +2272,8 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     audioCurrentTimeSec >= Number(action?.startSec || 0)
     && audioCurrentTimeSec <= Number(action?.startSec || 0) + Number(action?.durationSec || 0)
   )) || null;
+  const toolbarAction = actions.find((action) => String(action.id || '') === String(selectedActionId || '')) || actions[0] || null;
+  const isActorSelected = Boolean(toolbarAction && Number(toolbarAction.selectedFrameIndex) === -1);
 
   useEffect(() => {
     setActionNameDrafts((prev) => {
@@ -2272,7 +2312,8 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
 
   useEffect(() => {
     if (isPlaying || playingActionId) return;
-    const selectedAction = actions.find((action) => Number(action?.selectedFrameIndex) >= -1);
+    if (actorDragStateRef.current || actorResizeStateRef.current || spriteResizeStateRef.current) return;
+    const selectedAction = actions.find((action) => String(action.id || '') === String(selectedActionId || '')) || actions[0] || null;
     const selectedFrameIndex = Number(selectedAction?.selectedFrameIndex);
     const selectedFrame = selectedFrameIndex === -1
       ? {
@@ -2308,7 +2349,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         ? prev
         : nextActorState
     ));
-  }, [block, actions, isPlaying, playingActionId]);
+  }, [block, actions, isPlaying, playingActionId, selectedActionId]);
 
   useEffect(() => {
     const audio = audioTimelineRef.current;
@@ -2346,7 +2387,37 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       window.clearInterval(actionLoopIntervalRef.current);
       actionLoopIntervalRef.current = null;
     }
+    if (audioMenuCloseTimerRef.current) {
+      window.clearTimeout(audioMenuCloseTimerRef.current);
+      audioMenuCloseTimerRef.current = null;
+    }
   }, []);
+
+  useEffect(() => {
+    const stopErasing = () => {
+      if (spriteEditorDirtyRef.current) {
+        const { actionId, frameIndex, isOriginalSelected } = spriteEditorDirtyRef.current;
+        commitSpriteEditorCanvas(actionId, frameIndex, isOriginalSelected);
+        spriteEditorDirtyRef.current = null;
+      }
+      spriteEditorEraseStateRef.current = false;
+    };
+    window.addEventListener('mouseup', stopErasing);
+    return () => window.removeEventListener('mouseup', stopErasing);
+  }, []);
+
+  useEffect(() => {
+    if (!sliceToolOpen) return;
+    const onKeyDown = (event) => {
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedSliceBoxId) {
+        event.preventDefault();
+        setSliceBoxes((prev) => prev.filter((box) => box.id !== selectedSliceBoxId));
+        setSelectedSliceBoxId('');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sliceToolOpen, selectedSliceBoxId]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -2366,7 +2437,8 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     if (!frames.length) return;
     const startSec = Number(action.startSec || 0);
     const elapsedSec = Math.max(0, Number(audioCurrentTimeSec || 0) - startSec);
-    const frameIndex = frames.length <= 1 ? 0 : (Math.floor(elapsedSec / 0.18) % frames.length);
+    const frameDurationSec = Math.max(0.05, Number(action?.frameDurationSec || 0.18));
+    const frameIndex = frames.length <= 1 ? 0 : (Math.floor(elapsedSec / frameDurationSec) % frames.length);
     setLoopFrameState({ actionId: String(action.id || ''), frameIndex });
     setActorState((prev) => ({
       ...prev,
@@ -2532,6 +2604,14 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     updateActions(actions.map((action) => action.id === actionId ? { ...action, ...patch } : action));
   };
 
+  const adjustSpriteSpeed = (actionId, delta) => {
+    const action = actions.find((item) => item.id === actionId);
+    if (!action) return;
+    updateAction(actionId, {
+      frameDurationSec: Math.max(0.05, Math.min(1.5, Number(action.frameDurationSec || 0.18) + delta))
+    });
+  };
+
   const updateSharedAudio = (soundUrl, soundPitch = null) => {
     const safeUrl = String(soundUrl || '').trim();
     updateActions(actions.map((action) => ({
@@ -2546,7 +2626,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     const nextStartSec = Math.max(0, Number(lastAction?.startSec || 0) + Number(lastAction?.durationSec || 0));
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, startSec: nextStartSec, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, frameDurationSec: 0.18, startSec: nextStartSec, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
     ]);
   };
 
@@ -2561,6 +2641,26 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
 
   const removeFrame = (actionId, frameIndex) => {
     updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: (action.frames || []).filter((_, index) => index !== frameIndex), selectedFrameIndex: Math.max(0, Math.min((action.selectedFrameIndex || 0), (action.frames || []).length - 2)) } : action));
+  };
+
+  const reorderFrames = (actionId, fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    updateActions(actions.map((action) => {
+      if (action.id !== actionId) return action;
+      const frames = Array.isArray(action.frames) ? [...action.frames] : [];
+      if (fromIndex >= frames.length || toIndex >= frames.length) return action;
+      const [moved] = frames.splice(fromIndex, 1);
+      frames.splice(toIndex, 0, moved);
+      let nextSelected = Number(action.selectedFrameIndex || 0);
+      if (nextSelected === fromIndex) {
+        nextSelected = toIndex;
+      } else if (fromIndex < toIndex && nextSelected > fromIndex && nextSelected <= toIndex) {
+        nextSelected -= 1;
+      } else if (toIndex < fromIndex && nextSelected >= toIndex && nextSelected < fromIndex) {
+        nextSelected += 1;
+      }
+      return { ...action, frames, selectedFrameIndex: nextSelected };
+    }));
   };
 
   const toggleSpritesOpen = (actionId) => {
@@ -2714,6 +2814,26 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     flashNotice('Detourage applique');
   };
 
+  const autoCutoutSelectedSprite = async (actionId) => {
+    const action = actions.find((item) => item.id === actionId);
+    if (!action) return;
+    const selectedIndex = Number(action.selectedFrameIndex);
+    if (selectedIndex === -1) {
+      const nextActorUrl = block?.actorImageUrl ? await autoRemoveBgFromDataUrl(String(block.actorImageUrl || '')) : '';
+      if (!nextActorUrl) return;
+      updateRoot({ actorImageUrl: nextActorUrl });
+      setActorState((prev) => ({ ...prev, frameUrl: nextActorUrl }));
+      flashNotice('Sprite principal detoure');
+      return;
+    }
+    const frame = action?.frames?.[selectedIndex];
+    const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
+    const nextUrl = await autoRemoveBgFromDataUrl(String(normalizedFrame?.url || ''));
+    if (!nextUrl) return;
+    updateFrame(actionId, selectedIndex, { url: nextUrl });
+    flashNotice('Sprite detoure');
+  };
+
   const startSpriteResize = (event, actionId, frameIndex, corner) => {
     const action = actions.find((item) => item.id === actionId);
     const frame = frameIndex === -1
@@ -2736,6 +2856,158 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
 
   const handleEditorImageMouseDown = (event, actionId, frameIndex) => {
     startSpriteResize(event, actionId, frameIndex, 'se');
+  };
+
+  const commitSpriteEditorCanvas = (actionId, frameIndex, isOriginalSelected) => {
+    const canvas = spriteEditorCanvasRef.current;
+    if (!canvas) return;
+    const nextUrl = canvas.toDataURL('image/png');
+    if (isOriginalSelected) {
+      updateRoot({ actorImageUrl: nextUrl });
+      setActorState((prev) => ({ ...prev, frameUrl: nextUrl }));
+      return;
+    }
+    updateFrame(actionId, frameIndex, { url: nextUrl });
+  };
+
+  const openSliceTool = (actionId, frameIndex, frame) => {
+    if (!frame?.url) return;
+    setSliceSource({
+      actionId,
+      frameIndex,
+      frame
+    });
+    setSliceSourceSize({ width: 0, height: 0 });
+    setSliceBoxes([]);
+    setSliceCreateMode(false);
+    setSliceDraftBox(null);
+    setSelectedSliceBoxId('');
+    setSliceToolOpen(true);
+  };
+
+  const createSliceBox = (x, y, width, height, maxWidth, maxHeight) => ({
+    id: `slice_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    x: Math.max(0, Math.min(Number(x || 0), maxWidth)),
+    y: Math.max(0, Math.min(Number(y || 0), maxHeight)),
+    width: Math.max(12, Math.min(Number(width || 0), maxWidth)),
+    height: Math.max(12, Math.min(Number(height || 0), maxHeight))
+  });
+
+  const normalizeSliceBox = (box, sourceWidth, sourceHeight) => {
+    const x = Math.max(0, Math.min(Number(box.x || 0), sourceWidth));
+    const y = Math.max(0, Math.min(Number(box.y || 0), sourceHeight));
+    const width = Math.max(12, Math.min(Number(box.width || 0), sourceWidth - x));
+    const height = Math.max(12, Math.min(Number(box.height || 0), sourceHeight - y));
+    return {
+      ...box,
+      x,
+      y,
+      width,
+      height
+    };
+  };
+
+  const getSlicePreviewMetrics = (element) => {
+    const sourceWidth = Number(sliceSourceSize.width || sliceSource?.frame?.width || 1);
+    const sourceHeight = Number(sliceSourceSize.height || sliceSource?.frame?.height || 1);
+    const rect = element?.getBoundingClientRect?.();
+    const displayWidth = Math.max(1, Number(rect?.width || sourceWidth || 1));
+    const displayHeight = Math.max(1, Number(rect?.height || sourceHeight || 1));
+    return {
+      sourceWidth,
+      sourceHeight,
+      displayWidth,
+      displayHeight
+    };
+  };
+
+  const applySliceTool = async () => {
+    if (!sliceSource?.frame?.url) return;
+    const targetActionId = String(sliceSource.actionId || '');
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      const sourceWidth = Number(sliceSourceSize.width || image.width || sliceSource.frame.width || 140);
+      const sourceHeight = Number(sliceSourceSize.height || image.height || sliceSource.frame.height || 140);
+      const nextSlices = sliceBoxes
+        .map((box) => normalizeSliceBox(box, sourceWidth, sourceHeight))
+        .filter((box) => box.width >= 8 && box.height >= 8)
+        .map((rect) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(rect.width);
+          canvas.height = Math.round(rect.height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return null;
+          ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+          return createSpriteFrame(canvas.toDataURL('image/png'));
+        })
+        .filter(Boolean);
+      if (!nextSlices.length) {
+        setSliceToolOpen(false);
+        return;
+      }
+      const latestActions = normalizeTimelineActions(Array.isArray(block?.actions) ? block.actions : actions);
+      updateActions(latestActions.map((action) => (
+        String(action.id || '') === targetActionId
+          ? {
+              ...action,
+              frames: (() => {
+                const existingFrames = Array.isArray(action.frames) ? action.frames : [];
+                const insertAfterIndex = Number(sliceSource?.frameIndex);
+                if (insertAfterIndex >= 0 && insertAfterIndex < existingFrames.length) {
+                  return [
+                    ...existingFrames.slice(0, insertAfterIndex + 1),
+                    ...nextSlices,
+                    ...existingFrames.slice(insertAfterIndex + 1)
+                  ];
+                }
+                return [...existingFrames, ...nextSlices];
+              })(),
+              spritesOpen: true,
+              selectedFrameIndex: (() => {
+                const existingCount = Array.isArray(action.frames) ? action.frames.length : 0;
+                const insertAfterIndex = Number(sliceSource?.frameIndex);
+                if (insertAfterIndex >= 0 && insertAfterIndex < existingCount) {
+                  return insertAfterIndex + 1;
+                }
+                return Math.max(0, existingCount);
+              })()
+            }
+          : action
+      )));
+      setSelectedActionId(targetActionId);
+      setSliceToolOpen(false);
+      setSliceSource(null);
+      setSliceSourceSize({ width: 0, height: 0 });
+      setSliceBoxes([]);
+      setSliceCreateMode(false);
+      setSliceDraftBox(null);
+      setSelectedSliceBoxId('');
+      flashNotice(`${nextSlices.length} sprites ajoutes`);
+    };
+    image.src = resolveWeb5eAssetUrl(String(sliceSource.frame.url || ''));
+  };
+
+  const eraseOnSpriteCanvas = (event, actionId, frameIndex, isOriginalSelected) => {
+    const canvas = spriteEditorCanvasRef.current;
+    if (!canvas || !eraserActive) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / Math.max(rect.width, 1);
+    const scaleY = canvas.height / Math.max(rect.height, 1);
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+    const radius = Math.max(2, Number(eraserSize || 24) / 2) * ((scaleX + scaleY) / 2);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    spriteEditorDirtyRef.current = { actionId, frameIndex, isOriginalSelected };
   };
 
   const startDragActor = (event) => {
@@ -2876,9 +3148,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     flashNotice(`${availableAudios.length} audio${availableAudios.length > 1 ? 's' : ''} trouvé${availableAudios.length > 1 ? 's' : ''}`);
   };
 
-  const applyImportedAudio = async () => {
+  const applyImportedAudio = async (audioId = '') => {
     const currentAudio = extractSharedAudioMeta(block);
-    const nextAudio = importOptions.find((row) => String(row.id || '') === String(selectedImportId || '')) || importOptions[0] || null;
+    const targetId = String(audioId || selectedImportId || '');
+    const nextAudio = importOptions.find((row) => String(row.id || '') === targetId) || importOptions[0] || null;
     if (!nextAudio?.soundUrl) {
       flashNotice("Aucun audio selectionne");
       return;
@@ -2911,6 +3184,14 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     window.setTimeout(() => {
       updateSharedAudio(nextAudio.soundUrl, nextAudio.soundPitch);
     }, 0);
+    setSelectedImportId(String(nextAudio.id || ''));
+    if (audioMenuCloseTimerRef.current) {
+      window.clearTimeout(audioMenuCloseTimerRef.current);
+    }
+    audioMenuCloseTimerRef.current = window.setTimeout(() => {
+      setAudioMenuOpen(false);
+      audioMenuCloseTimerRef.current = null;
+    }, 500);
     flashNotice("Audio CondaWeb importé");
   };
 
@@ -2956,7 +3237,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         frameTimer = window.setInterval(() => {
           frameIndex = (frameIndex + 1) % frames.length;
           setActorState((prev) => ({ ...prev, frameUrl: String(frames[frameIndex] || '') }));
-        }, 180);
+        }, Math.max(50, Number(action.frameDurationSec || 0.18) * 1000));
       }
       let audio = null;
       if (withAudio && action.soundUrl) {
@@ -3034,10 +3315,31 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         frameUrl: String(frames[frameIndex] || ''),
         actionName: action.name || 'Action'
       }));
-    }, 180);
+    }, Math.max(50, Number(action.frameDurationSec || 0.18) * 1000));
   };
 
-  const selectedAction = actions.find((action) => Number(action?.selectedFrameIndex) >= -1) || null;
+  const showActionFrame = (action) => {
+    if (!action) return;
+    const frames = Array.isArray(action.frames) && action.frames.length > 0
+      ? action.frames.map((frame) => (typeof frame === 'string' ? frame : frame?.url)).filter(Boolean)
+      : [block?.actorImageUrl].filter(Boolean);
+    setSelectedActionId(String(action.id || ''));
+    setLoopFrameState({ actionId: '', frameIndex: -1 });
+    setActorState((prev) => ({
+      ...prev,
+      frameUrl: String(frames[0] || block?.actorImageUrl || ''),
+      actionName: action.name || 'Action'
+    }));
+  };
+
+  const showNextAction = () => {
+    if (!actions.length) return;
+    const currentIndex = actions.findIndex((action) => String(action.id || '') === String(selectedActionId || ''));
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % actions.length : 0;
+    showActionFrame(actions[nextIndex]);
+  };
+
+  const selectedAction = actions.find((action) => String(action.id || '') === String(selectedActionId || '')) || actions[0] || null;
   const selectedFrameIndex = Number(selectedAction?.selectedFrameIndex);
   const selectedFrameData = selectedFrameIndex === -1
     ? {
@@ -3072,16 +3374,29 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     <div className="animation-block-shell">
       <div ref={overlayRef} className="animation-page-overlay visible">
         <div
-          className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'}`}
+          className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'} ${isActorSelected ? 'selected' : ''}`}
           style={{
             transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)`
           }}
           onMouseDown={startDragActor}
+          onClick={() => {
+            if (readOnly) return;
+            if (!toolbarAction?.id) return;
+            selectOriginalActor(toolbarAction.id);
+          }}
         >
           <div className="animation-actor-name top">{animationCode}</div>
           <div
             className="animation-page-actor-figure"
             style={{ width: actorRenderWidth, height: actorRenderHeight }}
+            draggable={Boolean(block?.actorImageUrl)}
+            onDragStart={(event) => {
+              const spriteUrl = resolveWeb5eAssetUrl(String(block?.actorImageUrl || ''));
+              if (!spriteUrl) return;
+              event.dataTransfer.setData('text/plain', spriteUrl);
+              event.dataTransfer.setData('text/uri-list', spriteUrl);
+              event.dataTransfer.effectAllowed = 'copy';
+            }}
           >
             {actorRenderFrame ? (
               <img
@@ -3104,57 +3419,52 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
             ) : null}
           </div>
         </div>
+        {!readOnly ? (
         <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + actorState.width + 12)}px, ${Number(actorState.y)}px)` }}>
           {baseAudioUrl ? <audio ref={audioTimelineRef} src={baseAudioUrl} preload="metadata" /> : null}
           {!readOnly && (
             <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
               <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={toggleTimelinePlayback}>{isPlaying ? 'Pause' : 'Play'}</button>
               <button type="button" className="animation-add-action-btn" onClick={addAction}>+</button>
-              <button type="button" className={`animation-rec-btn ${recordingAudio ? 'active' : ''}`} onClick={() => void toggleAudioRecord()}>{recordingAudio ? '■' : 'Rec'}</button>
-              <button type="button" onClick={importOptions.length > 0 ? applyImportedAudio : importRecordedAudio}>Choisir</button>
+              <div className="animation-audio-menu-shell">
+                <button
+                  type="button"
+                  className={`animation-rec-btn ${recordingAudio || audioMenuOpen ? 'active' : ''}`}
+                  onClick={() => setAudioMenuOpen((prev) => !prev)}
+                >
+                  Audio
+                </button>
+                {audioMenuOpen ? (
+                  <div className="animation-audio-menu">
+                    <div className="animation-audio-menu-actions">
+                      <button type="button" onClick={() => void toggleAudioRecord()}>{recordingAudio ? 'Stop rec' : 'Rec'}</button>
+                      <button type="button" onClick={() => void importRecordedAudio()}>Charger</button>
+                    </div>
+                    {importOptions.length > 0 ? (
+                      <div className="animation-audio-option-list">
+                        {importOptions.map((option, index) => {
+                          const isSelected = String(selectedImportId || '') === String(option.id || '');
+                          return (
+                            <button
+                              key={String(option.id || `import_option_${index}`)}
+                              type="button"
+                              className={`animation-audio-option ${isSelected ? 'active' : ''}`}
+                              onClick={() => void applyImportedAudio(String(option.id || ''))}
+                            >
+                              slide {option.slideNumber} • {option.durationSec}s {option.selected ? '• choisi prof' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <button type="button" className="animation-gemini-btn" onClick={openGeminiPopup}>Gemini</button>
               {!readOnly ? <button type="button" className="animation-action-remove" onClick={onRemove}>×</button> : null}
             </div>
           )}
           {importNotice ? <div className="animation-import-notice">{importNotice}</div> : null}
-          {importDebug ? (
-            <div className="animation-import-notice" style={{ whiteSpace: 'normal' }}>
-              Import debug: slide {importDebug.slideNumber} • {importDebug.presenterName || 'sans presentateur'}
-              <br />
-              current: {importDebug.currentAudioUrl || 'aucun'}
-              <br />
-              backup: {importDebug.backupAudioUrl || 'aucun'}
-              {importDebug.backupCount ? (
-                <>
-                  <br />
-                  liste: {importDebug.backupCount}
-                </>
-              ) : null}
-            </div>
-          ) : null}
-          {importOptions.length > 0 ? (
-            <div className="animation-import-notice" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {importOptions.map((option, index) => {
-                const isSelected = String(selectedImportId || '') === String(option.id || '');
-                return (
-                  <button
-                    key={String(option.id || `import_option_${index}`)}
-                    type="button"
-                    onClick={() => setSelectedImportId(String(option.id || ''))}
-                    style={{
-                      textAlign: 'left',
-                      border: isSelected ? '2px solid #4f46e5' : '1px solid #cbd5e1',
-                      background: isSelected ? '#eef2ff' : '#fff',
-                      borderRadius: '12px',
-                      padding: '8px 10px',
-                      fontWeight: 800
-                    }}
-                  >
-                    slide {option.slideNumber} • {option.durationSec}s {option.selected ? '• choisi prof' : ''}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
           <div className="animation-timeline-shell">
             <div className="animation-timeline-topline">
               <span>Audio</span>
@@ -3253,11 +3563,17 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                   <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
                 </div>
+                <div className="animation-speed-controls animation-speed-controls-inline">
+                  <button type="button" onClick={() => adjustSpriteSpeed(action.id, 0.05)}>-</button>
+                  <span>{`${Number(action.frameDurationSec || 0.18).toFixed(2)}s`}</span>
+                  <button type="button" onClick={() => adjustSpriteSpeed(action.id, -0.05)}>+</button>
+                </div>
                 {!readOnly && actions.length > 1 ? <button type="button" className="animation-action-remove small" onClick={(e) => { e.stopPropagation(); removeAction(action.id); }}>×</button> : null}
               </div>
               {action.spritesOpen && !readOnly && (
                 <div
                   className="animation-sprite-space"
+                  tabIndex={0}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => { e.preventDefault(); void appendFrames(action.id, e.dataTransfer.files); }}
                   onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => importActionFrameFromValue(action.id, nextValue))}
@@ -3265,7 +3581,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                   <div className="animation-sprite-space-head">
                     <div className="animation-sprite-space-title">Sprites</div>
                     <div className="animation-sprite-space-actions">
-                      <button type="button" onClick={() => void autoCutoutActionSprites(action.id)}>Detourer</button>
+                      <button type="button" onClick={() => void autoCutoutSelectedSprite(action.id)}>Detourer</button>
                       <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
                       <button type="button" className="icon-btn" onClick={() => actionFileInputRefs.current[action.id]?.click()}>+</button>
                     </div>
@@ -3298,6 +3614,20 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                             ? (String(loopFrameState.actionId || '') === String(action.id || '') && Number(loopFrameState.frameIndex) === frameIndex ? 'selected' : '')
                             : (frameIndex === (action.selectedFrameIndex || 0) ? 'selected' : '')
                         }`}
+                        draggable
+                        onDragStart={() => {
+                          spriteDragStateRef.current = { actionId: action.id, frameIndex };
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          const dragState = spriteDragStateRef.current;
+                          if (dragState.actionId !== action.id) return;
+                          reorderFrames(action.id, Number(dragState.frameIndex), frameIndex);
+                          spriteDragStateRef.current = { actionId: '', frameIndex: -1 };
+                        }}
+                        onDragEnd={() => {
+                          spriteDragStateRef.current = { actionId: '', frameIndex: -1 };
+                        }}
                         onClick={() => selectFrame(action.id, frameIndex)}
                       >
                         <img src={resolveWeb5eAssetUrl(typeof frame === 'string' ? frame : frame?.url)} alt="" />
@@ -3322,6 +3652,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                       offsetY: Number(block?.actorOffsetY || 0)
                     }
                   : (typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame);
+                const editorFrameIndex = isOriginalSelected ? -1 : (action.selectedFrameIndex || 0);
                 return (
                   <div className="animation-sprite-editor-panel">
                     {normalizedFrame?.url ? (
@@ -3331,23 +3662,93 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                             className="animation-sprite-editor-target"
                             style={{ width: Number(normalizedFrame.width || 140), height: Number(normalizedFrame.height || 140) }}
                           >
-                            <img
-                              src={normalizedFrame.url}
-                              alt=""
+                            <canvas
+                              key={`${action.id}-${editorFrameIndex}-${normalizedFrame.url}`}
+                              ref={(node) => {
+                                spriteEditorCanvasRef.current = node;
+                                if (!node) return;
+                                const nextWidth = Math.max(1, Number(normalizedFrame.width || 140));
+                                const nextHeight = Math.max(1, Number(normalizedFrame.height || 140));
+                                const sourceKey = `${normalizedFrame.url}|${nextWidth}|${nextHeight}`;
+                                if (node.dataset.sourceKey === sourceKey) return;
+                                const image = new Image();
+                                image.onload = () => {
+                                  node.width = nextWidth;
+                                  node.height = nextHeight;
+                                  const ctx = node.getContext('2d');
+                                  if (!ctx) return;
+                                  ctx.clearRect(0, 0, node.width, node.height);
+                                  ctx.drawImage(image, 0, 0, node.width, node.height);
+                                  node.dataset.sourceKey = sourceKey;
+                                };
+                                image.src = normalizedFrame.url;
+                              }}
+                              className={`animation-sprite-editor-canvas ${eraserActive ? 'eraser-active' : ''}`}
                               style={{
                                 width: Number(normalizedFrame.width || 140),
                                 height: Number(normalizedFrame.height || 140),
                                 transform: `translate(${Number(normalizedFrame.offsetX || 0)}px, ${Number(normalizedFrame.offsetY || 0)}px) scale(${Number(normalizedFrame.scale || 1)})`
                               }}
-                              onMouseDown={(e) => handleEditorImageMouseDown(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0))}
+                              onMouseDown={(e) => {
+                                if (eraserActive) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  spriteEditorEraseStateRef.current = true;
+                                  eraseOnSpriteCanvas(e, action.id, editorFrameIndex, isOriginalSelected);
+                                  return;
+                                }
+                                handleEditorImageMouseDown(e, action.id, editorFrameIndex);
+                              }}
+                              onMouseMove={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setEraserCursor({
+                                  visible: eraserActive,
+                                  x: e.clientX - rect.left,
+                                  y: e.clientY - rect.top
+                                });
+                                if (eraserActive && spriteEditorEraseStateRef.current) {
+                                  eraseOnSpriteCanvas(e, action.id, editorFrameIndex, isOriginalSelected);
+                                }
+                              }}
+                              onMouseEnter={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setEraserCursor({
+                                  visible: eraserActive,
+                                  x: e.clientX - rect.left,
+                                  y: e.clientY - rect.top
+                                });
+                              }}
+                              onMouseLeave={() => setEraserCursor({ visible: false, x: 0, y: 0 })}
+                              onMouseUp={(e) => {
+                                if (eraserActive) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }
+                                spriteEditorEraseStateRef.current = false;
+                              }}
                             />
+                            {eraserActive && eraserCursor.visible ? (
+                              <div
+                                className="animation-eraser-cursor"
+                                style={{
+                                  width: eraserSize,
+                                  height: eraserSize,
+                                  left: eraserCursor.x,
+                                  top: eraserCursor.y
+                                }}
+                              />
+                            ) : null}
                             <button type="button" className="animation-editor-resizer nw" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'nw')} />
                             <button type="button" className="animation-editor-resizer ne" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'ne')} />
                             <button type="button" className="animation-editor-resizer sw" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'sw')} />
                             <button type="button" className="animation-editor-resizer se" onMouseDown={(e) => startSpriteResize(e, action.id, isOriginalSelected ? -1 : (action.selectedFrameIndex || 0), 'se')} />
                           </div>
                         </div>
-                        <div className="animation-sprite-editor-controls">
+                        <div
+                          className="animation-sprite-editor-controls"
+                          tabIndex={0}
+                          onPaste={(e) => handleUrlOrImagePaste(e, (nextValue) => importActionFrameFromValue(action.id, nextValue))}
+                        >
                           <div className="animation-sprite-editor-size-readout">
                             {Number(normalizedFrame.width || 140)} x {Number(normalizedFrame.height || 140)} px
                           </div>
@@ -3358,6 +3759,28 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                               <button type="button" className="icon-btn" onClick={() => adjustFrameScale(action.id, action.selectedFrameIndex || 0, 0.1)}>+</button>
                             </div>
                           ) : null}
+                          <div className="animation-sprite-adjust-row">
+                            <button
+                              type="button"
+                              className={eraserActive ? 'icon-btn animation-eraser-toggle active' : 'icon-btn animation-eraser-toggle'}
+                              onClick={() => setEraserActive((prev) => !prev)}
+                              aria-label="Activer la gomme"
+                              title="Gomme"
+                            >
+                              G
+                            </button>
+                            <button type="button" className="icon-btn animation-eraser-size-btn" onClick={() => setEraserSize((prev) => Math.max(6, prev - 4))}>-</button>
+                            <span className="animation-eraser-size-readout">{eraserSize}</span>
+                            <button type="button" className="icon-btn animation-eraser-size-btn" onClick={() => setEraserSize((prev) => Math.min(80, prev + 4))}>+</button>
+                            <button
+                              type="button"
+                              className="icon-btn animation-scissors-btn"
+                              onClick={() => openSliceTool(action.id, editorFrameIndex, normalizedFrame)}
+                              title="Decouper en sprites"
+                            >
+                              ✂
+                            </button>
+                          </div>
                           {!isOriginalSelected ? (
                             <div className="animation-sprite-adjust-grid">
                               <div />
@@ -3383,7 +3806,232 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
           )})}
           </div>
         </div>
+        ) : (
+          <div className="animation-readonly-controls">
+            <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={() => void playAnimation()}>
+              {isPlaying ? 'Pause' : 'Play'}
+            </button>
+            <button type="button" className="animation-add-action-btn" onClick={showNextAction}>
+              Suivant
+            </button>
+          </div>
+        )}
       </div>
+      {sliceToolOpen && sliceSource?.frame?.url ? (
+        <div className="animation-slice-overlay" onClick={() => setSliceToolOpen(false)}>
+          <div className="animation-slice-window" onClick={(event) => event.stopPropagation()}>
+            <div className="animation-slice-head">
+              <strong>Selectionner les sprites</strong>
+              <button type="button" className="animation-action-remove small" onClick={() => setSliceToolOpen(false)}>×</button>
+            </div>
+            <div className="animation-slice-help">Ajoute un cadre, place-le autour d'un sprite, puis applique. Chaque cadre deviendra un sprite.</div>
+            <div className="animation-slice-mode-row">
+              <button
+                type="button"
+                className={sliceCreateMode ? 'active' : ''}
+                onClick={() => {
+                  setSliceCreateMode((prev) => !prev);
+                }}
+              >
+                Selectionner un sprite
+              </button>
+              <button
+                type="button"
+                className="animation-slice-delete-btn"
+                disabled={!selectedSliceBoxId}
+                onClick={() => {
+                  setSliceBoxes((prev) => prev.filter((box) => box.id !== selectedSliceBoxId));
+                  setSelectedSliceBoxId('');
+                }}
+              >
+                Effacer
+              </button>
+            </div>
+            <div
+              className="animation-slice-preview"
+              ref={slicePreviewRef}
+              onMouseDown={(event) => {
+                const targetBoxId = event.target?.dataset?.boxId || '';
+                const resizeHandle = event.target?.dataset?.resizeHandle || '';
+                const { sourceWidth, sourceHeight, displayWidth, displayHeight } = getSlicePreviewMetrics(event.currentTarget);
+                const rect = event.currentTarget.getBoundingClientRect();
+                const pointerX = ((event.clientX - rect.left) / Math.max(displayWidth, 1)) * sourceWidth;
+                const pointerY = ((event.clientY - rect.top) / Math.max(displayHeight, 1)) * sourceHeight;
+                if (targetBoxId) {
+                  const targetBox = sliceBoxes.find((box) => box.id === targetBoxId);
+                  if (!targetBox) return;
+                  sliceDragRef.current = {
+                    id: targetBoxId,
+                    mode: resizeHandle ? 'resize' : 'move',
+                    offsetX: resizeHandle ? pointerX : pointerX - Number(targetBox.x || 0),
+                    offsetY: resizeHandle ? pointerY : pointerY - Number(targetBox.y || 0),
+                    active: true,
+                    handle: resizeHandle
+                  };
+                  setSelectedSliceBoxId(targetBoxId);
+                  event.preventDefault();
+                  return;
+                }
+                if (!sliceCreateMode) {
+                  setSelectedSliceBoxId('');
+                  return;
+                }
+                const nextBox = createSliceBox(pointerX, pointerY, sourceWidth * 0.16, sourceHeight * 0.2, sourceWidth, sourceHeight);
+                setSliceDraftBox(nextBox);
+                setSelectedSliceBoxId(nextBox.id);
+                sliceDragRef.current = {
+                  id: nextBox.id,
+                  mode: 'create',
+                  offsetX: pointerX,
+                  offsetY: pointerY,
+                  active: true,
+                  handle: ''
+                };
+              }}
+              onMouseMove={(event) => {
+                if (sliceDragRef.current.active) {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const sourceWidth = Number(sliceSourceSize.width || sliceSource?.frame?.width || rect.width || 1);
+                  const sourceHeight = Number(sliceSourceSize.height || sliceSource?.frame?.height || rect.height || 1);
+                  const displayWidth = Math.max(1, rect.width);
+                  const displayHeight = Math.max(1, rect.height);
+                  const pointerX = ((event.clientX - rect.left) / displayWidth) * sourceWidth;
+                  const pointerY = ((event.clientY - rect.top) / displayHeight) * sourceHeight;
+                  if (sliceDragRef.current.mode === 'move') {
+                    setSliceBoxes((prev) => prev.map((box) => (
+                      box.id === sliceDragRef.current.id
+                        ? normalizeSliceBox({
+                            ...box,
+                            x: pointerX - sliceDragRef.current.offsetX,
+                            y: pointerY - sliceDragRef.current.offsetY
+                          }, sourceWidth, sourceHeight)
+                        : box
+                    )));
+                    return;
+                  }
+                  if (sliceDragRef.current.mode === 'resize') {
+                    setSliceBoxes((prev) => prev.map((box) => {
+                      if (box.id !== sliceDragRef.current.id) return box;
+                      const handle = String(sliceDragRef.current.handle || '');
+                      const right = Number(box.x || 0) + Number(box.width || 0);
+                      const bottom = Number(box.y || 0) + Number(box.height || 0);
+                      const nextBox = { ...box };
+                      if (handle.includes('n')) {
+                        nextBox.y = Math.min(pointerY, bottom - 12);
+                        nextBox.height = bottom - nextBox.y;
+                      }
+                      if (handle.includes('s')) {
+                        nextBox.height = Math.max(12, pointerY - Number(nextBox.y || 0));
+                      }
+                      if (handle.includes('w')) {
+                        nextBox.x = Math.min(pointerX, right - 12);
+                        nextBox.width = right - nextBox.x;
+                      }
+                      if (handle.includes('e')) {
+                        nextBox.width = Math.max(12, pointerX - Number(nextBox.x || 0));
+                      }
+                      return normalizeSliceBox(nextBox, sourceWidth, sourceHeight);
+                    }));
+                    return;
+                  }
+                  if (sliceDragRef.current.mode === 'create' && sliceDraftBox) {
+                    const startX = sliceDragRef.current.offsetX;
+                    const startY = sliceDragRef.current.offsetY;
+                    const nextBox = normalizeSliceBox({
+                      ...sliceDraftBox,
+                      x: Math.min(startX, pointerX),
+                      y: Math.min(startY, pointerY),
+                      width: Math.abs(pointerX - startX),
+                      height: Math.abs(pointerY - startY)
+                    }, sourceWidth, sourceHeight);
+                    setSliceDraftBox(nextBox);
+                  }
+                  return;
+                }
+              }}
+              onMouseUp={() => {
+                if (sliceDragRef.current.active) {
+                  if (sliceDragRef.current.mode === 'create' && sliceDraftBox) {
+                    setSliceBoxes((prev) => [...prev, sliceDraftBox]);
+                    setSelectedSliceBoxId(sliceDraftBox.id);
+                    setSliceDraftBox(null);
+                    setSliceCreateMode(false);
+                  }
+                  sliceDragRef.current = { id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' };
+                }
+              }}
+              onMouseLeave={() => {
+                sliceDragRef.current = { id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' };
+              }}
+            >
+              <img
+                src={resolveWeb5eAssetUrl(sliceSource.frame.url)}
+                alt=""
+                draggable={false}
+                onLoad={(event) => {
+                  const nextWidth = Number(event.currentTarget.naturalWidth || 0);
+                  const nextHeight = Number(event.currentTarget.naturalHeight || 0);
+                  if (nextWidth > 0 && nextHeight > 0) {
+                    setSliceSourceSize((prev) => (
+                      prev.width === nextWidth && prev.height === nextHeight
+                        ? prev
+                        : { width: nextWidth, height: nextHeight }
+                    ));
+                  }
+                }}
+                onDragStart={(event) => event.preventDefault()}
+              />
+              {sliceBoxes.map((box, index) => {
+                const sourceWidth = Number(sliceSourceSize.width || sliceSource?.frame?.width || 1);
+                const sourceHeight = Number(sliceSourceSize.height || sliceSource?.frame?.height || 1);
+                return (
+                  <button
+                    key={box.id || `slice-box-${index}`}
+                    type="button"
+                    data-box-id={box.id}
+                    className={`animation-slice-box ${selectedSliceBoxId === box.id ? 'selected' : ''}`}
+                    style={{
+                      left: `${(Number(box.x || 0) / Math.max(sourceWidth, 1)) * 100}%`,
+                      top: `${(Number(box.y || 0) / Math.max(sourceHeight, 1)) * 100}%`,
+                      width: `${(Number(box.width || 0) / Math.max(sourceWidth, 1)) * 100}%`,
+                      height: `${(Number(box.height || 0) / Math.max(sourceHeight, 1)) * 100}%`
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedSliceBoxId(box.id);
+                    }}
+                    title="Selection de sprite"
+                  >
+                    {selectedSliceBoxId === box.id ? (
+                      <>
+                        <span className="animation-slice-box-handle nw" data-box-id={box.id} data-resize-handle="nw" />
+                        <span className="animation-slice-box-handle ne" data-box-id={box.id} data-resize-handle="ne" />
+                        <span className="animation-slice-box-handle sw" data-box-id={box.id} data-resize-handle="sw" />
+                        <span className="animation-slice-box-handle se" data-box-id={box.id} data-resize-handle="se" />
+                      </>
+                    ) : null}
+                  </button>
+                );
+              })}
+              {sliceDraftBox ? (
+                <div
+                  className="animation-slice-box draft"
+                  style={{
+                    left: `${(Number(sliceDraftBox.x || 0) / Math.max(Number(sliceSourceSize.width || sliceSource?.frame?.width || 1), 1)) * 100}%`,
+                    top: `${(Number(sliceDraftBox.y || 0) / Math.max(Number(sliceSourceSize.height || sliceSource?.frame?.height || 1), 1)) * 100}%`,
+                    width: `${(Number(sliceDraftBox.width || 0) / Math.max(Number(sliceSourceSize.width || sliceSource?.frame?.width || 1), 1)) * 100}%`,
+                    height: `${(Number(sliceDraftBox.height || 0) / Math.max(Number(sliceSourceSize.height || sliceSource?.frame?.height || 1), 1)) * 100}%`
+                  }}
+                />
+              ) : null}
+            </div>
+            <div className="animation-slice-actions">
+              <button type="button" onClick={() => { setSliceBoxes([]); setSliceDraftBox(null); setSelectedSliceBoxId(''); }}>Reinitialiser</button>
+              <button type="button" className="primary-btn" onClick={applySliceTool}>Appliquer</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="animation-meta-line">
         {`Presentation ${safePresentationNumber} • Slide ${safeSlideNumber}`}
       </div>

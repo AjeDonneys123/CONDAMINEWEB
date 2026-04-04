@@ -529,7 +529,7 @@ export default function ExposesManager({ globalClass }) {
                                         {recording ? `Enregistrement ${recordingSec}s` : (uploadingRecording ? 'Envoi...' : 'Prêt')}
                                     </div>
                                     <div className="text-[12px] font-black text-slate-500">
-                                        {selectedRecorder.presenterName || selectedRecorder.studentLabel} • Slide {selectedRecorder.slideNumber}
+                                        {selectedRecorder.presenterName || selectedRecorder.studentLabel}
                                     </div>
                                 </div>
                             </div>
@@ -552,7 +552,7 @@ export default function ExposesManager({ globalClass }) {
                                         >
                                             <div className="min-w-[170px]">
                                                 <div className="text-sm font-black text-slate-800">
-                                                    Slide {Math.max(1, Number(recordingEntry?.presenterSlideNumber || selectedRecorder.slideNumber || 1))}
+                                                    Rec {index + 1}
                                                 </div>
                                                 <div className="text-[11px] font-black uppercase text-slate-500 mt-1">
                                                     {Number(recordingEntry?.recordingDurationSec || 0)}s
