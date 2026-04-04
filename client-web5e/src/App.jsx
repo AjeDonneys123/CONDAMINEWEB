@@ -1027,6 +1027,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const [presenterSearchTarget, setPresenterSearchTarget] = useState(null);
   const [animationImportMenuOpen, setAnimationImportMenuOpen] = useState(false);
   const [pendingAnimationSpriteUrlInput, setPendingAnimationSpriteUrlInput] = useState('');
+  const [pendingAnimationSpriteOptions, setPendingAnimationSpriteOptions] = useState([]);
   const pendingAnimationSpriteInputRef = useRef(null);
   const pendingAnimationSpriteTargetRef = useRef({ slideIndex: -1, slideNumber: 0 });
   const editorRef = useRef(null);
@@ -1360,6 +1361,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       slideIndex: currentEditorCanvaSlideIndex,
       slideNumber: editorCanvaStep
     };
+    setPendingAnimationSpriteOptions([]);
     setAnimationImportMenuOpen(true);
   };
   const applyPendingAnimationSpriteUrl = (nextUrl) => {
@@ -1388,6 +1390,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       }
     });
     setPendingAnimationSpriteUrlInput('');
+    setPendingAnimationSpriteOptions([]);
     setAnimationImportMenuOpen(false);
     pendingAnimationSpriteTargetRef.current = { slideIndex: -1, slideNumber: 0 };
     if (pendingAnimationSpriteInputRef.current) pendingAnimationSpriteInputRef.current.value = '';
@@ -1400,6 +1403,39 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       applyPendingAnimationSpriteUrl(String(reader.result || ''));
     };
     reader.readAsDataURL(file);
+  };
+  const loadPendingAnimationSpritesFromPhone = async () => {
+    const presenterName = String(currentEditorCanvaSlide?.presenterName || '').trim();
+    if (!presenterName) return;
+    try {
+      const backupRes = await fetch(`/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`);
+      const backupData = await backupRes.json().catch(() => ({}));
+      if (!backupRes.ok || !backupData?.ok) {
+        setPendingAnimationSpriteOptions([]);
+        return;
+      }
+      const sourceRows = Array.isArray(backupData?.recordings) && backupData.recordings.length > 0
+        ? backupData.recordings
+        : [backupData];
+      const seen = new Set();
+      const nextOptions = sourceRows.flatMap((row, rowIndex) => {
+        const urls = Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : [];
+        return urls
+          .map((url, imageIndex) => ({
+            id: `${String(row?.id || rowIndex)}_${imageIndex}`,
+            url: String(url || '').trim(),
+            slideNumber: Math.max(1, Number(row?.slideNumber || backupData?.slideNumber || 1))
+          }))
+          .filter((item) => {
+            if (!item.url || seen.has(item.url)) return false;
+            seen.add(item.url);
+            return true;
+          });
+      });
+      setPendingAnimationSpriteOptions(nextOptions);
+    } catch (_) {
+      setPendingAnimationSpriteOptions([]);
+    }
   };
 
   useEffect(() => {
@@ -1757,7 +1793,30 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                 >
                   Importer
                 </button>
+                <button
+                  type="button"
+                  className="presentation-slide-add"
+                  onClick={() => void loadPendingAnimationSpritesFromPhone()}
+                  disabled={!String(currentEditorCanvaSlide?.presenterName || '').trim()}
+                >
+                  Importer depuis tel
+                </button>
               </div>
+              {pendingAnimationSpriteOptions.length > 0 ? (
+                <div className="animation-frame-strip in-space">
+                  {pendingAnimationSpriteOptions.map((option, optionIndex) => (
+                    <button
+                      key={String(option.id || `pending_phone_sprite_${optionIndex}`)}
+                      type="button"
+                      className="animation-frame-thumb from-mobile"
+                      title={`Slide ${option.slideNumber}`}
+                      onClick={() => applyPendingAnimationSpriteUrl(option.url)}
+                    >
+                      <img src={resolveWeb5eAssetUrl(option.url)} alt="" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div className="slideshow-nav">

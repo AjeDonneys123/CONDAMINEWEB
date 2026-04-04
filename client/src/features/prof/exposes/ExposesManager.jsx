@@ -62,7 +62,6 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [uploadingImages, setUploadingImages] = useState(false);
     const [imageCameraError, setImageCameraError] = useState('');
     const [imageCameraReady, setImageCameraReady] = useState(false);
-    const [pendingImages, setPendingImages] = useState([]);
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -131,10 +130,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
-        pendingImages.forEach((item) => {
-            try { URL.revokeObjectURL(item.previewUrl); } catch (_) {}
-        });
-    }, [pendingImages]);
+    }, []);
 
     useEffect(() => {
         const stopImageCamera = () => {
@@ -169,15 +165,6 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         void startImageCamera();
         return () => stopImageCamera();
     }, [selectedRecorder, studioTab]);
-
-    useEffect(() => {
-        setPendingImages((prev) => {
-            prev.forEach((item) => {
-                try { URL.revokeObjectURL(item.previewUrl); } catch (_) {}
-            });
-            return [];
-        });
-    }, [selectedRecorder?.studentId, studioTab]);
 
     const filtered = useMemo(() => {
         const key = norm(globalClass || '');
@@ -513,34 +500,8 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         canvas.toBlob((blob) => {
             if (!blob) return;
             const file = new File([blob], `sprite_${Date.now()}.jpg`, { type: 'image/jpeg' });
-            const previewUrl = URL.createObjectURL(file);
-            setPendingImages((prev) => [...prev, {
-                id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                file,
-                previewUrl
-            }]);
+            void uploadPresenterImages([file]);
         }, 'image/jpeg', 0.92);
-    };
-
-    const removePendingImage = (imageId) => {
-        setPendingImages((prev) => {
-            const target = prev.find((item) => item.id === imageId);
-            if (target?.previewUrl) {
-                try { URL.revokeObjectURL(target.previewUrl); } catch (_) {}
-            }
-            return prev.filter((item) => item.id !== imageId);
-        });
-    };
-
-    const uploadPendingImages = async () => {
-        if (!pendingImages.length) return;
-        await uploadPresenterImages(pendingImages.map((item) => item.file));
-        setPendingImages((prev) => {
-            prev.forEach((item) => {
-                try { URL.revokeObjectURL(item.previewUrl); } catch (_) {}
-            });
-            return [];
-        });
     };
 
     const deletePresenterImage = async (imageUrl) => {
@@ -704,10 +665,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                     <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
                                         <div className="flex flex-wrap items-center gap-3 mb-3">
                                             <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={capturePresenterImage} disabled={!imageCameraReady || uploadingImages}>
-                                                Prendre photo
-                                            </button>
-                                            <button type="button" className="px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 font-black text-[12px] uppercase shadow-sm disabled:opacity-40" onClick={() => void uploadPendingImages()} disabled={!pendingImages.length || uploadingImages}>
-                                                {uploadingImages ? 'Envoi...' : 'Envoyer'}
+                                                {uploadingImages ? 'Envoi...' : 'Prendre photo'}
                                             </button>
                                             <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
                                         </div>
@@ -726,23 +684,6 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                         </div>
                                         <canvas ref={imageCanvasRef} className="hidden" />
                                     </div>
-                                    {pendingImages.length > 0 ? (
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                            {pendingImages.map((item, index) => (
-                                                <div key={item.id} className="relative rounded-[18px] border border-indigo-200 bg-indigo-50 p-2">
-                                                    <button
-                                                        type="button"
-                                                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white border border-red-200 text-red-600 font-black"
-                                                        onClick={() => removePendingImage(item.id)}
-                                                    >
-                                                        ×
-                                                    </button>
-                                                    <img src={item.previewUrl} alt={`Local ${index + 1}`} className="w-full h-32 object-cover rounded-xl bg-white" />
-                                                    <div className="mt-2 text-[11px] font-black text-indigo-600">Local</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : null}
                                     {(selectedRecorder.spriteImageUrls || []).length > 0 ? (
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             {(selectedRecorder.spriteImageUrls || []).map((url, index) => (
