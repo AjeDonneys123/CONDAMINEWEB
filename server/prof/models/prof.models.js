@@ -224,6 +224,7 @@ const Models = {
                 recordingUrl: { type: String, default: '' },
                 recordingDurationSec: { type: Number, default: 0 },
                 recordingPitch: { type: Number, default: 1 },
+                spriteImageUrls: { type: [String], default: [] },
                 presenterName: { type: String, default: '' },
                 presenterSlideNumber: { type: Number, default: 0 },
                 selectedForPresenter: { type: Boolean, default: false },

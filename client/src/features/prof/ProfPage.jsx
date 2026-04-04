@@ -16,6 +16,11 @@ import './ProfPage.css';
 export default function ProfPage({ user, onLogout }) {
   const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
   const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'studio', 'students', 'admin'];
+  const urlParams = new URLSearchParams(window.location.search);
+  const requestedTab = String(urlParams.get('profTab') || '').trim();
+  const requestedClassId = String(urlParams.get('classId') || '').trim();
+  const requestedScanAuto = String(urlParams.get('scanAuto') || '').trim() === '1';
+  const requestedScanTitle = String(urlParams.get('scanTitle') || '').trim();
 
   const [liveUser, setLiveUser] = useState(getInitialUser());
   const [tab, setTab] = useState('activities');
@@ -57,8 +62,10 @@ export default function ProfPage({ user, onLogout }) {
         setClasses(filteredCls);
         if (filteredCls.length > 0) {
             const preferredClassId = String(uiState?.lastProfClassId || freshProfile?.lastProfClassId || selectedClassId || '').trim();
+            const forcedClassExists = filteredCls.some(c => String(c._id) === String(requestedClassId));
             const stillExists = filteredCls.some(c => String(c._id) === String(preferredClassId));
-            if (preferredClassId && stillExists) setSelectedClassId(preferredClassId);
+            if (requestedClassId && forcedClassExists) setSelectedClassId(requestedClassId);
+            else if (preferredClassId && stillExists) setSelectedClassId(preferredClassId);
             else {
               const currentStillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
               if (!selectedClassId || !currentStillExists) setSelectedClassId(filteredCls[0]._id);
@@ -96,6 +103,18 @@ export default function ProfPage({ user, onLogout }) {
   const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
   const currentClassName = currentClassObj?.name || "";
   const currentLevel = currentClassObj?.level || "";
+  const scanLaunchIntent = requestedScanAuto ? {
+    autoCreate: true,
+    title: requestedScanTitle || `Sprites ${currentClassName || 'Classe'}`,
+    requestedAt: `${requestedClassId}:${requestedScanTitle}:${requestedScanAuto}`
+  } : null;
+
+  useEffect(() => {
+    if (requestedTab && allowedTabs.includes(requestedTab)) {
+      const blockedForRole = (!liveUser.isDeveloper && (requestedTab === 'studio' || requestedTab === 'admin'));
+      if (!blockedForRole) setTab(requestedTab);
+    }
+  }, [requestedTab, liveUser.isDeveloper]);
 
   return (
     <div className="prof-page-container">
@@ -137,9 +156,9 @@ export default function ProfPage({ user, onLogout }) {
           ) : (
              <>
                 {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
-                {tab === 'exposes' && <ExposesManager globalClass={currentClassName} />}
+                {tab === 'exposes' && <ExposesManager globalClass={currentClassName} globalClassId={selectedClassId} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
-                {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} />}
+                {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} launchIntent={scanLaunchIntent} />}
                 {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
                 {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
                 {tab === 'admin' && liveUser.isDeveloper && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}

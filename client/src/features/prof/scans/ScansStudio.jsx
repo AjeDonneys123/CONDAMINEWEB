@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-export default function ScansStudio({ user, globalClass, globalClassId, classes = [] }) {
+export default function ScansStudio({ user, globalClass, globalClassId, classes = [], launchIntent = null }) {
     const [sessions, setSessions] = useState([]);
     const [activeSession, setActiveSession] = useState(null);
     const [view, setView] = useState('list'); 
@@ -35,6 +35,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const canvasRef = useRef(null);
     const queueTimersRef = useRef({});
     const localQueueRef = useRef([]);
+    const handledLaunchIntentRef = useRef('');
     const teacherId = user?.id || user?._id || '';
     const normalizedGlobalClassId = String(globalClassId || '').trim();
     const gradeClass = (corr = {}) => {
@@ -202,6 +203,40 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
             setCameraReady(false);
         };
     }, [view, loading]);
+
+    useEffect(() => {
+        const key = String(launchIntent?.requestedAt || '');
+        if (!launchIntent?.autoCreate || !teacherId || !normalizedGlobalClassId || !globalClass || !key) return;
+        if (handledLaunchIntentRef.current === key) return;
+        handledLaunchIntentRef.current = key;
+        const openIntentSession = async () => {
+            try {
+                const res = await fetch('/api/scans/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: String(launchIntent?.title || `Sprites ${globalClass}`).trim(),
+                        teacherId,
+                        classId: normalizedGlobalClassId,
+                        className: globalClass || ''
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                await loadSessions();
+                if (res.ok && data?._id) {
+                    setActiveSession(data);
+                    setView('scan');
+                    setWorkspaceCollapsed(false);
+                }
+                if (typeof window !== 'undefined') {
+                    const url = new URL(window.location.href);
+                    ['scanAuto', 'scanTitle'].forEach((name) => url.searchParams.delete(name));
+                    window.history.replaceState({}, '', url.toString());
+                }
+            } catch (_) {}
+        };
+        void openIntentSession();
+    }, [launchIntent?.autoCreate, launchIntent?.requestedAt, launchIntent?.title, teacherId, normalizedGlobalClassId, globalClass]);
 
     const handleCapture = () => {
         const video = videoRef.current;

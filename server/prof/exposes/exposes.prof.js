@@ -123,7 +123,10 @@ router.get('/presenter-backup', async (req, res) => {
             const matches = presentations
                 .filter((row) => (
                     clean(row?.presenterName || '') === clean(presenterName)
-                    && String(row?.recordingUrl || '').trim()
+                    && (
+                        String(row?.recordingUrl || '').trim()
+                        || (Array.isArray(row?.spriteImageUrls) && row.spriteImageUrls.some((url) => String(url || '').trim()))
+                    )
                 ))
                 .sort((a, b) => {
                     if (Boolean(a?.selectedForPresenter) !== Boolean(b?.selectedForPresenter)) {
@@ -137,6 +140,9 @@ router.get('/presenter-backup', async (req, res) => {
                     ok: true,
                     recordingUrl: String(match.recordingUrl || '').trim(),
                     recordingPitch: Math.max(0.5, Math.min(2, Number(match.recordingPitch || 1))),
+                    spriteImageUrls: Array.isArray(match?.spriteImageUrls)
+                        ? match.spriteImageUrls.map((url) => String(url || '').trim()).filter(Boolean)
+                        : [],
                     presentationTitle: String(match.presentationTitle || ''),
                     presenterName: String(match.presenterName || ''),
                     slideNumber: Math.max(1, Number(match.presenterSlideNumber || 1)),
@@ -148,7 +154,10 @@ router.get('/presenter-backup', async (req, res) => {
                         presenterName: String(row?.presenterName || ''),
                         slideNumber: Math.max(1, Number(row?.presenterSlideNumber || 1)),
                         durationSec: Math.max(0, Number(row?.recordingDurationSec || 0)),
-                        selected: row?.selectedForPresenter === true
+                        selected: row?.selectedForPresenter === true,
+                        spriteImageUrls: Array.isArray(row?.spriteImageUrls)
+                            ? row.spriteImageUrls.map((url) => String(url || '').trim()).filter(Boolean)
+                            : []
                     }))
                 });
             }
@@ -281,6 +290,7 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
             recordingUrl,
             recordingDurationSec,
             recordingPitch,
+            spriteImageUrls: [],
             presenterName,
             presenterSlideNumber: slideNumber,
             selectedForPresenter: true,
@@ -304,6 +314,90 @@ router.post('/:id/presenter-recording', upload.single('audio'), async (req, res)
             presentation: row.presentations[row.presentations.length - 1],
             web5eLinked: Boolean(injection.updated),
             warning: uploadWarning || null
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:id/presenter-images', upload.array('images'), async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const studentId = String(req.body?.studentId || '').trim();
+        const presentationTitle = String(req.body?.presentationTitle || '').trim();
+        const presenterName = String(req.body?.presenterName || '').trim();
+        const slideNumber = Math.max(1, Number(req.body?.slideNumber || 0));
+
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!studentId) return res.status(400).json({ error: 'studentId requis' });
+        if (!presentationTitle) return res.status(400).json({ error: 'presentationTitle requis' });
+        if (!presenterName) return res.status(400).json({ error: 'presenterName requis' });
+        if (!slideNumber) return res.status(400).json({ error: 'slideNumber requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const files = Array.isArray(req.files) ? req.files : [];
+        if (!files.length) return res.status(400).json({ error: 'image requise' });
+
+        const folderId = await ProfDrive.getOrCreateFolder('CONDA_EXPOSES_IMAGES');
+        const uploadedUrls = [];
+        for (const file of files) {
+            try {
+                const driveFile = await ProfDrive.uploadFile(file.originalname, file.path, folderId);
+                uploadedUrls.push(`/api/structure/proxy/${driveFile.id}`);
+            } finally {
+                try { fs.unlinkSync(file.path); } catch (_) {}
+            }
+        }
+        if (!uploadedUrls.length) return res.status(400).json({ error: 'Aucune image uploadée' });
+
+        const now = new Date();
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+        const presenterKey = clean(presenterName);
+        const existingIndex = entries.findIndex((entry) => (
+            String(entry?.studentId || '') === studentId
+            && clean(entry?.presenterName || '') === presenterKey
+            && Math.max(1, Number(entry?.presenterSlideNumber || 1)) === slideNumber
+        ));
+
+        if (existingIndex >= 0) {
+            const existingUrls = Array.isArray(entries[existingIndex]?.spriteImageUrls) ? entries[existingIndex].spriteImageUrls : [];
+            entries[existingIndex] = {
+                ...entries[existingIndex],
+                presentationTitle: presentationTitle || String(entries[existingIndex]?.presentationTitle || ''),
+                spriteImageUrls: [...existingUrls, ...uploadedUrls],
+                updatedAt: now
+            };
+        } else {
+            entries.push({
+                studentId,
+                presentationTitle,
+                canvasUrl: '',
+                slidesText: '',
+                recordingUrl: '',
+                recordingDurationSec: 0,
+                recordingPitch: 1,
+                spriteImageUrls: uploadedUrls,
+                presenterName,
+                presenterSlideNumber: slideNumber,
+                selectedForPresenter: false,
+                createdAt: now,
+                updatedAt: now
+            });
+        }
+
+        row.presentations = entries;
+        await row.save();
+
+        const current = entries[existingIndex >= 0 ? existingIndex : entries.length - 1];
+        res.json({
+            ok: true,
+            spriteImageUrls: Array.isArray(current?.spriteImageUrls) ? current.spriteImageUrls : [],
+            added: uploadedUrls.length,
+            presentation: current
         });
     } catch (e) {
         res.status(500).json({ error: e.message });

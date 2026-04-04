@@ -132,7 +132,11 @@ function createBlock(type = 'text') {
   }
   return {
     type,
-    value: type === 'text' ? '<h3>Nouveau slide</h3><p>Écris ici.</p>' : ''
+    value: type === 'text' ? '<h3>Nouveau slide</h3><p>Écris ici.</p>' : '',
+    canvaLiveUrl: type === 'text'
+      ? 'https://www.canva.com/design/DAHC1EUAfKs/t_9dfR28nNBZnkW2CysANQ/view?utm_content=DAHC1EUAfKs&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&embed=1#2'
+      : '',
+    canvaSlideCount: type === 'text' ? 3 : 0
   };
 }
 
@@ -189,8 +193,21 @@ function normalizeCanvaLiveUrl(rawUrl = '') {
   try {
     const url = new URL(value);
     if (url.hostname.includes('canva.com')) {
+      const parts = String(url.pathname || '').split('/').filter(Boolean);
+      if (parts[0] === 'design' && parts.length >= 2) {
+        const designId = parts[1];
+        const accessToken = parts[2] || '';
+        const mode = String(parts[3] || '').toLowerCase();
+        const tail = accessToken ? `/${accessToken}` : '';
+        if (mode === 'edit' || mode === 'preview' || mode === '') {
+          url.pathname = `/design/${designId}${tail}/view`;
+        }
+      }
       if (!url.searchParams.has('embed')) {
         url.searchParams.set('embed', '1');
+      }
+      if (!extractSlideNumberFromUrl(url.toString())) {
+        url.hash = '#1';
       }
       return url.toString();
     }
@@ -1008,6 +1025,8 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const [draftTextBox, setDraftTextBox] = useState(null);
   const [activeTextBoxId, setActiveTextBoxId] = useState('');
   const [presenterSearchTarget, setPresenterSearchTarget] = useState(null);
+  const [animationImportMenuOpen, setAnimationImportMenuOpen] = useState(false);
+  const [pendingAnimationSpriteUrlInput, setPendingAnimationSpriteUrlInput] = useState('');
   const pendingAnimationSpriteInputRef = useRef(null);
   const pendingAnimationSpriteTargetRef = useRef({ slideIndex: -1, slideNumber: 0 });
   const editorRef = useRef(null);
@@ -1038,19 +1057,31 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     return (Array.isArray(allUsersData) ? allUsersData : [])
       .filter((row) => row?.type === 'student')
       .filter((row) => /^5/.test(String(row?.className || '').trim()))
-      .map((row) => formatPresenterLabel(`${String(row?.firstName || '').trim()} ${String(row?.lastName || '').trim()}`))
-      .filter(Boolean)
-      .filter((name) => {
-        const key = clean(name);
+      .map((row) => {
+        const firstName = String(row?.firstName || '').trim();
+        const lastName = String(row?.lastName || '').trim();
+        const label = formatPresenterLabel(`${firstName} ${lastName}`);
+        return {
+          label,
+          firstName,
+          lastName,
+          searchValue: clean(`${firstName} ${lastName}`),
+          firstNameValue: clean(firstName),
+          lastNameValue: clean(lastName)
+        };
+      })
+      .filter((entry) => Boolean(entry.label))
+      .filter((entry) => {
+        const key = clean(entry.label);
         if (!key || seen.has(key)) return false;
         seen.add(key);
         return true;
       })
-      .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
   }, [allUsersData]);
   const isValidPresenterSelection = (value = '') => {
     const normalized = clean(value);
-    return Boolean(normalized) && presenterSuggestions.some((name) => clean(name) === normalized);
+    return Boolean(normalized) && presenterSuggestions.some((entry) => clean(entry.label) === normalized);
   };
   const isPresenterValid = isValidPresenterSelection(activeSlide?.presenterName || '');
   const isActiveSlideValid = isPresenterValid && slideHasContent;
@@ -1069,7 +1100,11 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     const typed = clean(presenterSearchTarget.value);
     if (!typed) return [];
     return presenterSuggestions
-      .filter((name) => clean(name).includes(typed))
+      .filter((entry) => (
+        entry.firstNameValue.startsWith(typed)
+        || entry.lastNameValue.startsWith(typed)
+        || entry.searchValue.includes(typed)
+      ))
       .slice(0, 6);
   }, [presenterSuggestions, presenterSearchTarget]);
 
@@ -1124,6 +1159,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     <div className={`presentation-presenter-field ${compact ? 'presentation-presenter-field-compact' : ''}`}>
       <input
         className="presentation-presenter-short-input"
+        list="web5e-presenter-suggestions"
         value={slide?.presenterName || ''}
         onChange={(e) => {
           const nextValue = e.target.value;
@@ -1138,15 +1174,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       />
       {presenterSearchTarget?.type === 'slide' && presenterSearchTarget?.index === slideIndex && filteredPresenterSuggestions.length > 0 ? (
         <div className="suggestions presenter-suggestions">
-          {filteredPresenterSuggestions.map((name) => {
-            const parts = splitPresenterName(name);
+          {filteredPresenterSuggestions.map((entry) => {
+            const parts = splitPresenterName(entry.label);
             return (
               <button
-                key={`slide-${slideIndex}-${name}`}
+                key={`slide-${slideIndex}-${entry.label}`}
                 type="button"
-                className={`suggestion ${clean(slide?.presenterName || '') === clean(name) ? 'selected' : ''}`}
+                className={`suggestion ${clean(slide?.presenterName || '') === clean(entry.label) ? 'selected' : ''}`}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyPresenterSuggestion(name)}
+                onClick={() => applyPresenterSuggestion(entry.label)}
               >
                 <span>{parts.firstName} <strong>{parts.lastName || ''}</strong></span>
               </button>
@@ -1316,45 +1352,52 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     patchPresentation({ activeEditorTab: 'animation' });
     const slide = currentEditorCanvaSlide;
     const needsSprite = !String(slide?.animation?.actorImageUrl || '').trim();
-    if (!needsSprite) return;
+    if (!needsSprite) {
+      setAnimationImportMenuOpen(false);
+      return;
+    }
     pendingAnimationSpriteTargetRef.current = {
       slideIndex: currentEditorCanvaSlideIndex,
       slideNumber: editorCanvaStep
     };
-    window.setTimeout(() => pendingAnimationSpriteInputRef.current?.click(), 0);
+    setAnimationImportMenuOpen(true);
+  };
+  const applyPendingAnimationSpriteUrl = (nextUrl) => {
+    const safeUrl = String(nextUrl || '').trim();
+    const { slideIndex, slideNumber } = pendingAnimationSpriteTargetRef.current;
+    if (!safeUrl || slideIndex < 0) return;
+    const baseAnimation = presentation.slides[slideIndex]?.animation
+      ? attachAnimationMetadata(
+          presentation.slides[slideIndex].animation,
+          presentationNumber,
+          slideNumber || (slideIndex + 1),
+          presentation.presentationName,
+          presentation.slides[slideIndex]?.presenterName
+        )
+      : attachAnimationMetadata(
+          createAnimationBlockFromDraft({ title: `Animation slide ${slideNumber || (slideIndex + 1)}` }),
+          presentationNumber,
+          slideNumber || (slideIndex + 1),
+          presentation.presentationName,
+          presentation.slides[slideIndex]?.presenterName
+        );
+    patchSlide(slideIndex, {
+      animation: {
+        ...baseAnimation,
+        actorImageUrl: safeUrl
+      }
+    });
+    setPendingAnimationSpriteUrlInput('');
+    setAnimationImportMenuOpen(false);
+    pendingAnimationSpriteTargetRef.current = { slideIndex: -1, slideNumber: 0 };
+    if (pendingAnimationSpriteInputRef.current) pendingAnimationSpriteInputRef.current.value = '';
   };
   const handlePendingAnimationSpriteImport = async (fileList) => {
     const file = Array.from(fileList || []).find((row) => row.type.startsWith('image/'));
     if (!file) return;
-    const { slideIndex, slideNumber } = pendingAnimationSpriteTargetRef.current;
-    if (slideIndex < 0) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const nextUrl = String(reader.result || '');
-      if (!nextUrl) return;
-      const baseAnimation = presentation.slides[slideIndex]?.animation
-        ? attachAnimationMetadata(
-            presentation.slides[slideIndex].animation,
-            presentationNumber,
-            slideNumber || (slideIndex + 1),
-            presentation.presentationName,
-            presentation.slides[slideIndex]?.presenterName
-          )
-        : attachAnimationMetadata(
-            createAnimationBlockFromDraft({ title: `Animation slide ${slideNumber || (slideIndex + 1)}` }),
-            presentationNumber,
-            slideNumber || (slideIndex + 1),
-            presentation.presentationName,
-            presentation.slides[slideIndex]?.presenterName
-          );
-      patchSlide(slideIndex, {
-        animation: {
-          ...baseAnimation,
-          actorImageUrl: nextUrl
-        }
-      });
-      pendingAnimationSpriteTargetRef.current = { slideIndex: -1, slideNumber: 0 };
-      if (pendingAnimationSpriteInputRef.current) pendingAnimationSpriteInputRef.current.value = '';
+      applyPendingAnimationSpriteUrl(String(reader.result || ''));
     };
     reader.readAsDataURL(file);
   };
@@ -1533,6 +1576,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                 <div key={`setup-presenter-${index}`} className="presentation-presenter-field">
                   <input
                     className="presentation-presenter-short-input"
+                    list="web5e-presenter-suggestions"
                     value={value}
                     onChange={(e) => {
                       const nextValue = e.target.value;
@@ -1547,15 +1591,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   />
                   {presenterSearchTarget?.type === 'setup' && presenterSearchTarget?.index === index && filteredPresenterSuggestions.length > 0 ? (
                     <div className="suggestions presenter-suggestions">
-                      {filteredPresenterSuggestions.map((name) => {
-                        const parts = splitPresenterName(name);
+                      {filteredPresenterSuggestions.map((entry) => {
+                        const parts = splitPresenterName(entry.label);
                         return (
                           <button
-                            key={`setup-${index}-${name}`}
+                            key={`setup-${index}-${entry.label}`}
                             type="button"
-                            className={`suggestion ${clean(value) === clean(name) ? 'selected' : ''}`}
+                            className={`suggestion ${clean(value) === clean(entry.label) ? 'selected' : ''}`}
                             onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => applyPresenterSuggestion(name)}
+                            onClick={() => applyPresenterSuggestion(entry.label)}
                           >
                             <span>{parts.firstName} <strong>{parts.lastName || ''}</strong></span>
                           </button>
@@ -1581,6 +1625,11 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   return (
     <div className="presentation-shell">
       <div className="presentation-editor-head">
+        <datalist id="web5e-presenter-suggestions">
+          {presenterSuggestions.map((entry) => (
+            <option key={`presenter-option-${entry.label}`} value={entry.label} />
+          ))}
+        </datalist>
         <input
           ref={pendingAnimationSpriteInputRef}
           type="file"
@@ -1598,6 +1647,23 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                 onChange={(e) => setCanvaLiveUrlInput(e.target.value)}
                 placeholder="Coller le lien Canva"
               />
+              <div className="presentation-editor-field-actions">
+                <button
+                  type="button"
+                  className="presentation-slide-add"
+                  onClick={() => slidesImportInputRef.current?.click()}
+                >
+                  Importer PNG
+                </button>
+                <input
+                  ref={slidesImportInputRef}
+                  type="file"
+                  accept="image/*,.png"
+                  multiple
+                  className="hidden-file-input"
+                  onChange={(e) => void handleSlidesImport(e.target.files)}
+                />
+              </div>
             </label>
             <label className="presentation-editor-field">
               <span>Nombre de slides :</span>
@@ -1658,6 +1724,42 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               Supprimer
             </button>
           </div>
+          {presentation.activeEditorTab === 'animation' && animationImportMenuOpen ? (
+            <div
+              className="animation-import-mini-menu"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void handlePendingAnimationSpriteImport(event.dataTransfer.files);
+              }}
+              onPaste={(event) => handleUrlOrImagePaste(event, (nextValue) => applyPendingAnimationSpriteUrl(nextValue))}
+            >
+              <div className="animation-import-mini-menu-title">Sprite de depart</div>
+              <div className="animation-import-mini-menu-help">Glisse une image ici, colle une URL/image, ou importe un fichier.</div>
+              <input
+                className="presentation-slide-title"
+                value={pendingAnimationSpriteUrlInput}
+                onChange={(event) => setPendingAnimationSpriteUrlInput(event.target.value)}
+                placeholder="Coller une URL d'image"
+              />
+              <div className="animation-import-mini-menu-actions">
+                <button
+                  type="button"
+                  className="presentation-slide-add"
+                  onClick={() => applyPendingAnimationSpriteUrl(pendingAnimationSpriteUrlInput)}
+                >
+                  Utiliser URL
+                </button>
+                <button
+                  type="button"
+                  className="presentation-slide-add"
+                  onClick={() => pendingAnimationSpriteInputRef.current?.click()}
+                >
+                  Importer
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="slideshow-nav">
             <button
               type="button"
@@ -2224,6 +2326,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const [importDebug, setImportDebug] = useState(null);
   const [importOptions, setImportOptions] = useState([]);
   const [selectedImportId, setSelectedImportId] = useState('');
+  const [imageImportOptions, setImageImportOptions] = useState([]);
   const [audioMenuOpen, setAudioMenuOpen] = useState(false);
   const audioMenuCloseTimerRef = useRef(null);
   const [eraserActive, setEraserActive] = useState(false);
@@ -2257,6 +2360,30 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const openGeminiPopup = () => {
     if (typeof window === 'undefined') return;
     window.open('https://gemini.google.com/app', 'web5e-gemini', 'popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes');
+  };
+  const copyActiveActorToClipboard = async () => {
+    const spriteUrl = resolveWeb5eAssetUrl(String(actorRenderFrame || block?.actorImageUrl || ''));
+    if (!spriteUrl) {
+      flashNotice('Aucune image a copier');
+      return;
+    }
+    try {
+      const response = await fetch(spriteUrl);
+      const blob = await response.blob();
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new window.ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        flashNotice('Sprite copie');
+        return;
+      }
+    } catch (_) {}
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(spriteUrl);
+        flashNotice('URL du sprite copiee');
+        return;
+      }
+    } catch (_) {}
+    flashNotice('Copie impossible');
   };
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
@@ -2418,6 +2545,29 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [sliceToolOpen, selectedSliceBoxId]);
+
+  useEffect(() => {
+    if (!sliceToolOpen) return;
+    const onMouseMove = (event) => {
+      updateSliceDrag(event.clientX, event.clientY);
+    };
+    const onMouseUp = () => {
+      if (!sliceDragRef.current.active) return;
+      if (sliceDragRef.current.mode === 'create' && sliceDraftBox) {
+        setSliceBoxes((prev) => [...prev, sliceDraftBox]);
+        setSelectedSliceBoxId(sliceDraftBox.id);
+        setSliceDraftBox(null);
+        if (sliceCreateMode) setSliceCreateMode(false);
+      }
+      sliceDragRef.current = { id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' };
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [sliceToolOpen, sliceDraftBox, sliceCreateMode, sliceSourceSize.width, sliceSourceSize.height, sliceSource?.frame?.width, sliceSource?.frame?.height]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -2921,6 +3071,65 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     };
   };
 
+  const updateSliceDrag = (clientX, clientY) => {
+    if (!sliceDragRef.current.active || !slicePreviewRef.current) return;
+    const rect = slicePreviewRef.current.getBoundingClientRect();
+    const sourceWidth = Number(sliceSourceSize.width || sliceSource?.frame?.width || rect.width || 1);
+    const sourceHeight = Number(sliceSourceSize.height || sliceSource?.frame?.height || rect.height || 1);
+    const displayWidth = Math.max(1, rect.width);
+    const displayHeight = Math.max(1, rect.height);
+    const pointerX = ((clientX - rect.left) / displayWidth) * sourceWidth;
+    const pointerY = ((clientY - rect.top) / displayHeight) * sourceHeight;
+    if (sliceDragRef.current.mode === 'move') {
+      setSliceBoxes((prev) => prev.map((box) => (
+        box.id === sliceDragRef.current.id
+          ? normalizeSliceBox({
+              ...box,
+              x: pointerX - sliceDragRef.current.offsetX,
+              y: pointerY - sliceDragRef.current.offsetY
+            }, sourceWidth, sourceHeight)
+          : box
+      )));
+      return;
+    }
+    if (sliceDragRef.current.mode === 'resize') {
+      setSliceBoxes((prev) => prev.map((box) => {
+        if (box.id !== sliceDragRef.current.id) return box;
+        const handle = String(sliceDragRef.current.handle || '');
+        const right = Number(box.x || 0) + Number(box.width || 0);
+        const bottom = Number(box.y || 0) + Number(box.height || 0);
+        const nextBox = { ...box };
+        if (handle.includes('n')) {
+          nextBox.y = Math.min(pointerY, bottom - 12);
+          nextBox.height = bottom - nextBox.y;
+        }
+        if (handle.includes('s')) {
+          nextBox.height = Math.max(12, pointerY - Number(nextBox.y || 0));
+        }
+        if (handle.includes('w')) {
+          nextBox.x = Math.min(pointerX, right - 12);
+          nextBox.width = right - nextBox.x;
+        }
+        if (handle.includes('e')) {
+          nextBox.width = Math.max(12, pointerX - Number(nextBox.x || 0));
+        }
+        return normalizeSliceBox(nextBox, sourceWidth, sourceHeight);
+      }));
+      return;
+    }
+    if (sliceDragRef.current.mode === 'create' && sliceDraftBox) {
+      const startX = sliceDragRef.current.offsetX;
+      const startY = sliceDragRef.current.offsetY;
+      setSliceDraftBox(normalizeSliceBox({
+        ...sliceDraftBox,
+        x: Math.min(startX, pointerX),
+        y: Math.min(startY, pointerY),
+        width: Math.abs(pointerX - startX),
+        height: Math.abs(pointerY - startY)
+      }, sourceWidth, sourceHeight));
+    }
+  };
+
   const applySliceTool = async () => {
     if (!sliceSource?.frame?.url) return;
     const targetActionId = String(sliceSource.actionId || '');
@@ -3146,6 +3355,52 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       return;
     }
     flashNotice(`${availableAudios.length} audio${availableAudios.length > 1 ? 's' : ''} trouvé${availableAudios.length > 1 ? 's' : ''}`);
+  };
+
+  const loadPresenterSprites = async (actionId) => {
+    const presenterName = String(block?.presenterName || '').trim();
+    if (!presenterName) {
+      flashNotice("Choisis d'abord l'exposant");
+      return;
+    }
+    try {
+      const backupRes = await fetch(`/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`);
+      const backupData = await backupRes.json().catch(() => ({}));
+      if (!backupRes.ok || !backupData?.ok) {
+        setImageImportOptions([]);
+        updateAction(actionId, { mobileImportOpen: true });
+        flashNotice("Aucune image CondaWeb");
+        return;
+      }
+      const sourceRows = Array.isArray(backupData?.recordings) && backupData.recordings.length > 0
+        ? backupData.recordings
+        : [backupData];
+      const seen = new Set();
+      const nextOptions = sourceRows.flatMap((row, rowIndex) => {
+        const urls = Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : [];
+        return urls
+          .map((url, imageIndex) => ({
+            id: `${String(row?.id || rowIndex)}_${imageIndex}`,
+            url: String(url || '').trim(),
+            slideNumber: Math.max(1, Number(row?.slideNumber || backupData?.slideNumber || 1)),
+            selected: row?.selected === true
+          }))
+          .filter((item) => {
+            if (!item.url || seen.has(item.url)) return false;
+            seen.add(item.url);
+            return true;
+          });
+      });
+      setImageImportOptions(nextOptions);
+      updateAction(actionId, { mobileImportOpen: true });
+      flashNotice(nextOptions.length ? `${nextOptions.length} image${nextOptions.length > 1 ? 's' : ''} CondaWeb` : 'Aucune image CondaWeb');
+    } catch (_) {
+      flashNotice("Import images impossible");
+    }
+  };
+
+  const importPresenterSprite = (actionId, spriteUrl) => {
+    importActionFrameFromValue(actionId, spriteUrl);
   };
 
   const applyImportedAudio = async (audioId = '') => {
@@ -3418,6 +3673,18 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
               </>
             ) : null}
           </div>
+          {!readOnly ? (
+            <button
+              type="button"
+              className="animation-actor-copy-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                void copyActiveActorToClipboard();
+              }}
+            >
+              Copier
+            </button>
+          ) : null}
         </div>
         {!readOnly ? (
         <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + actorState.width + 12)}px, ${Number(actorState.y)}px)` }}>
@@ -3581,22 +3848,45 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                   <div className="animation-sprite-space-head">
                     <div className="animation-sprite-space-title">Sprites</div>
                     <div className="animation-sprite-space-actions">
-                      <button type="button" onClick={() => void autoCutoutSelectedSprite(action.id)}>Detourer</button>
-                      <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
-                      <button type="button" className="icon-btn" onClick={() => actionFileInputRefs.current[action.id]?.click()}>+</button>
+                      <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>+ordi</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (action.mobileImportOpen) {
+                            setImageImportOptions([]);
+                            updateAction(action.id, { mobileImportOpen: false });
+                            return;
+                          }
+                          void loadPresenterSprites(action.id);
+                        }}
+                      >
+                        +tel
+                      </button>
                     </div>
                   </div>
-                  {action.spriteUrlOpen ? (
-                    <div className="animation-sprite-url-row">
-                      <input
-                        value={action.frameUrlInput || ''}
-                        onChange={(e) => updateAction(action.id, { frameUrlInput: e.target.value })}
-                        placeholder="URL d'un sprite"
-                      />
-                      <button type="button" onClick={() => importActionFrameFromValue(action.id, action.frameUrlInput || '')}>Injecter</button>
+                  <div className="animation-sprite-drop-hint">Colle, glisse, ou ajoute des sprites ici.</div>
+                  {action.mobileImportOpen ? (
+                    <div className="animation-mobile-import-panel">
+                      {imageImportOptions.length > 0 ? (
+                        <div className="animation-frame-strip in-space">
+                          {imageImportOptions.map((option, optionIndex) => (
+                            <button
+                              key={String(option.id || `mobile_sprite_${optionIndex}`)}
+                              type="button"
+                              className="animation-frame-thumb from-mobile"
+                              onClick={() => importPresenterSprite(action.id, option.url)}
+                              title={`Slide ${option.slideNumber}${option.selected ? ' • choisi prof' : ''}`}
+                            >
+                              <img src={resolveWeb5eAssetUrl(option.url)} alt="" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="animation-frame-empty">Aucune image prof</div>
+                      )}
+                      <div className="animation-mobile-import-help">Le prof prend les photos dans CondaWeb / Exposés / Image. Clique sur une image pour l'ajouter à cette action.</div>
                     </div>
                   ) : null}
-                  <div className="animation-sprite-drop-hint">Colle, glisse, ou ajoute des sprites ici.</div>
                   <div className="animation-frame-strip in-space">
                     {block?.actorImageUrl ? (
                       <div
@@ -3635,6 +3925,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                       </div>
                     ))}
                     {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite</div>}
+                  </div>
+                  <div className="animation-sprite-space-footer">
+                    <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
+                    <button type="button" onClick={() => void autoCutoutSelectedSprite(action.id)}>Detourer</button>
                   </div>
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
@@ -3851,8 +4145,10 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
               className="animation-slice-preview"
               ref={slicePreviewRef}
               onMouseDown={(event) => {
-                const targetBoxId = event.target?.dataset?.boxId || '';
-                const resizeHandle = event.target?.dataset?.resizeHandle || '';
+                const handleTarget = event.target?.closest?.('[data-resize-handle]');
+                const boxTarget = event.target?.closest?.('[data-box-id]');
+                const targetBoxId = String(handleTarget?.dataset?.boxId || boxTarget?.dataset?.boxId || '');
+                const resizeHandle = String(handleTarget?.dataset?.resizeHandle || '');
                 const { sourceWidth, sourceHeight, displayWidth, displayHeight } = getSlicePreviewMetrics(event.currentTarget);
                 const rect = event.currentTarget.getBoundingClientRect();
                 const pointerX = ((event.clientX - rect.left) / Math.max(displayWidth, 1)) * sourceWidth;
@@ -3872,10 +4168,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                   event.preventDefault();
                   return;
                 }
-                if (!sliceCreateMode) {
-                  setSelectedSliceBoxId('');
-                  return;
-                }
+                setSelectedSliceBoxId('');
                 const nextBox = createSliceBox(pointerX, pointerY, sourceWidth * 0.16, sourceHeight * 0.2, sourceWidth, sourceHeight);
                 setSliceDraftBox(nextBox);
                 setSelectedSliceBoxId(nextBox.id);
@@ -3890,78 +4183,14 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
               }}
               onMouseMove={(event) => {
                 if (sliceDragRef.current.active) {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  const sourceWidth = Number(sliceSourceSize.width || sliceSource?.frame?.width || rect.width || 1);
-                  const sourceHeight = Number(sliceSourceSize.height || sliceSource?.frame?.height || rect.height || 1);
-                  const displayWidth = Math.max(1, rect.width);
-                  const displayHeight = Math.max(1, rect.height);
-                  const pointerX = ((event.clientX - rect.left) / displayWidth) * sourceWidth;
-                  const pointerY = ((event.clientY - rect.top) / displayHeight) * sourceHeight;
-                  if (sliceDragRef.current.mode === 'move') {
-                    setSliceBoxes((prev) => prev.map((box) => (
-                      box.id === sliceDragRef.current.id
-                        ? normalizeSliceBox({
-                            ...box,
-                            x: pointerX - sliceDragRef.current.offsetX,
-                            y: pointerY - sliceDragRef.current.offsetY
-                          }, sourceWidth, sourceHeight)
-                        : box
-                    )));
-                    return;
-                  }
-                  if (sliceDragRef.current.mode === 'resize') {
-                    setSliceBoxes((prev) => prev.map((box) => {
-                      if (box.id !== sliceDragRef.current.id) return box;
-                      const handle = String(sliceDragRef.current.handle || '');
-                      const right = Number(box.x || 0) + Number(box.width || 0);
-                      const bottom = Number(box.y || 0) + Number(box.height || 0);
-                      const nextBox = { ...box };
-                      if (handle.includes('n')) {
-                        nextBox.y = Math.min(pointerY, bottom - 12);
-                        nextBox.height = bottom - nextBox.y;
-                      }
-                      if (handle.includes('s')) {
-                        nextBox.height = Math.max(12, pointerY - Number(nextBox.y || 0));
-                      }
-                      if (handle.includes('w')) {
-                        nextBox.x = Math.min(pointerX, right - 12);
-                        nextBox.width = right - nextBox.x;
-                      }
-                      if (handle.includes('e')) {
-                        nextBox.width = Math.max(12, pointerX - Number(nextBox.x || 0));
-                      }
-                      return normalizeSliceBox(nextBox, sourceWidth, sourceHeight);
-                    }));
-                    return;
-                  }
-                  if (sliceDragRef.current.mode === 'create' && sliceDraftBox) {
-                    const startX = sliceDragRef.current.offsetX;
-                    const startY = sliceDragRef.current.offsetY;
-                    const nextBox = normalizeSliceBox({
-                      ...sliceDraftBox,
-                      x: Math.min(startX, pointerX),
-                      y: Math.min(startY, pointerY),
-                      width: Math.abs(pointerX - startX),
-                      height: Math.abs(pointerY - startY)
-                    }, sourceWidth, sourceHeight);
-                    setSliceDraftBox(nextBox);
-                  }
+                  updateSliceDrag(event.clientX, event.clientY);
                   return;
                 }
               }}
-              onMouseUp={() => {
-                if (sliceDragRef.current.active) {
-                  if (sliceDragRef.current.mode === 'create' && sliceDraftBox) {
-                    setSliceBoxes((prev) => [...prev, sliceDraftBox]);
-                    setSelectedSliceBoxId(sliceDraftBox.id);
-                    setSliceDraftBox(null);
-                    setSliceCreateMode(false);
-                  }
+              onMouseLeave={() => {
+                if (!sliceDragRef.current.active) {
                   sliceDragRef.current = { id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' };
                 }
-              }}
-              onMouseLeave={() => {
-                sliceDragRef.current = { id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' };
               }}
             >
               <img
@@ -4005,9 +4234,13 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                     {selectedSliceBoxId === box.id ? (
                       <>
                         <span className="animation-slice-box-handle nw" data-box-id={box.id} data-resize-handle="nw" />
+                        <span className="animation-slice-box-handle n" data-box-id={box.id} data-resize-handle="n" />
                         <span className="animation-slice-box-handle ne" data-box-id={box.id} data-resize-handle="ne" />
+                        <span className="animation-slice-box-handle e" data-box-id={box.id} data-resize-handle="e" />
                         <span className="animation-slice-box-handle sw" data-box-id={box.id} data-resize-handle="sw" />
+                        <span className="animation-slice-box-handle s" data-box-id={box.id} data-resize-handle="s" />
                         <span className="animation-slice-box-handle se" data-box-id={box.id} data-resize-handle="se" />
+                        <span className="animation-slice-box-handle w" data-box-id={box.id} data-resize-handle="w" />
                       </>
                     ) : null}
                   </button>

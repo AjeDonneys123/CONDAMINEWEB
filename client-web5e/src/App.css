@@ -951,6 +951,12 @@
   font-size: 0.95rem;
 }
 
+.presentation-editor-field-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
 .presentation-mode-tabs,
 .presentation-group-row,
 .presentation-validation-bar {
@@ -999,6 +1005,33 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.animation-import-mini-menu {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px dashed rgba(28, 41, 67, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.animation-import-mini-menu-title {
+  font-size: 0.82rem;
+  font-weight: 900;
+  color: #1d2942;
+}
+
+.animation-import-mini-menu-help {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.animation-import-mini-menu-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .slideshow-nav {
@@ -2037,6 +2070,33 @@
   gap: 8px;
 }
 
+.animation-mobile-import-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px dashed rgba(28, 41, 67, 0.16);
+  background: #f8fafc;
+}
+
+.animation-mobile-import-qr-wrap {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.animation-mobile-import-help {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.animation-sprite-space-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
 .animation-sprite-space-title {
   font-size: 0.8rem;
   font-weight: 800;
@@ -2292,6 +2352,7 @@
   border: 2px solid #60a5fa;
   box-shadow: 0 4px 10px rgba(28, 41, 67, 0.16);
   pointer-events: auto;
+  z-index: 2;
 }
 
 .animation-slice-box-handle.nw {
@@ -2306,16 +2367,40 @@
   cursor: nesw-resize;
 }
 
+.animation-slice-box-handle.n {
+  top: -7px;
+  left: calc(50% - 6px);
+  cursor: ns-resize;
+}
+
+.animation-slice-box-handle.e {
+  top: calc(50% - 6px);
+  right: -7px;
+  cursor: ew-resize;
+}
+
 .animation-slice-box-handle.sw {
   bottom: -7px;
   left: -7px;
   cursor: nesw-resize;
 }
 
+.animation-slice-box-handle.s {
+  bottom: -7px;
+  left: calc(50% - 6px);
+  cursor: ns-resize;
+}
+
 .animation-slice-box-handle.se {
   right: -7px;
   bottom: -7px;
   cursor: nwse-resize;
+}
+
+.animation-slice-box-handle.w {
+  top: calc(50% - 6px);
+  left: -7px;
+  cursor: ew-resize;
 }
 
 .animation-slice-actions {

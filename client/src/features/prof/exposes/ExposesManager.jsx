@@ -45,7 +45,7 @@ const toEmbeddableCanvasUrl = (raw = '') => {
     }
 };
 
-export default function ExposesManager({ globalClass }) {
+export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState([]);
     const [students, setStudents] = useState([]);
@@ -58,6 +58,8 @@ export default function ExposesManager({ globalClass }) {
     const [previewingRecordingId, setPreviewingRecordingId] = useState('');
     const [savingPitch, setSavingPitch] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [studioTab, setStudioTab] = useState('audio');
+    const [uploadingImages, setUploadingImages] = useState(false);
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -65,6 +67,7 @@ export default function ExposesManager({ globalClass }) {
     const startedAtRef = React.useRef(0);
     const timerRef = React.useRef(null);
     const previewAudioRef = React.useRef(null);
+    const imageInputRef = React.useRef(null);
     const exposeGridCols = 6;
 
     const classStudents = useMemo(() => {
@@ -160,7 +163,12 @@ export default function ExposesManager({ globalClass }) {
             slideNumber: Math.max(1, Number(selectedEntry?.presenterSlideNumber || guessSlideNumberFromText(selectedEntry?.slidesText || '1'))),
             recordingPitch: Math.max(0.5, Math.min(2, Number(selectedEntry?.recordingPitch || 1))),
             recordings,
-            selectedRecordingId: String(selectedEntry?._id || '')
+            selectedRecordingId: String(selectedEntry?._id || ''),
+            spriteImageUrls: (expose?.presentations || [])
+                .filter((row) => String(row?.studentId || '') === studentId)
+                .flatMap((row) => (Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : []))
+                .map((url) => String(url || '').trim())
+                .filter(Boolean)
         };
     }, [globalClass]);
 
@@ -414,6 +422,43 @@ export default function ExposesManager({ globalClass }) {
         }
     };
 
+    const uploadPresenterImages = async (fileList) => {
+        if (!selectedRecorder?.studentId || !fileList?.length) return;
+        setUploadingImages(true);
+        try {
+            const expose = await ensureActiveExpose();
+            const fd = new FormData();
+            fd.append('studentId', String(selectedRecorder.studentId || ''));
+            fd.append('presentationTitle', String(selectedRecorder.presentationTitle || ''));
+            fd.append('presenterName', String(selectedRecorder.presenterName || selectedRecorder.studentLabel || ''));
+            fd.append('slideNumber', String(selectedRecorder.slideNumber || 1));
+            Array.from(fileList).forEach((file) => {
+                fd.append('images', file, file.name || `sprite_${Date.now()}.png`);
+            });
+            const res = await fetch(`/api/exposes/${encodeURIComponent(String(expose._id))}/presenter-images`, {
+                method: 'POST',
+                body: fd
+            });
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Echec import images');
+            await loadData();
+        } catch (e) {
+            alert(e.message || 'Echec import images');
+        } finally {
+            setUploadingImages(false);
+            if (imageInputRef.current) imageInputRef.current.value = '';
+        }
+    };
+
+    const openScanSessionForSprites = () => {
+        const params = new URLSearchParams();
+        params.set('profTab', 'scans');
+        if (globalClassId) params.set('classId', String(globalClassId));
+        params.set('scanAuto', '1');
+        params.set('scanTitle', `Sprites ${selectedRecorder?.studentLabel || 'Eleve'}`);
+        window.open(`${window.location.origin}?${params.toString()}`, '_blank', 'noopener,noreferrer');
+    };
+
     return (
         <div className="p-6 space-y-4">
             <div className="bg-slate-50 border border-slate-200 rounded-[28px] p-4">
@@ -454,6 +499,7 @@ export default function ExposesManager({ globalClass }) {
                                         onClick={() => {
                                             const next = buildRecorderState(student, activeExpose);
                                             setSelectedRecorder(next);
+                                            setStudioTab('audio');
                                             const selectedEntry = next.recordings.find((row) => String(row?._id || '') === String(next.selectedRecordingId)) || next.recordings[0] || null;
                                             setRecordingSec(Number(selectedEntry?.recordingDurationSec || 0));
                                         }}
@@ -487,144 +533,97 @@ export default function ExposesManager({ globalClass }) {
                 </div>
             </div>
 
-            {selectedRecorder && (
+            {selectedRecorder ? (
                 <div className="fixed inset-0 z-[140] bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-6">
                     <div className="w-full max-w-4xl rounded-[30px] border border-slate-200 bg-white shadow-2xl overflow-hidden">
                         <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50 flex items-center justify-between gap-4">
                             <div>
-                                <div className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-500">Studio Audio Exposé</div>
+                                <div className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-500">Studio Exposé</div>
                                 <div className="text-3xl font-black uppercase text-slate-800 mt-1">{selectedRecorder.studentLabel}</div>
                                 <div className="text-[11px] font-black uppercase text-slate-400 mt-1">{globalClass || 'CLASSE'}</div>
                             </div>
-                            <button
-                                type="button"
-                                className="w-12 h-12 rounded-full bg-white border border-slate-200 text-slate-700 font-black text-xl"
-                                onClick={() => setSelectedRecorder(null)}
-                            >
-                                ×
-                            </button>
+                            <button type="button" className="w-12 h-12 rounded-full bg-white border border-slate-200 text-slate-700 font-black text-xl" onClick={() => setSelectedRecorder(null)}>×</button>
                         </div>
                         <div className="p-6 space-y-5">
-                            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                                <div className="flex flex-wrap items-center gap-3">
-                                    {!recording ? (
-                                        <button
-                                            type="button"
-                                            className="px-5 py-3 rounded-2xl bg-red-500 text-white font-black text-[12px] uppercase shadow-lg"
-                                            onClick={() => void startRecording()}
-                                            disabled={uploadingRecording}
-                                        >
-                                            Rec
-                                        </button>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-black text-[12px] uppercase shadow-lg"
-                                            onClick={stopRecording}
-                                        >
-                                            Stop
-                                        </button>
-                                    )}
-                                    <div className="px-4 py-3 rounded-2xl bg-white border border-slate-200 text-[12px] font-black text-slate-600">
-                                        {recording ? `Enregistrement ${recordingSec}s` : (uploadingRecording ? 'Envoi...' : 'Prêt')}
-                                    </div>
-                                    <div className="text-[12px] font-black text-slate-500">
-                                        {selectedRecorder.presenterName || selectedRecorder.studentLabel}
-                                    </div>
-                                </div>
+                            <div className="flex items-center gap-3">
+                                <button type="button" className={`px-4 py-2 rounded-2xl font-black text-[12px] uppercase border ${studioTab === 'audio' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-700'}`} onClick={() => setStudioTab('audio')}>Audio</button>
+                                <button type="button" className={`px-4 py-2 rounded-2xl font-black text-[12px] uppercase border ${studioTab === 'image' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-700'}`} onClick={() => setStudioTab('image')}>Image</button>
                             </div>
 
-                            <div className="space-y-3">
-                                {(selectedRecorder.recordings || []).length === 0 && (
-                                    <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-black text-slate-400">
-                                        Aucun audio enregistré.
-                                    </div>
-                                )}
-                                {(selectedRecorder.recordings || []).map((recordingEntry, index) => {
-                                    const isSelected = Boolean(recordingEntry?.selectedForPresenter);
-                                    const isPreviewing = String(previewingRecordingId || '') === String(recordingEntry?._id || '');
-                                    return (
-                                        <div
-                                            key={String(recordingEntry?._id || `recording_${index}`)}
-                                            className={`rounded-[22px] border px-4 py-4 flex flex-wrap items-center gap-3 ${
-                                                isSelected ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-white'
-                                            }`}
-                                        >
-                                            <div className="min-w-[170px]">
-                                                <div className="text-sm font-black text-slate-800">
-                                                    Rec {index + 1}
-                                                </div>
-                                                <div className="text-[11px] font-black uppercase text-slate-500 mt-1">
-                                                    {Number(recordingEntry?.recordingDurationSec || 0)}s
-                                                    {isSelected ? ' • sélectionné' : ''}
-                                                </div>
+                            {studioTab === 'audio' ? (
+                                <div className="space-y-5">
+                                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            {!recording ? (
+                                                <button type="button" className="px-5 py-3 rounded-2xl bg-red-500 text-white font-black text-[12px] uppercase shadow-lg" onClick={() => void startRecording()} disabled={uploadingRecording}>Rec</button>
+                                            ) : (
+                                                <button type="button" className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-black text-[12px] uppercase shadow-lg" onClick={stopRecording}>Stop</button>
+                                            )}
+                                            <div className="px-4 py-3 rounded-2xl bg-white border border-slate-200 text-[12px] font-black text-slate-600">
+                                                {recording ? `Enregistrement ${recordingSec}s` : (uploadingRecording ? 'Envoi...' : 'Prêt')}
                                             </div>
-                                            <div className="flex flex-wrap items-center gap-2 ml-auto">
-                                                <button
-                                                    type="button"
-                                                    className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]"
-                                                    onClick={() => togglePreview(recordingEntry)}
-                                                >
-                                                    {isPreviewing ? 'Stop' : 'Play'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]"
-                                                    onClick={() => {
-                                                        applyPitchPreset(recordingEntry, 'vite');
-                                                        togglePreview(recordingEntry, 1.75);
-                                                    }}
-                                                    disabled={savingPitch}
-                                                >
-                                                    Vite
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]"
-                                                    onClick={() => {
-                                                        applyPitchPreset(recordingEntry, 'lent');
-                                                        togglePreview(recordingEntry, 0.8);
-                                                    }}
-                                                    disabled={savingPitch}
-                                                >
-                                                    Lent
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`px-4 py-2 rounded-2xl font-black text-[12px] ${
-                                                        isSelected
-                                                            ? 'bg-indigo-600 text-white'
-                                                            : 'border border-slate-200 bg-white text-slate-700'
-                                                    }`}
-                                                    onClick={() => void selectRecording(recordingEntry?._id)}
-                                                >
-                                                    {isSelected ? 'Choisi' : 'Choisir'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="w-10 h-10 rounded-full border border-red-200 bg-red-50 text-red-600 font-black"
-                                                    onClick={() => void deleteRecording(recordingEntry?._id)}
-                                                >
-                                                    X
-                                                </button>
-                                            </div>
+                                            <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
                                         </div>
-                                    );
-                                })}
-                                <div className="flex justify-end">
-                                    <button
-                                        type="button"
-                                        className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase"
-                                        onClick={() => setSelectedRecorder(null)}
-                                    >
-                                        Quitter
-                                    </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {(selectedRecorder.recordings || []).length === 0 ? (
+                                            <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-black text-slate-400">Aucun audio enregistré.</div>
+                                        ) : null}
+                                        {(selectedRecorder.recordings || []).map((recordingEntry, index) => {
+                                            const isSelected = Boolean(recordingEntry?.selectedForPresenter);
+                                            const isPreviewing = String(previewingRecordingId || '') === String(recordingEntry?._id || '');
+                                            return (
+                                                <div key={String(recordingEntry?._id || `recording_${index}`)} className={`rounded-[22px] border px-4 py-4 flex flex-wrap items-center gap-3 ${isSelected ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-white'}`}>
+                                                    <div className="min-w-[170px]">
+                                                        <div className="text-sm font-black text-slate-800">Rec {index + 1}</div>
+                                                        <div className="text-[11px] font-black uppercase text-slate-500 mt-1">
+                                                            {Number(recordingEntry?.recordingDurationSec || 0)}s
+                                                            {isSelected ? ' • sélectionné' : ''}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-2 ml-auto">
+                                                        <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]" onClick={() => togglePreview(recordingEntry)}>{isPreviewing ? 'Stop' : 'Play'}</button>
+                                                        <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]" onClick={() => { applyPitchPreset(recordingEntry, 'vite'); togglePreview(recordingEntry, 1.75); }} disabled={savingPitch}>Vite</button>
+                                                        <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]" onClick={() => { applyPitchPreset(recordingEntry, 'lent'); togglePreview(recordingEntry, 0.8); }} disabled={savingPitch}>Lent</button>
+                                                        <button type="button" className={`px-4 py-2 rounded-2xl font-black text-[12px] ${isSelected ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`} onClick={() => void selectRecording(recordingEntry?._id)}>{isSelected ? 'Choisi' : 'Choisir'}</button>
+                                                        <button type="button" className="w-10 h-10 rounded-full border border-red-200 bg-red-50 text-red-600 font-black" onClick={() => void deleteRecording(recordingEntry?._id)}>X</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={openScanSessionForSprites}>Ouvrir session scan</button>
+                                            <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
+                                        </div>
+                                        <div className="mt-3 text-[12px] font-black text-slate-400">Le prof ouvre une nouvelle session Scan pour photographier les sprites de cet élève.</div>
+                                    </div>
+                                    {(selectedRecorder.spriteImageUrls || []).length > 0 ? (
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            {(selectedRecorder.spriteImageUrls || []).map((url, index) => (
+                                                <div key={`${url}_${index}`} className="rounded-[18px] border border-slate-200 bg-slate-50 p-2">
+                                                    <img src={toEmbeddableCanvasUrl(url) || url} alt={`Sprite ${index + 1}`} className="w-full h-32 object-contain rounded-xl bg-white" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-black text-slate-400">Aucune image enregistrée.</div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end">
+                                <button type="button" className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-black text-[12px] uppercase" onClick={() => setSelectedRecorder(null)}>Quitter</button>
                             </div>
                         </div>
                     </div>
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }
