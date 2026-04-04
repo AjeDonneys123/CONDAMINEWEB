@@ -404,6 +404,58 @@ router.post('/:id/presenter-images', upload.array('images'), async (req, res) =>
     }
 });
 
+router.delete('/:id/presenter-image', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const studentId = String(req.body?.studentId || '').trim();
+        const presenterName = String(req.body?.presenterName || '').trim();
+        const slideNumber = Math.max(1, Number(req.body?.slideNumber || 0));
+        const imageUrl = String(req.body?.imageUrl || '').trim();
+
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!studentId) return res.status(400).json({ error: 'studentId requis' });
+        if (!presenterName) return res.status(400).json({ error: 'presenterName requis' });
+        if (!slideNumber) return res.status(400).json({ error: 'slideNumber requis' });
+        if (!imageUrl) return res.status(400).json({ error: 'imageUrl requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const presenterKey = clean(presenterName);
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+
+        let removed = false;
+        row.presentations = entries.map((entry) => {
+            const matchesEntry = (
+                String(entry?.studentId || '') === studentId
+                && clean(entry?.presenterName || '') === presenterKey
+                && Math.max(1, Number(entry?.presenterSlideNumber || 1)) === slideNumber
+            );
+            if (!matchesEntry) return entry;
+            const nextUrls = (Array.isArray(entry?.spriteImageUrls) ? entry.spriteImageUrls : [])
+                .map((url) => String(url || '').trim())
+                .filter((url) => {
+                    const keep = url !== imageUrl;
+                    if (!keep) removed = true;
+                    return keep;
+                });
+            return {
+                ...entry,
+                spriteImageUrls: nextUrls,
+                updatedAt: removed ? new Date() : entry.updatedAt
+            };
+        });
+
+        if (!removed) return res.status(404).json({ error: 'Image introuvable' });
+        await row.save();
+        return res.json({ ok: true });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/:id/presenter-recording-settings', async (req, res) => {
     try {
         const exposeId = String(req.params.id || '').trim();

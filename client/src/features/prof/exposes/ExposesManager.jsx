@@ -60,6 +60,9 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [studioTab, setStudioTab] = useState('audio');
     const [uploadingImages, setUploadingImages] = useState(false);
+    const [imageCameraError, setImageCameraError] = useState('');
+    const [imageCameraReady, setImageCameraReady] = useState(false);
+    const [pendingImages, setPendingImages] = useState([]);
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -68,6 +71,8 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const timerRef = React.useRef(null);
     const previewAudioRef = React.useRef(null);
     const imageInputRef = React.useRef(null);
+    const imageVideoRef = React.useRef(null);
+    const imageCanvasRef = React.useRef(null);
     const exposeGridCols = 6;
 
     const classStudents = useMemo(() => {
@@ -126,7 +131,53 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
-    }, []);
+        pendingImages.forEach((item) => {
+            try { URL.revokeObjectURL(item.previewUrl); } catch (_) {}
+        });
+    }, [pendingImages]);
+
+    useEffect(() => {
+        const stopImageCamera = () => {
+            if (imageVideoRef.current?.srcObject) {
+                imageVideoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+                imageVideoRef.current.srcObject = null;
+            }
+            setImageCameraReady(false);
+        };
+
+        const startImageCamera = async () => {
+            if (!selectedRecorder || studioTab !== 'image') {
+                stopImageCamera();
+                return;
+            }
+            setImageCameraError('');
+            setImageCameraReady(false);
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: 'environment' } },
+                    audio: false
+                });
+                if (imageVideoRef.current) {
+                    imageVideoRef.current.srcObject = stream;
+                    imageVideoRef.current.onloadedmetadata = () => setImageCameraReady(true);
+                }
+            } catch (error) {
+                setImageCameraError("Caméra indisponible.");
+            }
+        };
+
+        void startImageCamera();
+        return () => stopImageCamera();
+    }, [selectedRecorder, studioTab]);
+
+    useEffect(() => {
+        setPendingImages((prev) => {
+            prev.forEach((item) => {
+                try { URL.revokeObjectURL(item.previewUrl); } catch (_) {}
+            });
+            return [];
+        });
+    }, [selectedRecorder?.studentId, studioTab]);
 
     const filtered = useMemo(() => {
         const key = norm(globalClass || '');
@@ -450,13 +501,67 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         }
     };
 
-    const openScanSessionForSprites = () => {
-        const params = new URLSearchParams();
-        params.set('profTab', 'scans');
-        if (globalClassId) params.set('classId', String(globalClassId));
-        params.set('scanAuto', '1');
-        params.set('scanTitle', `Sprites ${selectedRecorder?.studentLabel || 'Eleve'}`);
-        window.open(`${window.location.origin}?${params.toString()}`, '_blank', 'noopener,noreferrer');
+    const capturePresenterImage = () => {
+        const video = imageVideoRef.current;
+        const canvas = imageCanvasRef.current;
+        if (!video || !canvas || !imageCameraReady) return;
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+            if (!blob) return;
+            const file = new File([blob], `sprite_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const previewUrl = URL.createObjectURL(file);
+            setPendingImages((prev) => [...prev, {
+                id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                file,
+                previewUrl
+            }]);
+        }, 'image/jpeg', 0.92);
+    };
+
+    const removePendingImage = (imageId) => {
+        setPendingImages((prev) => {
+            const target = prev.find((item) => item.id === imageId);
+            if (target?.previewUrl) {
+                try { URL.revokeObjectURL(target.previewUrl); } catch (_) {}
+            }
+            return prev.filter((item) => item.id !== imageId);
+        });
+    };
+
+    const uploadPendingImages = async () => {
+        if (!pendingImages.length) return;
+        await uploadPresenterImages(pendingImages.map((item) => item.file));
+        setPendingImages((prev) => {
+            prev.forEach((item) => {
+                try { URL.revokeObjectURL(item.previewUrl); } catch (_) {}
+            });
+            return [];
+        });
+    };
+
+    const deletePresenterImage = async (imageUrl) => {
+        if (!activeExpose?._id || !selectedRecorder?.studentId || !imageUrl) return;
+        try {
+            const res = await fetch(`/api/exposes/${encodeURIComponent(String(activeExpose._id))}/presenter-image`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: String(selectedRecorder.studentId || ''),
+                    presenterName: String(selectedRecorder.presenterName || selectedRecorder.studentLabel || ''),
+                    slideNumber: String(selectedRecorder.slideNumber || 1),
+                    imageUrl: String(imageUrl || '')
+                })
+            });
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Suppression image impossible');
+            await loadData();
+        } catch (e) {
+            alert(e.message || 'Suppression image impossible');
+        }
     };
 
     return (
@@ -597,16 +702,58 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                             ) : (
                                 <div className="space-y-4">
                                     <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                                        <div className="flex flex-wrap items-center gap-3">
-                                            <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={openScanSessionForSprites}>Ouvrir session scan</button>
+                                        <div className="flex flex-wrap items-center gap-3 mb-3">
+                                            <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={capturePresenterImage} disabled={!imageCameraReady || uploadingImages}>
+                                                Prendre photo
+                                            </button>
+                                            <button type="button" className="px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 font-black text-[12px] uppercase shadow-sm disabled:opacity-40" onClick={() => void uploadPendingImages()} disabled={!pendingImages.length || uploadingImages}>
+                                                {uploadingImages ? 'Envoi...' : 'Envoyer'}
+                                            </button>
                                             <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
                                         </div>
-                                        <div className="mt-3 text-[12px] font-black text-slate-400">Le prof ouvre une nouvelle session Scan pour photographier les sprites de cet élève.</div>
+                                        <div className="rounded-[18px] overflow-hidden bg-slate-900 min-h-[240px] flex items-center justify-center">
+                                            {imageCameraError ? (
+                                                <div className="text-white font-black text-sm">{imageCameraError}</div>
+                                            ) : (
+                                                <video
+                                                    ref={imageVideoRef}
+                                                    autoPlay
+                                                    playsInline
+                                                    muted
+                                                    className="w-full max-h-[360px] object-cover"
+                                                />
+                                            )}
+                                        </div>
+                                        <canvas ref={imageCanvasRef} className="hidden" />
                                     </div>
+                                    {pendingImages.length > 0 ? (
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            {pendingImages.map((item, index) => (
+                                                <div key={item.id} className="relative rounded-[18px] border border-indigo-200 bg-indigo-50 p-2">
+                                                    <button
+                                                        type="button"
+                                                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white border border-red-200 text-red-600 font-black"
+                                                        onClick={() => removePendingImage(item.id)}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                    <img src={item.previewUrl} alt={`Local ${index + 1}`} className="w-full h-32 object-cover rounded-xl bg-white" />
+                                                    <div className="mt-2 text-[11px] font-black text-indigo-600">Local</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                     {(selectedRecorder.spriteImageUrls || []).length > 0 ? (
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             {(selectedRecorder.spriteImageUrls || []).map((url, index) => (
-                                                <div key={`${url}_${index}`} className="rounded-[18px] border border-slate-200 bg-slate-50 p-2">
+                                                <div key={`${url}_${index}`} className="relative rounded-[18px] border border-slate-200 bg-slate-50 p-2">
+                                                    <button
+                                                        type="button"
+                                                        className="absolute top-2 right-2 z-10 w-8 h-8 rounded-full bg-white border border-red-200 text-red-600 font-black"
+                                                        onClick={() => void deletePresenterImage(url)}
+                                                    >
+                                                        ×
+                                                    </button>
                                                     <img src={toEmbeddableCanvasUrl(url) || url} alt={`Sprite ${index + 1}`} className="w-full h-32 object-contain rounded-xl bg-white" />
                                                 </div>
                                             ))}
