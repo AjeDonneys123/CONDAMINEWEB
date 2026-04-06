@@ -3,6 +3,7 @@ import './App.css';
 
 const WEB5E_SESSION_KEY = 'web5eBridgeSession';
 const WEB5E_LOCAL_CONTENT_KEY = 'web5eLocalContentV1';
+const WEB5E_PUBLIC_CACHE_KEY = 'web5ePublicEntriesV1';
 const WEB5E_VERSION_NAME = 'Orion Slides';
 
 const SECTION_CONFIG = {
@@ -575,6 +576,23 @@ function readLocalWeb5eContent() {
 function writeLocalWeb5eContent(content) {
   try {
     window.localStorage.setItem(WEB5E_LOCAL_CONTENT_KEY, JSON.stringify(content || {}));
+  } catch (_) {}
+}
+
+function readPublicEntriesCache() {
+  try {
+    const raw = window.localStorage.getItem(WEB5E_PUBLIC_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writePublicEntriesCache(entriesByKey) {
+  try {
+    window.localStorage.setItem(WEB5E_PUBLIC_CACHE_KEY, JSON.stringify(entriesByKey || {}));
   } catch (_) {}
 }
 
@@ -4939,6 +4957,7 @@ export default function App() {
   useEffect(() => {
     const loadWeb5e = async () => {
       const localContent = isLocalSessionMode ? readLocalWeb5eContent() : null;
+      const cachedPublicEntries = readPublicEntriesCache();
       if (localContent && typeof localContent === 'object') {
         setContentMap((prev) => ({ ...prev, ...localContent }));
       }
@@ -4973,12 +4992,29 @@ export default function App() {
           nextContentMap[sectionKey] = { ...(DEFAULT_CONTENT[sectionKey] || {}), ...(nextContentMap[sectionKey] || {}) };
         });
 
+        const mergedPublicEntriesByKey = { ...cachedPublicEntries };
+        Object.entries(nextPublicEntriesByKey).forEach(([key, rows]) => {
+          const nextRows = Array.isArray(rows) ? rows : [];
+          const cachedRows = Array.isArray(mergedPublicEntriesByKey[key]) ? mergedPublicEntriesByKey[key] : [];
+          const seen = new Set();
+          mergedPublicEntriesByKey[key] = [...nextRows, ...cachedRows].filter((row) => {
+            const rowId = String(row?._id || '');
+            if (rowId && seen.has(rowId)) return false;
+            if (rowId) seen.add(rowId);
+            return true;
+          });
+        });
+
         setSiteData(data.site || null);
         setTabDocsByKey(nextTabDocs);
         setEntryDocsByKey(nextEntryDocs);
-        setPublicEntriesByKey(nextPublicEntriesByKey);
+        setPublicEntriesByKey(mergedPublicEntriesByKey);
+        writePublicEntriesCache(mergedPublicEntriesByKey);
         setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
       } catch (_) {
+        if (Object.keys(cachedPublicEntries).length > 0) {
+          setPublicEntriesByKey(cachedPublicEntries);
+        }
       } finally {
         if (isLocalSessionMode) setLocalContentReady(true);
       }
@@ -5194,7 +5230,9 @@ export default function App() {
         const existingIndex = nextRows.findIndex((row) => String(row?._id || '') === String(data.entry?._id || ''));
         if (existingIndex >= 0) nextRows[existingIndex] = data.entry;
         else nextRows.unshift(data.entry);
-        return { ...prev, [docKey]: nextRows };
+        const nextState = { ...prev, [docKey]: nextRows };
+        writePublicEntriesCache(nextState);
+        return nextState;
       });
     } catch (error) {
       console.error('WEB5E save failed', error);
