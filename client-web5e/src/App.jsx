@@ -344,6 +344,19 @@ function isPresentationReadyForPublication(block = {}) {
   return hasAllPresenters && hasOneValidQcm;
 }
 
+function buildPresentationPublicationKey(presentation = {}) {
+  const normalized = normalizePresentationBlock(presentation);
+  const presenters = (Array.isArray(normalized.slides) ? normalized.slides : [])
+    .map((slide) => String(slide?.presenterName || '').trim())
+    .join('|');
+  return [
+    clean(normalized.presentationName || ''),
+    String(normalized.canvaLiveUrl || '').trim(),
+    String(normalized.canvaSlideCount || 0),
+    presenters
+  ].join('::');
+}
+
 function createQcmQuestion(index = 0) {
   return {
     id: `qcm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -2594,9 +2607,9 @@ function AnimationBlockEditor({
   const spriteEditorEraseStateRef = useRef(false);
   const spriteEditorDirtyRef = useRef(null);
   const slicePreviewRef = useRef(null);
-  const openGeminiPopup = () => {
+  const openChatGptPopup = () => {
     if (typeof window === 'undefined') return;
-    window.open('https://gemini.google.com/app', 'web5e-gemini', 'popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes');
+    window.open('https://chatgpt.com/', 'web5e-chatgpt', 'popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes');
   };
   const toggleActorDocked = () => {
     const nextDocked = !actorDocked;
@@ -4233,7 +4246,7 @@ function AnimationBlockEditor({
                   </div>
                 ) : null}
               </div>
-              <button type="button" className="animation-gemini-btn" onClick={openGeminiPopup}>Gemini</button>
+              <button type="button" className="animation-gemini-btn" onClick={openChatGptPopup}>ChatGPT</button>
               {!readOnly ? <button type="button" className="animation-action-remove" onClick={onRemove}>×</button> : null}
             </div>
           )}
