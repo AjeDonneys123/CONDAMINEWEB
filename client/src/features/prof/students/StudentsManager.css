@@ -36,3 +36,153 @@
 .corr-footer { padding: 1.5rem; background: white; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 15px; }
 .corr-btn-save { padding: 1rem 3rem; background: #16a34a; color: white; border-radius: 15px; font-weight: 900; border: none; cursor: pointer; }
 .corr-btn-cancel { padding: 1rem 2rem; background: #f1f5f9; color: #64748b; border-radius: 15px; font-weight: 800; border: none; cursor: pointer; }
+
+.students-activity-head.is-clickable {
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+.students-activity-head.is-clickable:hover { background: #eff6ff; color: #1d4ed8; }
+.students-activity-head-button {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.students-board-card,
+.students-board-editor {
+    background: white;
+    width: min(96vw, 1400px);
+    max-height: 90vh;
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: 0 40px 120px rgba(15, 23, 42, 0.45);
+    display: flex;
+    flex-direction: column;
+}
+
+.students-board-editor { width: min(96vw, 1180px); }
+
+.students-board-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 24px 28px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.students-board-title { margin: 0; font-size: 1.6rem; font-weight: 900; color: #1e293b; text-transform: uppercase; }
+.students-board-subtitle { margin: 4px 0 0; font-size: 0.78rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+
+.students-board-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(220px, 1fr));
+    gap: 16px;
+    padding: 20px;
+    overflow: auto;
+}
+
+.students-board-column {
+    min-height: 520px;
+    border: 1px solid #dbeafe;
+    border-radius: 22px;
+    background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+    display: flex;
+    flex-direction: column;
+}
+
+.students-board-column-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid #dbeafe;
+    font-size: 0.8rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #1d4ed8;
+}
+
+.students-board-column-body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow: auto;
+}
+
+.students-board-work {
+    width: 100%;
+    text-align: left;
+    border: 1px solid #bfdbfe;
+    border-radius: 18px;
+    background: white;
+    padding: 14px;
+    box-shadow: 0 12px 28px rgba(59, 130, 246, 0.08);
+    cursor: pointer;
+}
+
+.students-board-work-name { font-size: 0.9rem; font-weight: 900; color: #0f172a; }
+.students-board-work-type { margin-top: 6px; font-size: 0.7rem; font-weight: 900; color: #0284c7; text-transform: uppercase; }
+.students-board-work-group { margin-top: 8px; font-size: 0.75rem; font-weight: 700; color: #475569; line-height: 1.4; }
+.students-board-empty { margin-top: auto; margin-bottom: auto; text-align: center; font-size: 0.8rem; font-weight: 800; color: #94a3b8; }
+
+.students-board-editor-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+    gap: 20px;
+    padding: 20px;
+    overflow: auto;
+}
+
+.students-board-editor-preview,
+.students-board-editor-side {
+    border: 1px solid #e2e8f0;
+    border-radius: 22px;
+    background: #fff;
+    padding: 18px;
+}
+
+.students-board-editor-side { display: flex; flex-direction: column; gap: 12px; }
+.students-board-select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-weight: 800;
+    color: #0f172a;
+    background: #fff;
+}
+
+.students-board-participants {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-height: 48vh;
+    overflow: auto;
+}
+
+.students-board-participant {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #334155;
+}
+
+.students-board-participant.is-selected {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}

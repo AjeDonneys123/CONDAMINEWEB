@@ -114,6 +114,7 @@ function createBlock(type = 'text') {
       actorY: 120,
       actorWidth: 140,
       actorHeight: 140,
+      actorDocked: true,
       actions: [
         {
           id: `action_${Date.now()}`,
@@ -185,6 +186,18 @@ function createPresentationSlideHtmlFromPdf(pdfUrl = '', fileName = 'Document PD
       ></iframe>
     </div>
   `;
+}
+
+function slideHasImportedFallbackContent(slide = null) {
+  const html = String(slide?.html || '').trim();
+  if (!html) return false;
+  if (html === DEFAULT_PRESENTATION_SLIDE_HTML) return false;
+  return /<img[\s>]|<iframe[\s>]/i.test(html);
+}
+
+function presentationHasUploadedFallbackSlides(presentation = {}) {
+  const slides = Array.isArray(presentation?.slides) ? presentation.slides : [];
+  return slides.some((slide) => slideHasImportedFallbackContent(slide));
 }
 
 function normalizeCanvaLiveUrl(rawUrl = '') {
@@ -336,6 +349,7 @@ function createAnimationBlockFromDraft(draft = {}) {
     actorY: 120,
     actorWidth: 140,
     actorHeight: 140,
+    actorDocked: true,
     actions: [
       {
         id: `action_${Date.now()}`,
@@ -1007,7 +1021,7 @@ function MobileActionRemote({
   );
 }
 
-function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [] }) {
+function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [], currentUserName = '' }) {
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupName, setSetupName] = useState(String(presentation.presentationName || ''));
@@ -1028,6 +1042,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   const [animationImportMenuOpen, setAnimationImportMenuOpen] = useState(false);
   const [pendingAnimationSpriteUrlInput, setPendingAnimationSpriteUrlInput] = useState('');
   const [pendingAnimationSpriteOptions, setPendingAnimationSpriteOptions] = useState([]);
+  const [editorCanvaLoaded, setEditorCanvaLoaded] = useState(false);
   const pendingAnimationSpriteInputRef = useRef(null);
   const pendingAnimationSpriteTargetRef = useRef({ slideIndex: -1, slideNumber: 0 });
   const editorRef = useRef(null);
@@ -1051,6 +1066,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   );
   const currentEditorCanvaSlide = presentation.slides[Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1))] || null;
   const currentEditorCanvaSlideIndex = Math.max(0, Math.min(editorCanvaStep - 1, presentation.slides.length - 1));
+  const hasUploadedFallbackSlides = presentationHasUploadedFallbackSlides(presentation);
+  const currentEditorPresenterName = String(
+    currentEditorCanvaSlide?.presenterName
+    || currentEditorCanvaSlide?.animation?.presenterName
+    || presentation.presenterName
+    || block?.presenterName
+    || currentUserName
+    || ''
+  ).trim();
   const isPresentationUnconfigured = !String(presentation.presentationName || '').trim()
     && Math.max(0, Number(presentation.canvaSlideCount || 0)) === 0;
   const presenterSuggestions = useMemo(() => {
@@ -1085,17 +1109,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     return Boolean(normalized) && presenterSuggestions.some((entry) => clean(entry.label) === normalized);
   };
   const isPresenterValid = isValidPresenterSelection(activeSlide?.presenterName || '');
-  const isActiveSlideValid = isPresenterValid && slideHasContent;
+  const isActiveSlideValid = isPresenterValid;
   const slidesValidCount = presentation.slides.filter((slide) => {
-    const validPresenter = isValidPresenterSelection(slide?.presenterName || '');
-    const hasContent = Boolean(String(slide?.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-    return validPresenter && hasContent;
+    return isValidPresenterSelection(slide?.presenterName || '');
   }).length;
   const canValidatePresentation = !presentationNameAlreadyUsed
     && normalizedPresentationName
     && presentation.slides.length > 0
     && slidesValidCount === presentation.slides.length
-    && qcmValidCount >= presentation.slides.length;
+    && qcmValidCount >= 1;
   const filteredPresenterSuggestions = useMemo(() => {
     if (!presenterSearchTarget?.value) return [];
     const typed = clean(presenterSearchTarget.value);
@@ -1143,6 +1165,10 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   useEffect(() => {
     setEditorCanvaStep(1);
   }, [presentation.canvaLiveUrl, presentation.canvaSlideCount]);
+
+  useEffect(() => {
+    setEditorCanvaLoaded(false);
+  }, [presentation.canvaLiveUrl, editorCanvaStep]);
   const detectedEditorCanvaStep = extractSlideNumberFromUrl(presentation.canvaLiveUrl);
 
   useEffect(() => {
@@ -1405,7 +1431,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     reader.readAsDataURL(file);
   };
   const loadPendingAnimationSpritesFromPhone = async () => {
-    const presenterName = String(currentEditorCanvaSlide?.presenterName || '').trim();
+    const presenterName = currentEditorPresenterName;
     if (!presenterName) return;
     try {
       const backupRes = await fetch(`/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`);
@@ -1555,8 +1581,18 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             ))}
           </div>
         ) : (
-          <div className="presentation-canvas" style={{ background: activeSlide?.background || '#ffffff', color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
-            <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
+          <div
+            className="presentation-canvas"
+            data-mascot-docked={activeSlide?.animation?.actorDocked === false ? 'false' : 'true'}
+            style={{
+              background: activeSlide?.background || '#ffffff',
+              color: activeSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942',
+              '--mascot-lane-width': activeSlide?.animation?.actorDocked === false ? '0px' : 'clamp(260px, 28%, 360px)'
+            }}
+          >
+            <div className="presentation-slide-content-area">
+              <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: activeSlide?.html || '' }} />
+            </div>
             {activeSlide?.animation ? (
               <AnimationBlockEditor
                 block={attachAnimationMetadata(activeSlide.animation, presentationNumber, presentation.activeSlideIndex + 1, presentation.presentationName, activeSlide?.presenterName)}
@@ -1603,7 +1639,8 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                 type="number"
                 min="1"
                 max="300"
-                value={setupSlideCount}
+                value={setupSlideCount > 0 ? setupSlideCount : ''}
+                placeholder="0"
                 onChange={(e) => updateSetupCount(e.target.value)}
               />
             </label>
@@ -1673,7 +1710,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           className="hidden-file-input"
           onChange={(e) => void handlePendingAnimationSpriteImport(e.target.files)}
         />
-        {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation') ? (
+        {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation' || presentation.activeEditorTab === 'qcm') ? (
           <>
             <label className="presentation-editor-field">
               <span>Lien Canva :</span>
@@ -1689,12 +1726,12 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   className="presentation-slide-add"
                   onClick={() => slidesImportInputRef.current?.click()}
                 >
-                  Importer PNG
+                  Uploader presentation
                 </button>
                 <input
                   ref={slidesImportInputRef}
                   type="file"
-                  accept="image/*,.png"
+                  accept="image/*,.png,.pdf,application/pdf"
                   multiple
                   className="hidden-file-input"
                   onChange={(e) => void handleSlidesImport(e.target.files)}
@@ -1708,7 +1745,8 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                 type="number"
                 min="0"
                 max="300"
-                value={presentation.canvaSlideCount || 0}
+                value={presentation.canvaSlideCount > 0 ? presentation.canvaSlideCount : ''}
+                placeholder="0"
                 onChange={(e) => {
                   const nextCount = Math.max(0, Number(e.target.value || 0));
                   const nextSlides = syncPresentationSlidesWithCount(presentation.slides, nextCount);
@@ -1725,7 +1763,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           </>
         ) : null}
       </div>
-      {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation') && presentation.canvaLiveUrl ? (
+      {presentation.canvaLiveUrl ? (
         <div className="canva-live-shell">
           <div className="presentation-slide-tabs">
             <button
@@ -1797,11 +1835,18 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   type="button"
                   className="presentation-slide-add"
                   onClick={() => void loadPendingAnimationSpritesFromPhone()}
-                  disabled={!String(currentEditorCanvaSlide?.presenterName || '').trim()}
+                  disabled={!currentEditorPresenterName}
                 >
                   Importer depuis tel
                 </button>
               </div>
+              {currentEditorPresenterName ? (
+                <div className="animation-import-mini-menu-help">
+                  {pendingAnimationSpriteOptions.length > 0
+                    ? `${pendingAnimationSpriteOptions.length} image${pendingAnimationSpriteOptions.length > 1 ? 's' : ''} trouvée${pendingAnimationSpriteOptions.length > 1 ? 's' : ''} pour ${formatPresenterLabel(currentEditorPresenterName)}.`
+                    : `Aucune image chargée pour ${formatPresenterLabel(currentEditorPresenterName)}.`}
+                </div>
+              ) : null}
               {pendingAnimationSpriteOptions.length > 0 ? (
                 <div className="animation-frame-strip in-space">
                   {pendingAnimationSpriteOptions.map((option, optionIndex) => (
@@ -1819,93 +1864,125 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               ) : null}
             </div>
           ) : null}
-          <div className="slideshow-nav">
-            <button
-              type="button"
-              className="presentation-slide-add"
-              onClick={() => {
-                const nextStep = Math.max(1, editorCanvaStep - 1);
-                const nextUrl = injectSlideNumberIntoUrl(presentation.canvaLiveUrl, nextStep);
-                setEditorCanvaStep(nextStep);
-                setCanvaLiveUrlInput(nextUrl);
-                patchPresentation({
-                  canvaLiveUrl: nextUrl,
-                  presentationValidated: false
-                });
-              }}
-              disabled={editorCanvaStep <= 1}
-            >
-              Diapo precedente
-            </button>
-            <div className="slideshow-progress slideshow-progress-editor">
-              <span>
-                {presentation.canvaSlideCount > 0 ? `Canva live ${editorCanvaStep}/${presentation.canvaSlideCount}` : `Canva live ${editorCanvaStep}`}
-              </span>
-              <span className="slideshow-progress-presenter-label">Exposant de ce slide :</span>
-              <div className="slideshow-progress-presenter-field">
-                {renderPresenterSelector(currentEditorCanvaSlide, currentEditorCanvaSlideIndex, true)}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="presentation-slide-add"
-              onClick={() => {
-                if (!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '')) return;
-                const nextStep = presentation.canvaSlideCount > 0
-                  ? Math.min(presentation.canvaSlideCount, editorCanvaStep + 1)
-                  : editorCanvaStep + 1;
-                const nextUrl = injectSlideNumberIntoUrl(presentation.canvaLiveUrl, nextStep);
-                setEditorCanvaStep(nextStep);
-                setCanvaLiveUrlInput(nextUrl);
-                patchPresentation({
-                  canvaLiveUrl: nextUrl,
-                  presentationValidated: false
-                });
-              }}
-              disabled={!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '') || (presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount)}
-            >
-              Diapo suivante
-            </button>
-          </div>
-          <div className="canva-live-frame-shell">
-            <iframe
-              src={presentation.canvaLiveUrl}
-              title={`canva-live-editor-${presentation.presentationName || 'presentation'}`}
-              className="canva-live-frame"
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              allow="fullscreen"
-            />
-            <div className="canva-live-lock-overlay" aria-hidden="true" />
-            {currentEditorCanvaSlide?.presenterName ? (
-              <div className="canva-live-presenter-badge">
-                {formatPresenterLabel(currentEditorCanvaSlide.presenterName)}
-              </div>
-            ) : null}
-            {presentation.activeEditorTab === 'animation' && currentEditorCanvaSlide?.animation ? (
-              <div className="canva-live-animation-layer">
-                <AnimationBlockEditor
-                  block={attachAnimationMetadata(currentEditorCanvaSlide.animation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName)}
-                  onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName) })}
-                  onRemove={() => patchSlide(currentEditorCanvaSlideIndex, { animation: null })}
-                  readOnly={false}
-                  sectionKey={sectionKey}
-                  tabKey={tabKey}
-                  blockIndex={blockIndex}
-                  tabId={tabId}
-                  entryId={entryId}
-                  presentationNumber={presentationNumber}
-                  slideNumber={editorCanvaStep}
+          {presentation.activeEditorTab !== 'qcm' ? (
+            <>
+              {hasUploadedFallbackSlides && !editorCanvaLoaded ? (
+                <iframe
+                  src={presentation.canvaLiveUrl}
+                  title={`canva-live-editor-loader-${presentation.presentationName || 'presentation'}`}
+                  className="canva-live-loader-frame"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allow="fullscreen"
+                  onLoad={() => {
+                    setEditorCanvaLoaded(true);
+                  }}
                 />
+              ) : null}
+              <div className="slideshow-nav">
+                <button
+                  type="button"
+                  className="presentation-slide-add"
+                  onClick={() => {
+                    const nextStep = Math.max(1, editorCanvaStep - 1);
+                    const nextUrl = injectSlideNumberIntoUrl(presentation.canvaLiveUrl, nextStep);
+                    setEditorCanvaStep(nextStep);
+                    setCanvaLiveUrlInput(nextUrl);
+                    patchPresentation({
+                      canvaLiveUrl: nextUrl,
+                      presentationValidated: false
+                    });
+                  }}
+                  disabled={editorCanvaStep <= 1}
+                >
+                  Diapo precedente
+                </button>
+                <div className="slideshow-progress slideshow-progress-editor">
+                  <span>
+                    {presentation.canvaSlideCount > 0 ? `Canva live ${editorCanvaStep}/${presentation.canvaSlideCount}` : `Canva live ${editorCanvaStep}`}
+                  </span>
+                  <span className="slideshow-progress-presenter-label">Exposant de ce slide :</span>
+                  <div className="slideshow-progress-presenter-field">
+                    {renderPresenterSelector(currentEditorCanvaSlide, currentEditorCanvaSlideIndex, true)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="presentation-slide-add"
+                  onClick={() => {
+                    if (!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '')) return;
+                    const nextStep = presentation.canvaSlideCount > 0
+                      ? Math.min(presentation.canvaSlideCount, editorCanvaStep + 1)
+                      : editorCanvaStep + 1;
+                    const nextUrl = injectSlideNumberIntoUrl(presentation.canvaLiveUrl, nextStep);
+                    setEditorCanvaStep(nextStep);
+                    setCanvaLiveUrlInput(nextUrl);
+                    patchPresentation({
+                      canvaLiveUrl: nextUrl,
+                      presentationValidated: false
+                    });
+                  }}
+                  disabled={!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '') || (presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount)}
+                >
+                  Diapo suivante
+                </button>
               </div>
-            ) : null}
-          </div>
-          <a className="presentation-slide-add" href={presentation.canvaLiveUrl} target="_blank" rel="noreferrer">
-            Ouvrir Canva dans un nouvel onglet
-          </a>
+              <div
+                className="canva-live-frame-shell"
+                data-mascot-docked={currentEditorCanvaSlide?.animation?.actorDocked === false ? 'false' : 'true'}
+                style={{
+                  '--mascot-lane-width': currentEditorCanvaSlide?.animation?.actorDocked === false ? '0px' : 'clamp(260px, 28%, 360px)',
+                  display: hasUploadedFallbackSlides && !editorCanvaLoaded ? 'none' : undefined
+                }}
+              >
+                <iframe
+                  src={presentation.canvaLiveUrl}
+                  title={`canva-live-editor-${presentation.presentationName || 'presentation'}`}
+                  className="canva-live-frame"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allow="fullscreen"
+                  onLoad={() => {
+                    setEditorCanvaLoaded(true);
+                  }}
+                />
+                <div className="canva-live-lock-overlay" aria-hidden="true" />
+                {currentEditorCanvaSlide?.presenterName ? (
+                  <div className="canva-live-presenter-badge">
+                    {formatPresenterLabel(currentEditorCanvaSlide.presenterName)}
+                  </div>
+                ) : null}
+                {presentation.activeEditorTab === 'animation' && currentEditorCanvaSlide?.animation ? (
+                  <div className="canva-live-animation-layer">
+                    <AnimationBlockEditor
+                      block={attachAnimationMetadata(currentEditorCanvaSlide.animation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName)}
+                      onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName) })}
+                      onRemove={() => patchSlide(currentEditorCanvaSlideIndex, { animation: null })}
+                      readOnly={false}
+                      sectionKey={sectionKey}
+                      tabKey={tabKey}
+                      blockIndex={blockIndex}
+                      tabId={tabId}
+                      entryId={entryId}
+                      presentationNumber={presentationNumber}
+                      slideNumber={editorCanvaStep}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              <a className="presentation-slide-add" href={presentation.canvaLiveUrl} target="_blank" rel="noreferrer">
+                Ouvrir Canva dans un nouvel onglet
+              </a>
+            </>
+          ) : null}
+          {presentation.activeEditorTab !== 'qcm' && hasUploadedFallbackSlides && !editorCanvaLoaded ? (
+            <div className="presentation-import-fallback-note">
+              Slides uploadées affichées en attendant Canva.
+            </div>
+          ) : null}
         </div>
       ) : null}
-      {presentation.activeEditorTab === 'qcm' ? (
+      {(presentation.activeEditorTab === 'qcm') ? (
         <div className="presentation-qcm-panel">
           {qcmQuestions.map((question, questionIndex) => (
             <div key={question.id} className="presentation-qcm-card">
@@ -1955,41 +2032,8 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
             + Question QCM
           </button>
         </div>
-      ) : presentation.activeEditorTab === 'slides' ? (
+      ) : (presentation.activeEditorTab === 'slides' || (hasUploadedFallbackSlides && !editorCanvaLoaded)) ? (
         <>
-      <div className="presentation-slide-tabs">
-        <button
-          type="button"
-          className={`presentation-slide-tab ${presentation.activeEditorTab === 'slides' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'slides' })}
-        >
-          Slides
-        </button>
-        <button
-          type="button"
-          className={`presentation-slide-tab ${presentation.activeEditorTab === 'qcm' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'qcm' })}
-        >
-          Quizz
-        </button>
-        <button
-          type="button"
-          className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
-          onClick={() => patchPresentation({ activeEditorTab: 'animation' })}
-        >
-          Animation
-        </button>
-        <button
-          type="button"
-          className="presentation-slide-add presentation-slide-add-red"
-          onClick={() => {
-            if (!window.confirm('Supprimer cette presentation ?')) return;
-            onChange?.(createBlock('text'));
-          }}
-        >
-          Supprimer
-        </button>
-      </div>
       {activeMiniMenu === 'color' ? (
         <div className="presentation-pop-panel">
           {ARTICLE_COLORS.map((color) => (
@@ -2054,7 +2098,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
   );
 }
 
-function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', mode = 'browse', presentationNumber = 0 }) {
+function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', mode = 'browse', presentationNumber = 0, simpleMode = false }) {
   const normalized = useMemo(() => normalizePresentationBlock(presentation), [presentation]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTab, setActiveTab] = useState('slides');
@@ -2065,14 +2109,15 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
   const [canvaStep, setCanvaStep] = useState(1);
   const [canvaRuntimeUrl, setCanvaRuntimeUrl] = useState(normalized.canvaLiveUrl || '');
   const [canvaPlaying, setCanvaPlaying] = useState(mode === 'canva');
+  const [publicCanvaLoaded, setPublicCanvaLoaded] = useState(false);
   const activeSlide = normalized.slides[activeIndex] || normalized.slides[0];
   const qcmQuestions = Array.isArray(normalized.qcmQuestions) ? normalized.qcmQuestions : [];
   const hasQcmTab = qcmQuestions.length > 0;
   const isSlideshow = mode === 'slideshow';
   const isCanvaLive = mode === 'canva';
   const hasCanvaLive = Boolean(normalized.canvaLiveUrl);
-  const detectedCanvaStep = extractSlideNumberFromUrl(normalized.canvaLiveUrl);
-  const canvaBaseStep = detectedCanvaStep || 1;
+  const hasUploadedFallbackSlides = presentationHasUploadedFallbackSlides(normalized);
+  const canvaBaseStep = 1;
   const currentCanvaSlide = normalized.slides[Math.max(0, Math.min(canvaStep - 1, normalized.slides.length - 1))] || null;
   const totalSteps = normalized.slides.length + (hasQcmTab ? 1 : 0);
   const showingQcm = isSlideshow ? (hasQcmTab && slideshowStep === normalized.slides.length) : activeTab === 'qcm';
@@ -2099,15 +2144,12 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
   }, [normalized.presentationName, normalized.canvaLiveUrl, normalized.canvaSlideCount]);
 
   useEffect(() => {
-    if (detectedCanvaStep) {
-      setCanvaStep(detectedCanvaStep);
-    }
-  }, [detectedCanvaStep]);
+    setPublicCanvaLoaded(false);
+  }, [normalized.presentationName, normalized.canvaLiveUrl, canvaStep]);
 
   useEffect(() => {
-    const baseStep = detectedCanvaStep || 1;
-    setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, baseStep));
-  }, [normalized.canvaLiveUrl, detectedCanvaStep]);
+    setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, 1));
+  }, [normalized.canvaLiveUrl]);
 
   useEffect(() => {
     setCanvaPlaying(mode === 'canva');
@@ -2144,10 +2186,12 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
 
   return (
     <div className="public-presentation-viewer">
-      <div className="public-presentation-head">
-        <div className="eyebrow">Presentation validee</div>
-        <h3>{normalized.presentationName || 'Presentation'}</h3>
-      </div>
+      {!simpleMode ? (
+        <div className="public-presentation-head">
+          <div className="eyebrow">Presentation validee</div>
+          <h3>{normalized.presentationName || 'Presentation'}</h3>
+        </div>
+      ) : null}
       {isCanvaLive ? (
         <div className="slideshow-nav">
           <button
@@ -2167,58 +2211,66 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           >
             {canvaPlaying ? 'Stop' : 'Play'}
           </button>
-          <button
-            type="button"
-            className="presentation-slide-add"
-            onClick={() => {
-              const nextStep = Math.max(1, canvaStep - 1);
-              setCanvaStep(nextStep);
-              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
-            }}
-            disabled={!canvaPlaying || canvaStep <= 1}
-          >
-            Diapo precedente
-          </button>
           <div className="slideshow-progress">
             {normalized.canvaSlideCount > 0 ? `Canva live ${canvaStep}/${normalized.canvaSlideCount}` : `Canva live ${canvaStep}`}
-            {currentCanvaSlide?.presenterName ? ` • ${currentCanvaSlide.presenterName}` : ''}
+            {!simpleMode && currentCanvaSlide?.presenterName ? ` • ${currentCanvaSlide.presenterName}` : ''}
           </div>
-          <button
-            type="button"
-            className="presentation-slide-add"
-            onClick={() => {
-              const nextStep = normalized.canvaSlideCount > 0
-                ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
-                : canvaStep + 1;
-              setCanvaStep(nextStep);
-              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
-            }}
-            disabled={!canvaPlaying || (normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount)}
-          >
-            Diapo suivante
-          </button>
+          {!simpleMode ? (
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => {
+                const nextStep = Math.max(1, canvaStep - 1);
+                setCanvaStep(nextStep);
+                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+              }}
+              disabled={canvaStep <= 1}
+            >
+              Diapo precedente
+            </button>
+          ) : null}
+          {!simpleMode ? (
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => {
+                const nextStep = normalized.canvaSlideCount > 0
+                  ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
+                  : canvaStep + 1;
+                setCanvaStep(nextStep);
+                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+              }}
+              disabled={normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount}
+            >
+              Diapo suivante
+            </button>
+          ) : null}
         </div>
       ) : isSlideshow ? (
         <div className="slideshow-nav">
-          <button
-            type="button"
-            className="presentation-slide-add"
-            onClick={() => setSlideshowStep((prev) => Math.max(0, prev - 1))}
-            disabled={slideshowStep <= 0}
-          >
-            Diapo precedente
-          </button>
+          {!simpleMode ? (
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => setSlideshowStep((prev) => Math.max(0, prev - 1))}
+              disabled={slideshowStep <= 0}
+            >
+              Diapo precedente
+            </button>
+          ) : null}
           <div className="slideshow-progress">
             {showingQcm ? `Etape ${totalSteps}/${totalSteps} : QCM` : `Diapo ${slideshowStep + 1}/${totalSteps}`}
           </div>
-          <button
-            type="button"
-            className="presentation-slide-add"
-            onClick={() => setSlideshowStep((prev) => Math.min(totalSteps - 1, prev + 1))}
-            disabled={showingQcm || slideshowStep >= totalSteps - 1}
-          >
-            Diapo suivante
-          </button>
+          {!simpleMode ? (
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => setSlideshowStep((prev) => Math.min(totalSteps - 1, prev + 1))}
+              disabled={showingQcm || slideshowStep >= totalSteps - 1}
+            >
+              Diapo suivante
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="presentation-slide-tabs">
@@ -2248,12 +2300,34 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
       )}
       {isCanvaLive ? (
         <div className="canva-live-shell">
-          <div className="canva-live-note">
-            Slide detectee depuis l URL : {detectedCanvaStep || '?'}.
-            URL runtime : {canvaRuntimeUrl || normalized.canvaLiveUrl || 'aucune'}.
-            {currentCanvaSlide?.presenterName ? ` Exposant: ${currentCanvaSlide.presenterName}.` : ''}
-          </div>
-          <div className="canva-live-frame-shell">
+          {hasUploadedFallbackSlides && !publicCanvaLoaded ? (
+            <iframe
+              src={canvaRuntimeUrl || normalized.canvaLiveUrl}
+              title={`canva-live-public-loader-${normalized.presentationName || 'presentation'}`}
+              className="canva-live-loader-frame"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allow="fullscreen"
+              onLoad={() => {
+                setPublicCanvaLoaded(true);
+              }}
+            />
+          ) : null}
+          {!simpleMode ? (
+            <div className="canva-live-note">
+              Slide detectee depuis l URL : {detectedCanvaStep || '?'}.
+              URL runtime : {canvaRuntimeUrl || normalized.canvaLiveUrl || 'aucune'}.
+              {currentCanvaSlide?.presenterName ? ` Exposant: ${currentCanvaSlide.presenterName}.` : ''}
+            </div>
+          ) : null}
+          <div
+            className="canva-live-frame-shell"
+            data-mascot-docked={currentCanvaSlide?.animation?.actorDocked === false ? 'false' : 'true'}
+            style={{
+              '--mascot-lane-width': currentCanvaSlide?.animation?.actorDocked === false ? '0px' : 'clamp(260px, 28%, 360px)',
+              display: hasUploadedFallbackSlides && !publicCanvaLoaded ? 'none' : undefined
+            }}
+          >
             <iframe
               src={canvaRuntimeUrl || normalized.canvaLiveUrl}
               title={`canva-live-${normalized.presentationName || 'presentation'}`}
@@ -2261,6 +2335,9 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               allow="fullscreen"
+              onLoad={() => {
+                setPublicCanvaLoaded(true);
+              }}
             />
             <div className="canva-live-lock-overlay" aria-hidden="true" />
             {currentCanvaSlide?.presenterName ? (
@@ -2268,10 +2345,54 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
                 {formatPresenterLabel(currentCanvaSlide.presenterName)}
               </div>
             ) : null}
+            {currentCanvaSlide?.animation ? (
+              <div className="canva-live-animation-layer">
+                <AnimationBlockEditor
+                  block={attachAnimationMetadata(
+                    currentCanvaSlide.animation,
+                    presentationNumber,
+                    Math.max(1, canvaStep),
+                    normalized.presentationName,
+                    currentCanvaSlide?.presenterName
+                  )}
+                  onChange={() => {}}
+                  onRemove={() => {}}
+                  readOnly
+                  sectionKey={sectionKey}
+                  tabKey={tabKey}
+                  blockIndex={blockIndex}
+                  tabId={tabId}
+                  entryId={entryId}
+                  presentationNumber={presentationNumber}
+                  slideNumber={Math.max(1, canvaStep)}
+                  onPreviousSlide={() => {
+                    const nextStep = Math.max(1, canvaStep - 1);
+                    setCanvaStep(nextStep);
+                    setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+                  }}
+                  onNextSlide={() => {
+                    const nextStep = normalized.canvaSlideCount > 0
+                      ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
+                      : canvaStep + 1;
+                    setCanvaStep(nextStep);
+                    setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+                  }}
+                  canGoPrevious={canvaStep > 1}
+                  canGoNext={!(normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount)}
+                />
+              </div>
+            ) : null}
           </div>
-          <a className="presentation-slide-add" href={canvaRuntimeUrl || normalized.canvaLiveUrl} target="_blank" rel="noreferrer">
-            Ouvrir Canva dans un nouvel onglet
-          </a>
+          {!simpleMode ? (
+            <a className="presentation-slide-add" href={canvaRuntimeUrl || normalized.canvaLiveUrl} target="_blank" rel="noreferrer">
+              Ouvrir Canva dans un nouvel onglet
+            </a>
+          ) : null}
+          {hasUploadedFallbackSlides && !publicCanvaLoaded ? (
+            <div className="presentation-import-fallback-note">
+              Slides uploadées affichées en attendant Canva.
+            </div>
+          ) : null}
         </div>
       ) : showingQcm ? (
         <div className="public-quiz-shell">
@@ -2321,8 +2442,18 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           )}
         </div>
       ) : (
-        <div className="presentation-canvas" style={{ background: visibleSlide?.background || '#ffffff', color: visibleSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942' }}>
-          <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: visibleSlide?.html || '' }} />
+        <div
+          className="presentation-canvas"
+          data-mascot-docked={visibleSlide?.animation?.actorDocked === false ? 'false' : 'true'}
+          style={{
+            background: visibleSlide?.background || '#ffffff',
+            color: visibleSlide?.background === '#1d2942' ? '#ffffff' : '#1d2942',
+            '--mascot-lane-width': visibleSlide?.animation?.actorDocked === false ? '0px' : 'clamp(260px, 28%, 360px)'
+          }}
+        >
+          <div className="presentation-slide-content-area">
+            <div className="public-text article-render" dangerouslySetInnerHTML={{ __html: visibleSlide?.html || '' }} />
+          </div>
           {(visibleSlide?.textBoxes || []).map((box) => (
             <div
               key={box.id}
@@ -2344,6 +2475,10 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
               entryId={entryId}
               presentationNumber={presentationNumber}
               slideNumber={(isSlideshow ? slideshowStep : activeIndex) + 1}
+              onPreviousSlide={simpleMode && isSlideshow ? () => setSlideshowStep((prev) => Math.max(0, prev - 1)) : null}
+              onNextSlide={simpleMode && isSlideshow ? () => setSlideshowStep((prev) => Math.min(totalSteps - 1, prev + 1)) : null}
+              canGoPrevious={simpleMode && isSlideshow ? slideshowStep > 0 : false}
+              canGoNext={simpleMode && isSlideshow ? !showingQcm && slideshowStep < totalSteps - 1 : false}
             />
           ) : null}
           {visibleSlide?.presenterName ? (
@@ -2365,8 +2500,26 @@ function formatContributionName(name = '') {
   return `${firstName} ${lastName.slice(0, 3)}`;
 }
 
-function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', presentationNumber = 0, slideNumber = 0 }) {
+function AnimationBlockEditor({
+  block,
+  onChange,
+  onRemove,
+  readOnly,
+  sectionKey = '',
+  tabKey = '',
+  blockIndex = 0,
+  tabId = '',
+  entryId = '',
+  presentationNumber = 0,
+  slideNumber = 0,
+  onPreviousSlide = null,
+  onNextSlide = null,
+  canGoPrevious = false,
+  canGoNext = false
+}) {
   const overlayRef = useRef(null);
+  const actorRef = useRef(null);
+  const actorFigureRef = useRef(null);
   const actionFileInputRefs = useRef({});
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
@@ -2378,6 +2531,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const spriteDragStateRef = useRef({ actionId: '', frameIndex: -1 });
   const actionLoopStopRef = useRef({ stop: false, actionId: '' });
   const actionLoopIntervalRef = useRef(null);
+  const playAnimationStopRef = useRef(false);
+  const sequencePlaybackRef = useRef(false);
+  const audioRecordManualStopRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingActionId, setPlayingActionId] = useState('');
   const [recordingAudio, setRecordingAudio] = useState(false);
@@ -2386,8 +2542,13 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const [importOptions, setImportOptions] = useState([]);
   const [selectedImportId, setSelectedImportId] = useState('');
   const [imageImportOptions, setImageImportOptions] = useState([]);
+  const [actorImportOpen, setActorImportOpen] = useState(false);
+  const [actorImportUrlInput, setActorImportUrlInput] = useState('');
+  const [actorImportOptions, setActorImportOptions] = useState([]);
   const [audioMenuOpen, setAudioMenuOpen] = useState(false);
+  const [audioMenuTab, setAudioMenuTab] = useState('charger');
   const audioMenuCloseTimerRef = useRef(null);
+  const [editorPanelOpen, setEditorPanelOpen] = useState(true);
   const [eraserActive, setEraserActive] = useState(false);
   const [eraserSize, setEraserSize] = useState(24);
   const [eraserCursor, setEraserCursor] = useState({ visible: false, x: 0, y: 0 });
@@ -2404,6 +2565,8 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   const [audioCurrentTimeSec, setAudioCurrentTimeSec] = useState(0);
   const [selectedActionId, setSelectedActionId] = useState('');
   const [loopFrameState, setLoopFrameState] = useState({ actionId: '', frameIndex: -1 });
+  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
+  const actorDocked = block?.actorDocked !== false;
   const [actorState, setActorState] = useState({
     x: Number(block?.actorX || 120),
     y: Number(block?.actorY || 120),
@@ -2413,6 +2576,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     actionName: ''
   });
   const spriteEditorCanvasRef = useRef(null);
+  const actorImportInputRef = useRef(null);
   const spriteEditorEraseStateRef = useRef(false);
   const spriteEditorDirtyRef = useRef(null);
   const slicePreviewRef = useRef(null);
@@ -2420,8 +2584,21 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     if (typeof window === 'undefined') return;
     window.open('https://gemini.google.com/app', 'web5e-gemini', 'popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes');
   };
-  const copyActiveActorToClipboard = async () => {
-    const spriteUrl = resolveWeb5eAssetUrl(String(actorRenderFrame || block?.actorImageUrl || ''));
+  const toggleActorDocked = () => {
+    const nextDocked = !actorDocked;
+    if (!nextDocked) {
+      updateRoot({ actorDocked: false });
+      return;
+    }
+    const shellRect = overlayRef.current?.getBoundingClientRect?.();
+    const nextX = 16;
+    const maxY = shellRect ? Math.max(0, shellRect.height - actorDragHeight - 12) : Math.max(0, Number(block?.actorY || 120));
+    const nextY = Math.max(0, Math.min(Number(actorState.y || block?.actorY || 120), maxY));
+    setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
+    updateRoot({ actorDocked: true, actorX: Math.round(nextX), actorY: Math.round(nextY) });
+  };
+  const copySpriteUrlToClipboard = async (rawSpriteUrl = '') => {
+    const spriteUrl = resolveWeb5eAssetUrl(String(rawSpriteUrl || ''));
     if (!spriteUrl) {
       flashNotice('Aucune image a copier');
       return;
@@ -2429,25 +2606,75 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     try {
       const response = await fetch(spriteUrl);
       const blob = await response.blob();
+      const pngBlob = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth || image.width || 1;
+          canvas.height = image.naturalHeight || image.height || 1;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('canvas'));
+            return;
+          }
+          ctx.drawImage(image, 0, 0);
+          canvas.toBlob((nextBlob) => {
+            if (!nextBlob) {
+              reject(new Error('blob'));
+              return;
+            }
+            resolve(nextBlob);
+          }, 'image/png');
+        };
+        image.onerror = () => reject(new Error('image'));
+        image.src = URL.createObjectURL(blob);
+      });
       if (navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new window.ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': pngBlob })]);
         flashNotice('Sprite copie');
         return;
       }
     } catch (_) {}
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(spriteUrl);
-        flashNotice('URL du sprite copiee');
-        return;
-      }
-    } catch (_) {}
-    flashNotice('Copie impossible');
+    flashNotice('Copie image impossible sur ce navigateur');
+  };
+
+  const copyActiveActorToClipboard = async () => {
+    await copySpriteUrlToClipboard(String(actorRenderFrame || block?.actorImageUrl || ''));
+  };
+
+  const copySelectedActionFrameToClipboard = async (actionId) => {
+    const action = actions.find((item) => String(item?.id || '') === String(actionId || ''));
+    if (!action) {
+      flashNotice('Aucun sprite a copier');
+      return;
+    }
+    const targetIndex = Number(action.selectedFrameIndex);
+    const targetFrame = targetIndex === -1
+      ? { url: String(block?.actorImageUrl || '') }
+      : (targetIndex >= 0 ? action.frames?.[targetIndex] : null);
+    const normalizedFrame = typeof targetFrame === 'string' ? createSpriteFrame(targetFrame) : targetFrame;
+    await copySpriteUrlToClipboard(String(normalizedFrame?.url || ''));
   };
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? normalizeTimelineActions(block.actions)
     : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', soundPitch: 1, startSec: 0, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
+  const getOriginSpriteDimensions = () => ({
+    width: Math.max(40, Number(block?.actorWidth || actorState.width || 140)),
+    height: Math.max(40, Number(block?.actorHeight || actorState.height || 140))
+  });
+  const normalizeImportedFrame = (frameOrUrl) => {
+    const sourceFrame = typeof frameOrUrl === 'string'
+      ? createSpriteFrame(frameOrUrl)
+      : { ...createSpriteFrame(frameOrUrl?.url || ''), ...(frameOrUrl || {}) };
+    const origin = getOriginSpriteDimensions();
+    return {
+      ...sourceFrame,
+      width: origin.width,
+      height: origin.height
+    };
+  };
   const baseAudioUrl = String(actions.find((action) => String(action?.soundUrl || '').trim())?.soundUrl || '').trim();
   const totalTimelineSec = Math.max(
     1,
@@ -2497,6 +2724,19 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   }, [actionNameDrafts]);
 
   useEffect(() => {
+    const node = overlayRef.current;
+    if (!node || typeof window === 'undefined' || !window.ResizeObserver) return undefined;
+    const syncSize = () => {
+      const rect = node.getBoundingClientRect();
+      setOverlaySize({ width: rect.width, height: rect.height });
+    };
+    syncSize();
+    const observer = new window.ResizeObserver(() => syncSize());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (isPlaying || playingActionId) return;
     if (actorDragStateRef.current || actorResizeStateRef.current || spriteResizeStateRef.current) return;
     const selectedAction = actions.find((action) => String(action.id || '') === String(selectedActionId || '')) || actions[0] || null;
@@ -2512,11 +2752,19 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         }
       : (selectedFrameIndex >= 0 ? selectedAction?.frames?.[selectedFrameIndex] : null);
     const normalizedSelectedFrame = typeof selectedFrame === 'string' ? createSpriteFrame(selectedFrame) : selectedFrame;
+    const nextWidth = Number(normalizedSelectedFrame?.width || block?.actorWidth || 140);
+    const nextHeight = Number(normalizedSelectedFrame?.height || block?.actorHeight || 140);
+    const rawX = Number(block?.actorX || 32);
+    const rawY = Number(block?.actorY || 120);
+    const nextX = actorDocked
+      ? Math.min(Math.max(12, rawX), Math.max(12, Number(overlaySize.width || 0) - nextWidth - 12))
+      : Math.max(0, rawX);
+    const nextY = Math.min(Math.max(0, rawY), Math.max(0, Number(overlaySize.height || 0) - actorDragHeight - 12));
     const nextActorState = {
-      x: Number(block?.actorX || 120),
-      y: Number(block?.actorY || 120),
-      width: Number(normalizedSelectedFrame?.width || block?.actorWidth || 140),
-      height: Number(normalizedSelectedFrame?.height || block?.actorHeight || 140),
+      x: nextX,
+      y: nextY,
+      width: nextWidth,
+      height: nextHeight,
       frameUrl: String(
         normalizedSelectedFrame?.url
         || block?.actorImageUrl
@@ -2535,7 +2783,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         ? prev
         : nextActorState
     ));
-  }, [block, actions, isPlaying, playingActionId, selectedActionId]);
+  }, [block, actions, isPlaying, playingActionId, selectedActionId, actorDocked, overlaySize.width, overlaySize.height]);
 
   useEffect(() => {
     const audio = audioTimelineRef.current;
@@ -2630,6 +2878,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
 
   useEffect(() => {
     if (!isPlaying) return;
+    if (sequencePlaybackRef.current) return;
     if (!activeTimelineAction) {
       setLoopFrameState({ actionId: '', frameIndex: -1 });
       setActorState((prev) => ({ ...prev, actionName: '' }));
@@ -2662,8 +2911,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       if (!shellRect) return;
       const dragState = actorDragStateRef.current;
       if (dragState) {
-        const nextX = Math.max(0, event.clientX - shellRect.left - dragState.x);
-        const nextY = Math.max(0, event.clientY - shellRect.top - dragState.y);
+        const minX = actorDocked ? 12 : 0;
+        const nextX = Math.max(minX, Math.min(shellRect.width - actorState.width - 12, event.clientX - shellRect.left - dragState.x));
+        const nextY = Math.max(0, Math.min(shellRect.height - actorDragHeight - 12, event.clientY - shellRect.top - dragState.y));
         setActorState((prev) => ({ ...prev, x: nextX, y: nextY }));
       }
       const resizeState = actorResizeStateRef.current;
@@ -2805,7 +3055,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       flashNotice("Import sprite impossible");
       return;
     }
-    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: [...(action.frames || []), ...urls.map(createSpriteFrame)] } : action));
+    updateActions(actions.map((action) => action.id === actionId ? { ...action, frames: [...(action.frames || []), ...urls.map((url) => normalizeImportedFrame(url))] } : action));
     flashNotice("Sprite importé");
   };
 
@@ -2974,7 +3224,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
             ...item,
             soundUrl: nextSoundUrl || item.soundUrl || '',
             soundPitch: Math.max(0.5, Math.min(2, Number(item.soundPitch || 1))),
-            frames: [...(Array.isArray(item.frames) ? item.frames : []), ...incomingFrames]
+            frames: [...(Array.isArray(item.frames) ? item.frames : []), ...incomingFrames.map((frame) => normalizeImportedFrame(frame))]
           }
         : item
     ));
@@ -3330,36 +3580,101 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       flashNotice("Aucune image détectée");
       return;
     }
-    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), createSpriteFrame(safeValue)], frameUrlInput: '' } : item));
+    updateActions(actions.map((item) => item.id === actionId ? { ...item, frames: [...(item.frames || []), normalizeImportedFrame(safeValue)], frameUrlInput: '' } : item));
     flashNotice("Sprite importé");
   };
 
+  const pasteActionFrameFromClipboard = async (actionId) => {
+    try {
+      if (navigator.clipboard?.read) {
+        const clipboardItems = await navigator.clipboard.read();
+        for (const clipboardItem of clipboardItems) {
+          const imageType = clipboardItem.types.find((type) => type.startsWith('image/'));
+          if (!imageType) continue;
+          const blob = await clipboardItem.getType(imageType);
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('reader'));
+            reader.readAsDataURL(blob);
+          });
+          importActionFrameFromValue(actionId, dataUrl);
+          return;
+        }
+      }
+      if (navigator.clipboard?.readText) {
+        const text = String(await navigator.clipboard.readText()).trim();
+        if (text) {
+          importActionFrameFromValue(actionId, text);
+          return;
+        }
+      }
+    } catch (_) {}
+    flashNotice("Collage impossible");
+  };
+
   const toggleAudioRecord = async () => {
-    if (recordingAudio && recorderRef.current) {
-      recorderRef.current.stop();
+    if (recordingAudio) {
+      audioRecordManualStopRef.current = true;
+      if (recorderRef.current) {
+        recorderRef.current.stop();
+      } else {
+        setRecordingAudio(false);
+      }
       return;
     }
+    setRecordingAudio(true);
     try {
+      audioRecordManualStopRef.current = false;
+      if (typeof window === 'undefined' || !window.MediaRecorder) {
+        throw new Error('MediaRecorder indisponible');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorderOptions = window.MediaRecorder.isTypeSupported?.('audio/webm;codecs=opus')
+        ? { mimeType: 'audio/webm;codecs=opus' }
+        : (window.MediaRecorder.isTypeSupported?.('audio/mp4')
+          ? { mimeType: 'audio/mp4' }
+          : undefined);
+      const recorder = new window.MediaRecorder(stream, recorderOptions);
       recorderChunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data?.size) recorderChunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
-        const blob = new Blob(recorderChunksRef.current, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.onload = () => updateSharedAudio(String(reader.result || ''));
-        reader.readAsDataURL(blob);
+        const blobType = String(recorder.mimeType || recorderOptions?.mimeType || 'audio/webm');
+        const blob = new Blob(recorderChunksRef.current, { type: blobType });
+        if (blob.size > 0) {
+          const reader = new FileReader();
+          reader.onload = () => updateSharedAudio(String(reader.result || ''));
+          reader.readAsDataURL(blob);
+        }
         stream.getTracks().forEach((track) => track.stop());
         recorderRef.current = null;
         recorderChunksRef.current = [];
-        setRecordingAudio(false);
+        if (audioRecordManualStopRef.current) {
+          setRecordingAudio(false);
+          audioRecordManualStopRef.current = false;
+        } else {
+          flashNotice('Rec interrompu');
+        }
+      };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        recorderRef.current = null;
+        recorderChunksRef.current = [];
+        if (audioRecordManualStopRef.current) {
+          setRecordingAudio(false);
+          audioRecordManualStopRef.current = false;
+        }
+        flashNotice('Erreur micro');
       };
       recorderRef.current = recorder;
-      setRecordingAudio(true);
       recorder.start();
-    } catch (_) {}
+    } catch (error) {
+      audioRecordManualStopRef.current = false;
+      setRecordingAudio(false);
+      flashNotice(String(error?.message || 'Micro inaccessible'));
+    }
   };
 
   const importRecordedAudio = async () => {
@@ -3416,6 +3731,14 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
     flashNotice(`${availableAudios.length} audio${availableAudios.length > 1 ? 's' : ''} trouvé${availableAudios.length > 1 ? 's' : ''}`);
   };
 
+  const openAudioMenuTab = async (tab) => {
+    const nextTab = String(tab || 'charger') === 'rec' ? 'rec' : 'charger';
+    setAudioMenuTab(nextTab);
+    if (nextTab === 'charger') {
+      await importRecordedAudio();
+    }
+  };
+
   const loadPresenterSprites = async (actionId) => {
     const presenterName = String(block?.presenterName || '').trim();
     if (!presenterName) {
@@ -3459,7 +3782,21 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   };
 
   const importPresenterSprite = (actionId, spriteUrl) => {
-    importActionFrameFromValue(actionId, spriteUrl);
+    const safeValue = String(spriteUrl || '').trim();
+    if (!safeValue) {
+      flashNotice("Aucune image détectée");
+      return;
+    }
+    updateActions(actions.map((item) => item.id === actionId
+      ? {
+          ...item,
+          frames: [...(item.frames || []), normalizeImportedFrame(safeValue)],
+          frameUrlInput: '',
+          mobileImportOpen: false
+        }
+      : item));
+    setImageImportOptions([]);
+    flashNotice("Sprite importé");
   };
 
   const applyImportedAudio = async (audioId = '') => {
@@ -3534,9 +3871,23 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   };
 
   const playAnimation = async (customActions = null, options = {}) => {
+    if (isPlaying) {
+      playAnimationStopRef.current = true;
+      const audio = audioTimelineRef.current;
+      if (audio && !audio.paused) {
+        audio.pause();
+      }
+      setIsPlaying(false);
+      sequencePlaybackRef.current = false;
+      return;
+    }
     const withAudio = options.withAudio !== false;
     const sequence = Array.isArray(customActions) && customActions.length > 0 ? customActions : actions;
+    playAnimationStopRef.current = false;
+    sequencePlaybackRef.current = true;
+    setIsPlaying(true);
     for (const action of sequence) {
+      if (playAnimationStopRef.current) break;
       const frames = Array.isArray(action.frames) && action.frames.length > 0
         ? action.frames.map((frame) => (typeof frame === 'string' ? frame : frame?.url)).filter(Boolean)
         : [block?.actorImageUrl].filter(Boolean);
@@ -3549,6 +3900,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       let frameTimer = null;
       if (frames.length > 1) {
         frameTimer = window.setInterval(() => {
+          if (playAnimationStopRef.current) return;
           frameIndex = (frameIndex + 1) % frames.length;
           setActorState((prev) => ({ ...prev, frameUrl: String(frames[frameIndex] || '') }));
         }, Math.max(50, Number(action.frameDurationSec || 0.18) * 1000));
@@ -3582,6 +3934,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       }
     }
     setActorState((prev) => ({ ...prev, actionName: '' }));
+    setIsPlaying(false);
+    playAnimationStopRef.current = false;
+    sequencePlaybackRef.current = false;
   };
 
   const toggleActionLoop = async (action) => {
@@ -3680,6 +4035,13 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
       ? (normalizedPlayingLoopFrame?.url || currentActorFrame || '')
       : ((isPlaying ? currentActorFrame : (normalizedSelectedFrame?.url || currentActorFrame || '')) || '')
   ));
+  const actorDragHeight = Math.max(
+    actorRenderHeight,
+    Number(actorFigureRef.current?.offsetHeight || 0)
+  );
+  const actorOuterHeight = actorRef.current?.offsetHeight || actorRenderHeight;
+  const editorPanelTop = Number(actorState.y || 0) + actorOuterHeight + 12;
+  const editorPanelLeft = actorDocked ? 12 : Math.max(0, Number(actorState.x || 0));
   const safePresentationNumber = Math.max(1, Number(block?.presentationNumber || presentationNumber || 1));
   const safeSlideNumber = Math.max(1, Number(block?.slideNumber || slideNumber || 1));
   const animationCode = `${safePresentationNumber}${safeSlideNumber}`;
@@ -3687,7 +4049,17 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
   return (
     <div className="animation-block-shell">
       <div ref={overlayRef} className="animation-page-overlay visible">
+        {!readOnly ? (
+          <button
+            type="button"
+            className="animation-dock-toggle"
+            onClick={toggleActorDocked}
+          >
+            {actorDocked ? 'Fermer espace mascotte' : 'Ouvrir espace mascotte'}
+          </button>
+        ) : null}
         <div
+          ref={actorRef}
           className={`animation-page-actor ${readOnly ? 'readonly' : 'draggable'} ${isActorSelected ? 'selected' : ''}`}
           style={{
             transform: `translate(${Number(actorState.x || 0)}px, ${Number(actorState.y || 0)}px)`
@@ -3701,6 +4073,7 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
         >
           <div className="animation-actor-name top">{animationCode}</div>
           <div
+            ref={actorFigureRef}
             className="animation-page-actor-figure"
             style={{ width: actorRenderWidth, height: actorRenderHeight }}
             draggable={Boolean(block?.actorImageUrl)}
@@ -3733,20 +4106,46 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
             ) : null}
           </div>
           {!readOnly ? (
-            <button
-              type="button"
-              className="animation-actor-copy-btn"
-              onClick={(event) => {
-                event.stopPropagation();
-                void copyActiveActorToClipboard();
-              }}
-            >
-              Copier
-            </button>
+            <div className="animation-actor-floating-actions">
+              <button
+                type="button"
+                className="animation-actor-copy-btn"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void copyActiveActorToClipboard();
+                }}
+              >
+                Copier
+              </button>
+              <button
+                type="button"
+                className="animation-actor-copy-btn"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setEditorPanelOpen((prev) => !prev);
+                }}
+              >
+                {editorPanelOpen ? 'Fermer' : 'Ouvrir'}
+              </button>
+            </div>
           ) : null}
         </div>
-        {!readOnly ? (
-        <div className="animation-editor compact-floating" style={{ transform: `translate(${Number(actorState.x + actorState.width + 12)}px, ${Number(actorState.y)}px)` }}>
+        {!readOnly && editorPanelOpen ? (
+        <div
+          className="animation-editor compact-floating"
+          style={{
+            top: `${editorPanelTop}px`,
+            left: `${editorPanelLeft}px`
+          }}
+        >
           {baseAudioUrl ? <audio ref={audioTimelineRef} src={baseAudioUrl} preload="metadata" /> : null}
           {!readOnly && (
             <div className="animation-sprite-toolbar" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void handleActorFile(e.dataTransfer.files); }}>
@@ -3756,17 +4155,49 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                 <button
                   type="button"
                   className={`animation-rec-btn ${recordingAudio || audioMenuOpen ? 'active' : ''}`}
-                  onClick={() => setAudioMenuOpen((prev) => !prev)}
+                  onClick={() => {
+                    setAudioMenuOpen((prev) => {
+                      const nextOpen = !prev;
+                      if (nextOpen) {
+                        setAudioMenuTab('charger');
+                        void importRecordedAudio();
+                      }
+                      return nextOpen;
+                    });
+                  }}
                 >
                   Audio
                 </button>
                 {audioMenuOpen ? (
                   <div className="animation-audio-menu">
                     <div className="animation-audio-menu-actions">
-                      <button type="button" onClick={() => void toggleAudioRecord()}>{recordingAudio ? 'Stop rec' : 'Rec'}</button>
-                      <button type="button" onClick={() => void importRecordedAudio()}>Charger</button>
+                      <button
+                        type="button"
+                        className={audioMenuTab === 'rec' ? 'active' : ''}
+                        onClick={() => void openAudioMenuTab('rec')}
+                      >
+                        Rec
+                      </button>
+                      <button
+                        type="button"
+                        className={audioMenuTab === 'charger' ? 'active' : ''}
+                        onClick={() => void openAudioMenuTab('charger')}
+                      >
+                        Charger
+                      </button>
                     </div>
-                    {importOptions.length > 0 ? (
+                    {audioMenuTab === 'rec' ? (
+                      <div className="animation-audio-rec-panel">
+                        <button
+                          type="button"
+                          className={`animation-audio-rec-toggle ${recordingAudio ? 'is-recording' : ''}`}
+                          onClick={() => void toggleAudioRecord()}
+                        >
+                          <span className="animation-audio-rec-dot" />
+                          {recordingAudio ? 'Rec allumé' : 'Rec éteint'}
+                        </button>
+                      </div>
+                    ) : importOptions.length > 0 ? (
                       <div className="animation-audio-option-list">
                         {importOptions.map((option, index) => {
                           const isSelected = String(selectedImportId || '') === String(option.id || '');
@@ -3782,7 +4213,9 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                           );
                         })}
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="animation-audio-empty">Aucun audio à charger.</div>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -3908,44 +4341,46 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                     <div className="animation-sprite-space-title">Sprites</div>
                     <div className="animation-sprite-space-actions">
                       <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>+ordi</button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (action.mobileImportOpen) {
-                            setImageImportOptions([]);
-                            updateAction(action.id, { mobileImportOpen: false });
-                            return;
-                          }
-                          void loadPresenterSprites(action.id);
-                        }}
-                      >
-                        +tel
-                      </button>
+                      <div className="animation-mobile-import-shell">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (action.mobileImportOpen) {
+                              setImageImportOptions([]);
+                              updateAction(action.id, { mobileImportOpen: false });
+                              return;
+                            }
+                            void loadPresenterSprites(action.id);
+                          }}
+                        >
+                          +tel
+                        </button>
+                        {action.mobileImportOpen ? (
+                          <div className="animation-mobile-import-popover">
+                            {imageImportOptions.length > 0 ? (
+                              <div className="animation-frame-strip in-space">
+                                {imageImportOptions.map((option, optionIndex) => (
+                                  <button
+                                    key={String(option.id || `mobile_sprite_${optionIndex}`)}
+                                    type="button"
+                                    className="animation-frame-thumb from-mobile"
+                                    onClick={() => importPresenterSprite(action.id, option.url)}
+                                    title={`Slide ${option.slideNumber}${option.selected ? ' • choisi prof' : ''}`}
+                                  >
+                                    <img src={resolveWeb5eAssetUrl(option.url)} alt="" />
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="animation-frame-empty">Aucune image prof</div>
+                            )}
+                            <div className="animation-mobile-import-help">Choisis un sprite pour l’ajouter puis fermer ce menu.</div>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <div className="animation-sprite-drop-hint">Colle, glisse, ou ajoute des sprites ici.</div>
-                  {action.mobileImportOpen ? (
-                    <div className="animation-mobile-import-panel">
-                      {imageImportOptions.length > 0 ? (
-                        <div className="animation-frame-strip in-space">
-                          {imageImportOptions.map((option, optionIndex) => (
-                            <button
-                              key={String(option.id || `mobile_sprite_${optionIndex}`)}
-                              type="button"
-                              className="animation-frame-thumb from-mobile"
-                              onClick={() => importPresenterSprite(action.id, option.url)}
-                              title={`Slide ${option.slideNumber}${option.selected ? ' • choisi prof' : ''}`}
-                            >
-                              <img src={resolveWeb5eAssetUrl(option.url)} alt="" />
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="animation-frame-empty">Aucune image prof</div>
-                      )}
-                      <div className="animation-mobile-import-help">Le prof prend les photos dans CondaWeb / Exposés / Image. Clique sur une image pour l'ajouter à cette action.</div>
-                    </div>
-                  ) : null}
                   <div className="animation-frame-strip in-space">
                     {block?.actorImageUrl ? (
                       <div
@@ -3986,13 +4421,35 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                     {(!action.frames || action.frames.length === 0) && <div className="animation-frame-empty">Aucun sprite</div>}
                   </div>
                   <div className="animation-sprite-space-footer">
+                    <button type="button" onClick={() => void copySelectedActionFrameToClipboard(action.id)}>Copier</button>
+                    <button type="button" onClick={() => void pasteActionFrameFromClipboard(action.id)}>Coller</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const footerFrameIndex = Number(action.selectedFrameIndex) === -1 ? -1 : Number(action.selectedFrameIndex || 0);
+                        const footerFrame = footerFrameIndex === -1
+                          ? {
+                              url: String(block?.actorImageUrl || ''),
+                              width: Number(block?.actorWidth || 140),
+                              height: Number(block?.actorHeight || 140)
+                            }
+                          : action.frames?.[footerFrameIndex];
+                        const normalizedFooterFrame = typeof footerFrame === 'string' ? createSpriteFrame(footerFrame) : footerFrame;
+                        if (!normalizedFooterFrame?.url) return;
+                        openSliceTool(action.id, footerFrameIndex, normalizedFooterFrame);
+                      }}
+                    >
+                      Ciseaux
+                    </button>
                     <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
                     <button type="button" onClick={() => void autoCutoutSelectedSprite(action.id)}>Detourer</button>
                   </div>
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}
-              {action.spriteEditorOpen && !readOnly ? (() => {
+              {!readOnly && action.spriteEditorOpen ? (
+                <div className="animation-editor-detached-shell">
+                  {(() => {
                 const isOriginalSelected = Number(action.selectedFrameIndex) === -1;
                 const selectedFrame = isOriginalSelected ? null : action.frames?.[action.selectedFrameIndex || 0];
                 const normalizedFrame = isOriginalSelected
@@ -4154,19 +4611,42 @@ function AnimationBlockEditor({ block, onChange, onRemove, readOnly, sectionKey 
                     )}
                   </div>
                 );
-              })() : null}
+                  })()}
+                </div>
+              ) : null}
             </div>
           )})}
           </div>
         </div>
         ) : (
           <div className="animation-readonly-controls">
+            {typeof onPreviousSlide === 'function' ? (
+              <button
+                type="button"
+                className="animation-add-action-btn"
+                onClick={onPreviousSlide}
+                disabled={!canGoPrevious}
+              >
+                Precedent
+              </button>
+            ) : null}
             <button type="button" className={`animation-sprite-play ${isPlaying ? 'active' : ''}`} onClick={() => void playAnimation()}>
               {isPlaying ? 'Pause' : 'Play'}
             </button>
-            <button type="button" className="animation-add-action-btn" onClick={showNextAction}>
-              Suivant
-            </button>
+            {typeof onNextSlide === 'function' ? (
+              <button
+                type="button"
+                className="animation-add-action-btn"
+                onClick={onNextSlide}
+                disabled={!canGoNext}
+              >
+                Suivant
+              </button>
+            ) : (
+              <button type="button" className="animation-add-action-btn" onClick={showNextAction}>
+                Suivant
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -4386,6 +4866,7 @@ export default function App() {
   const [siteData, setSiteData] = useState(null);
   const [tabDocsByKey, setTabDocsByKey] = useState({});
   const [entryDocsByKey, setEntryDocsByKey] = useState({});
+  const [publicEntriesByKey, setPublicEntriesByKey] = useState({});
   const pageParams = useMemo(() => {
     try {
       return new URLSearchParams(window.location.search);
@@ -4425,6 +4906,7 @@ export default function App() {
         const entries = Array.isArray(data.entries) ? data.entries : [];
         const nextTabDocs = {};
         const nextEntryDocs = {};
+        const nextPublicEntriesByKey = {};
         const nextContentMap = { eau: {}, energie: {} };
 
         tabs.forEach((tab) => {
@@ -4433,7 +4915,9 @@ export default function App() {
           if (!sectionKey || !tabKey) return;
           nextTabDocs[`${sectionKey}:${tabKey}`] = tab;
           if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
-          const entry = entries.find((row) => String(row.tabId || '') === String(tab._id || ''));
+          const matchingEntries = entries.filter((row) => String(row.tabId || '') === String(tab._id || ''));
+          nextPublicEntriesByKey[`${sectionKey}:${tabKey}`] = matchingEntries;
+          const entry = matchingEntries[0];
           nextEntryDocs[`${sectionKey}:${tabKey}`] = entry || null;
           nextContentMap[sectionKey][tabKey] = Array.isArray(entry?.blocks) && entry.blocks.length > 0
             ? entry.blocks
@@ -4447,6 +4931,7 @@ export default function App() {
         setSiteData(data.site || null);
         setTabDocsByKey(nextTabDocs);
         setEntryDocsByKey(nextEntryDocs);
+        setPublicEntriesByKey(nextPublicEntriesByKey);
         setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
       } catch (_) {
       } finally {
@@ -4655,6 +5140,14 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.entry) {
         setEntryDocsByKey((prev) => ({ ...prev, [docKey]: data.entry }));
+        setPublicEntriesByKey((prev) => {
+          const currentRows = Array.isArray(prev[docKey]) ? prev[docKey] : [];
+          const nextRows = [...currentRows];
+          const existingIndex = nextRows.findIndex((row) => String(row?._id || '') === String(data.entry?._id || ''));
+          if (existingIndex >= 0) nextRows[existingIndex] = data.entry;
+          else nextRows.unshift(data.entry);
+          return { ...prev, [docKey]: nextRows };
+        });
       }
     } catch (_) {}
   };
@@ -4785,28 +5278,53 @@ export default function App() {
 
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
   const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
+  const currentPublicEntries = Array.isArray(publicEntriesByKey[`${activeSection}:${currentTabId}`])
+    ? publicEntriesByKey[`${activeSection}:${currentTabId}`]
+    : [];
+  const allPublicEntries = Object.values(publicEntriesByKey)
+    .flatMap((rows) => Array.isArray(rows) ? rows : []);
+  const validatedPresentationsFromCurrentBlocks = articleBlocks
+    .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
+    .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
   const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
   const voteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
   const currentUserVoteKey = String(user?.id || user?._id || '').trim();
   const currentUserVotes = currentUserVoteKey ? (voteBoard.votesByUser[currentUserVoteKey] || {}) : {};
-  const validatedPresentations = articleBlocks
-    .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
-    .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
+  const validatedPresentations = user
+    ? validatedPresentationsFromCurrentBlocks
+    : (() => {
+      const sourceEntries = allPublicEntries.length > 0 ? allPublicEntries : currentPublicEntries;
+      const fromPublicEntries = sourceEntries.flatMap((entry, entryIndex) => (
+        (Array.isArray(entry?.blocks) ? entry.blocks : [])
+          .map((block, blockIndex) => ({ block, blockIndex, entryIndex }))
+          .filter(({ block }) => block?.type === 'text' && normalizePresentationBlock(block).presentationValidated)
+          .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
+            index: blockIndex,
+            presentation: normalizePresentationBlock(block),
+            publicEntryIndex
+          }))
+      ));
+      return fromPublicEntries.length > 0 ? fromPublicEntries : validatedPresentationsFromCurrentBlocks;
+    })();
   const studentHasValidatedPresentation = !isTeacher && validatedPresentations.length > 0;
   const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
   const [openedValidatedPresentationMode, setOpenedValidatedPresentationMode] = useState('browse');
   const [editingPresentationBlockIndex, setEditingPresentationBlockIndex] = useState(-1);
+  const hasLockedPresentationEditing = Boolean(user) && editingPresentationBlockIndex >= 0;
   const presentationBlocks = blocks
     .map((block, index) => ({ block, index }))
     .filter(({ block }) => block.type === 'text')
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
+  const preferredStudentPresentationIndex = editingPresentationBlockIndex >= 0
+    ? editingPresentationBlockIndex
+    : (validatedPresentations[0]?.index ?? presentationBlocks[0]?.index ?? -1);
   const hasEmptyPresentationName = presentationBlocks.some(({ presentation }) => !String(presentation.presentationName || '').trim());
   const visibleArticleBlocks = user
     ? articleBlocks.filter(({ block, index }) => {
         if (block.type !== 'text') return true;
         if (isTeacher) return true;
-        if (!studentHasValidatedPresentation) return true;
-        return index === editingPresentationBlockIndex;
+        if (studentHasValidatedPresentation && !hasLockedPresentationEditing) return false;
+        return index === preferredStudentPresentationIndex;
       })
     : articleBlocks.filter(({ block }) => block.type !== 'text');
 
@@ -5081,7 +5599,7 @@ export default function App() {
             <div className="section-kicker">{currentSection.title}</div>
             <h2>{currentSection.subtitle}</h2>
           </div>
-          {user && (
+          {isTeacher && (
             <div className="toolbar">
               <button onClick={() => {
                 if (hasEmptyPresentationName) {
@@ -5142,74 +5660,89 @@ export default function App() {
           ))}
         </div>
 
-        {validatedPresentations.length > 0 ? (
+        {validatedPresentations.length > 0 && (!user || !hasLockedPresentationEditing) ? (
           <div className="validated-presentations-grid">
             {validatedPresentations.map(({ presentation, index }) => (
-              <article key={`validated-presentation-${index}`} className="validated-presentation-card">
-                <div className="validated-presentation-eyebrow">Presentation validee</div>
+              <article
+                key={`validated-presentation-${index}`}
+                className={`validated-presentation-card ${!user ? 'public-only-card' : ''}`}
+                onClick={() => {
+                  if (user) return;
+                  setOpenedValidatedPresentationMode(presentation.canvaLiveUrl ? 'canva' : 'slideshow');
+                  setOpenedValidatedPresentationIndex(index);
+                }}
+              >
+                {user ? <div className="validated-presentation-eyebrow">Presentation validee</div> : null}
                 <h3>{presentation.presentationName || `Presentation ${index + 1}`}</h3>
-                <div className="validated-presentation-meta">
-                  <span>{presentation.slides.length} slides</span>
-                  <span>{Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions.length : 0} questions QCM</span>
-                </div>
-                <div className="validated-presentation-actions">
-                  <button
-                    type="button"
-                    className="presentation-slide-add"
-                    onClick={() => {
-                      setOpenedValidatedPresentationMode('browse');
-                      setOpenedValidatedPresentationIndex(index);
-                    }}
-                  >
-                    Ouvrir
-                  </button>
-                  <button
-                    type="button"
-                    className="presentation-slide-add"
-                    onClick={() => {
-                      setOpenedValidatedPresentationMode('slideshow');
-                      setOpenedValidatedPresentationIndex(index);
-                    }}
-                  >
-                    Diapo
-                  </button>
-                  {presentation.canvaLiveUrl ? (
-                    <button
-                      type="button"
-                      className="presentation-slide-add"
-                      onClick={() => {
-                        setOpenedValidatedPresentationMode('canva');
-                        setOpenedValidatedPresentationIndex(index);
-                      }}
-                    >
-                      Play
-                    </button>
-                  ) : null}
-                  {user ? (
-                    <button
-                      type="button"
-                      className="presentation-slide-add"
-                      onClick={() => {
-                        const targetBlockIndex = validatedPresentations[index].index;
-                        const targetBlock = blocks[targetBlockIndex];
-                        if (targetBlock?.type === 'text') {
-                          replaceBlock(targetBlockIndex, {
-                            ...normalizePresentationBlock(targetBlock),
-                            presentationValidated: false
-                          });
-                        }
-                        setEditingPresentationBlockIndex(targetBlockIndex);
-                        setOpenedValidatedPresentationMode('browse');
-                        setOpenedValidatedPresentationIndex(-1);
-                      }}
-                    >
-                      Modifie
-                    </button>
-                  ) : null}
-                  {isLocalSessionMode ? (
-                    <button type="button" className="presentation-slide-add danger" onClick={() => deleteValidatedPresentationCard(index)}>Supprimer</button>
-                  ) : null}
-                </div>
+                {user ? (
+                  <>
+                    <div className="validated-presentation-meta">
+                      <span>{presentation.slides.length} slides</span>
+                      <span>{Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions.length : 0} questions QCM</span>
+                    </div>
+                    <div className="validated-presentation-actions">
+                      {isTeacher ? (
+                        <>
+                          <button
+                            type="button"
+                            className="presentation-slide-add"
+                            onClick={() => {
+                              setOpenedValidatedPresentationMode('browse');
+                              setOpenedValidatedPresentationIndex(index);
+                            }}
+                          >
+                            Ouvrir
+                          </button>
+                          <button
+                            type="button"
+                            className="presentation-slide-add"
+                            onClick={() => {
+                              setOpenedValidatedPresentationMode('slideshow');
+                              setOpenedValidatedPresentationIndex(index);
+                            }}
+                          >
+                            Diapo
+                          </button>
+                          {presentation.canvaLiveUrl ? (
+                            <button
+                              type="button"
+                              className="presentation-slide-add"
+                              onClick={() => {
+                                setOpenedValidatedPresentationMode('canva');
+                                setOpenedValidatedPresentationIndex(index);
+                              }}
+                            >
+                              Play
+                            </button>
+                          ) : null}
+                        </>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="presentation-slide-add"
+                        onClick={() => {
+                          const targetBlockIndex = validatedPresentations[index].index;
+                          const targetBlock = blocks[targetBlockIndex];
+                          if (targetBlock?.type === 'text') {
+                            const normalizedTargetBlock = normalizePresentationBlock(targetBlock);
+                            replaceBlock(targetBlockIndex, {
+                              ...normalizedTargetBlock,
+                              activeEditorTab: 'slides'
+                            });
+                          }
+                          setEditingPresentationBlockIndex(targetBlockIndex);
+                          setOpenedValidatedPresentationMode('browse');
+                          setOpenedValidatedPresentationIndex(-1);
+                        }}
+                      >
+                        Modifier
+                      </button>
+                      {isTeacher && isLocalSessionMode ? (
+                        <button type="button" className="presentation-slide-add danger" onClick={() => deleteValidatedPresentationCard(index)}>Supprimer</button>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
               </article>
             ))}
           </div>
@@ -5226,6 +5759,7 @@ export default function App() {
               entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
               mode={openedValidatedPresentationMode}
               presentationNumber={openedValidatedPresentationIndex + 1}
+              simpleMode={!user}
             />
           </div>
         ) : null}
@@ -5276,6 +5810,7 @@ export default function App() {
                   siblingPresentationNames={presentationBlocks.filter((row) => row.index !== index).map((row) => row.presentation.presentationName)}
                   presentationNumber={Math.max(1, presentationBlocks.findIndex((row) => row.index === index) + 1)}
                   allUsersData={allUsersData}
+                  currentUserName={`${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
                 />
               )}
 

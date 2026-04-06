@@ -138,6 +138,12 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                 imageVideoRef.current.srcObject.getTracks().forEach((track) => track.stop());
                 imageVideoRef.current.srcObject = null;
             }
+            if (streamRef.current) {
+                try {
+                    streamRef.current.getTracks().forEach((track) => track.stop());
+                } catch (_) {}
+                streamRef.current = null;
+            }
             setImageCameraReady(false);
         };
 
@@ -149,13 +155,33 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
             setImageCameraError('');
             setImageCameraReady(false);
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: 'environment' } },
-                    audio: false
-                });
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    throw new Error('media_devices_unavailable');
+                }
+                stopImageCamera();
+                let stream = null;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { ideal: 'environment' } },
+                        audio: false
+                    });
+                } catch (_) {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false
+                    });
+                }
+                streamRef.current = stream;
                 if (imageVideoRef.current) {
                     imageVideoRef.current.srcObject = stream;
-                    imageVideoRef.current.onloadedmetadata = () => setImageCameraReady(true);
+                    imageVideoRef.current.onloadedmetadata = () => {
+                        setImageCameraReady(true);
+                        if (imageVideoRef.current?.play) {
+                            imageVideoRef.current.play().catch(() => {});
+                        }
+                    };
+                } else {
+                    setImageCameraReady(true);
                 }
             } catch (error) {
                 setImageCameraError("Caméra indisponible.");
@@ -557,8 +583,17 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                 const studentRecordings = (activeExpose?.presentations || []).filter((row) => (
                                     String(row?.studentId || '') === studentId && String(row?.recordingUrl || '').trim()
                                 ));
+                                const studentImages = (activeExpose?.presentations || []).filter((row) => (
+                                    String(row?.studentId || '') === studentId
+                                    && Array.isArray(row?.spriteImageUrls)
+                                    && row.spriteImageUrls.some((url) => String(url || '').trim())
+                                ));
+                                const imageCount = studentImages.reduce((sum, row) => (
+                                    sum + (Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls.filter((url) => String(url || '').trim()).length : 0)
+                                ), 0);
                                 const active = String(selectedRecorder?.studentId || '') === studentId;
                                 const hasAudio = studentRecordings.length > 0;
+                                const hasImages = imageCount > 0;
                                 return (
                                     <button
                                         key={studentId}
@@ -582,8 +617,8 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                         <div className="text-[11px] font-black text-slate-500 leading-tight">
                                             {student.lastName}
                                         </div>
-                                        <div className={`mt-2 text-[10px] font-black ${hasAudio ? 'text-orange-600' : 'text-slate-300'}`}>
-                                            {hasAudio ? `${studentRecordings.length} audio${studentRecordings.length > 1 ? 's' : ''}` : ''}
+                                        <div className={`mt-2 text-[10px] font-black ${(hasAudio || hasImages) ? 'text-orange-600' : 'text-slate-300'}`}>
+                                            {[hasAudio ? `${studentRecordings.length} audio${studentRecordings.length > 1 ? 's' : ''}` : '', hasImages ? `${imageCount} image${imageCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' • ')}
                                         </div>
                                     </button>
                                 );

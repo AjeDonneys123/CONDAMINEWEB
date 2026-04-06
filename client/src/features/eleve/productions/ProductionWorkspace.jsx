@@ -54,8 +54,9 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
   const slideWindowInteractionRef = useRef(null);
-  const initialSubmission = production?.studentSubmission || {};
+  const initialSubmission = production?.startFresh ? {} : (production?.studentSubmission || {});
   const productionType = String(production?.productionType || 'fiche');
+  const [currentSubmission, setCurrentSubmission] = useState(initialSubmission);
 
   const [slides, setSlides] = useState([]);
   const [activeSlideIdx, setActiveSlideIdx] = useState(0);
@@ -125,6 +126,10 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
     });
     return grouped.length > 0 ? grouped : [emptyQcmLevel()];
   });
+
+  useEffect(() => {
+    setCurrentSubmission(production?.startFresh ? {} : (production?.studentSubmission || {}));
+  }, [production?._id, production?.startFresh, production?.studentSubmission?._id]);
 
   const presentationId = useMemo(() => extractGoogleSlidesId(production?.presentationUrl || ''), [production?.presentationUrl]);
   const activeSlide = slides[activeSlideIdx] || null;
@@ -311,7 +316,8 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
     try {
       const payload = {
         productionId: String(production?._id || ''),
-        studentId: String(user?._id || user?.id || '')
+        studentId: String(user?._id || user?.id || ''),
+        submissionId: String(currentSubmission?._id || '')
       };
 
       if (productionType === 'fiche') {
@@ -339,6 +345,9 @@ export default function ProductionWorkspace({ production, user, relatedAlternati
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String(data?.error || 'Sauvegarde impossible'));
+      if (data?.submission) {
+        setCurrentSubmission(data.submission);
+      }
       setSaveMessage(mode === 'auto' ? 'Travail sauvegarde automatiquement' : 'Travail sauvegarde');
     } catch (e) {
       setSaveMessage(String(e?.message || 'Sauvegarde impossible'));

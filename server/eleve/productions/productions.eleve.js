@@ -138,7 +138,10 @@ router.get('/list/:studentId', async (req, res) => {
 
         const out = rows.map((x) => {
             const chapter = chapterById.get(String(x.chapterId || ''));
-            const sub = (x.submissions || []).find((p) => String(p.studentId) === String(student._id)) || null;
+            const studentSubs = (x.submissions || [])
+                .filter((p) => String(p.studentId) === String(student._id))
+                .sort((a, b) => new Date(b?.updatedAt || b?.completedAt || 0).getTime() - new Date(a?.updatedAt || a?.completedAt || 0).getTime());
+            const sub = studentSubs[0] || null;
             const done = Boolean(sub?.completedAt);
             return {
                 ...x,
@@ -146,6 +149,7 @@ router.get('/list/:studentId', async (req, res) => {
                 chapterSection: chapter?.section || x.subject || 'GÉNÉRAL',
                 linkedGameTitle: x.gameId ? (gameById.get(String(x.gameId))?.title || '') : '',
                 studentSubmission: sub,
+                studentSubmissions: studentSubs,
                 status: done ? 'done' : 'todo'
             };
         });
@@ -169,7 +173,10 @@ router.post('/save', async (req, res) => {
         const type = String(row.productionType || 'fiche');
         const now = new Date();
         const entries = Array.isArray(row.submissions) ? [...row.submissions] : [];
-        const idx = entries.findIndex((p) => String(p.studentId) === studentId);
+        const submissionId = String(req.body?.submissionId || '').trim();
+        const idx = submissionId
+            ? entries.findIndex((p) => String(p?._id || '') === submissionId && String(p.studentId) === studentId)
+            : -1;
         const previous = idx >= 0 ? entries[idx] : null;
 
         let nextEntry = {
@@ -230,13 +237,16 @@ router.post('/save', async (req, res) => {
             nextEntry.completedAt = answers.length > 0 && answers.every((ans) => ans.levelTitle && ans.prompt && ans.options.length === 4 && ans.options.every((opt) => countWords(opt) > 0 && countWords(opt) <= 4) && ans.correctIndex >= 0) ? (previous?.completedAt || now) : null;
         }
 
-        if (idx >= 0) entries[idx] = nextEntry;
+        if (idx >= 0) entries[idx] = { ...entries[idx], ...nextEntry };
         else entries.push(nextEntry);
 
         row.submissions = entries;
         await row.save();
 
-        res.json({ ok: true, submission: nextEntry });
+        const savedSubmission = idx >= 0
+            ? row.submissions[idx]
+            : row.submissions[row.submissions.length - 1];
+        res.json({ ok: true, submission: savedSubmission });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

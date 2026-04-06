@@ -104,9 +104,39 @@ router.patch('/:id/submissions/:studentId/validate', async (req, res) => {
         const row = await Production.findById(req.params.id);
         if (!row) return res.status(404).json({ error: 'Production introuvable' });
         const sid = String(req.params.studentId || '').trim();
-        const idx = (row.submissions || []).findIndex((sub) => String(sub?.studentId || '') === sid);
+        const submissionId = String(req.body?.submissionId || '').trim();
+        const idx = submissionId
+            ? (row.submissions || []).findIndex((sub) => String(sub?._id || '') === submissionId && String(sub?.studentId || '') === sid)
+            : (row.submissions || []).findIndex((sub) => String(sub?.studentId || '') === sid);
         if (idx < 0) return res.status(404).json({ error: 'Rendu élève introuvable' });
         row.submissions[idx].teacherValidated = req.body?.teacherValidated !== false;
+        row.submissions[idx].updatedAt = new Date();
+        await row.save();
+        res.json({ ok: true, submission: row.submissions[idx] });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.patch('/:id/submissions/:studentId/meta', async (req, res) => {
+    try {
+        const row = await Production.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Production introuvable' });
+        const sid = String(req.params.studentId || '').trim();
+        const idx = (row.submissions || []).findIndex((sub) => String(sub?.studentId || '') === sid);
+        if (idx < 0) return res.status(404).json({ error: 'Rendu élève introuvable' });
+        const lessonSlotRaw = Number(req.body?.lessonSlot || 1);
+        const lessonSlot = Number.isFinite(lessonSlotRaw)
+            ? Math.max(1, Math.min(5, Math.floor(lessonSlotRaw)))
+            : 1;
+        const participantStudentIds = [...new Set(
+            (Array.isArray(req.body?.participantStudentIds) ? req.body.participantStudentIds : [])
+                .map((id) => String(id || '').trim())
+                .filter(Boolean)
+                .filter((id) => id !== sid)
+        )];
+        row.submissions[idx].lessonSlot = lessonSlot;
+        row.submissions[idx].participantStudentIds = participantStudentIds;
         row.submissions[idx].updatedAt = new Date();
         await row.save();
         res.json({ ok: true, submission: row.submissions[idx] });

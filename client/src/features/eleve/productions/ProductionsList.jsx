@@ -72,7 +72,22 @@ export default function ProductionsList({ user, openItemId = '', onOpenHandled }
                     {loading ? '...' : '🔄 ACTUALISER'}
                 </button>
             </div>
-            <DashboardFolder items={items} type="fiche" onSelect={setSelected} />
+            <DashboardFolder
+                items={items}
+                type="fiche"
+                onSelect={(item) => {
+                    if (!item) return;
+                    if (item.status === 'done') {
+                        setSelected({
+                            ...item,
+                            startFresh: true,
+                            studentSubmission: null
+                        });
+                        return;
+                    }
+                    setSelected(item);
+                }}
+            />
         </div>
     );
 }

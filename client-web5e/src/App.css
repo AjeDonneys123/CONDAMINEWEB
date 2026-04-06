@@ -670,6 +670,16 @@
   color: #1d2942;
 }
 
+.validated-presentation-card.public-only-card {
+  cursor: pointer;
+  min-height: 88px;
+  align-items: center;
+}
+
+.validated-presentation-card.public-only-card h3 {
+  font-size: 1.35rem;
+}
+
 .validated-presentation-eyebrow {
   font-size: 0.78rem;
   font-weight: 900;
@@ -1144,6 +1154,7 @@
 }
 
 .presentation-canvas {
+  --mascot-lane-width: clamp(260px, 28%, 360px);
   min-height: clamp(360px, 52vw, 640px);
   aspect-ratio: 16 / 9;
   padding: 20px;
@@ -1154,6 +1165,32 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.presentation-slide-content-area {
+  width: calc(100% - var(--mascot-lane-width));
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+.presentation-canvas > .animation-block-shell {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  bottom: 20px;
+  width: max(0px, calc(var(--mascot-lane-width) - 20px));
+  z-index: 4;
+}
+
+.presentation-canvas[data-mascot-docked='false'] > .animation-block-shell {
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: auto;
 }
 
 .presentation-canvas.draw-text-mode {
@@ -1258,6 +1295,7 @@
 }
 
 .canva-live-frame-shell {
+  --mascot-lane-width: clamp(260px, 28%, 360px);
   min-height: clamp(360px, 52vw, 640px);
   border-radius: 24px;
   overflow: visible;
@@ -1267,8 +1305,28 @@
   position: relative;
 }
 
+.canva-live-loader-frame {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
+
+.presentation-import-fallback-note {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 41, 67, 0.1);
+  background: rgba(255, 250, 245, 0.96);
+  color: #58677f;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .canva-live-frame {
-  width: 100%;
+  width: calc(100% - var(--mascot-lane-width));
   min-height: clamp(360px, 52vw, 640px);
   border: none;
   display: block;
@@ -1278,15 +1336,42 @@
 
 .canva-live-animation-layer {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--mascot-lane-width);
   z-index: 4;
 }
 
 .canva-live-lock-overlay {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: calc(100% - var(--mascot-lane-width));
   z-index: 3;
   background: transparent;
+}
+
+.canva-live-frame-shell[data-mascot-docked='false'] .canva-live-animation-layer {
+  left: 0;
+  width: auto;
+}
+
+.animation-dock-toggle {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 240;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 800;
+  color: #1f2944;
+  box-shadow: 0 10px 18px rgba(28, 41, 67, 0.14);
+  pointer-events: auto;
 }
 
 .canva-live-presenter-badge {
@@ -1601,6 +1686,13 @@
   min-height: 340px;
 }
 
+.canva-live-animation-layer > .animation-block-shell,
+.presentation-canvas > .animation-block-shell {
+  height: 100%;
+  min-height: 100%;
+  padding-right: 0;
+}
+
 .animation-editor {
   display: grid;
   gap: 14px;
@@ -1699,11 +1791,64 @@
   gap: 8px;
 }
 
+.animation-audio-menu-actions button {
+  border: 1px solid #94a3b8;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.animation-audio-menu-actions button.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #312e81;
+}
+
 .animation-audio-option-list {
   display: grid;
   gap: 6px;
   max-height: 220px;
   overflow: auto;
+}
+
+.animation-audio-rec-panel {
+  display: grid;
+}
+
+.animation-audio-rec-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font: inherit;
+  font-weight: 900;
+  color: #334155;
+}
+
+.animation-audio-rec-toggle.is-recording {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #b91c1c;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
+
+.animation-audio-rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #94a3b8;
+  flex: 0 0 auto;
+}
+
+.animation-audio-rec-toggle.is-recording .animation-audio-rec-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.16);
 }
 
 .animation-audio-option {
@@ -1718,6 +1863,16 @@
 .animation-audio-option.active {
   border: 2px solid #4f46e5;
   background: #eef2ff;
+}
+
+.animation-audio-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #64748b;
 }
 
 .animation-gemini-btn {
@@ -2070,6 +2225,25 @@
   gap: 8px;
 }
 
+.animation-mobile-import-shell {
+  position: relative;
+}
+
+.animation-mobile-import-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 220;
+  width: 260px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(28, 41, 67, 0.16);
+  background: #fff;
+  box-shadow: 0 18px 36px rgba(28, 41, 67, 0.16);
+}
+
 .animation-mobile-import-panel {
   display: grid;
   gap: 8px;
@@ -2138,6 +2312,23 @@
   background: rgba(255, 255, 255, 0.96);
   display: grid;
   gap: 12px;
+}
+
+.animation-editor-detached-shell {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 41, 67, 0.12);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.98));
+  box-shadow: 0 18px 34px rgba(28, 41, 67, 0.08);
+}
+
+.animation-editor-detached-shell .animation-sprite-editor-panel {
+  margin-top: 0;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
 }
 
 .animation-sprite-editor-preview {
@@ -2476,6 +2667,13 @@
   pointer-events: none;
 }
 
+.canva-live-animation-layer > .animation-block-shell > .animation-page-overlay,
+.presentation-canvas > .animation-block-shell > .animation-page-overlay {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
 .animation-page-overlay.hidden {
   opacity: 0;
 }
@@ -2495,6 +2693,12 @@
   pointer-events: auto;
   touch-action: none;
   user-select: none;
+}
+
+.animation-actor-floating-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .animation-page-actor-figure {

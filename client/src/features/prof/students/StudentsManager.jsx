@@ -68,6 +68,9 @@ export default function StudentsManager({ globalClassId }) {
   const [viewingStudent, setViewingStudent] = useState(null); // Pour la modale de suivi
   const [controlRecoveriesByStudent, setControlRecoveriesByStudent] = useState({});
   const [viewingWork, setViewingWork] = useState(null);
+  const [ficheBoardActivity, setFicheBoardActivity] = useState(null);
+  const [ficheBoardEditing, setFicheBoardEditing] = useState(null);
+  const [ficheBoardSaving, setFicheBoardSaving] = useState(false);
 
   useEffect(() => {
     if (!globalClassId) return;
@@ -77,13 +80,14 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, lms, exs, prods, subs, progs, chapters, draftDocs] = await Promise.all([
+        const [sts, clsList, hws, gms, lms, exs, fiches, prods, subs, progs, chapters, draftDocs] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
             fetch('/api/games/all').then(r => r.json()),
             fetch('/api/learning/all').then(r => r.ok ? r.json() : []),
             fetch('/api/exposes/all').then(r => r.ok ? r.json() : []),
+            fetch('/api/fiches/all').then(r => r.ok ? r.json() : []),
             fetch('/api/productions/all').then(r => r.ok ? r.json() : []),
             fetch('/api/homework/submissions').then(r => r.json()),
             fetch('/api/games/progress').then(r => r.json()),
@@ -140,6 +144,7 @@ export default function StudentsManager({ globalClassId }) {
             ...gms.map(g => ({ ...g, type: 'game', chapterIdStr: extractId(g.chapterId), label: '🎮 ' + g.title })),
             ...lms.map(m => ({ ...m, type: 'learning', chapterIdStr: extractId(m.chapterId), label: '📚 ' + m.title })),
             ...exs.map(e => ({ ...e, type: 'expose', chapterIdStr: extractId(e.chapterId), label: '🗣️ ' + e.title })),
+            ...fiches.map(f => ({ ...f, type: 'fiche', chapterIdStr: extractId(f.chapterId), label: '🗂️ ' + f.title })),
             ...prods.map(p => ({ ...p, type: 'production', chapterIdStr: extractId(p.chapterId), label: '🏗️ ' + p.title }))
         ];
         const classTargetKey = norm(currentClassName);
@@ -229,13 +234,36 @@ export default function StudentsManager({ globalClassId }) {
                 };
             });
         });
+        fiches.forEach((fiche) => {
+            const ficheId = extractId(fiche._id);
+            (fiche.submissions || []).forEach((sub) => {
+                const sid = extractId(sub.studentId);
+                if (!sid || !ficheId) return;
+                map[`${sid}_${ficheId}`] = {
+                    // Nouvelle règle: toute sauvegarde, même incomplète, est visible côté prof.
+                    done: true,
+                    score: 'FICHE',
+                    fiche: {
+                        title: fiche.title || 'Fiche',
+                        contentHtml: sub.contentHtml || '',
+                        plainText: sub.plainText || '',
+                        imageCount: Number(sub.imageCount || 0),
+                        teacherValidated: sub.teacherValidated === true,
+                        participantStudentIds: Array.isArray(sub.participantStudentIds) ? sub.participantStudentIds : [],
+                        lessonSlot: Math.max(1, Number(sub.lessonSlot || 1)),
+                        updatedAt: sub.updatedAt || sub.completedAt || null
+                    }
+                };
+            });
+        });
         prods.forEach((prod) => {
             const prodId = extractId(prod._id);
             (prod.submissions || []).forEach((sub) => {
                 const sid = extractId(sub.studentId);
                 if (!sid || !prodId) return;
                 map[`${sid}_${prodId}`] = {
-                    done: Boolean(sub.completedAt || sub.updatedAt || sub.contentHtml || (Array.isArray(sub.answers) && sub.answers.length > 0)),
+                    // Nouvelle règle: toute autosauvegarde ou sauvegarde manuelle apparaît côté prof.
+                    done: true,
                     score: prod.productionType === 'qcm'
                         ? `${Number(sub.score || 0)} QCM`
                         : (prod.productionType === 'questionnaire' ? `${Array.isArray(sub.answers) ? sub.answers.length : 0} questions` : 'FICHE'),
@@ -246,6 +274,8 @@ export default function StudentsManager({ globalClassId }) {
                         plainText: sub.plainText || '',
                         answers: Array.isArray(sub.answers) ? sub.answers : [],
                         teacherValidated: sub.teacherValidated === true,
+                        participantStudentIds: Array.isArray(sub.participantStudentIds) ? sub.participantStudentIds : [],
+                        lessonSlot: Math.max(1, Number(sub.lessonSlot || 1)),
                         updatedAt: sub.updatedAt || sub.completedAt || null
                     }
                 };
@@ -303,6 +333,11 @@ export default function StudentsManager({ globalClassId }) {
       setViewingWork(payload);
   };
 
+  const isBoardActivity = (act) => (
+      String(act?.type || '') === 'fiche'
+      || (String(act?.type || '') === 'production' && String(act?.productionType || '') === 'fiche')
+  );
+
   const handleOpenActivityWork = (student, act, status) => {
       if (!student || !act || !status?.done) return;
       if (act.type === 'homework' && status?.subId) return handleOpenCorrection(status.subId);
@@ -322,6 +357,15 @@ export default function StudentsManager({ globalClassId }) {
               studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
               chapterLabel: act.chapterLabel || chapterNameById[extractId(act.chapterId)] || '',
               production: status.production
+          });
+      }
+      if (act.type === 'fiche' && status?.fiche) {
+          return openWorkViewer({
+              kind: 'fiche',
+              title: status.fiche.title || act.title || 'Fiche',
+              studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+              chapterLabel: act.chapterLabel || chapterNameById[extractId(act.chapterId)] || '',
+              fiche: status.fiche
           });
       }
   };
@@ -368,6 +412,8 @@ export default function StudentsManager({ globalClassId }) {
                   presentation: status ? (status.presentation || null) : null,
                   draftDoc: status ? (status.draftDoc || null) : null,
                   production: status ? (status.production || null) : null
+                  ,
+                  fiche: status ? (status.fiche || null) : null
               });
           }
       });
@@ -423,6 +469,142 @@ export default function StudentsManager({ globalClassId }) {
           learning: learningTotal
         }
       };
+  };
+
+  const ficheBoardItems = ficheBoardActivity
+    ? activities
+        .filter((act) => {
+            const sameCurrent = String(extractId(act._id)) === String(extractId(ficheBoardActivity._id));
+            const sameFamily = String(act.type || '') === 'production';
+            return sameCurrent || sameFamily;
+        })
+        .flatMap((act) => {
+            if (String(act.type || '') === 'fiche') {
+              return (act.submissions || []).map((source, index) => {
+                const sid = extractId(source?.studentId);
+                const student = students.find((row) => extractId(row._id) === sid);
+                if (!sid || !student) return null;
+                const participantIds = [...new Set([
+                  sid,
+                  ...((source.participantStudentIds || []).map((id) => String(id)))
+                ])];
+                const participantNames = participantIds
+                  .map((id) => students.find((row) => extractId(row._id) === String(id)))
+                  .filter(Boolean)
+                  .map((row) => `${row.firstName || ''} ${row.lastName || ''}`.trim())
+                  .filter(Boolean);
+                return {
+                  boardItemId: `${extractId(act._id)}::${extractId(source?._id || index)}`,
+                  activityId: extractId(act._id),
+                  activityType: String(act.type || ''),
+                  submissionId: extractId(source?._id || index),
+                  activityTitle: act.title || 'Fiche de révision',
+                  contentType: 'fiche',
+                  ownerStudentId: sid,
+                  ownerName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+                  participantIds,
+                  participantNames,
+                  lessonSlot: Math.max(1, Math.min(5, Number(source.lessonSlot || 1))),
+                  typeLabel: 'Fiche de révision',
+                  fiche: source
+                };
+              });
+            }
+            if (String(act.type || '') === 'production') {
+              return (act.submissions || []).map((source, index) => {
+                const sid = extractId(source?.studentId);
+                const student = students.find((row) => extractId(row._id) === sid);
+                if (!sid || !student) return null;
+                const sourceType = String(act.productionType || source?.type || 'fiche');
+                if (!['fiche', 'questionnaire', 'qcm'].includes(sourceType)) return null;
+                const participantIds = [...new Set([
+                  sid,
+                  ...((source.participantStudentIds || []).map((id) => String(id)))
+                ])];
+                const participantNames = participantIds
+                  .map((id) => students.find((row) => extractId(row._id) === String(id)))
+                  .filter(Boolean)
+                  .map((row) => `${row.firstName || ''} ${row.lastName || ''}`.trim())
+                  .filter(Boolean);
+                const typeLabel = sourceType === 'qcm'
+                  ? 'QCM'
+                  : (sourceType === 'questionnaire' ? 'Apprentissage' : 'Fiche de révision');
+                return {
+                  boardItemId: `${extractId(act._id)}::${extractId(source?._id || index)}`,
+                  activityId: extractId(act._id),
+                  activityType: String(act.type || ''),
+                  submissionId: extractId(source?._id || index),
+                  activityTitle: act.title || typeLabel,
+                  contentType: sourceType,
+                  ownerStudentId: sid,
+                  ownerName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+                  participantIds,
+                  participantNames,
+                  lessonSlot: Math.max(1, Math.min(5, Number(source.lessonSlot || 1))),
+                  typeLabel,
+                  fiche: source
+                };
+              });
+            }
+            return [];
+        })
+        .filter(Boolean)
+    : [];
+
+  const saveFicheBoardMeta = async (activityId, activityType, ownerStudentId, payload) => {
+      if (!activityId || !ownerStudentId) return;
+      setFicheBoardSaving(true);
+      try {
+          const basePath = String(activityType || '') === 'production'
+              ? '/api/productions'
+              : '/api/fiches';
+          const res = await fetch(`${basePath}/${encodeURIComponent(String(activityId))}/submissions/${encodeURIComponent(String(ownerStudentId))}/meta`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+          });
+          if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data?.error || 'Enregistrement impossible');
+          }
+          await loadMatrix();
+      } catch (e) {
+          alert(e.message || 'Enregistrement impossible');
+      } finally {
+          setFicheBoardSaving(false);
+      }
+  };
+
+  const handleFicheBoardDrop = async (event, lessonSlot) => {
+      event.preventDefault();
+      const raw = event.dataTransfer.getData('text/plain');
+      if (!raw) return;
+      const [activityId, submissionId] = String(raw).split('::');
+      const item = ficheBoardItems.find((row) => row.activityId === activityId && row.submissionId === submissionId);
+      if (!item || item.lessonSlot === lessonSlot) return;
+      await saveFicheBoardMeta(item.activityId, item.activityType, item.ownerStudentId, {
+          lessonSlot,
+          participantStudentIds: item.participantIds.filter((id) => id !== item.ownerStudentId),
+          submissionId: item.submissionId
+      });
+  };
+
+  const openFicheBoardEditor = (item) => {
+      if (!item) return;
+      setFicheBoardEditing({
+          ...item,
+          participantStudentIds: item.participantIds.filter((id) => id !== item.ownerStudentId)
+      });
+  };
+
+  const handleSaveFicheBoardEditor = async () => {
+      if (!ficheBoardEditing?.ownerStudentId) return;
+      await saveFicheBoardMeta(ficheBoardEditing.activityId, ficheBoardEditing.activityType, ficheBoardEditing.ownerStudentId, {
+          lessonSlot: ficheBoardEditing.lessonSlot,
+          participantStudentIds: ficheBoardEditing.participantStudentIds,
+          submissionId: ficheBoardEditing.submissionId
+      });
+      setFicheBoardEditing(null);
   };
 
   return (
@@ -715,6 +897,18 @@ export default function StudentsManager({ globalClassId }) {
                                 )}
                             </div>
                         )}
+                        {viewingWork.kind === 'fiche' && (
+                            <div className="space-y-4">
+                                <div className="text-[11px] font-black uppercase text-sky-600">Fiche de révision</div>
+                                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                                    {viewingWork.fiche?.contentHtml ? (
+                                        <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: viewingWork.fiche.contentHtml }} />
+                                    ) : (
+                                        <div className="text-slate-400 italic">Aucune donnée enregistrée.</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         {viewingWork.kind === 'control-recovery' && (
                             <div className="space-y-4">
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -750,6 +944,156 @@ export default function StudentsManager({ globalClassId }) {
                                 )}
                             </div>
                         )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {ficheBoardActivity && (
+            <div className="correction-overlay" onClick={() => !ficheBoardSaving && setFicheBoardActivity(null)}>
+                <div className="students-board-card" onClick={(e) => e.stopPropagation()}>
+                    <div className="students-board-header">
+                        <div>
+                            <h2 className="students-board-title">{ficheBoardActivity.title || 'Fiche de révision'}</h2>
+                            <p className="students-board-subtitle">Organise les travaux par leçon et ouvre chaque rendu pour voir le contenu.</p>
+                        </div>
+                        <button onClick={() => setFicheBoardActivity(null)} className="text-slate-500 text-2xl font-black" disabled={ficheBoardSaving}>✕</button>
+                    </div>
+                    <div className="students-board-grid">
+                        {[1, 2, 3, 4, 5].map((lessonSlot) => (
+                            <div
+                                key={lessonSlot}
+                                className="students-board-column"
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => handleFicheBoardDrop(e, lessonSlot)}
+                            >
+                                <div className="students-board-column-head">Leçon {lessonSlot}</div>
+                                <div className="students-board-column-body">
+                                    {ficheBoardItems.filter((item) => item.lessonSlot === lessonSlot).map((item) => (
+                                        <button
+                                            key={item.boardItemId}
+                                            type="button"
+                                            className="students-board-work"
+                                            draggable
+                                            onDragStart={(e) => e.dataTransfer.setData('text/plain', `${item.activityId}::${item.submissionId}`)}
+                                            onClick={() => openFicheBoardEditor(item)}
+                                        >
+                                            <div className="students-board-work-name">{item.ownerName}</div>
+                                            <div className="students-board-work-type">{item.typeLabel}</div>
+                                            <div className="students-board-work-type">{item.activityTitle}</div>
+                                            <div className="students-board-work-group">{item.participantNames.join(', ')}</div>
+                                        </button>
+                                    ))}
+                                    {ficheBoardItems.filter((item) => item.lessonSlot === lessonSlot).length === 0 && (
+                                        <div className="students-board-empty">Aucun travail dans cette leçon.</div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {ficheBoardEditing && (
+            <div className="correction-overlay" onClick={() => !ficheBoardSaving && setFicheBoardEditing(null)}>
+                <div className="students-board-editor" onClick={(e) => e.stopPropagation()}>
+                    <div className="students-board-header">
+                        <div>
+                            <h2 className="students-board-title">{ficheBoardEditing.ownerName}</h2>
+                            <p className="students-board-subtitle">{ficheBoardActivity?.title || 'Fiche de révision'} • Leçon {ficheBoardEditing.lessonSlot}</p>
+                        </div>
+                        <button onClick={() => setFicheBoardEditing(null)} className="text-slate-500 text-2xl font-black" disabled={ficheBoardSaving}>✕</button>
+                    </div>
+                    <div className="students-board-editor-body">
+                        <div className="students-board-editor-preview">
+                            {ficheBoardEditing.contentType === 'fiche' && ficheBoardEditing.fiche?.contentHtml ? (
+                                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: ficheBoardEditing.fiche.contentHtml }} />
+                            ) : ficheBoardEditing.contentType === 'fiche' && String(ficheBoardEditing.fiche?.plainText || '').trim() ? (
+                                <div className="whitespace-pre-wrap text-sm text-slate-700">{String(ficheBoardEditing.fiche?.plainText || '')}</div>
+                            ) : ficheBoardEditing.contentType === 'fiche' ? (
+                                <div className="text-slate-400 italic">Fiche vide.</div>
+                            ) : ficheBoardEditing.contentType === 'questionnaire' ? (
+                                Array.isArray(ficheBoardEditing.fiche?.answers) && ficheBoardEditing.fiche.answers.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {ficheBoardEditing.fiche.answers.map((row, idx) => (
+                                            <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                                <div className="text-[10px] font-black uppercase text-slate-400">{(row.levelTitle || '').trim() || `Niveau/Leçon ${idx + 1}`}</div>
+                                                <div className="mt-1 font-black text-slate-800">{row.prompt || 'Question non renseignée'}</div>
+                                                <div className="mt-2"><span className="font-black text-slate-500">Réponse:</span> {row.answer || '—'}</div>
+                                                <div className="mt-1"><span className="font-black text-slate-500">Mots-clés:</span> {(row.expectedKeywords || []).join(' ') || '—'}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : String(ficheBoardEditing.fiche?.plainText || '').trim() ? (
+                                    <div className="whitespace-pre-wrap text-sm text-slate-700">{String(ficheBoardEditing.fiche?.plainText || '')}</div>
+                                ) : (
+                                    <div className="text-slate-400 italic">Aucune réponse enregistrée.</div>
+                                )
+                            ) : ficheBoardEditing.contentType === 'qcm' ? (
+                                Array.isArray(ficheBoardEditing.fiche?.answers) && ficheBoardEditing.fiche.answers.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {ficheBoardEditing.fiche.answers.map((row, idx) => (
+                                            <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                                <div className="text-[10px] font-black uppercase text-slate-400">{(row.levelTitle || '').trim() || `Niveau/Leçon ${idx + 1}`}</div>
+                                                <div className="mt-1 font-black text-slate-800">{row.prompt || 'Question non renseignée'}</div>
+                                                <div className="mt-2 grid gap-1">
+                                                    {(row.options || []).map((option, optIdx) => (
+                                                        <div key={optIdx} className={`rounded-lg border px-2 py-1 text-[12px] ${Number(row.correctIndex) === optIdx ? 'border-emerald-200 bg-emerald-50 text-emerald-700 font-black' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                                                            {option || '—'}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="mt-2"><span className="font-black text-slate-500">Choix élève:</span> {Number.isInteger(row.selectedIndex) && row.selectedIndex >= 0 ? ((row.options || [])[row.selectedIndex] || `Option ${row.selectedIndex + 1}`) : '—'}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : String(ficheBoardEditing.fiche?.plainText || '').trim() ? (
+                                    <div className="whitespace-pre-wrap text-sm text-slate-700">{String(ficheBoardEditing.fiche?.plainText || '')}</div>
+                                ) : (
+                                    <div className="text-slate-400 italic">Aucune réponse enregistrée.</div>
+                                )
+                            ) : (
+                                <div className="text-slate-400 italic">Aucun aperçu disponible.</div>
+                            )}
+                        </div>
+                        <div className="students-board-editor-side">
+                            <label className="corr-label">Leçon</label>
+                            <select
+                                className="students-board-select"
+                                value={ficheBoardEditing.lessonSlot}
+                                onChange={(e) => setFicheBoardEditing((prev) => ({ ...prev, lessonSlot: Number(e.target.value) || 1 }))}
+                            >
+                                {[1, 2, 3, 4, 5].map((slot) => <option key={slot} value={slot}>Leçon {slot}</option>)}
+                            </select>
+                            <label className="corr-label">Participants</label>
+                            <div className="students-board-participants">
+                                {students.map((student) => {
+                                    const sid = extractId(student._id);
+                                    const checked = sid === ficheBoardEditing.ownerStudentId || ficheBoardEditing.participantStudentIds.includes(sid);
+                                    return (
+                                        <label key={sid} className={`students-board-participant ${checked ? 'is-selected' : ''}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                disabled={sid === ficheBoardEditing.ownerStudentId}
+                                                onChange={(e) => {
+                                                    const nextIds = e.target.checked
+                                                        ? [...ficheBoardEditing.participantStudentIds, sid]
+                                                        : ficheBoardEditing.participantStudentIds.filter((id) => id !== sid);
+                                                    setFicheBoardEditing((prev) => ({ ...prev, participantStudentIds: [...new Set(nextIds)] }));
+                                                }}
+                                            />
+                                            <span>{student.firstName} {student.lastName}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="corr-footer">
+                        <button onClick={() => setFicheBoardEditing(null)} className="corr-btn-cancel">Fermer</button>
+                        <button onClick={handleSaveFicheBoardEditor} className="corr-btn-save" disabled={ficheBoardSaving}>Enregistrer</button>
                     </div>
                 </div>
             </div>
@@ -846,9 +1190,26 @@ export default function StudentsManager({ globalClassId }) {
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[100px]">Action</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[130px]">Réalisations</th>
                             {activities.filter(a => !a.isPunishment).map(act => (
-                                <th key={act._id} className="p-4 text-[9px] font-black text-slate-600 uppercase text-center border-b min-w-[100px] max-w-[170px]" title={`${act.title} • ${act.chapterLabel || ''}`}>
-                                    <div className="truncate">{act.label}</div>
-                                    <div className="text-[8px] text-slate-400 font-black truncate">{act.chapterLabel || ''}</div>
+                                <th
+                                    key={act._id}
+                                    className={`p-4 text-[9px] font-black text-slate-600 uppercase text-center border-b min-w-[100px] max-w-[170px] ${isBoardActivity(act) ? 'students-activity-head is-clickable' : ''}`}
+                                    title={`${act.title} • ${act.chapterLabel || ''}`}
+                                >
+                                    {isBoardActivity(act) ? (
+                                        <button
+                                            type="button"
+                                            className="students-activity-head-button"
+                                            onClick={() => setFicheBoardActivity(act)}
+                                        >
+                                            <div className="truncate">{act.label}</div>
+                                            <div className="text-[8px] text-slate-400 font-black truncate">{act.chapterLabel || ''}</div>
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <div className="truncate">{act.label}</div>
+                                            <div className="text-[8px] text-slate-400 font-black truncate">{act.chapterLabel || ''}</div>
+                                        </>
+                                    )}
                                 </th>
                             ))}
                         </tr>
@@ -885,7 +1246,23 @@ export default function StudentsManager({ globalClassId }) {
                                     return (
                                         <td key={act._id} className="p-2 text-center border-b">
                                             {status?.done ? (
-                                                <button onClick={() => handleOpenActivityWork(s, act, status)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : (act.type === 'game' ? 'bg-purple-100 text-purple-700 border-purple-200' : act.type === 'production' ? 'bg-cyan-100 text-cyan-700 border-cyan-200' : 'bg-rose-100 text-rose-700 border-rose-200')}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
+                                                <button
+                                                    onClick={() => handleOpenActivityWork(s, act, status)}
+                                                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${
+                                                        act.type === 'homework'
+                                                            ? 'bg-green-100 text-green-700 border-green-200'
+                                                            : act.type === 'game'
+                                                                ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                                                : act.type === 'production'
+                                                                    ? 'bg-cyan-100 text-cyan-700 border-cyan-200'
+                                                                    : act.type === 'fiche'
+                                                                        ? 'bg-sky-100 text-sky-700 border-sky-200'
+                                                                        : 'bg-rose-100 text-rose-700 border-rose-200'
+                                                    }`}
+                                                    title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}
+                                                >
+                                                    {status.score || 'OK'}
+                                                </button>
                                             ) : <div className="text-slate-200 text-xs">•</div>}
                                         </td>
                                     );

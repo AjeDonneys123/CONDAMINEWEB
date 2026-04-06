@@ -292,6 +292,8 @@ const Models = {
         submissions: {
             type: [{
                 studentId: mongoose.Schema.Types.ObjectId,
+                participantStudentIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+                lessonSlot: { type: Number, default: 1 },
                 contentHtml: { type: String, default: '' },
                 plainText: { type: String, default: '' },
                 imageCount: { type: Number, default: 0 },
@@ -350,6 +352,8 @@ const Models = {
                 },
                 score: { type: Number, default: 0 },
                 teacherValidated: { type: Boolean, default: false },
+                participantStudentIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+                lessonSlot: { type: Number, default: 1 },
                 updatedAt: Date,
                 completedAt: Date
             }],

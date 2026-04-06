@@ -153,6 +153,8 @@ router.post('/save', async (req, res) => {
         const previous = idx >= 0 ? entries[idx] : null;
         const nextEntry = {
             studentId,
+            participantStudentIds: Array.isArray(previous?.participantStudentIds) ? previous.participantStudentIds : [],
+            lessonSlot: Math.max(1, Number(previous?.lessonSlot || 1)),
             contentHtml: html,
             plainText,
             imageCount,
