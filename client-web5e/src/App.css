@@ -697,6 +697,16 @@
   margin: 22px 0;
 }
 
+.web5e-save-error-banner {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  background: #fff4f2;
+  color: #b42318;
+  font-weight: 700;
+}
+
 .validated-presentations-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

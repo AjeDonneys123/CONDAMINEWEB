@@ -4911,6 +4911,7 @@ export default function App() {
   const [tabDocsByKey, setTabDocsByKey] = useState({});
   const [entryDocsByKey, setEntryDocsByKey] = useState({});
   const [publicEntriesByKey, setPublicEntriesByKey] = useState({});
+  const [saveErrorMessage, setSaveErrorMessage] = useState('');
   const pageParams = useMemo(() => {
     try {
       return new URLSearchParams(window.location.search);
@@ -5154,6 +5155,7 @@ export default function App() {
 
   const persistBlocks = async (nextBlocks) => {
     const docKey = `${activeSection}:${currentTabId}`;
+    setSaveErrorMessage('');
     if (isLocalSessionMode) {
       const nextContent = {
         ...contentMap,
@@ -5182,18 +5184,22 @@ export default function App() {
         })
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.entry) {
-        setEntryDocsByKey((prev) => ({ ...prev, [docKey]: data.entry }));
-        setPublicEntriesByKey((prev) => {
-          const currentRows = Array.isArray(prev[docKey]) ? prev[docKey] : [];
-          const nextRows = [...currentRows];
-          const existingIndex = nextRows.findIndex((row) => String(row?._id || '') === String(data.entry?._id || ''));
-          if (existingIndex >= 0) nextRows[existingIndex] = data.entry;
-          else nextRows.unshift(data.entry);
-          return { ...prev, [docKey]: nextRows };
-        });
+      if (!res.ok || !data?.entry) {
+        throw new Error(data?.error || `Sauvegarde publique impossible (${res.status})`);
       }
-    } catch (_) {}
+      setEntryDocsByKey((prev) => ({ ...prev, [docKey]: data.entry }));
+      setPublicEntriesByKey((prev) => {
+        const currentRows = Array.isArray(prev[docKey]) ? prev[docKey] : [];
+        const nextRows = [...currentRows];
+        const existingIndex = nextRows.findIndex((row) => String(row?._id || '') === String(data.entry?._id || ''));
+        if (existingIndex >= 0) nextRows[existingIndex] = data.entry;
+        else nextRows.unshift(data.entry);
+        return { ...prev, [docKey]: nextRows };
+      });
+    } catch (error) {
+      console.error('WEB5E save failed', error);
+      setSaveErrorMessage(String(error?.message || 'Sauvegarde publique impossible'));
+    }
   };
 
   const queueAutosave = (nextBlocks) => {
@@ -5795,6 +5801,12 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        {saveErrorMessage ? (
+          <div className="web5e-save-error-banner">
+            {saveErrorMessage}
+          </div>
+        ) : null}
 
         {validatedPresentations.length > 0 && (!user || !hasLockedPresentationEditing) ? (
           <div className="validated-presentations-grid">
