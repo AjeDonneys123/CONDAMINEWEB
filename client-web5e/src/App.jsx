@@ -4,6 +4,7 @@ import './App.css';
 const WEB5E_SESSION_KEY = 'web5eBridgeSession';
 const WEB5E_LOCAL_CONTENT_KEY = 'web5eLocalContentV1';
 const WEB5E_PUBLIC_CACHE_KEY = 'web5ePublicEntriesV1';
+const WEB5E_REMOTE_API_ORIGIN = 'https://hgeoentraineur.onrender.com';
 const WEB5E_VERSION_NAME = 'Orion Slides';
 
 const SECTION_CONFIG = {
@@ -482,6 +483,16 @@ function resolveWeb5eAssetUrl(url) {
     if (typeof window !== 'undefined' && String(window.location.hostname || '').includes('vercel.app')) {
       return `https://hgeoentraineur.onrender.com${raw}`;
     }
+  }
+  return raw;
+}
+
+function resolveWeb5eApiUrl(path = '') {
+  const raw = String(path || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (typeof window !== 'undefined' && String(window.location.hostname || '').includes('vercel.app')) {
+    return `${WEB5E_REMOTE_API_ORIGIN}${raw.startsWith('/') ? raw : `/${raw}`}`;
   }
   return raw;
 }
@@ -4948,7 +4959,7 @@ export default function App() {
   }, [initialLocalUser]);
 
   useEffect(() => {
-    fetch('/api/auth/finder-data')
+    fetch(resolveWeb5eApiUrl('/api/auth/finder-data'))
       .then((res) => res.ok ? res.json() : [])
       .then((data) => setAllUsersData(Array.isArray(data) ? data : []))
       .catch(() => setAllUsersData([]));
@@ -4962,7 +4973,7 @@ export default function App() {
         setContentMap((prev) => ({ ...prev, ...localContent }));
       }
       try {
-        const res = await fetch('/api/web5e/public');
+        const res = await fetch(resolveWeb5eApiUrl('/api/web5e/public'), { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok || !data?.ok) throw new Error(data?.error || 'Chargement impossible');
 
@@ -5206,7 +5217,7 @@ export default function App() {
     if (!tabDoc?._id || !user?.id) return;
     const existingEntry = entryDocsByKey[docKey];
     try {
-      const res = await fetch('/api/web5e/entries', {
+      const res = await fetch(resolveWeb5eApiUrl('/api/web5e/entries'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5283,7 +5294,7 @@ export default function App() {
 
   const persistSiteWelcomeAnimation = async (nextAnimation) => {
     try {
-      const res = await fetch('/api/web5e/site', {
+      const res = await fetch(resolveWeb5eApiUrl('/api/web5e/site'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5417,7 +5428,7 @@ export default function App() {
     : articleBlocks.filter(({ block }) => block.type !== 'text');
 
   const persistVoteBoard = async (nextVoteBoard) => {
-    const res = await fetch('/api/web5e/votes', {
+    const res = await fetch(resolveWeb5eApiUrl('/api/web5e/votes'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ voteBoard: nextVoteBoard })
