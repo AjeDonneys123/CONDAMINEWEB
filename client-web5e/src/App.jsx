@@ -330,6 +330,20 @@ function normalizePresentationBlock(block = {}) {
   };
 }
 
+function isPresentationReadyForPublication(block = {}) {
+  const presentation = normalizePresentationBlock(block);
+  if (presentation.presentationValidated === true) return true;
+  const slides = Array.isArray(presentation.slides) ? presentation.slides : [];
+  const qcmQuestions = Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions : [];
+  if (!slides.length || !qcmQuestions.length) return false;
+  const hasAllPresenters = slides.every((slide) => Boolean(String(slide?.presenterName || '').trim()));
+  const hasOneValidQcm = qcmQuestions.some((row) => {
+    const options = Array.isArray(row?.options) ? row.options : [];
+    return Boolean(String(row?.question || '').trim()) && options.every((option) => Boolean(String(option || '').trim()));
+  });
+  return hasAllPresenters && hasOneValidQcm;
+}
+
 function createQcmQuestion(index = 0) {
   return {
     id: `qcm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -5286,7 +5300,7 @@ export default function App() {
   const allPublicEntries = Object.values(publicEntriesByKey)
     .flatMap((rows) => Array.isArray(rows) ? rows : []);
   const validatedPresentationsFromCurrentBlocks = articleBlocks
-    .filter(({ block }) => block.type === 'text' && normalizePresentationBlock(block).presentationValidated)
+    .filter(({ block }) => block.type === 'text' && isPresentationReadyForPublication(block))
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
   const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
   const voteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
@@ -5299,7 +5313,7 @@ export default function App() {
       const fromPublicEntries = sourceEntries.flatMap((entry, entryIndex) => (
         (Array.isArray(entry?.blocks) ? entry.blocks : [])
           .map((block, blockIndex) => ({ block, blockIndex, entryIndex }))
-          .filter(({ block }) => block?.type === 'text' && normalizePresentationBlock(block).presentationValidated)
+          .filter(({ block }) => block?.type === 'text' && isPresentationReadyForPublication(block))
           .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
             index: blockIndex,
             presentation: normalizePresentationBlock(block),
