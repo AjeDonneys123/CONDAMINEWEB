@@ -335,13 +335,18 @@ function isPresentationReadyForPublication(block = {}) {
   if (presentation.presentationValidated === true) return true;
   const slides = Array.isArray(presentation.slides) ? presentation.slides : [];
   const qcmQuestions = Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions : [];
-  if (!slides.length || !qcmQuestions.length) return false;
+  if (!slides.length) return false;
   const hasAllPresenters = slides.every((slide) => Boolean(String(slide?.presenterName || '').trim()));
+  const hasPresentationIdentity = Boolean(
+    String(presentation.presentationName || '').trim()
+    || String(presentation.canvaLiveUrl || '').trim()
+  );
+  const hasCanvaPresentation = Boolean(String(presentation.canvaLiveUrl || '').trim()) && hasAllPresenters;
   const hasOneValidQcm = qcmQuestions.some((row) => {
     const options = Array.isArray(row?.options) ? row.options : [];
     return Boolean(String(row?.question || '').trim()) && options.every((option) => Boolean(String(option || '').trim()));
   });
-  return hasAllPresenters && hasOneValidQcm;
+  return hasAllPresenters && hasPresentationIdentity && (hasOneValidQcm || hasCanvaPresentation);
 }
 
 function buildPresentationPublicationKey(presentation = {}) {
@@ -355,6 +360,16 @@ function buildPresentationPublicationKey(presentation = {}) {
     String(normalized.canvaSlideCount || 0),
     presenters
   ].join('::');
+}
+
+function dedupePublishedPresentations(rows = []) {
+  const seen = new Set();
+  return rows.filter((row) => {
+    const key = buildPresentationPublicationKey(row?.presentation || {});
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function createQcmQuestion(index = 0) {
@@ -5333,7 +5348,7 @@ export default function App() {
             publicEntryIndex
           }))
       ));
-      return fromPublicEntries.length > 0 ? fromPublicEntries : validatedPresentationsFromCurrentBlocks;
+      return dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : validatedPresentationsFromCurrentBlocks);
     })();
   const studentHasValidatedPresentation = !isTeacher && validatedPresentations.length > 0;
   const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
