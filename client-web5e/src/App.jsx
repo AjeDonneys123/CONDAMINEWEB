@@ -4860,6 +4860,8 @@ export default function App() {
     water_mascot_name: '',
     energy_mascot_name: ''
   });
+  const [voteMascotImportOptions, setVoteMascotImportOptions] = useState([]);
+  const [voteMascotImportOpen, setVoteMascotImportOpen] = useState('');
   const [activeSection, setActiveSection] = useState('eau');
   const [activeTabBySection, setActiveTabBySection] = useState({ eau: 'manquer-eau', energie: 'fossiles' });
   const [contentMap, setContentMap] = useState(DEFAULT_CONTENT);
@@ -5384,6 +5386,59 @@ export default function App() {
     await persistVoteBoard(nextVoteBoard);
   };
 
+  const addVoteMascotProposalFromUrl = async (categoryKey, imageUrl) => {
+    if (!currentUserVoteKey) return;
+    const safeUrl = String(imageUrl || '').trim();
+    if (!safeUrl) return;
+    const nextVoteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
+    const existingProposal = (nextVoteBoard.mascots[categoryKey] || []).find((row) => String(row?.proposedBy || '') === currentUserVoteKey);
+    if (existingProposal) return;
+    nextVoteBoard.mascots[categoryKey] = [
+      ...(nextVoteBoard.mascots[categoryKey] || []),
+      { id: `vote_${categoryKey}_${Date.now()}`, imageUrl: safeUrl, proposedBy: currentUserVoteKey }
+    ];
+    await persistVoteBoard(nextVoteBoard);
+    setVoteMascotImportOptions([]);
+    setVoteMascotImportOpen('');
+  };
+
+  const loadVoteMascotImports = async (categoryKey) => {
+    if (!user || !currentUserVoteKey) return;
+    const presenterName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    if (!presenterName) return;
+    try {
+      const backupRes = await fetch(`/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`);
+      const backupData = await backupRes.json().catch(() => ({}));
+      if (!backupRes.ok || !backupData?.ok) {
+        setVoteMascotImportOptions([]);
+        setVoteMascotImportOpen(categoryKey);
+        return;
+      }
+      const sourceRows = Array.isArray(backupData?.recordings) && backupData.recordings.length > 0
+        ? backupData.recordings
+        : [backupData];
+      const seen = new Set();
+      const nextOptions = sourceRows.flatMap((row, rowIndex) => {
+        const urls = Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : [];
+        return urls
+          .map((url, imageIndex) => ({
+            id: `${String(row?.id || rowIndex)}_${imageIndex}`,
+            url: String(url || '').trim()
+          }))
+          .filter((item) => {
+            if (!item.url || seen.has(item.url)) return false;
+            seen.add(item.url);
+            return true;
+          });
+      });
+      setVoteMascotImportOptions(nextOptions);
+      setVoteMascotImportOpen(categoryKey);
+    } catch (_) {
+      setVoteMascotImportOptions([]);
+      setVoteMascotImportOpen(categoryKey);
+    }
+  };
+
   if (isMobileActionMode) {
     return <MobileActionRemote token={mobileActionToken} />;
   }
@@ -5543,15 +5598,54 @@ export default function App() {
                     <div className="vote-image-grid">
                       {options.map((option) => (
                         <button key={option.id} type="button" className={`vote-image-option ${currentUserVotes[category.key] === option.id ? 'active' : ''}`} onClick={() => void saveVoteSelection(category.key, option.id)}>
-                          <img src={option.imageUrl} alt="" />
+                          <img src={resolveWeb5eAssetUrl(option.imageUrl) || option.imageUrl} alt="" />
                           <strong>{countVotesForOption(voteBoard, category.key, option.id)}</strong>
                         </button>
                       ))}
                     </div>
-                    <label className="presentation-slide-add">
-                      Ajouter image
-                      <input type="file" accept="image/*" className="hidden-file-input" disabled={alreadyProposed} onChange={(e) => void addVoteMascotProposal(category.key, e.target.files)} />
-                    </label>
+                    <div className="vote-proposal-row vote-mascot-actions">
+                      <label className="presentation-slide-add">
+                        +ordi
+                        <input type="file" accept="image/*" className="hidden-file-input" disabled={alreadyProposed} onChange={(e) => void addVoteMascotProposal(category.key, e.target.files)} />
+                      </label>
+                      <div className="vote-mascot-import-shell">
+                        <button
+                          type="button"
+                          className="presentation-slide-add"
+                          disabled={alreadyProposed}
+                          onClick={() => {
+                            if (voteMascotImportOpen === category.key) {
+                              setVoteMascotImportOpen('');
+                              setVoteMascotImportOptions([]);
+                              return;
+                            }
+                            void loadVoteMascotImports(category.key);
+                          }}
+                        >
+                          +tel
+                        </button>
+                        {voteMascotImportOpen === category.key ? (
+                          <div className="vote-mascot-import-popover">
+                            {voteMascotImportOptions.length > 0 ? (
+                              <div className="vote-mascot-import-grid">
+                                {voteMascotImportOptions.map((option) => (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    className="vote-mascot-import-option"
+                                    onClick={() => void addVoteMascotProposalFromUrl(category.key, option.url)}
+                                  >
+                                    <img src={resolveWeb5eAssetUrl(option.url)} alt="" />
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="vote-mascot-import-empty">Aucune image CondaWeb.</div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
