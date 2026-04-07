@@ -5039,6 +5039,30 @@ export default function App() {
   }, [contentMap, isLocalSessionMode, localContentReady]);
 
   useEffect(() => {
+    if (!user) return;
+    const docKey = `${activeSection}:${currentTabId}`;
+    const nextBlocks = Array.isArray(contentMap?.[activeSection]?.[currentTabId])
+      ? contentMap[activeSection][currentTabId]
+      : [];
+    const hasPublishedPresentation = nextBlocks.some((block) => block?.type === 'text' && isPresentationReadyForPublication(block));
+    if (!hasPublishedPresentation) return;
+    const cached = readPublicEntriesCache();
+    const currentRows = Array.isArray(cached[docKey]) ? cached[docKey] : [];
+    const syntheticEntry = {
+      _id: `cache:${docKey}:${user.id || user._id || 'anon'}`,
+      tabId: tabDocsByKey[docKey]?._id || '',
+      studentId: user.id || user._id || '',
+      authorName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      title: tabDocsByKey[docKey]?.title || '',
+      blocks: nextBlocks,
+      isPublished: true,
+      updatedAt: new Date().toISOString()
+    };
+    const nextRows = [syntheticEntry, ...currentRows.filter((row) => String(row?._id || '') !== syntheticEntry._id)];
+    writePublicEntriesCache({ ...cached, [docKey]: nextRows });
+  }, [user, activeSection, currentTabId, contentMap, tabDocsByKey]);
+
+  useEffect(() => {
     const bridgedUser = readBridgeUserFromUrl() || readBridgeUserFromWindowName();
     if (!bridgedUser?.id) return;
     window.localStorage.setItem(WEB5E_SESSION_KEY, JSON.stringify(bridgedUser));
