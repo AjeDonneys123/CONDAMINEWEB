@@ -351,6 +351,16 @@ function isPresentationReadyForPublication(block = {}) {
   return hasAllPresenters && hasPresentationIdentity && (hasOneValidQcm || hasCanvaPresentation);
 }
 
+function isPresentationCreated(block = {}) {
+  const presentation = normalizePresentationBlock(block);
+  const slides = Array.isArray(presentation.slides) ? presentation.slides : [];
+  const hasName = Boolean(String(presentation.presentationName || '').trim());
+  const hasCanva = Boolean(String(presentation.canvaLiveUrl || '').trim());
+  const hasPresenters = slides.some((slide) => Boolean(String(slide?.presenterName || '').trim()));
+  const hasFallbackSlide = slides.some((slide) => slideHasImportedFallbackContent(slide));
+  return hasName || hasCanva || hasPresenters || hasFallbackSlide;
+}
+
 function buildPresentationPublicationKey(presentation = {}) {
   const normalized = normalizePresentationBlock(presentation);
   const presenters = (Array.isArray(normalized.slides) ? normalized.slides : [])
@@ -5410,6 +5420,9 @@ export default function App() {
   const validatedPresentationsFromCurrentBlocks = articleBlocks
     .filter(({ block }) => block.type === 'text' && isPresentationReadyForPublication(block))
     .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
+  const createdPresentationsFromCurrentBlocks = articleBlocks
+    .filter(({ block }) => block.type === 'text' && isPresentationCreated(block))
+    .map(({ block, index }) => ({ index, presentation: normalizePresentationBlock(block) }));
   const contributionSignature = formatContributionName(currentEntry?.authorName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim());
   const voteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
   const currentUserVoteKey = String(user?.id || user?._id || '').trim();
@@ -5421,14 +5434,14 @@ export default function App() {
       const fromPublicEntries = sourceEntries.flatMap((entry, entryIndex) => (
         (Array.isArray(entry?.blocks) ? entry.blocks : [])
           .map((block, blockIndex) => ({ block, blockIndex, entryIndex }))
-          .filter(({ block }) => block?.type === 'text' && isPresentationReadyForPublication(block))
+          .filter(({ block }) => block?.type === 'text' && isPresentationCreated(block))
           .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
             index: blockIndex,
             presentation: normalizePresentationBlock(block),
             publicEntryIndex
           }))
       ));
-      return dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : validatedPresentationsFromCurrentBlocks);
+      return dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
     })();
   const studentHasValidatedPresentation = !isTeacher && validatedPresentations.length > 0;
   const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
