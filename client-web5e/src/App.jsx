@@ -5040,9 +5040,10 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const docKey = `${activeSection}:${currentTabId}`;
-    const nextBlocks = Array.isArray(contentMap?.[activeSection]?.[currentTabId])
-      ? contentMap[activeSection][currentTabId]
+    const currentTabIdForCache = activeTabBySection[activeSection];
+    const docKey = `${activeSection}:${currentTabIdForCache}`;
+    const nextBlocks = Array.isArray(contentMap?.[activeSection]?.[currentTabIdForCache])
+      ? contentMap[activeSection][currentTabIdForCache]
       : [];
     const hasPublishedPresentation = nextBlocks.some((block) => block?.type === 'text' && isPresentationReadyForPublication(block));
     if (!hasPublishedPresentation) return;
@@ -5060,7 +5061,7 @@ export default function App() {
     };
     const nextRows = [syntheticEntry, ...currentRows.filter((row) => String(row?._id || '') !== syntheticEntry._id)];
     writePublicEntriesCache({ ...cached, [docKey]: nextRows });
-  }, [user, activeSection, currentTabId, contentMap, tabDocsByKey]);
+  }, [user, activeSection, activeTabBySection, contentMap, tabDocsByKey]);
 
   useEffect(() => {
     const bridgedUser = readBridgeUserFromUrl() || readBridgeUserFromWindowName();
