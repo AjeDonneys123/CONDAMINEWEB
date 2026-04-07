@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 
 const WEB5E_SESSION_KEY = 'web5eBridgeSession';
@@ -4971,84 +4971,111 @@ export default function App() {
       .catch(() => setAllUsersData([]));
   }, []);
 
-  useEffect(() => {
-    const loadWeb5e = async () => {
-      const localContent = isLocalSessionMode ? readLocalWeb5eContent() : null;
-      const cachedPublicEntries = readPublicEntriesCache();
-      if (localContent && typeof localContent === 'object') {
-        setContentMap((prev) => ({ ...prev, ...localContent }));
-      }
-      try {
-        const res = await fetch(resolveWeb5eApiUrl('/api/web5e/public'), { cache: 'no-store' });
-        const data = await res.json();
-        if (!res.ok || !data?.ok) throw new Error(data?.error || 'Chargement impossible');
+  const loadWeb5e = useCallback(async () => {
+    const localContent = isLocalSessionMode ? readLocalWeb5eContent() : null;
+    const cachedPublicEntries = readPublicEntriesCache();
+    if (localContent && typeof localContent === 'object') {
+      setContentMap((prev) => ({ ...prev, ...localContent }));
+    }
+    try {
+      const publicUrl = resolveWeb5eApiUrl('/api/web5e/public');
+      const res = await fetch(publicUrl, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Chargement impossible');
 
-        const tabs = Array.isArray(data.tabs) ? data.tabs : [];
-        const entries = Array.isArray(data.entries) ? data.entries : [];
-        const nextTabDocs = {};
-        const nextEntryDocs = {};
-        const nextPublicEntriesByKey = {};
-        const nextContentMap = { eau: {}, energie: {} };
+      const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      const nextTabDocs = {};
+      const nextEntryDocs = {};
+      const nextPublicEntriesByKey = {};
+      const nextContentMap = { eau: {}, energie: {} };
 
-        tabs.forEach((tab) => {
-          const sectionKey = String(tab.sectionKey || '').trim().toLowerCase();
-          const tabKey = String(tab.tabKey || '').trim().toLowerCase();
-          if (!sectionKey || !tabKey) return;
-          nextTabDocs[`${sectionKey}:${tabKey}`] = tab;
-          if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
-          const matchingEntries = entries.filter((row) => String(row.tabId || '') === String(tab._id || ''));
-          const docKey = `${sectionKey}:${tabKey}`;
-          const existingRows = Array.isArray(nextPublicEntriesByKey[docKey]) ? nextPublicEntriesByKey[docKey] : [];
-          const mergedRows = [...existingRows, ...matchingEntries].filter((row, rowIndex, allRows) => {
-            const rowId = String(row?._id || '');
-            if (!rowId) return true;
-            return allRows.findIndex((candidate) => String(candidate?._id || '') === rowId) === rowIndex;
-          });
-          nextPublicEntriesByKey[docKey] = mergedRows;
-          const entry = mergedRows[0];
-          if (!nextEntryDocs[docKey] && entry) {
-            nextEntryDocs[docKey] = entry;
-          }
-          if (!nextContentMap[sectionKey][tabKey] || nextContentMap[sectionKey][tabKey] === DEFAULT_CONTENT[sectionKey]?.[tabKey]) {
-            nextContentMap[sectionKey][tabKey] = Array.isArray(entry?.blocks) && entry.blocks.length > 0
-              ? entry.blocks
-              : (DEFAULT_CONTENT[sectionKey]?.[tabKey] || []);
-          }
+      tabs.forEach((tab) => {
+        const sectionKey = String(tab.sectionKey || '').trim().toLowerCase();
+        const tabKey = String(tab.tabKey || '').trim().toLowerCase();
+        if (!sectionKey || !tabKey) return;
+        nextTabDocs[`${sectionKey}:${tabKey}`] = tab;
+        if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
+        const matchingEntries = entries.filter((row) => String(row.tabId || '') === String(tab._id || ''));
+        const docKey = `${sectionKey}:${tabKey}`;
+        const existingRows = Array.isArray(nextPublicEntriesByKey[docKey]) ? nextPublicEntriesByKey[docKey] : [];
+        const mergedRows = [...existingRows, ...matchingEntries].filter((row, rowIndex, allRows) => {
+          const rowId = String(row?._id || '');
+          if (!rowId) return true;
+          return allRows.findIndex((candidate) => String(candidate?._id || '') === rowId) === rowIndex;
         });
-
-        Object.keys(DEFAULT_CONTENT).forEach((sectionKey) => {
-          nextContentMap[sectionKey] = { ...(DEFAULT_CONTENT[sectionKey] || {}), ...(nextContentMap[sectionKey] || {}) };
-        });
-
-        const mergedPublicEntriesByKey = { ...cachedPublicEntries };
-        Object.entries(nextPublicEntriesByKey).forEach(([key, rows]) => {
-          const nextRows = Array.isArray(rows) ? rows : [];
-          const cachedRows = Array.isArray(mergedPublicEntriesByKey[key]) ? mergedPublicEntriesByKey[key] : [];
-          const seen = new Set();
-          mergedPublicEntriesByKey[key] = [...nextRows, ...cachedRows].filter((row) => {
-            const rowId = String(row?._id || '');
-            if (rowId && seen.has(rowId)) return false;
-            if (rowId) seen.add(rowId);
-            return true;
-          });
-        });
-
-        setSiteData(data.site || null);
-        setTabDocsByKey(nextTabDocs);
-        setEntryDocsByKey(nextEntryDocs);
-        setPublicEntriesByKey(mergedPublicEntriesByKey);
-        writePublicEntriesCache(mergedPublicEntriesByKey);
-        setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
-      } catch (_) {
-        if (Object.keys(cachedPublicEntries).length > 0) {
-          setPublicEntriesByKey(cachedPublicEntries);
+        nextPublicEntriesByKey[docKey] = mergedRows;
+        const entry = mergedRows[0];
+        if (!nextEntryDocs[docKey] && entry) {
+          nextEntryDocs[docKey] = entry;
         }
-      } finally {
-        if (isLocalSessionMode) setLocalContentReady(true);
+        if (!nextContentMap[sectionKey][tabKey] || nextContentMap[sectionKey][tabKey] === DEFAULT_CONTENT[sectionKey]?.[tabKey]) {
+          nextContentMap[sectionKey][tabKey] = Array.isArray(entry?.blocks) && entry.blocks.length > 0
+            ? entry.blocks
+            : (DEFAULT_CONTENT[sectionKey]?.[tabKey] || []);
+        }
+      });
+
+      Object.keys(DEFAULT_CONTENT).forEach((sectionKey) => {
+        nextContentMap[sectionKey] = { ...(DEFAULT_CONTENT[sectionKey] || {}), ...(nextContentMap[sectionKey] || {}) };
+      });
+
+      const mergedPublicEntriesByKey = { ...cachedPublicEntries };
+      Object.entries(nextPublicEntriesByKey).forEach(([key, rows]) => {
+        const nextRows = Array.isArray(rows) ? rows : [];
+        const cachedRows = Array.isArray(mergedPublicEntriesByKey[key]) ? mergedPublicEntriesByKey[key] : [];
+        const seen = new Set();
+        mergedPublicEntriesByKey[key] = [...nextRows, ...cachedRows].filter((row) => {
+          const rowId = String(row?._id || '');
+          if (rowId && seen.has(rowId)) return false;
+          if (rowId) seen.add(rowId);
+          return true;
+        });
+      });
+
+      try {
+        console.log('[WEB5E_PUBLIC_LOAD]', {
+          publicUrl,
+          isLocalSessionMode,
+          tabsCount: tabs.length,
+          entriesCount: entries.length,
+          publicKeys: Object.keys(nextPublicEntriesByKey),
+          mergedKeys: Object.keys(mergedPublicEntriesByKey),
+          sampleEntries: entries.slice(0, 5).map((entry) => ({
+            id: String(entry?._id || ''),
+            tabId: String(entry?.tabId || ''),
+            authorName: String(entry?.authorName || ''),
+            title: String(entry?.title || ''),
+            blockTypes: Array.isArray(entry?.blocks) ? entry.blocks.map((block) => block?.type) : []
+          }))
+        });
+      } catch (_) {}
+
+      setSiteData(data.site || null);
+      setTabDocsByKey(nextTabDocs);
+      setEntryDocsByKey(nextEntryDocs);
+      setPublicEntriesByKey(mergedPublicEntriesByKey);
+      writePublicEntriesCache(mergedPublicEntriesByKey);
+      setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
+    } catch (error) {
+      try {
+        console.error('[WEB5E_PUBLIC_LOAD_ERROR]', {
+          message: error?.message || String(error || ''),
+          isLocalSessionMode,
+          cachedKeys: Object.keys(cachedPublicEntries || {})
+        });
+      } catch (_) {}
+      if (Object.keys(cachedPublicEntries).length > 0) {
+        setPublicEntriesByKey(cachedPublicEntries);
       }
-    };
-    loadWeb5e();
+    } finally {
+      if (isLocalSessionMode) setLocalContentReady(true);
+    }
   }, [isLocalSessionMode]);
+
+  useEffect(() => {
+    loadWeb5e();
+  }, [loadWeb5e]);
 
   useEffect(() => {
     if (!isLocalSessionMode || !localContentReady) return;
@@ -5450,6 +5477,48 @@ export default function App() {
       ));
       return dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
     })();
+  useEffect(() => {
+    if (user) return;
+    try {
+      console.log('[WEB5E_PUBLIC_RENDER]', {
+        activeSection,
+        currentTabId,
+        currentPublicEntriesCount: currentPublicEntries.length,
+        allPublicEntriesCount: allPublicEntries.length,
+        createdPresentationsFromCurrentBlocks: createdPresentationsFromCurrentBlocks.map(({ presentation }) => ({
+          name: presentation?.presentationName || '',
+          canvaLiveUrl: presentation?.canvaLiveUrl || '',
+          presenters: Array.isArray(presentation?.slides) ? presentation.slides.map((slide) => slide?.presenterName || '') : []
+        })),
+        renderedPresentations: validatedPresentations.map(({ presentation }) => ({
+          name: presentation?.presentationName || '',
+          canvaLiveUrl: presentation?.canvaLiveUrl || '',
+          presenters: Array.isArray(presentation?.slides) ? presentation.slides.map((slide) => slide?.presenterName || '') : []
+        })),
+        publicEntrySummaries: allPublicEntries.slice(0, 10).map((entry) => ({
+          id: String(entry?._id || ''),
+          authorName: String(entry?.authorName || ''),
+          title: String(entry?.title || ''),
+          blocks: Array.isArray(entry?.blocks)
+            ? entry.blocks.map((block) => ({
+                type: block?.type || '',
+                presentationName: block?.presentationName || '',
+                canvaLiveUrl: block?.canvaLiveUrl || '',
+                presenters: Array.isArray(block?.slides) ? block.slides.map((slide) => slide?.presenterName || '') : []
+              }))
+            : []
+        }))
+      });
+    } catch (_) {}
+  }, [
+    user,
+    activeSection,
+    currentTabId,
+    currentPublicEntries,
+    allPublicEntries,
+    createdPresentationsFromCurrentBlocks,
+    validatedPresentations
+  ]);
   const studentHasValidatedPresentation = !isTeacher && validatedPresentations.length > 0;
   const [openedValidatedPresentationIndex, setOpenedValidatedPresentationIndex] = useState(-1);
   const [openedValidatedPresentationMode, setOpenedValidatedPresentationMode] = useState('browse');
@@ -5835,6 +5904,13 @@ export default function App() {
             <div className="section-kicker">{currentSection.title}</div>
             <h2>{currentSection.subtitle}</h2>
           </div>
+          {!user ? (
+            <div className="toolbar">
+              <button type="button" onClick={() => { void loadWeb5e(); }}>
+                Charger les presentations
+              </button>
+            </div>
+          ) : null}
           {isTeacher && (
             <div className="toolbar">
               <button onClick={() => {
