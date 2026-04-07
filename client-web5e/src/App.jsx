@@ -5001,12 +5001,23 @@ export default function App() {
           nextTabDocs[`${sectionKey}:${tabKey}`] = tab;
           if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
           const matchingEntries = entries.filter((row) => String(row.tabId || '') === String(tab._id || ''));
-          nextPublicEntriesByKey[`${sectionKey}:${tabKey}`] = matchingEntries;
-          const entry = matchingEntries[0];
-          nextEntryDocs[`${sectionKey}:${tabKey}`] = entry || null;
-          nextContentMap[sectionKey][tabKey] = Array.isArray(entry?.blocks) && entry.blocks.length > 0
-            ? entry.blocks
-            : (DEFAULT_CONTENT[sectionKey]?.[tabKey] || []);
+          const docKey = `${sectionKey}:${tabKey}`;
+          const existingRows = Array.isArray(nextPublicEntriesByKey[docKey]) ? nextPublicEntriesByKey[docKey] : [];
+          const mergedRows = [...existingRows, ...matchingEntries].filter((row, rowIndex, allRows) => {
+            const rowId = String(row?._id || '');
+            if (!rowId) return true;
+            return allRows.findIndex((candidate) => String(candidate?._id || '') === rowId) === rowIndex;
+          });
+          nextPublicEntriesByKey[docKey] = mergedRows;
+          const entry = mergedRows[0];
+          if (!nextEntryDocs[docKey] && entry) {
+            nextEntryDocs[docKey] = entry;
+          }
+          if (!nextContentMap[sectionKey][tabKey] || nextContentMap[sectionKey][tabKey] === DEFAULT_CONTENT[sectionKey]?.[tabKey]) {
+            nextContentMap[sectionKey][tabKey] = Array.isArray(entry?.blocks) && entry.blocks.length > 0
+              ? entry.blocks
+              : (DEFAULT_CONTENT[sectionKey]?.[tabKey] || []);
+          }
         });
 
         Object.keys(DEFAULT_CONTENT).forEach((sectionKey) => {

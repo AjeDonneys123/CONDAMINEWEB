@@ -105,25 +105,12 @@ async function ensureDefaultSite() {
 router.get('/public', async (_req, res) => {
     try {
         const site = await ensureDefaultSite();
-        let [tabs, entries, actors, animations] = await Promise.all([
-            Web5eTab.find({ siteId: site._id, isPublished: true }).sort({ sectionKey: 1, order: 1, title: 1 }).lean(),
-            Web5eEntry.find({ siteId: site._id, isPublished: true }).sort({ order: 1, updatedAt: -1 }).lean(),
-            Web5eActor.find({ siteId: site._id }).sort({ updatedAt: -1 }).lean(),
-            Web5eAnimation.find({ siteId: site._id, isPublished: true }).sort({ updatedAt: -1 }).lean()
+        const [tabs, entries, actors, animations] = await Promise.all([
+            Web5eTab.find({}).sort({ sectionKey: 1, order: 1, title: 1, updatedAt: -1 }).lean(),
+            Web5eEntry.find({}).sort({ order: 1, updatedAt: -1, createdAt: -1 }).lean(),
+            Web5eActor.find({}).sort({ updatedAt: -1 }).lean(),
+            Web5eAnimation.find({}).sort({ updatedAt: -1 }).lean()
         ]);
-
-        if (!tabs.length || !entries.length) {
-            const [allTabs, allEntries, allActors, allAnimations] = await Promise.all([
-                Web5eTab.find({ isPublished: true }).sort({ sectionKey: 1, order: 1, title: 1 }).lean(),
-                Web5eEntry.find({ isPublished: true }).sort({ order: 1, updatedAt: -1 }).lean(),
-                Web5eActor.find({}).sort({ updatedAt: -1 }).lean(),
-                Web5eAnimation.find({ isPublished: true }).sort({ updatedAt: -1 }).lean()
-            ]);
-            if (allTabs.length) tabs = allTabs;
-            if (allEntries.length) entries = allEntries;
-            if (allActors.length) actors = allActors;
-            if (allAnimations.length) animations = allAnimations;
-        }
         res.json({ ok: true, site, tabs, entries, actors, animations });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
