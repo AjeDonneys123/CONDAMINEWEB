@@ -4,7 +4,6 @@ import './App.css';
 const WEB5E_SESSION_KEY = 'web5eBridgeSession';
 const WEB5E_LOCAL_CONTENT_KEY = 'web5eLocalContentV1';
 const WEB5E_PUBLIC_CACHE_KEY = 'web5ePublicEntriesV1';
-const WEB5E_REMOTE_API_ORIGIN = 'https://hgeoentraineur.onrender.com';
 const WEB5E_VERSION_NAME = 'Orion Slides';
 
 const SECTION_CONFIG = {
@@ -501,9 +500,6 @@ function resolveWeb5eApiUrl(path = '') {
   const raw = String(path || '').trim();
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
-  if (typeof window !== 'undefined' && String(window.location.hostname || '').includes('vercel.app')) {
-    return `${WEB5E_REMOTE_API_ORIGIN}${raw.startsWith('/') ? raw : `/${raw}`}`;
-  }
   return raw;
 }
 
