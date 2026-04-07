@@ -4959,7 +4959,7 @@ export default function App() {
   }, [initialLocalUser]);
 
   useEffect(() => {
-    fetch(resolveWeb5eApiUrl('/api/auth/finder-data'))
+    fetch('/api/auth/finder-data')
       .then((res) => res.ok ? res.json() : [])
       .then((data) => setAllUsersData(Array.isArray(data) ? data : []))
       .catch(() => setAllUsersData([]));
