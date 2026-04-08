@@ -479,9 +479,25 @@ router.post('/entries', async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(String(payload.tabId || ''))) {
             return res.status(400).json({ ok: false, error: 'tabId requis' });
         }
-        const row = data._id
-            ? await Web5eEntry.findByIdAndUpdate(data._id, { $set: payload }, { new: true })
-            : await Web5eEntry.create(payload);
+        let row = null;
+        if (data._id) {
+            row = await Web5eEntry.findByIdAndUpdate(data._id, { $set: payload }, { new: true });
+        } else if (payload.studentId) {
+            row = await Web5eEntry.findOneAndUpdate(
+                {
+                    siteId: site._id,
+                    tabId: payload.tabId,
+                    studentId: payload.studentId
+                },
+                { $set: payload },
+                { new: true }
+            );
+            if (!row) {
+                row = await Web5eEntry.create(payload);
+            }
+        } else {
+            row = await Web5eEntry.create(payload);
+        }
         res.json({ ok: true, entry: row });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });

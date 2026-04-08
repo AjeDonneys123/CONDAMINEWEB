@@ -383,6 +383,43 @@ function dedupePublishedPresentations(rows = []) {
   });
 }
 
+function scorePresentationForPublicRow(row = {}) {
+  const presentation = normalizePresentationBlock(row?.presentation || {});
+  const slides = Array.isArray(presentation.slides) ? presentation.slides : [];
+  const presentersCount = slides.filter((slide) => Boolean(String(slide?.presenterName || '').trim())).length;
+  return [
+    presentation.presentationValidated === true ? 1 : 0,
+    Boolean(String(presentation.canvaLiveUrl || '').trim()) ? 1 : 0,
+    presentersCount,
+    slides.length,
+    Array.isArray(presentation.qcmQuestions) ? presentation.qcmQuestions.length : 0
+  ];
+}
+
+function dedupePublicPresentationsByAuthor(rows = []) {
+  const bestByAuthor = new Map();
+  rows.forEach((row, index) => {
+    const authorKey = clean(row?.authorName || row?.presentation?.authorName || '');
+    if (!authorKey) return;
+    const existing = bestByAuthor.get(authorKey);
+    if (!existing) {
+      bestByAuthor.set(authorKey, { row, index });
+      return;
+    }
+    const nextScore = scorePresentationForPublicRow(row);
+    const prevScore = scorePresentationForPublicRow(existing.row);
+    const shouldReplace = nextScore.some((value, scoreIndex) => {
+      if (value === prevScore[scoreIndex]) return false;
+      return value > prevScore[scoreIndex];
+    });
+    if (shouldReplace) {
+      bestByAuthor.set(authorKey, { row, index });
+    }
+  });
+  const pickedIndexes = new Set(Array.from(bestByAuthor.values()).map((entry) => entry.index));
+  return rows.filter((_, index) => pickedIndexes.has(index));
+}
+
 function createQcmQuestion(index = 0) {
   return {
     id: `qcm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -2273,6 +2310,18 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
         <div className="slideshow-nav">
           <button
             type="button"
+            className="presentation-slide-add"
+            onClick={() => {
+              const nextStep = Math.max(1, canvaStep - 1);
+              setCanvaStep(nextStep);
+              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+            }}
+            disabled={canvaStep <= 1}
+          >
+            {simpleMode ? 'Precedent' : 'Diapo precedente'}
+          </button>
+          <button
+            type="button"
             className={`presentation-slide-add ${canvaPlaying ? 'presentation-slide-add-red' : ''}`}
             onClick={() => {
               if (canvaPlaying) {
@@ -2292,62 +2341,42 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
             {normalized.canvaSlideCount > 0 ? `Canva live ${canvaStep}/${normalized.canvaSlideCount}` : `Canva live ${canvaStep}`}
             {!simpleMode && currentCanvaSlide?.presenterName ? ` • ${currentCanvaSlide.presenterName}` : ''}
           </div>
-          {!simpleMode ? (
-            <button
-              type="button"
-              className="presentation-slide-add"
-              onClick={() => {
-                const nextStep = Math.max(1, canvaStep - 1);
-                setCanvaStep(nextStep);
-                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
-              }}
-              disabled={canvaStep <= 1}
-            >
-              Diapo precedente
-            </button>
-          ) : null}
-          {!simpleMode ? (
-            <button
-              type="button"
-              className="presentation-slide-add"
-              onClick={() => {
-                const nextStep = normalized.canvaSlideCount > 0
-                  ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
-                  : canvaStep + 1;
-                setCanvaStep(nextStep);
-                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
-              }}
-              disabled={normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount}
-            >
-              Diapo suivante
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => {
+              const nextStep = normalized.canvaSlideCount > 0
+                ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
+                : canvaStep + 1;
+              setCanvaStep(nextStep);
+              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+            }}
+            disabled={normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount}
+          >
+            {simpleMode ? 'Suivant' : 'Diapo suivante'}
+          </button>
         </div>
       ) : isSlideshow ? (
         <div className="slideshow-nav">
-          {!simpleMode ? (
-            <button
-              type="button"
-              className="presentation-slide-add"
-              onClick={() => setSlideshowStep((prev) => Math.max(0, prev - 1))}
-              disabled={slideshowStep <= 0}
-            >
-              Diapo precedente
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => setSlideshowStep((prev) => Math.max(0, prev - 1))}
+            disabled={slideshowStep <= 0}
+          >
+            {simpleMode ? 'Precedent' : 'Diapo precedente'}
+          </button>
           <div className="slideshow-progress">
             {showingQcm ? `Etape ${totalSteps}/${totalSteps} : QCM` : `Diapo ${slideshowStep + 1}/${totalSteps}`}
           </div>
-          {!simpleMode ? (
-            <button
-              type="button"
-              className="presentation-slide-add"
-              onClick={() => setSlideshowStep((prev) => Math.min(totalSteps - 1, prev + 1))}
-              disabled={showingQcm || slideshowStep >= totalSteps - 1}
-            >
-              Diapo suivante
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="presentation-slide-add"
+            onClick={() => setSlideshowStep((prev) => Math.min(totalSteps - 1, prev + 1))}
+            disabled={showingQcm || slideshowStep >= totalSteps - 1}
+          >
+            {simpleMode ? 'Suivant' : 'Diapo suivante'}
+          </button>
         </div>
       ) : (
         <div className="presentation-slide-tabs">
@@ -5513,10 +5542,12 @@ export default function App() {
           .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
             index: blockIndex,
             presentation: normalizePresentationBlock(block),
-            publicEntryIndex
+            publicEntryIndex,
+            authorName: String(entry?.authorName || '')
           }))
       ));
-      return dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
+      const dedupedRows = dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
+      return dedupePublicPresentationsByAuthor(dedupedRows);
     })();
   useEffect(() => {
     if (user) return;
