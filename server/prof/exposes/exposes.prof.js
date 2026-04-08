@@ -42,6 +42,14 @@ function createDefaultAnimationBlock(soundUrl = '', soundPitch = 1) {
     };
 }
 
+function normalizeAnimationBlockForStorage(block = null) {
+    if (!block || typeof block !== 'object') return null;
+    return {
+        ...block,
+        actions: Array.isArray(block.actions) ? block.actions : []
+    };
+}
+
 async function injectPresenterAudioIntoWeb5e({ presentationTitle = '', presenterName = '', slideNumber = 0, soundUrl = '', soundPitch = 1 }) {
     const safeTitle = clean(presentationTitle);
     const safePresenter = clean(presenterName);
@@ -157,6 +165,12 @@ router.get('/presenter-backup', async (req, res) => {
                         selected: row?.selectedForPresenter === true,
                         spriteImageUrls: Array.isArray(row?.spriteImageUrls)
                             ? row.spriteImageUrls.map((url) => String(url || '').trim()).filter(Boolean)
+                            : [],
+                        spriteAnimations: Array.isArray(row?.spriteAnimations)
+                            ? row.spriteAnimations.map((item) => ({
+                                imageUrl: String(item?.imageUrl || '').trim(),
+                                animationBlock: normalizeAnimationBlockForStorage(item?.animationBlock || null)
+                            })).filter((item) => item.imageUrl)
                             : []
                     }))
                 });
@@ -381,6 +395,7 @@ router.post('/:id/presenter-images', upload.array('images'), async (req, res) =>
                 recordingDurationSec: 0,
                 recordingPitch: 1,
                 spriteImageUrls: uploadedUrls,
+                spriteAnimations: [],
                 presenterName,
                 presenterSlideNumber: slideNumber,
                 selectedForPresenter: false,
@@ -444,6 +459,8 @@ router.delete('/:id/presenter-image', async (req, res) => {
             return {
                 ...entry,
                 spriteImageUrls: nextUrls,
+                spriteAnimations: (Array.isArray(entry?.spriteAnimations) ? entry.spriteAnimations : [])
+                    .filter((item) => String(item?.imageUrl || '').trim() !== imageUrl),
                 updatedAt: removed ? new Date() : entry.updatedAt
             };
         });
@@ -451,6 +468,56 @@ router.delete('/:id/presenter-image', async (req, res) => {
         if (!removed) return res.status(404).json({ error: 'Image introuvable' });
         await row.save();
         return res.json({ ok: true });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:id/presenter-image-animation', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const studentId = String(req.body?.studentId || '').trim();
+        const presenterName = String(req.body?.presenterName || '').trim();
+        const slideNumber = Math.max(1, Number(req.body?.slideNumber || 0));
+        const imageUrl = String(req.body?.imageUrl || '').trim();
+        const animationBlock = normalizeAnimationBlockForStorage(req.body?.animationBlock || null);
+
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!studentId) return res.status(400).json({ error: 'studentId requis' });
+        if (!presenterName) return res.status(400).json({ error: 'presenterName requis' });
+        if (!slideNumber) return res.status(400).json({ error: 'slideNumber requis' });
+        if (!imageUrl) return res.status(400).json({ error: 'imageUrl requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const presenterKey = clean(presenterName);
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+        const targetIndex = entries.findIndex((entry) => (
+            String(entry?.studentId || '') === studentId
+            && clean(entry?.presenterName || '') === presenterKey
+            && Math.max(1, Number(entry?.presenterSlideNumber || 1)) === slideNumber
+        ));
+        if (targetIndex < 0) return res.status(404).json({ error: 'Présentation élève introuvable' });
+
+        const nextAnimations = (Array.isArray(entries[targetIndex]?.spriteAnimations) ? entries[targetIndex].spriteAnimations : [])
+            .filter((item) => String(item?.imageUrl || '').trim() !== imageUrl);
+        nextAnimations.push({
+            imageUrl,
+            animationBlock
+        });
+
+        entries[targetIndex] = {
+            ...entries[targetIndex],
+            spriteAnimations: nextAnimations,
+            updatedAt: new Date()
+        };
+
+        row.presentations = entries;
+        await row.save();
+        return res.json({ ok: true, spriteAnimations: nextAnimations });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }

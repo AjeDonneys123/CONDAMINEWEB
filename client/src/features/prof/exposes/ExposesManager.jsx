@@ -45,6 +45,31 @@ const toEmbeddableCanvasUrl = (raw = '') => {
     }
 };
 
+const createSpriteAction = (index = 0, soundUrl = '', soundPitch = 1) => ({
+    id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    name: index === 0 ? 'Parler' : `Action ${index + 1}`,
+    frames: [],
+    frameUrlInput: '',
+    soundUrl: String(soundUrl || '').trim(),
+    soundPitch: Math.max(0.5, Math.min(2, Number(soundPitch || 1))),
+    frameDurationSec: 0.18,
+    startSec: Math.max(0, index * 2),
+    durationSec: 2
+});
+
+const createSpriteAnimationBlock = (actorImageUrl = '', soundUrl = '', soundPitch = 1) => ({
+    type: 'animation',
+    title: 'Animation sprite',
+    actorName: 'Personnage',
+    actorImageUrl: String(actorImageUrl || '').trim(),
+    actorX: 120,
+    actorY: 120,
+    actorWidth: 140,
+    actorHeight: 140,
+    savedActions: [],
+    actions: [createSpriteAction(0, soundUrl, soundPitch)]
+});
+
 export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState([]);
@@ -62,6 +87,10 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [uploadingImages, setUploadingImages] = useState(false);
     const [imageCameraError, setImageCameraError] = useState('');
     const [imageCameraReady, setImageCameraReady] = useState(false);
+    const [selectedSpriteUrl, setSelectedSpriteUrl] = useState('');
+    const [spriteEditorOpen, setSpriteEditorOpen] = useState(false);
+    const [spriteAnimationDraft, setSpriteAnimationDraft] = useState(null);
+    const [savingSpriteAnimation, setSavingSpriteAnimation] = useState(false);
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -232,7 +261,15 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                 .filter((row) => String(row?.studentId || '') === studentId)
                 .flatMap((row) => (Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : []))
                 .map((url) => String(url || '').trim())
-                .filter(Boolean)
+                .filter(Boolean),
+            spriteAnimations: (expose?.presentations || [])
+                .filter((row) => String(row?.studentId || '') === studentId)
+                .flatMap((row) => (Array.isArray(row?.spriteAnimations) ? row.spriteAnimations : []))
+                .map((item) => ({
+                    imageUrl: String(item?.imageUrl || '').trim(),
+                    animationBlock: item?.animationBlock && typeof item.animationBlock === 'object' ? item.animationBlock : null
+                }))
+                .filter((item) => item.imageUrl)
         };
     }, [globalClass]);
 
@@ -551,6 +588,96 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         }
     };
 
+    const openSpriteEditor = (imageUrl) => {
+        const safeUrl = String(imageUrl || '').trim();
+        if (!safeUrl || !selectedRecorder) return;
+        const existingAnimation = (selectedRecorder.spriteAnimations || []).find((item) => String(item?.imageUrl || '').trim() === safeUrl)?.animationBlock || null;
+        const selectedEntry = selectedRecorder.recordings.find((row) => String(row?._id || '') === String(selectedRecorder.selectedRecordingId || '')) || selectedRecorder.recordings[0] || null;
+        setSelectedSpriteUrl(safeUrl);
+        setSpriteAnimationDraft(existingAnimation || createSpriteAnimationBlock(
+            safeUrl,
+            String(selectedEntry?.recordingUrl || ''),
+            Number(selectedEntry?.recordingPitch || selectedRecorder.recordingPitch || 1)
+        ));
+        setSpriteEditorOpen(true);
+    };
+
+    const updateSpriteAction = (actionId, patch) => {
+        setSpriteAnimationDraft((prev) => {
+            if (!prev || !Array.isArray(prev.actions)) return prev;
+            return {
+                ...prev,
+                actions: prev.actions.map((action) => String(action?.id || '') === String(actionId || '') ? { ...action, ...patch } : action)
+            };
+        });
+    };
+
+    const addSpriteAction = () => {
+        setSpriteAnimationDraft((prev) => {
+            if (!prev) return prev;
+            const actions = Array.isArray(prev.actions) ? prev.actions : [];
+            return {
+                ...prev,
+                actions: [...actions, createSpriteAction(actions.length)]
+            };
+        });
+    };
+
+    const removeSpriteAction = (actionId) => {
+        setSpriteAnimationDraft((prev) => {
+            if (!prev) return prev;
+            const actions = Array.isArray(prev.actions) ? prev.actions : [];
+            if (actions.length <= 1) return prev;
+            return {
+                ...prev,
+                actions: actions.filter((action) => String(action?.id || '') !== String(actionId || ''))
+            };
+        });
+    };
+
+    const appendSpriteFrames = async (actionId, fileList) => {
+        const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
+        if (!files.length) return;
+        const urls = await Promise.all(files.map((file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.readAsDataURL(file);
+        })));
+        const currentFrames = ((spriteAnimationDraft?.actions || []).find((action) => String(action?.id || '') === String(actionId || ''))?.frames || []);
+        updateSpriteAction(actionId, {
+            frames: [
+                ...currentFrames,
+                ...urls.filter(Boolean).map((url) => ({ url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))
+            ]
+        });
+    };
+
+    const saveSpriteAnimation = async () => {
+        if (!activeExpose?._id || !selectedRecorder?.studentId || !selectedRecorder?.presenterName || !selectedRecorder?.slideNumber || !selectedSpriteUrl || !spriteAnimationDraft) return;
+        setSavingSpriteAnimation(true);
+        try {
+            const res = await fetch(`/api/exposes/${encodeURIComponent(String(activeExpose._id))}/presenter-image-animation`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: selectedRecorder.studentId,
+                    presenterName: selectedRecorder.presenterName,
+                    slideNumber: selectedRecorder.slideNumber,
+                    imageUrl: selectedSpriteUrl,
+                    animationBlock: spriteAnimationDraft
+                })
+            });
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Sauvegarde animation impossible');
+            await loadData();
+            setSpriteEditorOpen(false);
+        } catch (e) {
+            alert(e.message || 'Sauvegarde animation impossible');
+        } finally {
+            setSavingSpriteAnimation(false);
+        }
+    };
+
     return (
         <div className="p-6 space-y-4">
             <div className="bg-slate-50 border border-slate-200 rounded-[28px] p-4">
@@ -720,9 +847,13 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                         <canvas ref={imageCanvasRef} className="hidden" />
                                     </div>
                                     {(selectedRecorder.spriteImageUrls || []).length > 0 ? (
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             {(selectedRecorder.spriteImageUrls || []).map((url, index) => (
-                                                <div key={`${url}_${index}`} className="relative rounded-[18px] border border-slate-200 bg-slate-50 p-2">
+                                                <div
+                                                    key={`${url}_${index}`}
+                                                    className={`relative rounded-[18px] border bg-slate-50 p-2 ${selectedSpriteUrl === url ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200'}`}
+                                                >
                                                     <button
                                                         type="button"
                                                         className="absolute top-2 right-2 z-10 w-8 h-8 rounded-full bg-white border border-red-200 text-red-600 font-black"
@@ -730,9 +861,72 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                                     >
                                                         ×
                                                     </button>
-                                                    <img src={toEmbeddableCanvasUrl(url) || url} alt={`Sprite ${index + 1}`} className="w-full h-32 object-contain rounded-xl bg-white" />
+                                                    <button type="button" className="block w-full" onClick={() => setSelectedSpriteUrl(url)}>
+                                                        <img src={toEmbeddableCanvasUrl(url) || url} alt={`Sprite ${index + 1}`} className="w-full h-32 object-contain rounded-xl bg-white" />
+                                                    </button>
                                                 </div>
                                             ))}
+                                            </div>
+                                            {selectedSpriteUrl ? (
+                                                <div className="rounded-[18px] border border-slate-200 bg-white p-4 space-y-3">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="text-[12px] font-black uppercase text-slate-500">Sprite sélectionné</div>
+                                                        <button type="button" className="px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase" onClick={() => openSpriteEditor(selectedSpriteUrl)}>Editer</button>
+                                                    </div>
+                                                    <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="w-28 h-28 object-contain rounded-xl bg-slate-50 border border-slate-200" />
+                                                </div>
+                                            ) : null}
+                                            {spriteEditorOpen && spriteAnimationDraft ? (
+                                                <div className="rounded-[24px] border border-indigo-200 bg-white p-5 space-y-4">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div>
+                                                            <div className="text-[12px] font-black uppercase text-indigo-500">Edition sprite</div>
+                                                            <div className="text-xl font-black text-slate-800">Actions animées</div>
+                                                        </div>
+                                                        <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase" onClick={() => setSpriteEditorOpen(false)}>Fermer</button>
+                                                    </div>
+                                                    <div className="flex items-start gap-4">
+                                                        <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="w-28 h-28 object-contain rounded-xl bg-slate-50 border border-slate-200" />
+                                                        <div className="flex-1 space-y-3">
+                                                            {(spriteAnimationDraft.actions || []).map((action, actionIndex) => (
+                                                                <div key={action.id} className="rounded-[18px] border border-slate-200 bg-slate-50 p-4 space-y-3">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <input
+                                                                            className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 bg-white font-black text-slate-800"
+                                                                            value={String(action?.name || '')}
+                                                                            onChange={(event) => updateSpriteAction(action.id, { name: event.target.value })}
+                                                                        />
+                                                                        <button type="button" className="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]" onClick={() => removeSpriteAction(action.id)}>×</button>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap items-center gap-3">
+                                                                        <label className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase cursor-pointer">
+                                                                            +ordi
+                                                                            <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void appendSpriteFrames(action.id, event.target.files)} />
+                                                                        </label>
+                                                                        <button type="button" className="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.max(0.05, Number(action?.frameDurationSec || 0.18) - 0.05) })}>-</button>
+                                                                        <div className="text-sm font-black text-slate-600">{Number(action?.frameDurationSec || 0.18).toFixed(2)}s</div>
+                                                                        <button type="button" className="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.min(1.5, Number(action?.frameDurationSec || 0.18) + 0.05) })}>+</button>
+                                                                    </div>
+                                                                    <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                                                        {(action.frames || []).map((frame, frameIndex) => (
+                                                                            <img key={`${action.id}_${frameIndex}`} src={String(frame?.url || frame || '')} alt="" className="w-full h-20 object-contain rounded-xl bg-white border border-slate-200" />
+                                                                        ))}
+                                                                        {(!action.frames || action.frames.length === 0) ? (
+                                                                            <div className="col-span-full text-[12px] font-black text-slate-400">Aucun sprite chargé.</div>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase" onClick={addSpriteAction}>+ Action</button>
+                                                                <button type="button" className="px-5 py-3 rounded-2xl bg-emerald-600 text-white font-black text-[12px] uppercase" onClick={() => void saveSpriteAnimation()} disabled={savingSpriteAnimation}>
+                                                                    {savingSpriteAnimation ? 'Enregistrement...' : 'Enregistrer animation'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ) : (
                                         <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-black text-slate-400">Aucune image enregistrée.</div>

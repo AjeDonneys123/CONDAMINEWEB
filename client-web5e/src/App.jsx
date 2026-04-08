@@ -3866,12 +3866,14 @@ function AnimationBlockEditor({
       const seen = new Set();
       const nextOptions = sourceRows.flatMap((row, rowIndex) => {
         const urls = Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : [];
+        const spriteAnimations = Array.isArray(row?.spriteAnimations) ? row.spriteAnimations : [];
         return urls
           .map((url, imageIndex) => ({
             id: `${String(row?.id || rowIndex)}_${imageIndex}`,
             url: String(url || '').trim(),
             slideNumber: Math.max(1, Number(row?.slideNumber || backupData?.slideNumber || 1)),
-            selected: row?.selected === true
+            selected: row?.selected === true,
+            animationBlock: spriteAnimations.find((item) => String(item?.imageUrl || '').trim() === String(url || '').trim())?.animationBlock || null
           }))
           .filter((item) => {
             if (!item.url || seen.has(item.url)) return false;
@@ -3887,22 +3889,39 @@ function AnimationBlockEditor({
     }
   };
 
-  const importPresenterSprite = (actionId, spriteUrl) => {
-    const safeValue = String(spriteUrl || '').trim();
+  const importPresenterSprite = (actionId, spriteOption) => {
+    const safeValue = String(spriteOption?.url || spriteOption || '').trim();
     if (!safeValue) {
       flashNotice("Aucune image détectée");
       return;
     }
-    updateActions(actions.map((item) => item.id === actionId
-      ? {
-          ...item,
-          frames: [...(item.frames || []), normalizeImportedFrame(safeValue)],
-          frameUrlInput: '',
-          mobileImportOpen: false
-        }
-      : item));
+    const importedAnimationBlock = spriteOption?.animationBlock && typeof spriteOption.animationBlock === 'object'
+      ? spriteOption.animationBlock
+      : null;
+    const importedActions = Array.isArray(importedAnimationBlock?.actions)
+      ? normalizeTimelineActions(importedAnimationBlock.actions)
+      : [];
+    updateActions(actions.flatMap((item) => {
+      if (item.id !== actionId) return [item];
+      const nextItem = {
+        ...item,
+        frames: [...(item.frames || []), normalizeImportedFrame(safeValue)],
+        frameUrlInput: '',
+        mobileImportOpen: false
+      };
+      if (!importedActions.length) return [nextItem];
+      const clonedImportedActions = importedActions.map((action, index) => ({
+        ...action,
+        id: `imported_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${index}`,
+        spritesOpen: false,
+        spriteUrlOpen: false,
+        spriteEditorOpen: false,
+        mobileImportOpen: false
+      }));
+      return [nextItem, ...clonedImportedActions];
+    }));
     setImageImportOptions([]);
-    flashNotice("Sprite importé");
+    flashNotice(importedActions.length ? `Sprite et ${importedActions.length} action(s) importés` : "Sprite importé");
   };
 
   const applyImportedAudio = async (audioId = '') => {
@@ -4470,7 +4489,7 @@ function AnimationBlockEditor({
                                     key={String(option.id || `mobile_sprite_${optionIndex}`)}
                                     type="button"
                                     className="animation-frame-thumb from-mobile"
-                                    onClick={() => importPresenterSprite(action.id, option.url)}
+                                    onClick={() => importPresenterSprite(action.id, option)}
                                     title={`Slide ${option.slideNumber}${option.selected ? ' • choisi prof' : ''}`}
                                   >
                                     <img src={resolveWeb5eAssetUrl(option.url)} alt="" />

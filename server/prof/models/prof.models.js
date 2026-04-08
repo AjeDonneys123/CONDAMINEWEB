@@ -225,6 +225,13 @@ const Models = {
                 recordingDurationSec: { type: Number, default: 0 },
                 recordingPitch: { type: Number, default: 1 },
                 spriteImageUrls: { type: [String], default: [] },
+                spriteAnimations: {
+                    type: [{
+                        imageUrl: { type: String, default: '' },
+                        animationBlock: { type: mongoose.Schema.Types.Mixed, default: null }
+                    }],
+                    default: []
+                },
                 presenterName: { type: String, default: '' },
                 presenterSlideNumber: { type: Number, default: 0 },
                 selectedForPresenter: { type: Boolean, default: false },
