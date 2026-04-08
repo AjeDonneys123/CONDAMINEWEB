@@ -5269,6 +5269,39 @@ export default function App() {
     }));
   };
 
+  const ensureRemoteTabDoc = async (sectionKey, tabKey) => {
+    const docKey = `${sectionKey}:${tabKey}`;
+    const existingTab = tabDocsByKey[docKey];
+    if (existingTab?._id) return existingTab;
+
+    const section = SECTION_CONFIG[sectionKey];
+    const tabConfig = Array.isArray(section?.tabs) ? section.tabs.find((tab) => tab.id === tabKey) : null;
+    if (!section || !tabConfig) {
+      throw new Error(`Tab introuvable pour ${docKey}`);
+    }
+
+    const res = await fetch(resolveWeb5eApiUrl('/api/web5e/tabs'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionKey,
+        tabKey,
+        title: tabConfig.title,
+        description: section.subtitle || '',
+        order: Math.max(0, section.tabs.findIndex((tab) => tab.id === tabKey)),
+        isPublished: true,
+        createdBy: user?.id || user?._id || '',
+        createdByModel: 'Student'
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.tab?._id) {
+      throw new Error(data?.error || `Creation tab impossible (${res.status})`);
+    }
+    setTabDocsByKey((prev) => ({ ...prev, [docKey]: data.tab }));
+    return data.tab;
+  };
+
   const persistBlocks = async (nextBlocks) => {
     const docKey = `${activeSection}:${currentTabId}`;
     setSaveErrorMessage('');
@@ -5282,8 +5315,16 @@ export default function App() {
       };
       writeLocalWeb5eContent(nextContent);
     }
-    const tabDoc = tabDocsByKey[docKey];
-    if (!tabDoc?._id || !user?.id) return;
+    let tabDoc = tabDocsByKey[docKey];
+    if (!user?.id) return;
+    if (!tabDoc?._id) {
+      try {
+        tabDoc = await ensureRemoteTabDoc(activeSection, currentTabId);
+      } catch (error) {
+        setSaveErrorMessage(error?.message || 'Creation du sous-onglet public impossible.');
+        return;
+      }
+    }
     const existingEntry = entryDocsByKey[docKey];
     try {
       const res = await fetch(resolveWeb5eApiUrl('/api/web5e/entries'), {
