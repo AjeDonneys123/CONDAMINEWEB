@@ -5533,6 +5533,36 @@ export default function App() {
     });
   };
 
+  const deleteRemotePresentationEntry = async (row) => {
+    const entryId = String(row?.entryId || '').trim();
+    if (!entryId) {
+      window.alert('Suppression impossible: entree distante introuvable.');
+      return;
+    }
+    if (!window.confirm('Supprimer cette presentation de la BDD ?')) return;
+    const res = await fetch(resolveWeb5eApiUrl(`/api/web5e/entries/${encodeURIComponent(entryId)}`), {
+      method: 'DELETE'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      window.alert(data?.error || 'Suppression impossible');
+      return;
+    }
+    setPublicEntriesByKey((prev) => {
+      const next = {};
+      Object.entries(prev || {}).forEach(([key, rows]) => {
+        const filtered = (Array.isArray(rows) ? rows : []).filter((entry) => String(entry?._id || '') !== entryId);
+        if (filtered.length > 0) next[key] = filtered;
+      });
+      writePublicEntriesCache(next);
+      return next;
+    });
+    if (String(currentEntry?._id || '') === entryId) {
+      updateBlocks([]);
+    }
+    void loadWeb5e();
+  };
+
   const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
   const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
   const currentPublicEntries = Array.isArray(publicEntriesByKey[`${activeSection}:${currentTabId}`])
@@ -5562,7 +5592,8 @@ export default function App() {
             index: blockIndex,
             presentation: normalizePresentationBlock(block),
             publicEntryIndex,
-            authorName: String(entry?.authorName || '')
+            authorName: String(entry?.authorName || ''),
+            entryId: String(entry?._id || '')
           }))
       ));
       const dedupedRows = dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
@@ -5623,13 +5654,15 @@ export default function App() {
   const preferredStudentPresentationIndex = editingPresentationBlockIndex >= 0
     ? editingPresentationBlockIndex
     : (validatedPresentations[0]?.index ?? presentationBlocks[0]?.index ?? -1);
+  const singleVisibleStudentPresentationIndex = preferredStudentPresentationIndex >= 0
+    ? preferredStudentPresentationIndex
+    : (presentationBlocks[0]?.index ?? -1);
+  const singleVisiblePresentationIndex = singleVisibleStudentPresentationIndex;
   const hasEmptyPresentationName = presentationBlocks.some(({ presentation }) => !String(presentation.presentationName || '').trim());
   const visibleArticleBlocks = user
     ? articleBlocks.filter(({ block, index }) => {
         if (block.type !== 'text') return true;
-        if (isTeacher) return true;
-        if (studentHasValidatedPresentation && !hasLockedPresentationEditing) return false;
-        return index === preferredStudentPresentationIndex;
+        return index === singleVisiblePresentationIndex;
       })
     : articleBlocks.filter(({ block }) => block.type !== 'text');
 
@@ -6082,6 +6115,23 @@ export default function App() {
                   setOpenedValidatedPresentationIndex(index);
                 }}
               >
+                {isTeacher ? (
+                  <button
+                    type="button"
+                    className="validated-presentation-close"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const row = validatedPresentations[index];
+                      if (row?.entryId) {
+                        void deleteRemotePresentationEntry(row);
+                        return;
+                      }
+                      deleteValidatedPresentationCard(index);
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
                 {user ? <div className="validated-presentation-eyebrow">Presentation validee</div> : null}
                 <h3>{presentation.presentationName || `Presentation ${index + 1}`}</h3>
                 {user ? (

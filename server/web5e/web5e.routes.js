@@ -504,6 +504,22 @@ router.post('/entries', async (req, res) => {
     }
 });
 
+router.delete('/entries/:id', async (req, res) => {
+    try {
+        const entryId = String(req.params?.id || '').trim();
+        if (!mongoose.Types.ObjectId.isValid(entryId)) {
+            return res.status(400).json({ ok: false, error: 'entry id invalide' });
+        }
+        const deleted = await Web5eEntry.findByIdAndDelete(entryId).lean();
+        if (!deleted) {
+            return res.status(404).json({ ok: false, error: 'entree introuvable' });
+        }
+        res.json({ ok: true, deletedId: entryId });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/actors', async (req, res) => {
     try {
         const site = await ensureDefaultSite();
