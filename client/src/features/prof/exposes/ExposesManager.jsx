@@ -159,6 +159,8 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [sliceBoxes, setSliceBoxes] = useState([]);
     const [sliceDraftBox, setSliceDraftBox] = useState(null);
     const [selectedSliceBoxId, setSelectedSliceBoxId] = useState('');
+    const [playingSpriteActionId, setPlayingSpriteActionId] = useState('');
+    const [playingSpriteFrameIndex, setPlayingSpriteFrameIndex] = useState(0);
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -1070,6 +1072,27 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         };
     }, [sliceToolOpen, sliceDraftBox, sliceSourceSize.width, sliceSourceSize.height]);
 
+    useEffect(() => {
+        if (!playingSpriteActionId || !spriteAnimationDraft?.actions?.length) return undefined;
+        const action = spriteAnimationDraft.actions.find((item) => String(item?.id || '') === String(playingSpriteActionId || ''));
+        const frames = Array.isArray(action?.frames) ? action.frames : [];
+        if (frames.length <= 1) return undefined;
+        const interval = window.setInterval(() => {
+            setPlayingSpriteFrameIndex((prev) => (prev + 1) % Math.max(frames.length, 1));
+        }, Math.max(50, Number(action?.frameDurationSec || 0.18) * 1000));
+        return () => window.clearInterval(interval);
+    }, [playingSpriteActionId, spriteAnimationDraft]);
+
+    const toggleSpriteActionPreview = (actionId) => {
+        if (String(playingSpriteActionId || '') === String(actionId || '')) {
+            setPlayingSpriteActionId('');
+            setPlayingSpriteFrameIndex(0);
+            return;
+        }
+        setPlayingSpriteActionId(String(actionId || ''));
+        setPlayingSpriteFrameIndex(0);
+    };
+
     return (
         <div className="p-6 space-y-4">
             <div className="bg-slate-50 border border-slate-200 rounded-[28px] p-4">
@@ -1295,7 +1318,18 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                         <div className="flex flex-col gap-6 lg:flex-row">
                                             <div className="lg:sticky lg:top-0 lg:w-56 lg:self-start">
                                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                                                    <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="h-40 w-full object-contain rounded-2xl border border-slate-200 bg-white" />
+                                                    {(() => {
+                                                        const previewAction = (spriteAnimationDraft.actions || []).find((action) => String(action?.id || '') === String(playingSpriteActionId || ''));
+                                                        const previewFrames = Array.isArray(previewAction?.frames) ? previewAction.frames : [];
+                                                        const previewFrame = previewFrames.length > 0 ? normalizeDraftFrame(previewFrames[playingSpriteFrameIndex % previewFrames.length]) : null;
+                                                        return (
+                                                            <img
+                                                                src={String(previewFrame?.url || toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl)}
+                                                                alt=""
+                                                                className="h-40 w-full object-contain rounded-2xl border border-slate-200 bg-white"
+                                                            />
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                             <div className="min-w-0 flex-1 space-y-4">
@@ -1315,6 +1349,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                                                 <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void appendSpriteFrames(action.id, event.target.files)} />
                                                             </label>
                                                             <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => void pasteSpriteFramesFromClipboard(action.id)}>Coller</button>
+                                                            <button type="button" className={`rounded-2xl border px-4 py-2 font-black text-[12px] uppercase ${String(playingSpriteActionId || '') === String(action.id || '') ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white'}`} onClick={() => toggleSpriteActionPreview(action.id)}>{String(playingSpriteActionId || '') === String(action.id || '') ? 'Stop' : 'Play'}</button>
                                                             <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.max(0.05, Number(action?.frameDurationSec || 0.18) - 0.05) })}>-</button>
                                                             <div className="text-sm font-black text-slate-600">{Number(action?.frameDurationSec || 0.18).toFixed(2)}s</div>
                                                             <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.min(1.5, Number(action?.frameDurationSec || 0.18) + 0.05) })}>+</button>

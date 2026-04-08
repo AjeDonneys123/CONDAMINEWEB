@@ -5566,7 +5566,8 @@ export default function App() {
           }))
       ));
       const dedupedRows = dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
-      return dedupePublicPresentationsByAuthor(dedupedRows);
+      const dedupedByAuthor = dedupePublicPresentationsByAuthor(dedupedRows);
+      return dedupePublishedPresentations(dedupedByAuthor);
     })();
   useEffect(() => {
     if (user) return;
