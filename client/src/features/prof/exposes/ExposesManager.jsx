@@ -70,6 +70,64 @@ const createSpriteAnimationBlock = (actorImageUrl = '', soundUrl = '', soundPitc
     actions: [createSpriteAction(0, soundUrl, soundPitch)]
 });
 
+const createSpriteFrame = (url = '') => ({
+    id: `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    url: String(url || '').trim(),
+    width: 140,
+    height: 140,
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0
+});
+
+const normalizeDraftFrame = (frameOrUrl) => (
+    typeof frameOrUrl === 'string'
+        ? createSpriteFrame(frameOrUrl)
+        : { ...createSpriteFrame(frameOrUrl?.url || ''), ...(frameOrUrl || {}) }
+);
+
+const sampleCornerColor = (imageData, width) => {
+    const idx = ((0 * width) + Math.max(0, width - 1)) * 4;
+    return {
+        r: imageData.data[idx] || 255,
+        g: imageData.data[idx + 1] || 255,
+        b: imageData.data[idx + 2] || 255
+    };
+};
+
+const colorDistance = (a, b) => Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
+
+const autoRemoveBgFromDataUrl = async (dataUrl) => new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            resolve(dataUrl);
+            return;
+        }
+        try {
+            ctx.drawImage(image, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const target = sampleCornerColor(imageData, canvas.width);
+            const tolerance = 70;
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                const pixel = { r: imageData.data[i], g: imageData.data[i + 1], b: imageData.data[i + 2] };
+                if (colorDistance(pixel, target) <= tolerance) imageData.data[i + 3] = 0;
+            }
+            ctx.putImageData(imageData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        } catch (_) {
+            resolve(dataUrl);
+        }
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+});
+
 export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState([]);
@@ -91,6 +149,16 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [spriteEditorOpen, setSpriteEditorOpen] = useState(false);
     const [spriteAnimationDraft, setSpriteAnimationDraft] = useState(null);
     const [savingSpriteAnimation, setSavingSpriteAnimation] = useState(false);
+    const [frameEditorState, setFrameEditorState] = useState(null);
+    const [eraserActive, setEraserActive] = useState(false);
+    const [eraserSize, setEraserSize] = useState(24);
+    const [eraserCursor, setEraserCursor] = useState({ visible: false, x: 0, y: 0 });
+    const [sliceToolOpen, setSliceToolOpen] = useState(false);
+    const [sliceSource, setSliceSource] = useState(null);
+    const [sliceSourceSize, setSliceSourceSize] = useState({ width: 0, height: 0 });
+    const [sliceBoxes, setSliceBoxes] = useState([]);
+    const [sliceDraftBox, setSliceDraftBox] = useState(null);
+    const [selectedSliceBoxId, setSelectedSliceBoxId] = useState('');
 
     const recorderRef = React.useRef(null);
     const streamRef = React.useRef(null);
@@ -101,6 +169,11 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const imageInputRef = React.useRef(null);
     const imageVideoRef = React.useRef(null);
     const imageCanvasRef = React.useRef(null);
+    const spriteEditorCanvasRef = React.useRef(null);
+    const spriteEditorDirtyRef = React.useRef(null);
+    const spriteEditorEraseStateRef = React.useRef(false);
+    const slicePreviewRef = React.useRef(null);
+    const sliceDragRef = React.useRef({ id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' });
     const exposeGridCols = 6;
 
     const classStudents = useMemo(() => {
@@ -612,13 +685,36 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         });
     };
 
+    const updateSpriteFrame = (actionId, frameIndex, patch) => {
+        setSpriteAnimationDraft((prev) => {
+            if (!prev || !Array.isArray(prev.actions)) return prev;
+            return {
+                ...prev,
+                actions: prev.actions.map((action) => {
+                    if (String(action?.id || '') !== String(actionId || '')) return action;
+                    const frames = Array.isArray(action.frames) ? action.frames : [];
+                    return {
+                        ...action,
+                        frames: frames.map((frame, index) => (
+                            index === frameIndex ? { ...normalizeDraftFrame(frame), ...patch } : normalizeDraftFrame(frame)
+                        ))
+                    };
+                })
+            };
+        });
+    };
+
+    const selectSpriteFrame = (actionId, frameIndex) => {
+        updateSpriteAction(actionId, { selectedFrameIndex: Math.max(0, Number(frameIndex || 0)) });
+    };
+
     const addSpriteAction = () => {
         setSpriteAnimationDraft((prev) => {
             if (!prev) return prev;
             const actions = Array.isArray(prev.actions) ? prev.actions : [];
             return {
                 ...prev,
-                actions: [...actions, createSpriteAction(actions.length)]
+                actions: [...actions, { ...createSpriteAction(actions.length), selectedFrameIndex: 0 }]
             };
         });
     };
@@ -647,9 +743,280 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         updateSpriteAction(actionId, {
             frames: [
                 ...currentFrames,
-                ...urls.filter(Boolean).map((url) => ({ url, width: 140, height: 140, scale: 1, offsetX: 0, offsetY: 0 }))
-            ]
+                ...urls.filter(Boolean).map((url) => createSpriteFrame(url))
+            ],
+            selectedFrameIndex: currentFrames.length
         });
+    };
+
+    const importSpriteFrameFromValue = (actionId, value) => {
+        const safeValue = String(value || '').trim();
+        if (!safeValue) return;
+        const currentFrames = ((spriteAnimationDraft?.actions || []).find((action) => String(action?.id || '') === String(actionId || ''))?.frames || []);
+        updateSpriteAction(actionId, {
+            frames: [
+                ...currentFrames,
+                createSpriteFrame(safeValue)
+            ],
+            selectedFrameIndex: currentFrames.length
+        });
+    };
+
+    const removeSpriteFrame = (actionId, frameIndex) => {
+        setSpriteAnimationDraft((prev) => {
+            if (!prev || !Array.isArray(prev.actions)) return prev;
+            return {
+                ...prev,
+                actions: prev.actions.map((action) => {
+                    if (String(action?.id || '') !== String(actionId || '')) return action;
+                    const frames = Array.isArray(action.frames) ? action.frames : [];
+                    const nextFrames = frames.filter((_, index) => index !== frameIndex).map((frame) => normalizeDraftFrame(frame));
+                    return {
+                        ...action,
+                        frames: nextFrames,
+                        selectedFrameIndex: Math.max(0, Math.min(Number(action?.selectedFrameIndex || 0), Math.max(0, nextFrames.length - 1)))
+                    };
+                })
+            };
+        });
+    };
+
+    const openSpriteFrameEditor = (actionId) => {
+        const action = (spriteAnimationDraft?.actions || []).find((item) => String(item?.id || '') === String(actionId || ''));
+        const selectedIndex = Math.max(0, Number(action?.selectedFrameIndex || 0));
+        const frame = normalizeDraftFrame(action?.frames?.[selectedIndex]);
+        if (!frame?.url) return;
+        setFrameEditorState({ actionId, frameIndex: selectedIndex });
+        setEraserActive(false);
+        setEraserCursor({ visible: false, x: 0, y: 0 });
+    };
+
+    const commitSpriteEditorCanvas = () => {
+        const canvas = spriteEditorCanvasRef.current;
+        const editor = frameEditorState;
+        if (!canvas || !editor) return;
+        const nextUrl = canvas.toDataURL('image/png');
+        updateSpriteFrame(editor.actionId, editor.frameIndex, { url: nextUrl });
+    };
+
+    const eraseOnSpriteCanvas = (event) => {
+        const canvas = spriteEditorCanvasRef.current;
+        if (!canvas || !eraserActive) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / Math.max(rect.width, 1);
+        const scaleY = canvas.height / Math.max(rect.height, 1);
+        const x = (event.clientX - rect.left) * scaleX;
+        const y = (event.clientY - rect.top) * scaleY;
+        const radius = Math.max(2, Number(eraserSize || 24) / 2) * ((scaleX + scaleY) / 2);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        spriteEditorDirtyRef.current = true;
+    };
+
+    const cutoutSelectedSpriteFrame = async (actionId) => {
+        const action = (spriteAnimationDraft?.actions || []).find((item) => String(item?.id || '') === String(actionId || ''));
+        const selectedIndex = Math.max(0, Number(action?.selectedFrameIndex || 0));
+        const frame = normalizeDraftFrame(action?.frames?.[selectedIndex]);
+        if (!frame?.url) return;
+        const nextUrl = await autoRemoveBgFromDataUrl(frame.url);
+        updateSpriteFrame(actionId, selectedIndex, { url: nextUrl });
+    };
+
+    const openSliceTool = (actionId) => {
+        const action = (spriteAnimationDraft?.actions || []).find((item) => String(item?.id || '') === String(actionId || ''));
+        const selectedIndex = Math.max(0, Number(action?.selectedFrameIndex || 0));
+        const frame = normalizeDraftFrame(action?.frames?.[selectedIndex]);
+        if (!frame?.url) return;
+        setSliceSource({ actionId, frameIndex: selectedIndex, frame });
+        setSliceSourceSize({ width: 0, height: 0 });
+        setSliceBoxes([]);
+        setSliceDraftBox(null);
+        setSelectedSliceBoxId('');
+        setSliceToolOpen(true);
+    };
+
+    const applySliceTool = async () => {
+        if (!sliceSource?.frame?.url || !sliceBoxes.length) {
+            setSliceToolOpen(false);
+            return;
+        }
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => {
+            const sourceWidth = Number(sliceSourceSize.width || image.width || 1);
+            const sourceHeight = Number(sliceSourceSize.height || image.height || 1);
+            const nextSlices = sliceBoxes
+                .map((box) => ({
+                    x: Math.max(0, Math.min(Number(box.x || 0), sourceWidth)),
+                    y: Math.max(0, Math.min(Number(box.y || 0), sourceHeight)),
+                    width: Math.max(12, Math.min(Number(box.width || 0), sourceWidth)),
+                    height: Math.max(12, Math.min(Number(box.height || 0), sourceHeight))
+                }))
+                .filter((box) => box.width >= 8 && box.height >= 8)
+                .map((rect) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.round(rect.width);
+                    canvas.height = Math.round(rect.height);
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return null;
+                    ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+                    return createSpriteFrame(canvas.toDataURL('image/png'));
+                })
+                .filter(Boolean);
+            if (!nextSlices.length) {
+                setSliceToolOpen(false);
+                return;
+            }
+            setSpriteAnimationDraft((prev) => {
+                if (!prev || !Array.isArray(prev.actions)) return prev;
+                return {
+                    ...prev,
+                    actions: prev.actions.map((action) => {
+                        if (String(action?.id || '') !== String(sliceSource.actionId || '')) return action;
+                        const frames = (Array.isArray(action.frames) ? action.frames : []).map((frame) => normalizeDraftFrame(frame));
+                        const insertAfter = Math.max(0, Number(sliceSource.frameIndex || 0));
+                        return {
+                            ...action,
+                            frames: [
+                                ...frames.slice(0, insertAfter + 1),
+                                ...nextSlices,
+                                ...frames.slice(insertAfter + 1)
+                            ],
+                            selectedFrameIndex: insertAfter + 1
+                        };
+                    })
+                };
+            });
+            setSliceToolOpen(false);
+            setSliceSource(null);
+            setSliceBoxes([]);
+            setSliceDraftBox(null);
+            setSelectedSliceBoxId('');
+        };
+        image.src = String(sliceSource.frame.url || '');
+    };
+
+    const updateSliceDrag = (clientX, clientY) => {
+        if (!sliceDragRef.current.active || !slicePreviewRef.current) return;
+        const rect = slicePreviewRef.current.getBoundingClientRect();
+        const sourceWidth = Number(sliceSourceSize.width || rect.width || 1);
+        const sourceHeight = Number(sliceSourceSize.height || rect.height || 1);
+        const displayWidth = Math.max(1, rect.width);
+        const displayHeight = Math.max(1, rect.height);
+        const pointerX = ((clientX - rect.left) / displayWidth) * sourceWidth;
+        const pointerY = ((clientY - rect.top) / displayHeight) * sourceHeight;
+        if (sliceDragRef.current.mode === 'move') {
+            setSliceBoxes((prev) => prev.map((box) => (
+                box.id === sliceDragRef.current.id
+                    ? {
+                        ...box,
+                        x: Math.max(0, Math.min(pointerX - sliceDragRef.current.offsetX, sourceWidth - Number(box.width || 0))),
+                        y: Math.max(0, Math.min(pointerY - sliceDragRef.current.offsetY, sourceHeight - Number(box.height || 0)))
+                    }
+                    : box
+            )));
+            return;
+        }
+        if (sliceDragRef.current.mode === 'resize') {
+            setSliceBoxes((prev) => prev.map((box) => {
+                if (box.id !== sliceDragRef.current.id) return box;
+                const handle = String(sliceDragRef.current.handle || '');
+                const right = Number(box.x || 0) + Number(box.width || 0);
+                const bottom = Number(box.y || 0) + Number(box.height || 0);
+                const nextBox = { ...box };
+                if (handle.includes('n')) {
+                    nextBox.y = Math.min(pointerY, bottom - 12);
+                    nextBox.height = bottom - nextBox.y;
+                }
+                if (handle.includes('s')) {
+                    nextBox.height = Math.max(12, pointerY - Number(nextBox.y || 0));
+                }
+                if (handle.includes('w')) {
+                    nextBox.x = Math.min(pointerX, right - 12);
+                    nextBox.width = right - nextBox.x;
+                }
+                if (handle.includes('e')) {
+                    nextBox.width = Math.max(12, pointerX - Number(nextBox.x || 0));
+                }
+                return {
+                    ...nextBox,
+                    x: Math.max(0, Math.min(Number(nextBox.x || 0), sourceWidth - 12)),
+                    y: Math.max(0, Math.min(Number(nextBox.y || 0), sourceHeight - 12)),
+                    width: Math.max(12, Math.min(Number(nextBox.width || 0), sourceWidth - Number(nextBox.x || 0))),
+                    height: Math.max(12, Math.min(Number(nextBox.height || 0), sourceHeight - Number(nextBox.y || 0)))
+                };
+            }));
+            return;
+        }
+        if (sliceDragRef.current.mode === 'create') {
+            const startX = Number(sliceDragRef.current.offsetX || 0);
+            const startY = Number(sliceDragRef.current.offsetY || 0);
+            setSliceDraftBox({
+                id: 'draft',
+                x: Math.max(0, Math.min(Math.min(startX, pointerX), sourceWidth)),
+                y: Math.max(0, Math.min(Math.min(startY, pointerY), sourceHeight)),
+                width: Math.max(12, Math.min(Math.abs(pointerX - startX), sourceWidth)),
+                height: Math.max(12, Math.min(Math.abs(pointerY - startY), sourceHeight))
+            });
+        }
+    };
+
+    const handleSpriteFramePaste = (event, actionId) => {
+        const clipboard = event.clipboardData;
+        if (!clipboard) return;
+        const items = Array.from(clipboard.items || []);
+        const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
+        if (imageItem) {
+            event.preventDefault();
+            const file = imageItem.getAsFile();
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => importSpriteFrameFromValue(actionId, String(reader.result || ''));
+            reader.readAsDataURL(file);
+            return;
+        }
+        const pastedText = String(clipboard.getData('text/plain') || '').trim();
+        if (pastedText) {
+            event.preventDefault();
+            importSpriteFrameFromValue(actionId, pastedText);
+        }
+    };
+
+    const pasteSpriteFramesFromClipboard = async (actionId) => {
+        try {
+            if (navigator.clipboard?.read) {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const clipboardItem of clipboardItems) {
+                    const imageType = clipboardItem.types.find((type) => type.startsWith('image/'));
+                    if (!imageType) continue;
+                    const blob = await clipboardItem.getType(imageType);
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(String(reader.result || ''));
+                        reader.onerror = () => reject(new Error('reader'));
+                        reader.readAsDataURL(blob);
+                    });
+                    importSpriteFrameFromValue(actionId, dataUrl);
+                    return;
+                }
+            }
+            if (navigator.clipboard?.readText) {
+                const text = String(await navigator.clipboard.readText()).trim();
+                if (text) {
+                    importSpriteFrameFromValue(actionId, text);
+                    return;
+                }
+            }
+        } catch (_) {}
+        alert('Collage impossible');
     };
 
     const saveSpriteAnimation = async () => {
@@ -677,6 +1044,31 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
             setSavingSpriteAnimation(false);
         }
     };
+
+    useEffect(() => {
+        if (!sliceToolOpen) return undefined;
+        const handleMouseMove = (event) => {
+            if (!sliceDragRef.current.active) return;
+            updateSliceDrag(event.clientX, event.clientY);
+        };
+        const handleMouseUp = () => {
+            if (!sliceDragRef.current.active) return;
+            const previousMode = String(sliceDragRef.current.mode || '');
+            sliceDragRef.current = { id: '', mode: '', offsetX: 0, offsetY: 0, active: false, handle: '' };
+            if (previousMode === 'create' && sliceDraftBox && sliceDraftBox.width >= 12 && sliceDraftBox.height >= 12) {
+                const nextBox = { ...sliceDraftBox, id: `slice_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
+                setSliceBoxes((prev) => [...prev, nextBox]);
+                setSelectedSliceBoxId(nextBox.id);
+            }
+            setSliceDraftBox(null);
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [sliceToolOpen, sliceDraftBox, sliceSourceSize.width, sliceSourceSize.height]);
 
     return (
         <div className="p-6 space-y-4">
@@ -922,17 +1314,39 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                                                 +ordi
                                                                 <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void appendSpriteFrames(action.id, event.target.files)} />
                                                             </label>
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => void pasteSpriteFramesFromClipboard(action.id)}>Coller</button>
                                                             <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.max(0.05, Number(action?.frameDurationSec || 0.18) - 0.05) })}>-</button>
                                                             <div className="text-sm font-black text-slate-600">{Number(action?.frameDurationSec || 0.18).toFixed(2)}s</div>
                                                             <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.min(1.5, Number(action?.frameDurationSec || 0.18) + 0.05) })}>+</button>
                                                         </div>
-                                                        <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-6">
-                                                            {(action.frames || []).map((frame, frameIndex) => (
-                                                                <img key={`${action.id}_${frameIndex}`} src={String(frame?.url || frame || '')} alt="" className="h-24 w-full rounded-xl border border-slate-200 bg-white object-contain" />
-                                                            ))}
+                                                        <div
+                                                            className="space-y-3 rounded-[20px] border border-dashed border-slate-300 bg-white p-3"
+                                                            tabIndex={0}
+                                                            onPaste={(event) => handleSpriteFramePaste(event, action.id)}
+                                                        >
+                                                            <div className="text-[12px] font-black text-slate-500">Colle des sprites ici avec `Ctrl+V`, ou importe-les depuis `+ordi`.</div>
+                                                            <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-6">
+                                                            {(action.frames || []).map((frame, frameIndex) => {
+                                                                const normalizedFrame = normalizeDraftFrame(frame);
+                                                                const isSelected = Number(action?.selectedFrameIndex || 0) === frameIndex;
+                                                                return (
+                                                                    <div key={`${action.id}_${frameIndex}`} className={`group relative overflow-hidden rounded-xl border bg-white ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200'}`}>
+                                                                        <button type="button" className="block w-full" onClick={() => selectSpriteFrame(action.id, frameIndex)}>
+                                                                            <img src={String(normalizedFrame?.url || '')} alt="" className="h-24 w-full object-contain" />
+                                                                        </button>
+                                                                        <button type="button" className="absolute right-1 top-1 rounded-full border border-red-200 bg-white px-2 py-1 text-[11px] font-black text-red-600 opacity-100 md:opacity-0 md:group-hover:opacity-100" onClick={() => removeSpriteFrame(action.id, frameIndex)}>×</button>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                             {(!action.frames || action.frames.length === 0) ? (
-                                                                <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-[12px] font-black text-slate-400">Aucun sprite charge.</div>
+                                                                <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-[12px] font-black text-slate-400">Aucun sprite charge.</div>
                                                             ) : null}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-3">
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => openSliceTool(action.id)}>Ciseaux</button>
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => openSpriteFrameEditor(action.id)}>Edition</button>
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => void cutoutSelectedSpriteFrame(action.id)}>Detourer</button>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -944,6 +1358,210 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                         <button type="button" className="rounded-2xl bg-emerald-600 px-5 py-3 font-black text-[12px] uppercase text-white" onClick={() => void saveSpriteAnimation()} disabled={savingSpriteAnimation}>
                                             {savingSpriteAnimation ? 'Enregistrement...' : 'Enregistrer animation'}
                                         </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+                    {frameEditorState ? (
+                        <div className="fixed inset-0 z-[130] bg-slate-950/45 p-4 md:p-8">
+                            <div className="mx-auto flex h-full max-w-4xl items-center justify-center">
+                                <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-[28px] border border-indigo-200 bg-white shadow-[0_40px_120px_-40px_rgba(15,23,42,0.65)]">
+                                    <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                                        <div>
+                                            <div className="text-[12px] font-black uppercase text-indigo-500">Edition</div>
+                                            <div className="text-2xl font-black text-slate-800">Sprite selectionne</div>
+                                        </div>
+                                        <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => { if (spriteEditorDirtyRef.current) commitSpriteEditorCanvas(); setFrameEditorState(null); setEraserActive(false); }}>Fermer</button>
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+                                        {(() => {
+                                            const action = (spriteAnimationDraft?.actions || []).find((item) => String(item?.id || '') === String(frameEditorState.actionId || ''));
+                                            const frame = normalizeDraftFrame(action?.frames?.[frameEditorState.frameIndex]);
+                                            if (!frame?.url) return <div className="text-sm font-black text-slate-400">Aucun sprite selectionne.</div>;
+                                            return (
+                                                <div className="space-y-4">
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        <button type="button" className={eraserActive ? 'rounded-2xl border border-slate-200 bg-slate-900 px-4 py-2 font-black text-[12px] uppercase text-white' : 'rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase'} onClick={() => setEraserActive((prev) => !prev)}>G</button>
+                                                        <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => setEraserSize((prev) => Math.max(6, prev - 4))}>-</button>
+                                                        <div className="text-sm font-black text-slate-600">{eraserSize}</div>
+                                                        <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => setEraserSize((prev) => Math.min(80, prev + 4))}>+</button>
+                                                    </div>
+                                                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                                                        <div className="relative inline-block">
+                                                            <canvas
+                                                                key={`${frameEditorState.actionId}_${frameEditorState.frameIndex}_${frame.url}`}
+                                                                ref={(node) => {
+                                                                    spriteEditorCanvasRef.current = node;
+                                                                    if (!node) return;
+                                                                    const nextWidth = Math.max(1, Number(frame.width || 140));
+                                                                    const nextHeight = Math.max(1, Number(frame.height || 140));
+                                                                    const sourceKey = `${frame.url}|${nextWidth}|${nextHeight}`;
+                                                                    if (node.dataset.sourceKey === sourceKey) return;
+                                                                    const image = new Image();
+                                                                    image.onload = () => {
+                                                                        node.width = nextWidth;
+                                                                        node.height = nextHeight;
+                                                                        const ctx = node.getContext('2d');
+                                                                        if (!ctx) return;
+                                                                        ctx.clearRect(0, 0, node.width, node.height);
+                                                                        ctx.drawImage(image, 0, 0, node.width, node.height);
+                                                                        node.dataset.sourceKey = sourceKey;
+                                                                    };
+                                                                    image.src = frame.url;
+                                                                }}
+                                                                className="max-h-[60vh] rounded-2xl border border-slate-200 bg-white object-contain"
+                                                                style={{ width: Number(frame.width || 140), height: Number(frame.height || 140) }}
+                                                                onMouseDown={(event) => {
+                                                                    if (!eraserActive) return;
+                                                                    spriteEditorEraseStateRef.current = true;
+                                                                    eraseOnSpriteCanvas(event);
+                                                                }}
+                                                                onMouseMove={(event) => {
+                                                                    const rect = event.currentTarget.getBoundingClientRect();
+                                                                    setEraserCursor({ visible: eraserActive, x: event.clientX - rect.left, y: event.clientY - rect.top });
+                                                                    if (eraserActive && spriteEditorEraseStateRef.current) eraseOnSpriteCanvas(event);
+                                                                }}
+                                                                onMouseLeave={() => setEraserCursor({ visible: false, x: 0, y: 0 })}
+                                                                onMouseUp={() => { spriteEditorEraseStateRef.current = false; }}
+                                                            />
+                                                            {eraserActive && eraserCursor.visible ? (
+                                                                <div className="pointer-events-none absolute rounded-full border border-slate-900/70" style={{ width: eraserSize, height: eraserSize, left: eraserCursor.x - (eraserSize / 2), top: eraserCursor.y - (eraserSize / 2) }} />
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+                    {sliceToolOpen && sliceSource ? (
+                        <div className="fixed inset-0 z-[125] bg-slate-950/45 p-4 md:p-8">
+                            <div className="mx-auto flex h-full max-w-6xl items-center justify-center">
+                                <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-[28px] border border-indigo-200 bg-white shadow-[0_40px_120px_-40px_rgba(15,23,42,0.65)]">
+                                    <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                                        <div>
+                                            <div className="text-[12px] font-black uppercase text-indigo-500">Ciseaux</div>
+                                            <div className="text-2xl font-black text-slate-800">Decouper la planche</div>
+                                        </div>
+                                        <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => setSliceToolOpen(false)}>Fermer</button>
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+                                        <div className="mb-4 text-[12px] font-black text-slate-500">Glisse dans l’image pour creer des cadres. Chaque cadre deviendra un sprite.</div>
+                                        <div
+                                            ref={slicePreviewRef}
+                                            className="relative inline-block max-w-full overflow-auto rounded-[24px] border border-slate-200 bg-slate-50"
+                                            onMouseDown={(event) => {
+                                                const handleTarget = event.target?.closest?.('[data-resize-handle]');
+                                                const boxTarget = event.target?.closest?.('[data-box-id]');
+                                                const targetBoxId = String(handleTarget?.dataset?.boxId || boxTarget?.dataset?.boxId || '');
+                                                const resizeHandle = String(handleTarget?.dataset?.resizeHandle || '');
+                                                const rect = event.currentTarget.getBoundingClientRect();
+                                                const sourceWidth = Number(sliceSourceSize.width || rect.width || 1);
+                                                const sourceHeight = Number(sliceSourceSize.height || rect.height || 1);
+                                                const displayWidth = Math.max(1, rect.width);
+                                                const displayHeight = Math.max(1, rect.height);
+                                                const pointerX = ((event.clientX - rect.left) / displayWidth) * sourceWidth;
+                                                const pointerY = ((event.clientY - rect.top) / displayHeight) * sourceHeight;
+                                                if (targetBoxId) {
+                                                    const targetBox = sliceBoxes.find((box) => box.id === targetBoxId);
+                                                    if (!targetBox) return;
+                                                    sliceDragRef.current = {
+                                                        id: targetBoxId,
+                                                        mode: resizeHandle ? 'resize' : 'move',
+                                                        offsetX: resizeHandle ? pointerX : pointerX - Number(targetBox.x || 0),
+                                                        offsetY: resizeHandle ? pointerY : pointerY - Number(targetBox.y || 0),
+                                                        active: true,
+                                                        handle: resizeHandle
+                                                    };
+                                                    setSelectedSliceBoxId(targetBoxId);
+                                                    event.preventDefault();
+                                                    return;
+                                                }
+                                                setSelectedSliceBoxId('');
+                                                setSliceDraftBox({
+                                                    id: 'draft',
+                                                    x: pointerX,
+                                                    y: pointerY,
+                                                    width: 12,
+                                                    height: 12
+                                                });
+                                                sliceDragRef.current = {
+                                                    id: 'draft',
+                                                    mode: 'create',
+                                                    offsetX: pointerX,
+                                                    offsetY: pointerY,
+                                                    active: true,
+                                                    handle: ''
+                                                };
+                                            }}
+                                        >
+                                            <img
+                                                src={String(sliceSource?.frame?.url || '')}
+                                                alt=""
+                                                className="max-h-[65vh] max-w-full object-contain"
+                                                draggable={false}
+                                                onLoad={(event) => setSliceSourceSize({ width: Number(event.currentTarget.naturalWidth || 0), height: Number(event.currentTarget.naturalHeight || 0) })}
+                                            />
+                                            {sliceBoxes.map((box) => {
+                                                const displayWidth = slicePreviewRef.current?.getBoundingClientRect?.().width || sliceSourceSize.width || 1;
+                                                const displayHeight = slicePreviewRef.current?.getBoundingClientRect?.().height || sliceSourceSize.height || 1;
+                                                const scaleX = displayWidth / Math.max(sliceSourceSize.width || 1, 1);
+                                                const scaleY = displayHeight / Math.max(sliceSourceSize.height || 1, 1);
+                                                return (
+                                                    <button
+                                                        key={box.id}
+                                                        type="button"
+                                                        data-box-id={box.id}
+                                                        className={`absolute border-2 ${selectedSliceBoxId === box.id ? 'border-indigo-600' : 'border-red-400'}`}
+                                                        style={{ left: box.x * scaleX, top: box.y * scaleY, width: box.width * scaleX, height: box.height * scaleY }}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setSelectedSliceBoxId(box.id);
+                                                        }}
+                                                    />
+                                                );
+                                            })}
+                                            {sliceBoxes.map((box) => {
+                                                if (selectedSliceBoxId !== box.id) return null;
+                                                const displayWidth = slicePreviewRef.current?.getBoundingClientRect?.().width || sliceSourceSize.width || 1;
+                                                const displayHeight = slicePreviewRef.current?.getBoundingClientRect?.().height || sliceSourceSize.height || 1;
+                                                const scaleX = displayWidth / Math.max(sliceSourceSize.width || 1, 1);
+                                                const scaleY = displayHeight / Math.max(sliceSourceSize.height || 1, 1);
+                                                const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+                                                return handles.map((handle) => {
+                                                    const isNorth = handle.includes('n');
+                                                    const isSouth = handle.includes('s');
+                                                    const isWest = handle.includes('w');
+                                                    const isEast = handle.includes('e');
+                                                    const left = box.x * scaleX + (isWest ? 0 : isEast ? box.width * scaleX : (box.width * scaleX) / 2);
+                                                    const top = box.y * scaleY + (isNorth ? 0 : isSouth ? box.height * scaleY : (box.height * scaleY) / 2);
+                                                    return (
+                                                        <span
+                                                            key={`${box.id}_${handle}`}
+                                                            data-box-id={box.id}
+                                                            data-resize-handle={handle}
+                                                            className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-indigo-600 bg-white"
+                                                            style={{ left, top }}
+                                                        />
+                                                    );
+                                                });
+                                            })}
+                                            {sliceDraftBox ? (() => {
+                                                const displayWidth = slicePreviewRef.current?.getBoundingClientRect?.().width || sliceSourceSize.width || 1;
+                                                const displayHeight = slicePreviewRef.current?.getBoundingClientRect?.().height || sliceSourceSize.height || 1;
+                                                const scaleX = displayWidth / Math.max(sliceSourceSize.width || 1, 1);
+                                                const scaleY = displayHeight / Math.max(sliceSourceSize.height || 1, 1);
+                                                return <div className="absolute border-2 border-indigo-400" style={{ left: sliceDraftBox.x * scaleX, top: sliceDraftBox.y * scaleY, width: sliceDraftBox.width * scaleX, height: sliceDraftBox.height * scaleY }} />;
+                                            })() : null}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-5">
+                                        <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={() => setSliceBoxes((prev) => prev.filter((box) => box.id !== selectedSliceBoxId))}>Supprimer cadre</button>
+                                        <button type="button" className="rounded-2xl bg-emerald-600 px-5 py-3 font-black text-[12px] uppercase text-white" onClick={() => void applySliceTool()}>Appliquer</button>
                                     </div>
                                 </div>
                             </div>
