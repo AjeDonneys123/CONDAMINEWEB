@@ -876,57 +876,6 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                                     <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="w-28 h-28 object-contain rounded-xl bg-slate-50 border border-slate-200" />
                                                 </div>
                                             ) : null}
-                                            {spriteEditorOpen && spriteAnimationDraft ? (
-                                                <div className="rounded-[24px] border border-indigo-200 bg-white p-5 space-y-4">
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <div>
-                                                            <div className="text-[12px] font-black uppercase text-indigo-500">Edition sprite</div>
-                                                            <div className="text-xl font-black text-slate-800">Actions animées</div>
-                                                        </div>
-                                                        <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase" onClick={() => setSpriteEditorOpen(false)}>Fermer</button>
-                                                    </div>
-                                                    <div className="flex items-start gap-4">
-                                                        <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="w-28 h-28 object-contain rounded-xl bg-slate-50 border border-slate-200" />
-                                                        <div className="flex-1 space-y-3">
-                                                            {(spriteAnimationDraft.actions || []).map((action, actionIndex) => (
-                                                                <div key={action.id} className="rounded-[18px] border border-slate-200 bg-slate-50 p-4 space-y-3">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <input
-                                                                            className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 bg-white font-black text-slate-800"
-                                                                            value={String(action?.name || '')}
-                                                                            onChange={(event) => updateSpriteAction(action.id, { name: event.target.value })}
-                                                                        />
-                                                                        <button type="button" className="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px]" onClick={() => removeSpriteAction(action.id)}>×</button>
-                                                                    </div>
-                                                                    <div className="flex flex-wrap items-center gap-3">
-                                                                        <label className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase cursor-pointer">
-                                                                            +ordi
-                                                                            <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void appendSpriteFrames(action.id, event.target.files)} />
-                                                                        </label>
-                                                                        <button type="button" className="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.max(0.05, Number(action?.frameDurationSec || 0.18) - 0.05) })}>-</button>
-                                                                        <div className="text-sm font-black text-slate-600">{Number(action?.frameDurationSec || 0.18).toFixed(2)}s</div>
-                                                                        <button type="button" className="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.min(1.5, Number(action?.frameDurationSec || 0.18) + 0.05) })}>+</button>
-                                                                    </div>
-                                                                    <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                                                                        {(action.frames || []).map((frame, frameIndex) => (
-                                                                            <img key={`${action.id}_${frameIndex}`} src={String(frame?.url || frame || '')} alt="" className="w-full h-20 object-contain rounded-xl bg-white border border-slate-200" />
-                                                                        ))}
-                                                                        {(!action.frames || action.frames.length === 0) ? (
-                                                                            <div className="col-span-full text-[12px] font-black text-slate-400">Aucun sprite chargé.</div>
-                                                                        ) : null}
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                            <div className="flex items-center justify-between gap-3">
-                                                                <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase" onClick={addSpriteAction}>+ Action</button>
-                                                                <button type="button" className="px-5 py-3 rounded-2xl bg-emerald-600 text-white font-black text-[12px] uppercase" onClick={() => void saveSpriteAnimation()} disabled={savingSpriteAnimation}>
-                                                                    {savingSpriteAnimation ? 'Enregistrement...' : 'Enregistrer animation'}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : null}
                                         </div>
                                     ) : (
                                         <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-black text-slate-400">Aucune image enregistrée.</div>
@@ -939,6 +888,67 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                             </div>
                         </div>
                     </div>
+                    {spriteEditorOpen && spriteAnimationDraft ? (
+                        <div className="fixed inset-0 z-[120] bg-slate-950/35 p-4 md:p-8">
+                            <div className="mx-auto flex h-full max-w-6xl items-center justify-center">
+                                <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-[28px] border border-indigo-200 bg-white shadow-[0_40px_120px_-40px_rgba(15,23,42,0.65)]">
+                                    <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                                        <div>
+                                            <div className="text-[12px] font-black uppercase text-indigo-500">Edition sprite</div>
+                                            <div className="text-2xl font-black text-slate-800">Actions animees</div>
+                                        </div>
+                                        <button type="button" className="px-4 py-2 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase" onClick={() => setSpriteEditorOpen(false)}>Fermer</button>
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+                                        <div className="flex flex-col gap-6 lg:flex-row">
+                                            <div className="lg:sticky lg:top-0 lg:w-56 lg:self-start">
+                                                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                                                    <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="h-40 w-full object-contain rounded-2xl border border-slate-200 bg-white" />
+                                                </div>
+                                            </div>
+                                            <div className="min-w-0 flex-1 space-y-4">
+                                                {(spriteAnimationDraft.actions || []).map((action) => (
+                                                    <div key={action.id} className="space-y-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <input
+                                                                className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 font-black text-slate-800"
+                                                                value={String(action?.name || '')}
+                                                                onChange={(event) => updateSpriteAction(action.id, { name: event.target.value })}
+                                                            />
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black text-[12px]" onClick={() => removeSpriteAction(action.id)}>×</button>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-3">
+                                                            <label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase">
+                                                                +ordi
+                                                                <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void appendSpriteFrames(action.id, event.target.files)} />
+                                                            </label>
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.max(0.05, Number(action?.frameDurationSec || 0.18) - 0.05) })}>-</button>
+                                                            <div className="text-sm font-black text-slate-600">{Number(action?.frameDurationSec || 0.18).toFixed(2)}s</div>
+                                                            <button type="button" className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-black" onClick={() => updateSpriteAction(action.id, { frameDurationSec: Math.min(1.5, Number(action?.frameDurationSec || 0.18) + 0.05) })}>+</button>
+                                                        </div>
+                                                        <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-6">
+                                                            {(action.frames || []).map((frame, frameIndex) => (
+                                                                <img key={`${action.id}_${frameIndex}`} src={String(frame?.url || frame || '')} alt="" className="h-24 w-full rounded-xl border border-slate-200 bg-white object-contain" />
+                                                            ))}
+                                                            {(!action.frames || action.frames.length === 0) ? (
+                                                                <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-[12px] font-black text-slate-400">Aucun sprite charge.</div>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-5">
+                                        <button type="button" className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-black text-[12px] uppercase" onClick={addSpriteAction}>+ Action</button>
+                                        <button type="button" className="rounded-2xl bg-emerald-600 px-5 py-3 font-black text-[12px] uppercase text-white" onClick={() => void saveSpriteAnimation()} disabled={savingSpriteAnimation}>
+                                            {savingSpriteAnimation ? 'Enregistrement...' : 'Enregistrer animation'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             ) : null}
         </div>
