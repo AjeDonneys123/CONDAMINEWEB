@@ -5034,7 +5034,7 @@ export default function App() {
       });
 
       try {
-        console.log('[WEB5E_PUBLIC_LOAD]', {
+        console.log('[WEB5E_PUBLIC_LOAD_JSON]', JSON.stringify({
           publicUrl,
           isLocalSessionMode,
           tabsCount: tabs.length,
@@ -5048,7 +5048,7 @@ export default function App() {
             title: String(entry?.title || ''),
             blockTypes: Array.isArray(entry?.blocks) ? entry.blocks.map((block) => block?.type) : []
           }))
-        });
+        }, null, 2));
       } catch (_) {}
 
       setSiteData(data.site || null);
@@ -5059,11 +5059,11 @@ export default function App() {
       setContentMap(localContent && isLocalSessionMode ? { ...nextContentMap, ...localContent } : nextContentMap);
     } catch (error) {
       try {
-        console.error('[WEB5E_PUBLIC_LOAD_ERROR]', {
+        console.error('[WEB5E_PUBLIC_LOAD_ERROR_JSON]', JSON.stringify({
           message: error?.message || String(error || ''),
           isLocalSessionMode,
           cachedKeys: Object.keys(cachedPublicEntries || {})
-        });
+        }, null, 2));
       } catch (_) {}
       if (Object.keys(cachedPublicEntries).length > 0) {
         setPublicEntriesByKey(cachedPublicEntries);
@@ -5480,7 +5480,7 @@ export default function App() {
   useEffect(() => {
     if (user) return;
     try {
-      console.log('[WEB5E_PUBLIC_RENDER]', {
+      console.log('[WEB5E_PUBLIC_RENDER_JSON]', JSON.stringify({
         activeSection,
         currentTabId,
         currentPublicEntriesCount: currentPublicEntries.length,
@@ -5508,7 +5508,7 @@ export default function App() {
               }))
             : []
         }))
-      });
+      }, null, 2));
     } catch (_) {}
   }, [
     user,
