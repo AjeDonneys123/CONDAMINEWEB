@@ -117,6 +117,81 @@ router.get('/public', async (_req, res) => {
     }
 });
 
+router.get('/debug-counts', async (_req, res) => {
+    try {
+        const site = await ensureDefaultSite();
+        const [
+            siteCount,
+            tabCount,
+            entryCount,
+            actorCount,
+            animationCount,
+            publishedTabCount,
+            publishedEntryCount
+        ] = await Promise.all([
+            Web5eSite.countDocuments({}),
+            Web5eTab.countDocuments({}),
+            Web5eEntry.countDocuments({}),
+            Web5eActor.countDocuments({}),
+            Web5eAnimation.countDocuments({}),
+            Web5eTab.countDocuments({ isPublished: true }),
+            Web5eEntry.countDocuments({ isPublished: true })
+        ]);
+
+        const sampleTabs = await Web5eTab.find({})
+            .sort({ updatedAt: -1, createdAt: -1 })
+            .limit(5)
+            .lean();
+        const sampleEntries = await Web5eEntry.find({})
+            .sort({ updatedAt: -1, createdAt: -1 })
+            .limit(5)
+            .lean();
+
+        res.json({
+            ok: true,
+            mongo: {
+                readyState: mongoose.connection.readyState,
+                dbName: mongoose.connection?.db?.databaseName || '',
+                host: mongoose.connection?.host || '',
+                port: mongoose.connection?.port || null
+            },
+            site: {
+                id: String(site?._id || ''),
+                slug: String(site?.slug || ''),
+                title: String(site?.title || '')
+            },
+            counts: {
+                siteCount,
+                tabCount,
+                entryCount,
+                actorCount,
+                animationCount,
+                publishedTabCount,
+                publishedEntryCount
+            },
+            sampleTabs: sampleTabs.map((tab) => ({
+                id: String(tab?._id || ''),
+                siteId: String(tab?.siteId || ''),
+                sectionKey: String(tab?.sectionKey || ''),
+                tabKey: String(tab?.tabKey || ''),
+                title: String(tab?.title || ''),
+                isPublished: tab?.isPublished === true
+            })),
+            sampleEntries: sampleEntries.map((entry) => ({
+                id: String(entry?._id || ''),
+                siteId: String(entry?.siteId || ''),
+                tabId: String(entry?.tabId || ''),
+                authorName: String(entry?.authorName || ''),
+                title: String(entry?.title || ''),
+                isPublished: entry?.isPublished === true,
+                blockTypes: Array.isArray(entry?.blocks) ? entry.blocks.map((block) => block?.type || '') : []
+            }))
+        });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/site', async (req, res) => {
     try {
         const site = await ensureDefaultSite();
