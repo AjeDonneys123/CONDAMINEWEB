@@ -396,30 +396,6 @@ function scorePresentationForPublicRow(row = {}) {
   ];
 }
 
-function dedupePublicPresentationsByAuthor(rows = []) {
-  const bestByAuthor = new Map();
-  rows.forEach((row, index) => {
-    const authorKey = clean(row?.authorName || row?.presentation?.authorName || '');
-    if (!authorKey) return;
-    const existing = bestByAuthor.get(authorKey);
-    if (!existing) {
-      bestByAuthor.set(authorKey, { row, index });
-      return;
-    }
-    const nextScore = scorePresentationForPublicRow(row);
-    const prevScore = scorePresentationForPublicRow(existing.row);
-    const shouldReplace = nextScore.some((value, scoreIndex) => {
-      if (value === prevScore[scoreIndex]) return false;
-      return value > prevScore[scoreIndex];
-    });
-    if (shouldReplace) {
-      bestByAuthor.set(authorKey, { row, index });
-    }
-  });
-  const pickedIndexes = new Set(Array.from(bestByAuthor.values()).map((entry) => entry.index));
-  return rows.filter((_, index) => pickedIndexes.has(index));
-}
-
 function createQcmQuestion(index = 0) {
   return {
     id: `qcm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -5038,6 +5014,8 @@ export default function App() {
       const nextPublicEntriesByKey = {};
       const nextContentMap = { eau: {}, energie: {} };
 
+      const currentUserId = String(user?.id || user?._id || '').trim();
+      const currentUserName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
       tabs.forEach((tab) => {
         const sectionKey = String(tab.sectionKey || '').trim().toLowerCase();
         const tabKey = String(tab.tabKey || '').trim().toLowerCase();
@@ -5053,7 +5031,13 @@ export default function App() {
           return allRows.findIndex((candidate) => String(candidate?._id || '') === rowId) === rowIndex;
         });
         nextPublicEntriesByKey[docKey] = mergedRows;
-        const entry = mergedRows[0];
+        const entry = currentUserId
+          ? (
+            mergedRows.find((row) => String(row?.studentId || '') === currentUserId)
+            || mergedRows.find((row) => String(row?.authorName || '').trim() === currentUserName)
+            || null
+          )
+          : mergedRows[0];
         if (!nextEntryDocs[docKey] && entry) {
           nextEntryDocs[docKey] = entry;
         }
@@ -5119,7 +5103,7 @@ export default function App() {
     } finally {
       if (isLocalSessionMode) setLocalContentReady(true);
     }
-  }, [isLocalSessionMode]);
+  }, [isLocalSessionMode, user]);
 
   useEffect(() => {
     loadWeb5e();
@@ -5519,6 +5503,31 @@ export default function App() {
     void persistBlocks(nextBlocks);
   };
 
+  const openPresentationInEditor = (row) => {
+    if (!row?.presentation) return;
+    const targetIndex = isTeacher
+      ? (presentationBlocks[0]?.index ?? blocks.findIndex((block) => block?.type === 'text'))
+      : row.index;
+    const normalizedPresentation = normalizePresentationBlock(row.presentation);
+    const editableBlock = {
+      ...normalizedPresentation,
+      activeEditorTab: 'slides',
+      presentationValidated: false
+    };
+    if (targetIndex >= 0 && blocks[targetIndex]?.type === 'text') {
+      replaceBlock(targetIndex, editableBlock);
+      setEditingPresentationBlockIndex(targetIndex);
+    } else {
+      const nextBlocks = [...blocks, editableBlock];
+      updateBlocks(nextBlocks);
+      queueAutosave(nextBlocks);
+      void persistBlocks(nextBlocks);
+      setEditingPresentationBlockIndex(nextBlocks.length - 1);
+    }
+    setOpenedValidatedPresentationMode('browse');
+    setOpenedValidatedPresentationIndex(-1);
+  };
+
   const deleteValidatedPresentationCard = (index) => {
     if (!isLocalSessionMode) return;
     if (!window.confirm('Supprimer cette carte de presentation en local ?')) return;
@@ -5535,8 +5544,23 @@ export default function App() {
 
   const deleteRemotePresentationEntry = async (row) => {
     const entryId = String(row?.entryId || '').trim();
+    const removeEntryLocally = () => {
+      setPublicEntriesByKey((prev) => {
+        const next = {};
+        Object.entries(prev || {}).forEach(([key, rows]) => {
+          const filtered = (Array.isArray(rows) ? rows : []).filter((entry) => String(entry?._id || '') !== entryId);
+          if (filtered.length > 0) next[key] = filtered;
+        });
+        writePublicEntriesCache(next);
+        return next;
+      });
+    };
     if (!entryId) {
       window.alert('Suppression impossible: entree distante introuvable.');
+      return;
+    }
+    if (entryId.startsWith('cache:')) {
+      removeEntryLocally();
       return;
     }
     if (!window.confirm('Supprimer cette presentation de la BDD ?')) return;
@@ -5544,19 +5568,15 @@ export default function App() {
       method: 'DELETE'
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 404) {
+      removeEntryLocally();
+      return;
+    }
     if (!res.ok || !data?.ok) {
       window.alert(data?.error || 'Suppression impossible');
       return;
     }
-    setPublicEntriesByKey((prev) => {
-      const next = {};
-      Object.entries(prev || {}).forEach(([key, rows]) => {
-        const filtered = (Array.isArray(rows) ? rows : []).filter((entry) => String(entry?._id || '') !== entryId);
-        if (filtered.length > 0) next[key] = filtered;
-      });
-      writePublicEntriesCache(next);
-      return next;
-    });
+    removeEntryLocally();
     if (String(currentEntry?._id || '') === entryId) {
       updateBlocks([]);
     }
@@ -5580,26 +5600,27 @@ export default function App() {
   const voteBoard = normalizeVoteBoard(siteData?.voteBoard || null);
   const currentUserVoteKey = String(user?.id || user?._id || '').trim();
   const currentUserVotes = currentUserVoteKey ? (voteBoard.votesByUser[currentUserVoteKey] || {}) : {};
+  const presentationsFromCurrentPublicEntries = currentPublicEntries.flatMap((entry, entryIndex) => (
+    (Array.isArray(entry?.blocks) ? entry.blocks : [])
+      .map((block, blockIndex) => ({ block, blockIndex, entryIndex }))
+      .filter(({ block }) => block?.type === 'text' && isPresentationCreated(block))
+      .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
+        index: blockIndex,
+        presentation: normalizePresentationBlock(block),
+        publicEntryIndex,
+        authorName: String(entry?.authorName || ''),
+        entryId: String(entry?._id || '')
+      }))
+  ));
+  const allPublishedPresentations = (() => {
+    const sourceRows = presentationsFromCurrentPublicEntries.length > 0
+      ? presentationsFromCurrentPublicEntries
+      : createdPresentationsFromCurrentBlocks;
+    return dedupePublishedPresentations(sourceRows);
+  })();
   const validatedPresentations = user
-    ? validatedPresentationsFromCurrentBlocks
-    : (() => {
-      const sourceEntries = allPublicEntries.length > 0 ? allPublicEntries : currentPublicEntries;
-      const fromPublicEntries = sourceEntries.flatMap((entry, entryIndex) => (
-        (Array.isArray(entry?.blocks) ? entry.blocks : [])
-          .map((block, blockIndex) => ({ block, blockIndex, entryIndex }))
-          .filter(({ block }) => block?.type === 'text' && isPresentationCreated(block))
-          .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
-            index: blockIndex,
-            presentation: normalizePresentationBlock(block),
-            publicEntryIndex,
-            authorName: String(entry?.authorName || ''),
-            entryId: String(entry?._id || '')
-          }))
-      ));
-      const dedupedRows = dedupePublishedPresentations(fromPublicEntries.length > 0 ? fromPublicEntries : createdPresentationsFromCurrentBlocks);
-      const dedupedByAuthor = dedupePublicPresentationsByAuthor(dedupedRows);
-      return dedupePublishedPresentations(dedupedByAuthor);
-    })();
+    ? (isTeacher ? allPublishedPresentations : validatedPresentationsFromCurrentBlocks)
+    : allPublishedPresentations;
   useEffect(() => {
     if (user) return;
     try {
@@ -5618,7 +5639,7 @@ export default function App() {
           canvaLiveUrl: presentation?.canvaLiveUrl || '',
           presenters: Array.isArray(presentation?.slides) ? presentation.slides.map((slide) => slide?.presenterName || '') : []
         })),
-        publicEntrySummaries: allPublicEntries.slice(0, 10).map((entry) => ({
+        publicEntrySummaries: currentPublicEntries.slice(0, 10).map((entry) => ({
           id: String(entry?._id || ''),
           authorName: String(entry?.authorName || ''),
           title: String(entry?.title || ''),
@@ -5662,6 +5683,8 @@ export default function App() {
   const visibleArticleBlocks = user
     ? articleBlocks.filter(({ block, index }) => {
         if (block.type !== 'text') return true;
+        if (isTeacher) return hasLockedPresentationEditing && index === editingPresentationBlockIndex;
+        if (studentHasValidatedPresentation) return hasLockedPresentationEditing && index === editingPresentationBlockIndex;
         return index === singleVisiblePresentationIndex;
       })
     : articleBlocks.filter(({ block }) => block.type !== 'text');
@@ -6105,9 +6128,11 @@ export default function App() {
 
         {validatedPresentations.length > 0 && (!user || !hasLockedPresentationEditing) ? (
           <div className="validated-presentations-grid">
-            {validatedPresentations.map(({ presentation, index }) => (
+            {validatedPresentations.map((row, index) => {
+              const { presentation } = row;
+              return (
               <article
-                key={`validated-presentation-${index}`}
+                key={`validated-presentation-${row.entryId || index}-${presentation.presentationName || 'presentation'}`}
                 className={`validated-presentation-card ${!user ? 'public-only-card' : ''}`}
                 onClick={() => {
                   if (user) return;
@@ -6180,20 +6205,7 @@ export default function App() {
                       <button
                         type="button"
                         className="presentation-slide-add"
-                        onClick={() => {
-                          const targetBlockIndex = validatedPresentations[index].index;
-                          const targetBlock = blocks[targetBlockIndex];
-                          if (targetBlock?.type === 'text') {
-                            const normalizedTargetBlock = normalizePresentationBlock(targetBlock);
-                            replaceBlock(targetBlockIndex, {
-                              ...normalizedTargetBlock,
-                              activeEditorTab: 'slides'
-                            });
-                          }
-                          setEditingPresentationBlockIndex(targetBlockIndex);
-                          setOpenedValidatedPresentationMode('browse');
-                          setOpenedValidatedPresentationIndex(-1);
-                        }}
+                        onClick={() => openPresentationInEditor(row)}
                       >
                         Modifier
                       </button>
@@ -6204,7 +6216,7 @@ export default function App() {
                   </>
                 ) : null}
               </article>
-            ))}
+            );})}
           </div>
         ) : null}
 

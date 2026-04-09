@@ -465,11 +465,12 @@ router.post('/entries', async (req, res) => {
         const site = await ensureDefaultSite();
         const data = { ...req.body };
         if (!data._id || data._id === 'null') delete data._id;
+        const safeAuthorName = String(data.authorName || '').trim();
         const payload = {
             siteId: site._id,
             tabId: data.tabId,
             studentId: mongoose.Types.ObjectId.isValid(String(data.studentId || '')) ? data.studentId : null,
-            authorName: String(data.authorName || '').trim(),
+            authorName: safeAuthorName,
             title: String(data.title || '').trim(),
             blocks: Array.isArray(data.blocks) ? data.blocks : [],
             order: Number(data.order || 0),
@@ -488,6 +489,19 @@ router.post('/entries', async (req, res) => {
                     siteId: site._id,
                     tabId: payload.tabId,
                     studentId: payload.studentId
+                },
+                { $set: payload },
+                { new: true }
+            );
+            if (!row) {
+                row = await Web5eEntry.create(payload);
+            }
+        } else if (safeAuthorName) {
+            row = await Web5eEntry.findOneAndUpdate(
+                {
+                    siteId: site._id,
+                    tabId: payload.tabId,
+                    authorName: safeAuthorName
                 },
                 { $set: payload },
                 { new: true }

@@ -425,6 +425,17 @@ export default function StudentsManager({ globalClassId }) {
 
   const workloadItems = viewingStudent ? getStudentWorkload(viewingStudent._id) : [];
   const controlRecoveries = viewingStudent ? (controlRecoveriesByStudent[extractId(viewingStudent._id)] || []) : [];
+  const getControlRecoveryStatus = (student) => {
+      const sid = extractId(student?._id);
+      const rows = Array.isArray(controlRecoveriesByStudent?.[sid]) ? controlRecoveriesByStudent[sid] : [];
+      if (rows.some((row) => row?.teacherValidated === true)) {
+          return { label: 'VALIDÉ', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      }
+      if (rows.length > 0) {
+          return { label: 'EN COURS', className: 'bg-amber-100 text-amber-700 border-amber-200' };
+      }
+      return { label: 'AUCUN', className: 'bg-slate-100 text-slate-500 border-slate-200' };
+  };
   const getStudentRealizations = (student) => {
       const sid = extractId(student?._id);
       const studentNameKey = norm(`${student?.firstName || ''} ${student?.lastName || ''}`);
@@ -1188,6 +1199,7 @@ export default function StudentsManager({ globalClassId }) {
                         <tr>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-left bg-slate-50 min-w-[200px] border-b border-r">Élève</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[100px]">Action</th>
+                            <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[120px]">Récup contrôle</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[130px]">Réalisations</th>
                             {activities.filter(a => !a.isPunishment).map(act => (
                                 <th
@@ -1227,6 +1239,16 @@ export default function StudentsManager({ globalClassId }) {
                                 </td>
                                 <td className="p-2 text-center border-b">
                                     <button onClick={() => setViewingStudent(s)} className="bg-slate-100 text-slate-500 px-3 py-1 rounded hover:bg-indigo-100 hover:text-indigo-600 text-[10px] font-black">📋 SUIVI</button>
+                                </td>
+                                <td className="p-2 text-center border-b">
+                                    {(() => {
+                                        const recoveryStatus = getControlRecoveryStatus(s);
+                                        return (
+                                            <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-black border ${recoveryStatus.className}`}>
+                                                {recoveryStatus.label}
+                                            </span>
+                                        );
+                                    })()}
                                 </td>
                                 <td className="p-2 text-center border-b">
                                     <div className="inline-flex items-center gap-1">
