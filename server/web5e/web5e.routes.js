@@ -464,7 +464,7 @@ router.post('/entries', async (req, res) => {
     try {
         const site = await ensureDefaultSite();
         const data = { ...req.body };
-        if (!data._id || data._id === 'null') delete data._id;
+        if (!data._id || data._id === 'null' || !mongoose.Types.ObjectId.isValid(String(data._id || ''))) delete data._id;
         const safeAuthorName = String(data.authorName || '').trim();
         const payload = {
             siteId: site._id,

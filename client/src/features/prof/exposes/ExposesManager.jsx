@@ -143,6 +143,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [studioTab, setStudioTab] = useState('audio');
     const [uploadingImages, setUploadingImages] = useState(false);
+    const [generatingClassSprites, setGeneratingClassSprites] = useState(false);
     const [imageCameraError, setImageCameraError] = useState('');
     const [imageCameraReady, setImageCameraReady] = useState(false);
     const [selectedSpriteUrl, setSelectedSpriteUrl] = useState('');
@@ -663,6 +664,32 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
         }
     };
 
+    const generateClassSpriteAnimations = async () => {
+        if (generatingClassSprites) return;
+        try {
+            setGeneratingClassSprites(true);
+            const expose = await ensureActiveExpose();
+            const res = await fetch(`/api/exposes/${encodeURIComponent(String(expose._id))}/generate-class-sprite-animations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = res.ok ? await res.json() : {};
+            if (!res.ok || !data?.ok) throw new Error(data?.error || 'Generation IA impossible');
+            await loadData();
+            const generated = Math.max(0, Number(data?.generated || 0));
+            const errors = Array.isArray(data?.errors) ? data.errors : [];
+            const errorCount = errors.length;
+            const sampleErrors = errors.slice(0, 3).map((item) => item?.error).filter(Boolean).join(' | ');
+            alert(errorCount > 0
+                ? `Animations creees: ${generated}. Erreurs: ${errorCount}.${sampleErrors ? ` Details: ${sampleErrors}` : ''}`
+                : `Animations creees: ${generated}.`);
+        } catch (e) {
+            alert(e.message || 'Generation IA impossible');
+        } finally {
+            setGeneratingClassSprites(false);
+        }
+    };
+
     const openSpriteEditor = (imageUrl) => {
         const safeUrl = String(imageUrl || '').trim();
         if (!safeUrl || !selectedRecorder) return;
@@ -1036,7 +1063,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                     animationBlock: spriteAnimationDraft
                 })
             });
-            const data = res.ok ? await res.json() : {};
+            const data = await res.json().catch(() => ({}));
             if (!res.ok || !data?.ok) throw new Error(data?.error || 'Sauvegarde animation impossible');
             await loadData();
             setSpriteEditorOpen(false);
@@ -1099,6 +1126,14 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                 <div className="flex items-center justify-between gap-4 mb-4">
                     <div className="text-2xl font-black uppercase text-slate-800">Mode Liste</div>
                     <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            className="px-4 py-3 rounded-2xl bg-emerald-600 text-white text-[11px] font-black uppercase shadow-sm disabled:opacity-60"
+                            onClick={() => void generateClassSpriteAnimations()}
+                            disabled={generatingClassSprites}
+                        >
+                            {generatingClassSprites ? 'IA en cours...' : 'Animer toutes les images'}
+                        </button>
                         <div className="px-5 py-4 rounded-2xl border border-slate-200 bg-white text-[13px] font-black text-indigo-500 shadow-sm">A</div>
                     </div>
                 </div>
@@ -1239,28 +1274,46 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                                        <div className="flex flex-wrap items-center gap-3 mb-3">
-                                            <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={capturePresenterImage} disabled={!imageCameraReady || uploadingImages}>
-                                                {uploadingImages ? 'Envoi...' : 'Prendre photo'}
-                                            </button>
-                                            <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
+                                    {imageCameraReady || imageCameraError ? (
+                                        <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={capturePresenterImage} disabled={!imageCameraReady || uploadingImages}>
+                                                        {uploadingImages ? 'Envoi...' : 'Prendre photo'}
+                                                    </button>
+                                                    <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className="w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-600 font-black text-xl"
+                                                    onClick={() => {
+                                                        if (streamRef.current) {
+                                                            streamRef.current.getTracks().forEach((track) => track.stop());
+                                                            streamRef.current = null;
+                                                        }
+                                                        setImageCameraReady(false);
+                                                        setImageCameraError('');
+                                                    }}
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                            <div className="rounded-[18px] overflow-hidden bg-slate-900 min-h-[240px] flex items-center justify-center">
+                                                {imageCameraError ? (
+                                                    <div className="text-white font-black text-sm">{imageCameraError}</div>
+                                                ) : (
+                                                    <video
+                                                        ref={imageVideoRef}
+                                                        autoPlay
+                                                        playsInline
+                                                        muted
+                                                        className="w-full max-h-[360px] object-cover"
+                                                    />
+                                                )}
+                                            </div>
+                                            <canvas ref={imageCanvasRef} className="hidden" />
                                         </div>
-                                        <div className="rounded-[18px] overflow-hidden bg-slate-900 min-h-[240px] flex items-center justify-center">
-                                            {imageCameraError ? (
-                                                <div className="text-white font-black text-sm">{imageCameraError}</div>
-                                            ) : (
-                                                <video
-                                                    ref={imageVideoRef}
-                                                    autoPlay
-                                                    playsInline
-                                                    muted
-                                                    className="w-full max-h-[360px] object-cover"
-                                                />
-                                            )}
-                                        </div>
-                                        <canvas ref={imageCanvasRef} className="hidden" />
-                                    </div>
+                                    ) : null}
                                     {(selectedRecorder.spriteImageUrls || []).length > 0 ? (
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1286,7 +1339,16 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                                 <div className="rounded-[18px] border border-slate-200 bg-white p-4 space-y-3">
                                                     <div className="flex items-center justify-between gap-3">
                                                         <div className="text-[12px] font-black uppercase text-slate-500">Sprite sélectionné</div>
-                                                        <button type="button" className="px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase" onClick={() => openSpriteEditor(selectedSpriteUrl)}>Editer</button>
+                                                        <div className="flex items-center gap-2">
+                                                            <button type="button" className="px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase" onClick={() => openSpriteEditor(selectedSpriteUrl)}>Editer</button>
+                                                            <button
+                                                                type="button"
+                                                                className="w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-600 font-black text-xl"
+                                                                onClick={() => setSelectedSpriteUrl('')}
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     <img src={toEmbeddableCanvasUrl(selectedSpriteUrl) || selectedSpriteUrl} alt="" className="w-28 h-28 object-contain rounded-xl bg-slate-50 border border-slate-200" />
                                                 </div>

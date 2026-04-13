@@ -4,7 +4,9 @@ const { Expose } = require('../models/prof.models');
 const { Web5eEntry } = require('../../web5e/models.web5e');
 const multer = require('multer');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const fetch = require('node-fetch');
 const ProfDrive = require('../core/drive.prof');
 
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
@@ -47,6 +49,204 @@ function normalizeAnimationBlockForStorage(block = null) {
     return {
         ...block,
         actions: Array.isArray(block.actions) ? block.actions : []
+    };
+}
+
+function parseDataUrlImage(value = '') {
+    const txt = String(value || '').trim();
+    const match = txt.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) return null;
+    return {
+        mimeType: match[1],
+        buffer: Buffer.from(match[2], 'base64')
+    };
+}
+
+function extensionFromMimeType(mimeType = '') {
+    const cleanMime = String(mimeType || '').toLowerCase();
+    if (cleanMime.includes('png')) return 'png';
+    if (cleanMime.includes('webp')) return 'webp';
+    if (cleanMime.includes('jpeg') || cleanMime.includes('jpg')) return 'jpg';
+    return 'png';
+}
+
+async function persistAnimationFrames(block = null) {
+    const normalized = normalizeAnimationBlockForStorage(block);
+    if (!normalized || !Array.isArray(normalized.actions)) return normalized;
+    const folderId = await ProfDrive.getOrCreateFolder('CONDA_EXPOSES_SPRITES');
+
+    const nextActions = await Promise.all(normalized.actions.map(async (action) => {
+        const frames = Array.isArray(action?.frames) ? action.frames : [];
+        const nextFrames = await Promise.all(frames.map(async (rawFrame, index) => {
+            const frame = rawFrame && typeof rawFrame === 'object' ? { ...rawFrame } : rawFrame;
+            const parsed = parseDataUrlImage(frame?.url || '');
+            if (!parsed) return frame;
+            const ext = extensionFromMimeType(parsed.mimeType);
+            const tempPath = path.join(os.tmpdir(), `conda_sprite_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`);
+            fs.writeFileSync(tempPath, parsed.buffer);
+            try {
+                const driveFile = await ProfDrive.uploadFile(`sprite_frame_${Date.now()}_${index}.${ext}`, tempPath, folderId);
+                return {
+                    ...frame,
+                    url: `/api/structure/proxy/${driveFile.id}`
+                };
+            } finally {
+                try { fs.unlinkSync(tempPath); } catch (_) {}
+            }
+        }));
+        return {
+            ...action,
+            frames: nextFrames
+        };
+    }));
+
+    return {
+        ...normalized,
+        actions: nextActions
+    };
+}
+
+function collectEmbeddedImageUrls(block = null) {
+    if (!block || typeof block !== 'object') return [];
+    const urls = [];
+    const actorImageUrl = String(block?.actorImageUrl || '').trim();
+    if (actorImageUrl.startsWith('data:image/')) urls.push(actorImageUrl);
+    const actions = Array.isArray(block?.actions) ? block.actions : [];
+    actions.forEach((action) => {
+        const frames = Array.isArray(action?.frames) ? action.frames : [];
+        frames.forEach((frame) => {
+            const url = String(frame?.url || '').trim();
+            if (url.startsWith('data:image/')) urls.push(url);
+        });
+    });
+    return urls;
+}
+
+function guessMimeTypeFromUrl(url = '') {
+    const txt = String(url || '').toLowerCase();
+    if (txt.includes('.webp')) return 'image/webp';
+    if (txt.includes('.jpg') || txt.includes('.jpeg')) return 'image/jpeg';
+    return 'image/png';
+}
+
+async function fetchImageAsInlineData(imageUrl, req) {
+    const raw = String(imageUrl || '').trim();
+    if (!raw) throw new Error('imageUrl vide');
+    const absoluteUrl = /^https?:\/\//i.test(raw)
+        ? raw
+        : `${req.protocol}://${req.get('host')}${raw.startsWith('/') ? '' : '/'}${raw}`;
+    const response = await fetch(absoluteUrl);
+    if (!response.ok) throw new Error(`fetch image HTTP ${response.status}`);
+    const buffer = await response.buffer();
+    const mimeType = String(response.headers.get('content-type') || '').trim() || guessMimeTypeFromUrl(raw);
+    return {
+        mimeType,
+        data: buffer.toString('base64')
+    };
+}
+
+function buildAnimationPrompt() {
+    return [
+        'Transform this single character image into a clean 4-frame sprite sequence.',
+        'Keep the exact same character identity, clothes, face, colors, camera angle, and transparent background style.',
+        'The 4 frames must show only a continuous speaking animation.',
+        'Only the lips and mouth should move slightly from frame to frame.',
+        'Do not move the head, hands, arms, body, or camera.',
+        'Do not add any hand gesture or waving motion.',
+        'Frame 1: mouth closed, neutral pose.',
+        'Frame 2: lips slightly open.',
+        'Frame 3: mouth open clearly for speech.',
+        'Frame 4: mouth half-open as speech continues.',
+        'Return only the generated sprite frame image, no text, no collage caption, no border, no background scene.'
+    ].join(' ');
+}
+
+async function generateSpriteFramesFromImage({ imageUrl, req }) {
+    const inlineData = await fetchImageAsInlineData(imageUrl, req);
+    const apiKey = String(
+        process.env.GEMINI_API_KEY
+        || process.env.GOOGLE_API_KEY
+        || process.env.GOOGLE_AI_API_KEY
+        || ''
+    ).trim();
+    if (!apiKey) throw new Error('Clé Gemini absente');
+
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+            contents: [{
+                role: 'user',
+                parts: [
+                    { text: buildAnimationPrompt() },
+                    {
+                        inline_data: {
+                            mime_type: inlineData.mimeType,
+                            data: inlineData.data
+                        }
+                    }
+                ]
+            }],
+            generationConfig: {
+                responseModalities: ['TEXT', 'IMAGE']
+            }
+        })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.error) {
+        const message = data?.error?.message || `Gemini HTTP ${response.status}`;
+        console.error('[EXPOSES][SPRITE_GEN_ERROR]', { imageUrl, status: response.status, message });
+        throw new Error(message);
+    }
+
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const images = parts
+        .map((part) => part?.inlineData || part?.inline_data || null)
+        .filter(Boolean)
+        .map((part, index) => `data:${part.mimeType || 'image/png'};base64,${part.data || ''}`)
+        .filter((value) => value.includes('base64,') && value.length > 32);
+
+    if (!images.length) {
+        console.error('[EXPOSES][SPRITE_GEN_EMPTY]', {
+            imageUrl,
+            candidateCount: Array.isArray(data?.candidates) ? data.candidates.length : 0
+        });
+        throw new Error('Aucune image générée');
+    }
+
+    const frameDurationSec = 0.18;
+    return {
+        type: 'animation',
+        title: 'Animation IA',
+        actorName: 'Personnage',
+        actorImageUrl: String(imageUrl || '').trim(),
+        actorX: 120,
+        actorY: 120,
+        actorWidth: 140,
+        actorHeight: 140,
+        savedActions: [],
+        actions: [{
+            id: `action_${Date.now()}`,
+            name: 'Parler',
+            frames: images.slice(0, 4).map((url, index) => ({
+                id: `frame_${Date.now()}_${index}`,
+                url,
+                width: 140,
+                height: 140,
+                scale: 1,
+                offsetX: 0,
+                offsetY: 0
+            })),
+            frameUrlInput: '',
+            soundUrl: '',
+            soundPitch: 1,
+            frameDurationSec,
+            startSec: 0,
+            durationSec: Number((frameDurationSec * Math.min(images.length, 4)).toFixed(2))
+        }]
     };
 }
 
@@ -480,7 +680,7 @@ router.post('/:id/presenter-image-animation', async (req, res) => {
         const presenterName = String(req.body?.presenterName || '').trim();
         const slideNumber = Math.max(1, Number(req.body?.slideNumber || 0));
         const imageUrl = String(req.body?.imageUrl || '').trim();
-        const animationBlock = normalizeAnimationBlockForStorage(req.body?.animationBlock || null);
+        const animationBlock = await persistAnimationFrames(req.body?.animationBlock || null);
 
         if (!exposeId) return res.status(400).json({ error: 'id requis' });
         if (!studentId) return res.status(400).json({ error: 'studentId requis' });
@@ -495,11 +695,21 @@ router.post('/:id/presenter-image-animation', async (req, res) => {
         const entries = Array.isArray(row.presentations)
             ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
             : [];
-        const targetIndex = entries.findIndex((entry) => (
+        let targetIndex = entries.findIndex((entry) => (
             String(entry?.studentId || '') === studentId
             && clean(entry?.presenterName || '') === presenterKey
             && Math.max(1, Number(entry?.presenterSlideNumber || 1)) === slideNumber
         ));
+        if (targetIndex < 0) {
+            // L'editeur agrege les images par eleve: si le triplet presenter/slide diverge,
+            // on retombe sur l'entree qui porte effectivement cette image.
+            targetIndex = entries.findIndex((entry) => (
+                String(entry?.studentId || '') === studentId
+                && (Array.isArray(entry?.spriteImageUrls) ? entry.spriteImageUrls : [])
+                    .map((url) => String(url || '').trim())
+                    .includes(imageUrl)
+            ));
+        }
         if (targetIndex < 0) return res.status(404).json({ error: 'Présentation élève introuvable' });
 
         const nextAnimations = (Array.isArray(entries[targetIndex]?.spriteAnimations) ? entries[targetIndex].spriteAnimations : [])
@@ -517,7 +727,91 @@ router.post('/:id/presenter-image-animation', async (req, res) => {
 
         row.presentations = entries;
         await row.save();
-        return res.json({ ok: true, spriteAnimations: nextAnimations });
+        const embeddedCount = nextAnimations.reduce((sum, item) => (
+            sum + collectEmbeddedImageUrls(item?.animationBlock || null).length
+        ), 0);
+        return res.json({ ok: true, spriteAnimations: nextAnimations, embeddedCount });
+    } catch (e) {
+        console.error('[EXPOSES][SAVE_SPRITE_ANIMATION]', e.message);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:id/generate-class-sprite-animations', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const entries = Array.isArray(row.presentations)
+            ? row.presentations.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }))
+            : [];
+
+        let generated = 0;
+        const errors = [];
+        const nextEntries = [];
+
+        for (const entry of entries) {
+            const imageUrls = (Array.isArray(entry?.spriteImageUrls) ? entry.spriteImageUrls : [])
+                .map((url) => String(url || '').trim())
+                .filter(Boolean);
+            if (!imageUrls.length) {
+                nextEntries.push(entry);
+                continue;
+            }
+
+            const nextAnimations = (Array.isArray(entry?.spriteAnimations) ? entry.spriteAnimations : [])
+                .filter((item) => !imageUrls.includes(String(item?.imageUrl || '').trim()));
+
+            for (const imageUrl of imageUrls) {
+                try {
+                    const animationBlock = await persistAnimationFrames(
+                        await generateSpriteFramesFromImage({ imageUrl, req })
+                    );
+                    nextAnimations.push({ imageUrl, animationBlock });
+                    generated += 1;
+                } catch (error) {
+                    console.error('[EXPOSES][SPRITE_BATCH_ITEM_ERROR]', {
+                        exposeId,
+                        studentId: String(entry?.studentId || ''),
+                        presenterName: String(entry?.presenterName || ''),
+                        slideNumber: Math.max(1, Number(entry?.presenterSlideNumber || 1)),
+                        imageUrl,
+                        message: error.message
+                    });
+                    errors.push({
+                        studentId: String(entry?.studentId || ''),
+                        presenterName: String(entry?.presenterName || ''),
+                        slideNumber: Math.max(1, Number(entry?.presenterSlideNumber || 1)),
+                        imageUrl,
+                        error: error.message
+                    });
+                }
+            }
+
+            nextEntries.push({
+                ...entry,
+                spriteAnimations: nextAnimations,
+                updatedAt: new Date()
+            });
+        }
+
+        row.presentations = nextEntries;
+        await row.save();
+        const remainingEmbedded = nextEntries.reduce((sum, entry) => (
+            sum + (Array.isArray(entry?.spriteAnimations) ? entry.spriteAnimations.reduce((acc, item) => (
+                acc + collectEmbeddedImageUrls(item?.animationBlock || null).length
+            ), 0) : 0)
+        ), 0);
+        return res.json({
+            ok: true,
+            generated,
+            totalEntries: nextEntries.length,
+            errors,
+            remainingEmbedded
+        });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }

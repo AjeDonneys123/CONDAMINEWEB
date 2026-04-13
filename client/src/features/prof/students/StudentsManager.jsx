@@ -436,6 +436,18 @@ export default function StudentsManager({ globalClassId }) {
       }
       return { label: 'AUCUN', className: 'bg-slate-100 text-slate-500 border-slate-200' };
   };
+  const getPrimaryControlRecovery = (student) => {
+      const sid = extractId(student?._id);
+      const rows = Array.isArray(controlRecoveriesByStudent?.[sid]) ? controlRecoveriesByStudent[sid] : [];
+      if (rows.length === 0) return null;
+      const validated = rows.find((row) => row?.teacherValidated === true);
+      if (validated) return validated;
+      return [...rows].sort((a, b) => {
+          const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+          const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+          return bTs - aTs;
+      })[0] || null;
+  };
   const getStudentRealizations = (student) => {
       const sid = extractId(student?._id);
       const studentNameKey = norm(`${student?.firstName || ''} ${student?.lastName || ''}`);
@@ -1243,10 +1255,20 @@ export default function StudentsManager({ globalClassId }) {
                                 <td className="p-2 text-center border-b">
                                     {(() => {
                                         const recoveryStatus = getControlRecoveryStatus(s);
+                                        const recoveryItem = getPrimaryControlRecovery(s);
+                                        const isClickable = Boolean(recoveryItem);
                                         return (
-                                            <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-black border ${recoveryStatus.className}`}>
+                                            <button
+                                                type="button"
+                                                disabled={!isClickable}
+                                                onClick={() => {
+                                                    if (!recoveryItem) return;
+                                                    handleOpenRecoveryWork(s, recoveryItem);
+                                                }}
+                                                className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-black border ${recoveryStatus.className} ${isClickable ? 'hover:brightness-95 cursor-pointer' : 'cursor-default'}`}
+                                            >
                                                 {recoveryStatus.label}
-                                            </span>
+                                            </button>
                                         );
                                     })()}
                                 </td>

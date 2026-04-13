@@ -267,6 +267,36 @@ function formatPresenterLabel(name = '') {
   return String(name || '').trim().replace(/\s+/g, ' ');
 }
 
+function isSamePersonName(left = '', right = '') {
+  return Boolean(clean(left) && clean(left) === clean(right));
+}
+
+function normalizeAssetMatchKey(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw, 'https://web5e.local');
+    const pathname = String(url.pathname || '').trim();
+    if (!pathname) return raw;
+    const lastSegment = pathname.split('/').filter(Boolean).pop() || '';
+    return clean(lastSegment || pathname);
+  } catch (_) {
+    const noQuery = raw.split('?')[0].split('#')[0];
+    const lastSegment = noQuery.split('/').filter(Boolean).pop() || noQuery;
+    return clean(lastSegment);
+  }
+}
+
+function findImportedSpriteAnimation(spriteAnimations = [], imageUrl = '') {
+  const items = Array.isArray(spriteAnimations) ? spriteAnimations : [];
+  const exact = items.find((item) => String(item?.imageUrl || '').trim() === String(imageUrl || '').trim());
+  if (exact?.animationBlock) return exact.animationBlock;
+  const targetKey = normalizeAssetMatchKey(imageUrl);
+  if (!targetKey) return items[0]?.animationBlock || null;
+  const matched = items.find((item) => normalizeAssetMatchKey(item?.imageUrl || '') === targetKey);
+  return matched?.animationBlock || (items.length === 1 ? items[0]?.animationBlock || null : null);
+}
+
 function splitPresenterName(name = '') {
   const normalized = formatPresenterLabel(name);
   if (!normalized) return { firstName: '', lastName: '' };
@@ -525,6 +555,18 @@ function extractSharedAudioMeta(animationBlock = null) {
   };
 }
 
+function withFallbackAudioOnActions(rawActions = [], fallbackSoundUrl = '', fallbackSoundPitch = 1) {
+  const safeFallbackUrl = String(fallbackSoundUrl || '').trim();
+  const safeFallbackPitch = Math.max(0.5, Math.min(2, Number(fallbackSoundPitch || 1)));
+  return normalizeTimelineActions(rawActions).map((action) => ({
+    ...action,
+    soundUrl: String(action?.soundUrl || '').trim() || safeFallbackUrl,
+    soundPitch: String(action?.soundUrl || '').trim()
+      ? Math.max(0.5, Math.min(2, Number(action?.soundPitch || 1)))
+      : safeFallbackPitch
+  }));
+}
+
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
   return {
@@ -624,6 +666,20 @@ function writePublicEntriesCache(entriesByKey) {
   try {
     window.localStorage.setItem(WEB5E_PUBLIC_CACHE_KEY, JSON.stringify(entriesByKey || {}));
   } catch (_) {}
+}
+
+function findBestEntryForUser(rows = [], user = null) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!user) return list[0] || null;
+  const currentUserId = String(user?.id || user?._id || '').trim();
+  const currentUserName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
+  return (
+    (currentUserId
+      ? list.find((row) => String(row?.studentId || '') === currentUserId)
+      : null)
+    || list.find((row) => String(row?.authorName || '').trim() === currentUserName)
+    || null
+  );
 }
 
 function sampleCornerColor(imageData, width) {
@@ -1111,7 +1167,7 @@ function MobileActionRemote({
   );
 }
 
-function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [], currentUserName = '' }) {
+function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [], currentUserName = '', currentUserIsTeacher = false }) {
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupName, setSetupName] = useState(String(presentation.presentationName || ''));
@@ -1165,6 +1221,9 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     || currentUserName
     || ''
   ).trim();
+  const canEditCurrentSlideAnimation = !readOnly && (
+    currentUserIsTeacher || isSamePersonName(currentEditorPresenterName, currentUserName)
+  );
   const isPresentationUnconfigured = !String(presentation.presentationName || '').trim()
     && Math.max(0, Number(presentation.canvaSlideCount || 0)) === 0;
   const presenterSuggestions = useMemo(() => {
@@ -1466,6 +1525,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     });
   };
   const openAnimationTab = () => {
+    if (!canEditCurrentSlideAnimation) return;
     patchPresentation({ activeEditorTab: 'animation' });
     const slide = currentEditorCanvaSlide;
     const needsSprite = !String(slide?.animation?.actorImageUrl || '').trim();
@@ -1480,10 +1540,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     setPendingAnimationSpriteOptions([]);
     setAnimationImportMenuOpen(true);
   };
-  const applyPendingAnimationSpriteUrl = (nextUrl) => {
-    const safeUrl = String(nextUrl || '').trim();
+  const applyPendingAnimationSpriteUrl = (nextSprite) => {
+    const safeUrl = String(nextSprite?.url || nextSprite || '').trim();
     const { slideIndex, slideNumber } = pendingAnimationSpriteTargetRef.current;
     if (!safeUrl || slideIndex < 0) return;
+    const importedAnimationBlock = nextSprite?.animationBlock && typeof nextSprite.animationBlock === 'object'
+      ? nextSprite.animationBlock
+      : null;
+    const fallbackSoundUrl = String(nextSprite?.recordingUrl || '').trim();
+    const fallbackSoundPitch = Math.max(0.5, Math.min(2, Number(nextSprite?.recordingPitch || 1)));
     const baseAnimation = presentation.slides[slideIndex]?.animation
       ? attachAnimationMetadata(
           presentation.slides[slideIndex].animation,
@@ -1499,10 +1564,36 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           presentation.presentationName,
           presentation.slides[slideIndex]?.presenterName
         );
+    const importedActions = Array.isArray(importedAnimationBlock?.actions)
+      ? withFallbackAudioOnActions(importedAnimationBlock.actions, fallbackSoundUrl, fallbackSoundPitch).map((action, index) => ({
+          ...action,
+          id: `slide_imported_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${index}`,
+          frames: (Array.isArray(action?.frames) ? action.frames : []).map((frame) => {
+            const sourceFrame = typeof frame === 'string'
+              ? createSpriteFrame(frame)
+              : { ...createSpriteFrame(frame?.url || ''), ...(frame || {}) };
+            return {
+              ...sourceFrame,
+              width: Math.max(40, Number(sourceFrame.width || importedAnimationBlock?.actorWidth || baseAnimation?.actorWidth || 140)),
+              height: Math.max(40, Number(sourceFrame.height || importedAnimationBlock?.actorHeight || baseAnimation?.actorHeight || 140))
+            };
+          }),
+          spritesOpen: false,
+          spriteUrlOpen: false,
+          spriteEditorOpen: false,
+          mobileImportOpen: false,
+          selectedFrameIndex: Number.isFinite(Number(action?.selectedFrameIndex))
+            ? Number(action.selectedFrameIndex)
+            : 0
+        }))
+      : [];
     patchSlide(slideIndex, {
       animation: {
         ...baseAnimation,
-        actorImageUrl: safeUrl
+        actorImageUrl: String(importedAnimationBlock?.actorImageUrl || safeUrl).trim(),
+        actorWidth: Math.max(40, Number(importedAnimationBlock?.actorWidth || baseAnimation?.actorWidth || 140)),
+        actorHeight: Math.max(40, Number(importedAnimationBlock?.actorHeight || baseAnimation?.actorHeight || 140)),
+        actions: importedActions.length ? constrainTimelineActions(importedActions) : baseAnimation.actions
       }
     });
     setPendingAnimationSpriteUrlInput('');
@@ -1536,11 +1627,15 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       const seen = new Set();
       const nextOptions = sourceRows.flatMap((row, rowIndex) => {
         const urls = Array.isArray(row?.spriteImageUrls) ? row.spriteImageUrls : [];
+        const spriteAnimations = Array.isArray(row?.spriteAnimations) ? row.spriteAnimations : [];
         return urls
           .map((url, imageIndex) => ({
             id: `${String(row?.id || rowIndex)}_${imageIndex}`,
             url: String(url || '').trim(),
-            slideNumber: Math.max(1, Number(row?.slideNumber || backupData?.slideNumber || 1))
+            slideNumber: Math.max(1, Number(row?.slideNumber || backupData?.slideNumber || 1)),
+            animationBlock: findImportedSpriteAnimation(spriteAnimations, url),
+            recordingUrl: String(row?.recordingUrl || backupData?.recordingUrl || '').trim(),
+            recordingPitch: Math.max(0.5, Math.min(2, Number(row?.recordingPitch || backupData?.recordingPitch || 1)))
           }))
           .filter((item) => {
             if (!item.url || seen.has(item.url)) return false;
@@ -1874,6 +1969,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               type="button"
               className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
               onClick={openAnimationTab}
+              disabled={!canEditCurrentSlideAnimation}
             >
               Animation
             </button>
@@ -1945,7 +2041,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                       type="button"
                       className="animation-frame-thumb from-mobile"
                       title={`Slide ${option.slideNumber}`}
-                      onClick={() => applyPendingAnimationSpriteUrl(option.url)}
+                      onClick={() => applyPendingAnimationSpriteUrl(option)}
                     >
                       <img src={resolveWeb5eAssetUrl(option.url)} alt="" />
                     </button>
@@ -2048,7 +2144,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                       block={attachAnimationMetadata(currentEditorCanvaSlide.animation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName)}
                       onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName) })}
                       onRemove={() => patchSlide(currentEditorCanvaSlideIndex, { animation: null })}
-                      readOnly={false}
+                      readOnly={!canEditCurrentSlideAnimation}
                       sectionKey={sectionKey}
                       tabKey={tabKey}
                       blockIndex={blockIndex}
@@ -3849,7 +3945,9 @@ function AnimationBlockEditor({
             url: String(url || '').trim(),
             slideNumber: Math.max(1, Number(row?.slideNumber || backupData?.slideNumber || 1)),
             selected: row?.selected === true,
-            animationBlock: spriteAnimations.find((item) => String(item?.imageUrl || '').trim() === String(url || '').trim())?.animationBlock || null
+            animationBlock: findImportedSpriteAnimation(spriteAnimations, url),
+            recordingUrl: String(row?.recordingUrl || backupData?.recordingUrl || '').trim(),
+            recordingPitch: Math.max(0.5, Math.min(2, Number(row?.recordingPitch || backupData?.recordingPitch || 1)))
           }))
           .filter((item) => {
             if (!item.url || seen.has(item.url)) return false;
@@ -3874,9 +3972,40 @@ function AnimationBlockEditor({
     const importedAnimationBlock = spriteOption?.animationBlock && typeof spriteOption.animationBlock === 'object'
       ? spriteOption.animationBlock
       : null;
+    const fallbackSoundUrl = String(spriteOption?.recordingUrl || '').trim();
+    const fallbackSoundPitch = Math.max(0.5, Math.min(2, Number(spriteOption?.recordingPitch || 1)));
     const importedActions = Array.isArray(importedAnimationBlock?.actions)
-      ? normalizeTimelineActions(importedAnimationBlock.actions)
+      ? withFallbackAudioOnActions(importedAnimationBlock.actions, fallbackSoundUrl, fallbackSoundPitch)
       : [];
+    if (importedActions.length) {
+      const seed = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const clonedImportedActions = importedActions.map((action, index) => ({
+        ...action,
+        id: `imported_${seed}_${index}`,
+        frames: (Array.isArray(action?.frames) ? action.frames : []).map((frame) => normalizeImportedFrame(frame)),
+        spritesOpen: false,
+        spriteUrlOpen: false,
+        spriteEditorOpen: false,
+        mobileImportOpen: false,
+        selectedFrameIndex: Number.isFinite(Number(action?.selectedFrameIndex))
+          ? Number(action.selectedFrameIndex)
+          : 0
+      }));
+      const nextActions = actions.flatMap((item) => (
+        item.id === actionId ? clonedImportedActions : [item]
+      ));
+      onChange?.({
+        ...block,
+        actorImageUrl: String(importedAnimationBlock?.actorImageUrl || safeValue || block?.actorImageUrl || '').trim(),
+        actorWidth: Math.max(40, Number(importedAnimationBlock?.actorWidth || block?.actorWidth || actorState.width || 140)),
+        actorHeight: Math.max(40, Number(importedAnimationBlock?.actorHeight || block?.actorHeight || actorState.height || 140)),
+        actions: constrainTimelineActions(nextActions)
+      });
+      setSelectedActionId(String(clonedImportedActions[0]?.id || ''));
+      setImageImportOptions([]);
+      flashNotice(`Sprite et ${clonedImportedActions.length} action(s) importés depuis CondaWeb`);
+      return;
+    }
     updateActions(actions.flatMap((item) => {
       if (item.id !== actionId) return [item];
       const nextItem = {
@@ -3885,19 +4014,77 @@ function AnimationBlockEditor({
         frameUrlInput: '',
         mobileImportOpen: false
       };
-      if (!importedActions.length) return [nextItem];
-      const clonedImportedActions = importedActions.map((action, index) => ({
-        ...action,
-        id: `imported_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${index}`,
-        spritesOpen: false,
-        spriteUrlOpen: false,
-        spriteEditorOpen: false,
-        mobileImportOpen: false
-      }));
-      return [nextItem, ...clonedImportedActions];
+      return [nextItem];
     }));
     setImageImportOptions([]);
-    flashNotice(importedActions.length ? `Sprite et ${importedActions.length} action(s) importés` : "Sprite importé");
+    flashNotice("Sprite importé");
+  };
+
+  const importAllPresenterAnimations = async (actionId) => {
+    const presenterName = String(block?.presenterName || '').trim();
+    if (!presenterName) {
+      flashNotice("Choisis d'abord l'exposant");
+      return;
+    }
+    try {
+      const backupRes = await fetch(`/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`);
+      const backupData = await backupRes.json().catch(() => ({}));
+      if (!backupRes.ok || !backupData?.ok) {
+        flashNotice("Aucune animation CondaWeb");
+        return;
+      }
+      const sourceRows = Array.isArray(backupData?.recordings) && backupData.recordings.length > 0
+        ? backupData.recordings
+        : [backupData];
+      const importedActions = [];
+      let importedActorImageUrl = '';
+      let importedActorWidth = 0;
+      let importedActorHeight = 0;
+      sourceRows.forEach((row) => {
+        const spriteAnimations = Array.isArray(row?.spriteAnimations) ? row.spriteAnimations : [];
+        const fallbackSoundUrl = String(row?.recordingUrl || backupData?.recordingUrl || '').trim();
+        const fallbackSoundPitch = Math.max(0.5, Math.min(2, Number(row?.recordingPitch || backupData?.recordingPitch || 1)));
+        spriteAnimations.forEach((item) => {
+          const animationBlock = item?.animationBlock && typeof item.animationBlock === 'object' ? item.animationBlock : null;
+          if (!animationBlock || !Array.isArray(animationBlock.actions) || !animationBlock.actions.length) return;
+          if (!importedActorImageUrl) {
+            importedActorImageUrl = String(animationBlock.actorImageUrl || item?.imageUrl || '').trim();
+            importedActorWidth = Math.max(40, Number(animationBlock.actorWidth || block?.actorWidth || actorState.width || 140));
+            importedActorHeight = Math.max(40, Number(animationBlock.actorHeight || block?.actorHeight || actorState.height || 140));
+          }
+          const normalizedActions = withFallbackAudioOnActions(animationBlock.actions, fallbackSoundUrl, fallbackSoundPitch)
+            .map((action, index) => ({
+              ...action,
+              id: `bulk_imported_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${importedActions.length}_${index}`,
+              frames: (Array.isArray(action?.frames) ? action.frames : []).map((frame) => normalizeImportedFrame(frame)),
+              spritesOpen: false,
+              spriteUrlOpen: false,
+              spriteEditorOpen: false,
+              mobileImportOpen: false,
+              selectedFrameIndex: Number.isFinite(Number(action?.selectedFrameIndex)) ? Number(action.selectedFrameIndex) : 0
+            }));
+          importedActions.push(...normalizedActions);
+        });
+      });
+      if (!importedActions.length) {
+        flashNotice("Aucune animation CondaWeb");
+        return;
+      }
+      const nextActions = actions.flatMap((item) => (
+        item.id === actionId ? importedActions : [item]
+      ));
+      onChange?.({
+        ...block,
+        actorImageUrl: importedActorImageUrl || String(block?.actorImageUrl || ''),
+        actorWidth: importedActorWidth || Math.max(40, Number(block?.actorWidth || actorState.width || 140)),
+        actorHeight: importedActorHeight || Math.max(40, Number(block?.actorHeight || actorState.height || 140)),
+        actions: constrainTimelineActions(nextActions)
+      });
+      setSelectedActionId(String(importedActions[0]?.id || ''));
+      flashNotice(`${importedActions.length} action(s) importée(s) depuis CondaWeb`);
+    } catch (_) {
+      flashNotice("Import animations impossible");
+    }
   };
 
   const applyImportedAudio = async (audioId = '') => {
@@ -3949,7 +4136,10 @@ function AnimationBlockEditor({
 
   const toggleTimelinePlayback = async () => {
     const audio = audioTimelineRef.current;
-    if (!audio || !baseAudioUrl) return;
+    if (!audio || !baseAudioUrl) {
+      await playAnimation(actions, { withAudio: true });
+      return;
+    }
     if (!audio.paused) {
       audio.pause();
       return;
@@ -4442,6 +4632,7 @@ function AnimationBlockEditor({
                     <div className="animation-sprite-space-title">Sprites</div>
                     <div className="animation-sprite-space-actions">
                       <button type="button" onClick={() => actionFileInputRefs.current[action.id]?.click()}>+ordi</button>
+                      <button type="button" onClick={() => void importAllPresenterAnimations(action.id)}>Charger animations</button>
                       <div className="animation-mobile-import-shell">
                         <button
                           type="button"
@@ -5014,8 +5205,6 @@ export default function App() {
       const nextPublicEntriesByKey = {};
       const nextContentMap = { eau: {}, energie: {} };
 
-      const currentUserId = String(user?.id || user?._id || '').trim();
-      const currentUserName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
       tabs.forEach((tab) => {
         const sectionKey = String(tab.sectionKey || '').trim().toLowerCase();
         const tabKey = String(tab.tabKey || '').trim().toLowerCase();
@@ -5031,13 +5220,7 @@ export default function App() {
           return allRows.findIndex((candidate) => String(candidate?._id || '') === rowId) === rowIndex;
         });
         nextPublicEntriesByKey[docKey] = mergedRows;
-        const entry = currentUserId
-          ? (
-            mergedRows.find((row) => String(row?.studentId || '') === currentUserId)
-            || mergedRows.find((row) => String(row?.authorName || '').trim() === currentUserName)
-            || null
-          )
-          : mergedRows[0];
+        const entry = findBestEntryForUser(mergedRows, user);
         if (!nextEntryDocs[docKey] && entry) {
           nextEntryDocs[docKey] = entry;
         }
@@ -5063,6 +5246,24 @@ export default function App() {
           if (rowId) seen.add(rowId);
           return true;
         });
+      });
+
+      Object.keys(nextTabDocs).forEach((docKey) => {
+        const [sectionKey, tabKey] = String(docKey || '').split(':');
+        if (!sectionKey || !tabKey) return;
+        const mergedRows = Array.isArray(mergedPublicEntriesByKey[docKey]) ? mergedPublicEntriesByKey[docKey] : [];
+        const entry = findBestEntryForUser(mergedRows, user);
+        if (entry) {
+          nextEntryDocs[docKey] = entry;
+        }
+        if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
+        const currentValue = nextContentMap[sectionKey][tabKey];
+        const shouldHydrateFromEntry = !Array.isArray(currentValue)
+          || currentValue.length === 0
+          || currentValue === DEFAULT_CONTENT[sectionKey]?.[tabKey];
+        if (shouldHydrateFromEntry && Array.isArray(entry?.blocks) && entry.blocks.length > 0) {
+          nextContentMap[sectionKey][tabKey] = entry.blocks;
+        }
       });
 
       try {
@@ -5358,15 +5559,23 @@ export default function App() {
       }
     }
     const existingEntry = entryDocsByKey[docKey];
+    const persistedStudentId = isTeacher
+      ? String(existingEntry?.studentId || '')
+      : String(user.id || user._id || '');
+    const persistedAuthorName = isTeacher
+      ? String(existingEntry?.authorName || `${user.firstName || ''} ${user.lastName || ''}`.trim())
+      : `${user.firstName || ''} ${user.lastName || ''}`.trim();
     try {
+      const existingEntryId = String(existingEntry?._id || '').trim();
+      const safeExistingEntryId = existingEntryId.startsWith('cache:') ? '' : existingEntryId;
       const res = await fetch(resolveWeb5eApiUrl('/api/web5e/entries'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          _id: existingEntry?._id || '',
+          _id: safeExistingEntryId,
           tabId: tabDoc._id,
-          studentId: user.id || user._id || '',
-          authorName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          studentId: persistedStudentId,
+          authorName: persistedAuthorName,
           title: tabDoc.title || '',
           blocks: nextBlocks,
           isPublished: true
@@ -5505,6 +5714,7 @@ export default function App() {
 
   const openPresentationInEditor = (row) => {
     if (!row?.presentation) return;
+    const docKey = `${activeSection}:${currentTabId}`;
     const targetIndex = isTeacher
       ? (presentationBlocks[0]?.index ?? blocks.findIndex((block) => block?.type === 'text'))
       : row.index;
@@ -5523,6 +5733,12 @@ export default function App() {
       queueAutosave(nextBlocks);
       void persistBlocks(nextBlocks);
       setEditingPresentationBlockIndex(nextBlocks.length - 1);
+    }
+    if (row?.entryId) {
+      const matchingEntry = currentPublicEntries.find((entry) => String(entry?._id || '') === String(row.entryId || '')) || null;
+      if (matchingEntry) {
+        setEntryDocsByKey((prev) => ({ ...prev, [docKey]: matchingEntry }));
+      }
     }
     setOpenedValidatedPresentationMode('browse');
     setOpenedValidatedPresentationIndex(-1);
@@ -5573,7 +5789,12 @@ export default function App() {
       return;
     }
     if (!res.ok || !data?.ok) {
-      window.alert(data?.error || 'Suppression impossible');
+      const rawError = String(data?.error || '').trim();
+      if (/ENOTFOUND|MongoDB|mongodb/i.test(rawError)) {
+        window.alert('MongoDB inaccessible: suppression BDD impossible pour le moment.');
+        return;
+      }
+      window.alert(rawError || 'Suppression impossible');
       return;
     }
     removeEntryLocally();
@@ -6283,6 +6504,7 @@ export default function App() {
                   presentationNumber={Math.max(1, presentationBlocks.findIndex((row) => row.index === index) + 1)}
                   allUsersData={allUsersData}
                   currentUserName={`${user?.firstName || ''} ${user?.lastName || ''}`.trim()}
+                  currentUserIsTeacher={isTeacher}
                 />
               )}
 
