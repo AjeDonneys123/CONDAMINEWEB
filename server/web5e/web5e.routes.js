@@ -21,6 +21,22 @@ const uploadBatch = multer({ dest: uploadDir });
 
 const normalizeSectionKey = (value = '') => String(value || '').trim().toLowerCase();
 const normalizeTabKey = (value = '') => String(value || '').trim().toLowerCase();
+const cleanIdentityPart = (value = '') => String(value || '').trim().toLowerCase();
+
+function isNamedJpVuillet(firstName = '', lastName = '') {
+    const safeFirstName = cleanIdentityPart(firstName);
+    const safeLastName = cleanIdentityPart(lastName);
+    return safeLastName === 'vuillet' && (safeFirstName === 'jp' || safeFirstName === 'jean');
+}
+
+function canManageWeb5eEntries(req) {
+    const role = cleanIdentityPart(req.get('x-web5e-user-role'));
+    const firstName = req.get('x-web5e-user-first-name');
+    const lastName = req.get('x-web5e-user-last-name');
+    if (isNamedJpVuillet(firstName, lastName)) return true;
+    return role === 'teacher' || role === 'prof' || role === 'admin';
+}
+
 function finalizeUpload(file) {
     const ext = path.extname(file.originalname || '') || '.jpg';
     const finalName = `${file.filename}${ext}`;
@@ -520,6 +536,9 @@ router.post('/entries', async (req, res) => {
 
 router.delete('/entries/:id', async (req, res) => {
     try {
+        if (!canManageWeb5eEntries(req)) {
+            return res.status(403).json({ ok: false, error: 'suppression reservee au professeur' });
+        }
         const entryId = String(req.params?.id || '').trim();
         if (!mongoose.Types.ObjectId.isValid(entryId)) {
             return res.status(400).json({ ok: false, error: 'entry id invalide' });

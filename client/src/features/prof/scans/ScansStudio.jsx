@@ -12,6 +12,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const [status, setStatus] = useState("");
     const [cameraError, setCameraError] = useState("");
     const [cameraReady, setCameraReady] = useState(false);
+    const [cameraRequestNonce, setCameraRequestNonce] = useState(0);
     const [collapsedSessions, setCollapsedSessions] = useState({});
     const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
     const [iaDraftBySession, setIaDraftBySession] = useState({});
@@ -103,7 +104,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const loadSessions = async () => {
         const params = new URLSearchParams();
         if (teacherId) params.set('teacherId', teacherId);
-        if (normalizedGlobalClassId) params.set('classId', normalizedGlobalClassId);
+        if (normalizedGlobalClassId && !isDesktopMode) params.set('classId', normalizedGlobalClassId);
         if (isDesktopMode) params.set('includeUnassigned', '1');
         const res = await fetch(`/api/scans/sessions?${params.toString()}`);
         const data = await res.json();
@@ -146,6 +147,48 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     }, []);
 
     useEffect(() => {
+        const tryOpenCameraStream = async () => {
+            const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+            const attempts = isMobile
+                ? [
+                    { video: { facingMode: { ideal: 'environment' } } },
+                    { video: { facingMode: { ideal: 'user' } } },
+                    { video: true }
+                ]
+                : [
+                    { video: { facingMode: { ideal: 'user' } } },
+                    { video: true },
+                    { video: { facingMode: { ideal: 'environment' } } }
+                ];
+
+            let lastErr = null;
+            for (const constraints of attempts) {
+                try {
+                    return await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (err) {
+                    lastErr = err;
+                }
+            }
+
+            if (navigator.mediaDevices?.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+                const videoInputs = Array.isArray(devices)
+                    ? devices.filter((device) => device.kind === 'videoinput' && String(device.deviceId || '').trim())
+                    : [];
+                for (const device of videoInputs) {
+                    try {
+                        return await navigator.mediaDevices.getUserMedia({
+                            video: { deviceId: { exact: device.deviceId } }
+                        });
+                    } catch (err) {
+                        lastErr = err;
+                    }
+                }
+            }
+
+            throw lastErr || new Error('camera_unavailable');
+        };
+
         const startCamera = async () => {
             if (!(view === 'sujets' || view === 'scan') || loading) return;
             setCameraError("");
@@ -160,40 +203,23 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                 setCameraError("Caméra bloquée: ouvre ce site en HTTPS (ou localhost).");
                 return;
             }
-            let devices = [];
             try {
-                devices = await navigator.mediaDevices.enumerateDevices();
-            } catch (_) {}
-            const hasVideoInput = devices.some(d => d.kind === 'videoinput');
-            if (!hasVideoInput) {
-                setCameraError("Aucune caméra détectée sur cet appareil.");
+                const stream = await tryOpenCameraStream();
+                if (videoRef.current) videoRef.current.srcObject = stream;
                 return;
+            } catch (lastErr) {
+                const errorName = String(lastErr?.name || '').trim();
+                const errorMessage = String(lastErr?.message || '').trim();
+                setCameraError(
+                    errorName === 'NotAllowedError'
+                        ? "Accès caméra refusé. Autorise la caméra dans le navigateur."
+                        : (errorName === 'NotReadableError' || /notreadable|trackstart|concurrent|start/i.test(errorMessage))
+                            ? "Caméra occupée ou bloquée par le système."
+                            : (errorName === 'NotFoundError')
+                                ? "Aucune caméra disponible."
+                                : "Caméra détectée mais indisponible."
+                );
             }
-            const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-            const attempts = isMobile
-                ? [
-                    { video: { facingMode: { ideal: 'environment' } } },
-                    { video: { facingMode: 'user' } },
-                    { video: true }
-                ]
-                : [
-                    { video: { facingMode: 'user' } },
-                    { video: true },
-                    { video: { facingMode: { ideal: 'environment' } } }
-                ];
-            let lastErr = null;
-            for (const constraints of attempts) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    if (videoRef.current) videoRef.current.srcObject = stream;
-                    return;
-                } catch (err) {
-                    lastErr = err;
-                }
-            }
-            setCameraError(lastErr?.name === 'NotAllowedError'
-                ? "Accès caméra refusé. Autorise la caméra dans le navigateur."
-                : "Caméra introuvable ou indisponible.");
         };
         startCamera();
         return () => {
@@ -202,7 +228,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
             }
             setCameraReady(false);
         };
-    }, [view, loading]);
+    }, [view, loading, cameraRequestNonce]);
 
     useEffect(() => {
         const key = String(launchIntent?.requestedAt || '');
@@ -654,6 +680,18 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                     <button onClick={handleCapture} className="cam-trigger" />
                                     <canvas ref={canvasRef} className="hidden" />
                                 </div>
+                                {!cameraReady && (
+                                    <button
+                                        type="button"
+                                        className="act-btn btn-scan"
+                                        onClick={() => {
+                                            setCameraError("");
+                                            setCameraRequestNonce((prev) => prev + 1);
+                                        }}
+                                    >
+                                        Activer caméra
+                                    </button>
+                                )}
                                 {cameraError && <div className="camera-error">{cameraError}</div>}
                                 <div className="capture-strip custom-scrollbar">
                                     {localQueue.length === 0 && view === 'scan' && (
@@ -897,6 +935,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     };
 
     const visibleSessions = sessions.filter((session) => {
+        if (isDesktopMode) return true;
         const sessionClassId = String(session?.classId || '').trim();
         if (sessionClassId) return sessionClassId === normalizedGlobalClassId;
         return isDesktopMode;
@@ -911,19 +950,30 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                     {globalClass && <p className="scan-class-context">Classe active: {globalClass}</p>}
                 </div>
                 <button onClick={async () => {
-                    const title = prompt("Titre de l'évaluation :");
+                    const title = String(prompt("Titre de l'évaluation :") || '').trim();
                     if (!title) return;
-                    await fetch('/api/scans/sessions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title,
-                            teacherId,
-                            classId: globalClassId || null,
-                            className: globalClass || ''
-                        })
-                    });
-                    loadSessions();
+                    try {
+                        const res = await fetch('/api/scans/sessions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title,
+                                teacherId,
+                                classId: globalClassId || null,
+                                className: globalClass || ''
+                            })
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok || !data?._id) {
+                            throw new Error(data?.error || "Création de session impossible");
+                        }
+                        await loadSessions();
+                        setActiveSession(data);
+                        setView('scan');
+                        setWorkspaceCollapsed(false);
+                    } catch (e) {
+                        alert(e.message || "Création de session impossible");
+                    }
                 }} className="bg-indigo-600 text-white px-8 py-5 rounded-[25px] font-black text-sm shadow-xl hover:scale-105 transition-transform">
                     + NOUVELLE SESSION
                 </button>

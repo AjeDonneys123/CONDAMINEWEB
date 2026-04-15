@@ -5,6 +5,8 @@ const WEB5E_SESSION_KEY = 'web5eBridgeSession';
 const WEB5E_LOCAL_CONTENT_KEY = 'web5eLocalContentV1';
 const WEB5E_PUBLIC_CACHE_KEY = 'web5ePublicEntriesV1';
 const WEB5E_VERSION_NAME = 'Orion Slides';
+const MIN_TIMELINE_ACTION_DURATION_SEC = 1.2;
+const MIN_TIMELINE_ACTION_WIDTH_PX = 48;
 
 const SECTION_CONFIG = {
   eau: {
@@ -455,7 +457,7 @@ function createAnimationBlockFromDraft(draft = {}) {
         soundUrl: String(draft.soundUrl || '').trim(),
         soundPitch: Math.max(0.5, Math.min(2, Number(draft.soundPitch || 1))),
         startSec: 0,
-        durationSec: Math.max(0.5, Number(draft.durationSec || 2)),
+        durationSec: Math.max(MIN_TIMELINE_ACTION_DURATION_SEC, Number(draft.durationSec || 2)),
         spritesOpen: false,
         spriteUrlOpen: false,
         spriteEditorOpen: false,
@@ -480,7 +482,7 @@ function createSpriteFrame(url = '') {
 function normalizeTimelineActions(rawActions = []) {
   let cursor = 0;
   return (Array.isArray(rawActions) ? rawActions : []).map((action) => {
-    const durationSec = Math.max(0.5, Number(action?.durationSec || 2));
+    const durationSec = Math.max(MIN_TIMELINE_ACTION_DURATION_SEC, Number(action?.durationSec || 2));
     const frameDurationSec = Math.max(0.05, Math.min(1.5, Number(action?.frameDurationSec || 0.18)));
     const startSec = Number.isFinite(Number(action?.startSec))
       ? Math.max(0, Number(action.startSec))
@@ -507,6 +509,21 @@ function constrainTimelineActions(rawActions = []) {
     next[index].startSec = Math.max(minStart, Number(next[index].startSec || 0));
   }
   return next;
+}
+
+function compactTimelineActions(rawActions = []) {
+  const actions = normalizeTimelineActions(rawActions);
+  let cursor = 0;
+  return actions.map((action) => {
+    const durationSec = Math.max(MIN_TIMELINE_ACTION_DURATION_SEC, Number(action?.durationSec || MIN_TIMELINE_ACTION_DURATION_SEC));
+    const nextAction = {
+      ...action,
+      startSec: cursor,
+      durationSec
+    };
+    cursor += durationSec;
+    return nextAction;
+  });
 }
 
 function snapTimelineSeconds(value = 0, step = 0.1) {
@@ -560,6 +577,7 @@ function withFallbackAudioOnActions(rawActions = [], fallbackSoundUrl = '', fall
   const safeFallbackPitch = Math.max(0.5, Math.min(2, Number(fallbackSoundPitch || 1)));
   return normalizeTimelineActions(rawActions).map((action) => ({
     ...action,
+    durationSec: Math.max(1.2, Number(action?.durationSec || 0)),
     soundUrl: String(action?.soundUrl || '').trim() || safeFallbackUrl,
     soundPitch: String(action?.soundUrl || '').trim()
       ? Math.max(0.5, Math.min(2, Number(action?.soundPitch || 1)))
@@ -569,6 +587,14 @@ function withFallbackAudioOnActions(rawActions = [], fallbackSoundUrl = '', fall
 
 function normalizeBridgedUser(decoded) {
   if (!decoded || typeof decoded !== 'object') return null;
+  const normalizedRole = String(decoded.role || '').trim().toLowerCase();
+  const normalizedFirstName = clean(decoded.firstName || '');
+  const normalizedLastName = clean(decoded.lastName || '');
+  const safeRole = normalizedRole === 'teacher' || normalizedRole === 'prof' || normalizedRole === 'admin'
+    ? normalizedRole
+    : (normalizedLastName === 'vuillet' && (normalizedFirstName === 'jp' || normalizedFirstName === 'jean'))
+      ? 'teacher'
+    : 'student';
   return {
     id: decoded.id || decoded._id || '',
     _id: decoded._id || decoded.id || '',
@@ -576,7 +602,7 @@ function normalizeBridgedUser(decoded) {
     lastName: decoded.lastName || '',
     currentClass: decoded.currentClass || '',
     isTestAccount: decoded.isTestAccount === true,
-    role: 'student'
+    role: safeRole
   };
 }
 
@@ -680,6 +706,25 @@ function findBestEntryForUser(rows = [], user = null) {
     || list.find((row) => String(row?.authorName || '').trim() === currentUserName)
     || null
   );
+}
+
+function hydrateContentMapFromPublicEntries(publicEntriesByKey = {}, user = null) {
+  const nextContentMap = {};
+  Object.keys(DEFAULT_CONTENT).forEach((sectionKey) => {
+    nextContentMap[sectionKey] = { ...(DEFAULT_CONTENT[sectionKey] || {}) };
+  });
+  const nextEntryDocs = {};
+  Object.entries(publicEntriesByKey || {}).forEach(([docKey, rows]) => {
+    const [sectionKey, tabKey] = String(docKey || '').split(':');
+    if (!sectionKey || !tabKey) return;
+    const entry = findBestEntryForUser(rows, user);
+    if (entry) nextEntryDocs[docKey] = entry;
+    if (Array.isArray(entry?.blocks) && entry.blocks.length > 0) {
+      if (!nextContentMap[sectionKey]) nextContentMap[sectionKey] = {};
+      nextContentMap[sectionKey][tabKey] = entry.blocks;
+    }
+  });
+  return { nextContentMap, nextEntryDocs };
 }
 
 function sampleCornerColor(imageData, width) {
@@ -1167,7 +1212,7 @@ function MobileActionRemote({
   );
 }
 
-function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [], currentUserName = '', currentUserIsTeacher = false }) {
+function PresentationEditor({ block, onChange, readOnly, previewOnly = false, sectionKey = '', tabKey = '', blockIndex = 0, tabId = '', entryId = '', siblingPresentationNames = [], presentationNumber = 0, allUsersData = [], currentUserName = '', currentUserIsTeacher = false }) {
   const presentation = useMemo(() => normalizePresentationBlock(block), [block]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupName, setSetupName] = useState(String(presentation.presentationName || ''));
@@ -1221,9 +1266,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     || currentUserName
     || ''
   ).trim();
-  const canEditCurrentSlideAnimation = !readOnly && (
-    currentUserIsTeacher || isSamePersonName(currentEditorPresenterName, currentUserName)
-  );
+  const canEditCurrentSlideAnimation = !readOnly;
   const isPresentationUnconfigured = !String(presentation.presentationName || '').trim()
     && Math.max(0, Number(presentation.canvaSlideCount || 0)) === 0;
   const presenterSuggestions = useMemo(() => {
@@ -1279,6 +1322,11 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       ))
       .slice(0, 6);
   }, [presenterSuggestions, presenterSearchTarget]);
+  const pendingAnimationStudentLabel = useMemo(() => {
+    const typed = clean(pendingAnimationSpriteUrlInput);
+    if (!typed) return '';
+    return presenterSuggestions.find((entry) => clean(entry.label) === typed)?.label || '';
+  }, [pendingAnimationSpriteUrlInput, presenterSuggestions]);
 
   useEffect(() => {
     if (!isPresentationUnconfigured) return;
@@ -1525,7 +1573,6 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     });
   };
   const openAnimationTab = () => {
-    if (!canEditCurrentSlideAnimation) return;
     patchPresentation({ activeEditorTab: 'animation' });
     const slide = currentEditorCanvaSlide;
     const needsSprite = !String(slide?.animation?.actorImageUrl || '').trim();
@@ -1538,6 +1585,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
       slideNumber: editorCanvaStep
     };
     setPendingAnimationSpriteOptions([]);
+    setPendingAnimationSpriteUrlInput(String(currentEditorPresenterName || ''));
     setAnimationImportMenuOpen(true);
   };
   const applyPendingAnimationSpriteUrl = (nextSprite) => {
@@ -1612,7 +1660,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
     reader.readAsDataURL(file);
   };
   const loadPendingAnimationSpritesFromPhone = async () => {
-    const presenterName = currentEditorPresenterName;
+    const presenterName = pendingAnimationStudentLabel || currentEditorPresenterName;
     if (!presenterName) return;
     try {
       const backupRes = await fetch(`/api/exposes/presenter-backup?presenterName=${encodeURIComponent(presenterName)}`);
@@ -1895,7 +1943,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           className="hidden-file-input"
           onChange={(e) => void handlePendingAnimationSpriteImport(e.target.files)}
         />
-        {(presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation' || presentation.activeEditorTab === 'qcm') ? (
+        {!previewOnly && (presentation.activeEditorTab === 'slides' || presentation.activeEditorTab === 'animation' || presentation.activeEditorTab === 'qcm') ? (
           <>
             <label className="presentation-editor-field">
               <span>Lien Canva :</span>
@@ -1969,20 +2017,22 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               type="button"
               className={`presentation-slide-tab ${presentation.activeEditorTab === 'animation' ? 'active' : ''}`}
               onClick={openAnimationTab}
-              disabled={!canEditCurrentSlideAnimation}
+              title="Ouvrir animation"
             >
               Animation
             </button>
-            <button
-              type="button"
-              className="presentation-slide-add presentation-slide-add-red"
-              onClick={() => {
-                if (!window.confirm('Supprimer cette presentation ?')) return;
-                onChange?.(createBlock('text'));
-              }}
-            >
-              Supprimer
-            </button>
+            {!previewOnly ? (
+              <button
+                type="button"
+                className="presentation-slide-add presentation-slide-add-red"
+                onClick={() => {
+                  if (!window.confirm('Supprimer cette presentation ?')) return;
+                  onChange?.(createBlock('text'));
+                }}
+              >
+                Supprimer
+              </button>
+            ) : null}
           </div>
           {presentation.activeEditorTab === 'animation' && animationImportMenuOpen ? (
             <div
@@ -1998,9 +2048,10 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
               <div className="animation-import-mini-menu-help">Glisse une image ici, colle une URL/image, ou importe un fichier.</div>
               <input
                 className="presentation-slide-title"
+                list="web5e-presenter-suggestions"
                 value={pendingAnimationSpriteUrlInput}
                 onChange={(event) => setPendingAnimationSpriteUrlInput(event.target.value)}
-                placeholder="Coller une URL d'image"
+                placeholder="URL d'image ou nom d'un eleve de 5e"
               />
               <div className="animation-import-mini-menu-actions">
                 <button
@@ -2021,16 +2072,16 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   type="button"
                   className="presentation-slide-add"
                   onClick={() => void loadPendingAnimationSpritesFromPhone()}
-                  disabled={!currentEditorPresenterName}
+                  disabled={!(pendingAnimationStudentLabel || currentEditorPresenterName)}
                 >
                   Importer depuis tel
                 </button>
               </div>
-              {currentEditorPresenterName ? (
+              {(pendingAnimationStudentLabel || currentEditorPresenterName) ? (
                 <div className="animation-import-mini-menu-help">
                   {pendingAnimationSpriteOptions.length > 0
-                    ? `${pendingAnimationSpriteOptions.length} image${pendingAnimationSpriteOptions.length > 1 ? 's' : ''} trouvée${pendingAnimationSpriteOptions.length > 1 ? 's' : ''} pour ${formatPresenterLabel(currentEditorPresenterName)}.`
-                    : `Aucune image chargée pour ${formatPresenterLabel(currentEditorPresenterName)}.`}
+                    ? `${pendingAnimationSpriteOptions.length} image${pendingAnimationSpriteOptions.length > 1 ? 's' : ''} trouvée${pendingAnimationSpriteOptions.length > 1 ? 's' : ''} pour ${formatPresenterLabel(pendingAnimationStudentLabel || currentEditorPresenterName)}.`
+                    : `Aucune image chargée pour ${formatPresenterLabel(pendingAnimationStudentLabel || currentEditorPresenterName)}.`}
                 </div>
               ) : null}
               {pendingAnimationSpriteOptions.length > 0 ? (
@@ -2087,16 +2138,20 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                   <span>
                     {presentation.canvaSlideCount > 0 ? `Canva live ${editorCanvaStep}/${presentation.canvaSlideCount}` : `Canva live ${editorCanvaStep}`}
                   </span>
-                  <span className="slideshow-progress-presenter-label">Exposant de ce slide :</span>
-                  <div className="slideshow-progress-presenter-field">
-                    {renderPresenterSelector(currentEditorCanvaSlide, currentEditorCanvaSlideIndex, true)}
-                  </div>
+                  {!previewOnly ? (
+                    <>
+                      <span className="slideshow-progress-presenter-label">Exposant de ce slide :</span>
+                      <div className="slideshow-progress-presenter-field">
+                        {renderPresenterSelector(currentEditorCanvaSlide, currentEditorCanvaSlideIndex, true)}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
                 <button
                   type="button"
                   className="presentation-slide-add"
                   onClick={() => {
-                    if (!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '')) return;
+                    if (!previewOnly && !isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '')) return;
                     const nextStep = presentation.canvaSlideCount > 0
                       ? Math.min(presentation.canvaSlideCount, editorCanvaStep + 1)
                       : editorCanvaStep + 1;
@@ -2108,7 +2163,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                       presentationValidated: false
                     });
                   }}
-                  disabled={!isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '') || (presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount)}
+                  disabled={(!previewOnly && !isValidPresenterSelection(currentEditorCanvaSlide?.presenterName || '')) || (presentation.canvaSlideCount > 0 && editorCanvaStep >= presentation.canvaSlideCount)}
                 >
                   Diapo suivante
                 </button>
@@ -2132,7 +2187,7 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
                     setEditorCanvaLoaded(true);
                   }}
                 />
-                <div className="canva-live-lock-overlay" aria-hidden="true" />
+                {!previewOnly ? <div className="canva-live-lock-overlay" aria-hidden="true" /> : null}
                 {currentEditorCanvaSlide?.presenterName ? (
                   <div className="canva-live-presenter-badge">
                     {formatPresenterLabel(currentEditorCanvaSlide.presenterName)}
@@ -2258,28 +2313,30 @@ function PresentationEditor({ block, onChange, readOnly, sectionKey = '', tabKey
           <button type="button" onClick={() => imageFileInputRef.current?.click()}>Importer image</button>
         </div>
       ) : null}
-      {!presentation.canvaLiveUrl ? renderPresenterSelector(activeSlide, presentation.activeSlideIndex) : null}
+      {!previewOnly && !presentation.canvaLiveUrl ? renderPresenterSelector(activeSlide, presentation.activeSlideIndex) : null}
       </>
       ) : null}
-      <div className="presentation-validation-bar">
-        <div className="presentation-validation-status">
-          {slidesValidCount}/{presentation.slides.length || 0} slides valides • {qcmValidCount} questions QCM valides
+      {!previewOnly ? (
+        <div className="presentation-validation-bar">
+          <div className="presentation-validation-status">
+            {slidesValidCount}/{presentation.slides.length || 0} slides valides • {qcmValidCount} questions QCM valides
+          </div>
+          {presentationNameAlreadyUsed ? <div className="presentation-validation-warning">Ce nom de presentation existe deja dans cet onglet.</div> : null}
+          {validatedFlash ? <div className="presentation-validated-flash">Presentation validee</div> : null}
+          <button
+            type="button"
+            className={`primary-btn ${canValidatePresentation ? '' : 'disabled-btn'}`}
+            disabled={!canValidatePresentation}
+            onClick={() => {
+              patchPresentation({ presentationValidated: true });
+              setValidatedFlash(true);
+              window.setTimeout(() => setValidatedFlash(false), 1000);
+            }}
+          >
+            Valider ma presentation
+          </button>
         </div>
-        {presentationNameAlreadyUsed ? <div className="presentation-validation-warning">Ce nom de presentation existe deja dans cet onglet.</div> : null}
-        {validatedFlash ? <div className="presentation-validated-flash">Presentation validee</div> : null}
-        <button
-          type="button"
-          className={`primary-btn ${canValidatePresentation ? '' : 'disabled-btn'}`}
-          disabled={!canValidatePresentation}
-          onClick={() => {
-            patchPresentation({ presentationValidated: true });
-            setValidatedFlash(true);
-            window.setTimeout(() => setValidatedFlash(false), 1000);
-          }}
-        >
-          Valider ma presentation
-        </button>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -2302,9 +2359,16 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
   const isSlideshow = mode === 'slideshow';
   const isCanvaLive = mode === 'canva';
   const hasCanvaLive = Boolean(normalized.canvaLiveUrl);
+  const browseSlidesAreEmpty = (Array.isArray(normalized.slides) ? normalized.slides : []).every((slide) => {
+    const html = String(slide?.html || '').replace(/<[^>]+>/g, '').trim();
+    const hasTextBoxes = Array.isArray(slide?.textBoxes) && slide.textBoxes.some((box) => Boolean(String(box?.text || '').replace(/<[^>]+>/g, '').trim()));
+    const hasAnimation = Boolean(slide?.animation);
+    return !html && !hasTextBoxes && !hasAnimation;
+  });
+  const shouldUseCanvaInBrowse = !isCanvaLive && hasCanvaLive && browseSlidesAreEmpty;
   const hasUploadedFallbackSlides = presentationHasUploadedFallbackSlides(normalized);
   const canvaBaseStep = 1;
-  const currentCanvaSlide = normalized.slides[Math.max(0, Math.min(canvaStep - 1, normalized.slides.length - 1))] || null;
+  const currentCanvaSlide = normalized.slides[Math.max(0, Math.min((shouldUseCanvaInBrowse ? activeIndex + 1 : canvaStep) - 1, normalized.slides.length - 1))] || null;
   const totalSteps = normalized.slides.length + (hasQcmTab ? 1 : 0);
   const showingQcm = isSlideshow ? (hasQcmTab && slideshowStep === normalized.slides.length) : activeTab === 'qcm';
   const slideshowSlide = normalized.slides[Math.min(slideshowStep, Math.max(0, normalized.slides.length - 1))] || normalized.slides[0];
@@ -2378,55 +2442,63 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           <h3>{normalized.presentationName || 'Presentation'}</h3>
         </div>
       ) : null}
-      {isCanvaLive ? (
+      {(isCanvaLive || shouldUseCanvaInBrowse) ? (
         <div className="slideshow-nav">
-          <button
-            type="button"
-            className="presentation-slide-add"
-            onClick={() => {
-              const nextStep = Math.max(1, canvaStep - 1);
-              setCanvaStep(nextStep);
-              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
-            }}
-            disabled={canvaStep <= 1}
-          >
-            {simpleMode ? 'Precedent' : 'Diapo precedente'}
-          </button>
-          <button
-            type="button"
-            className={`presentation-slide-add ${canvaPlaying ? 'presentation-slide-add-red' : ''}`}
-            onClick={() => {
-              if (canvaPlaying) {
-                setCanvaPlaying(false);
-                setCanvaStep(canvaBaseStep);
-                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, canvaBaseStep));
-                return;
-              }
-              setCanvaPlaying(true);
-              setCanvaStep(1);
-              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, 1));
-            }}
-          >
-            {canvaPlaying ? 'Stop' : 'Play'}
-          </button>
+          {!shouldUseCanvaInBrowse ? (
+            <>
+              <button
+                type="button"
+                className="presentation-slide-add"
+                onClick={() => {
+                  const nextStep = Math.max(1, canvaStep - 1);
+                  setCanvaStep(nextStep);
+                  setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+                }}
+                disabled={canvaStep <= 1}
+              >
+                {simpleMode ? 'Precedent' : 'Diapo precedente'}
+              </button>
+              <button
+                type="button"
+                className={`presentation-slide-add ${canvaPlaying ? 'presentation-slide-add-red' : ''}`}
+                onClick={() => {
+                  if (canvaPlaying) {
+                    setCanvaPlaying(false);
+                    setCanvaStep(canvaBaseStep);
+                    setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, canvaBaseStep));
+                    return;
+                  }
+                  setCanvaPlaying(true);
+                  setCanvaStep(1);
+                  setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, 1));
+                }}
+              >
+                {canvaPlaying ? 'Stop' : 'Play'}
+              </button>
+            </>
+          ) : null}
           <div className="slideshow-progress">
-            {normalized.canvaSlideCount > 0 ? `Canva live ${canvaStep}/${normalized.canvaSlideCount}` : `Canva live ${canvaStep}`}
+            {normalized.canvaSlideCount > 0
+              ? `Canva live ${shouldUseCanvaInBrowse ? (activeIndex + 1) : canvaStep}/${normalized.canvaSlideCount}`
+              : `Canva live ${shouldUseCanvaInBrowse ? (activeIndex + 1) : canvaStep}`}
             {!simpleMode && currentCanvaSlide?.presenterName ? ` • ${currentCanvaSlide.presenterName}` : ''}
           </div>
-          <button
-            type="button"
-            className="presentation-slide-add"
-            onClick={() => {
-              const nextStep = normalized.canvaSlideCount > 0
-                ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
-                : canvaStep + 1;
-              setCanvaStep(nextStep);
-              setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
-            }}
-            disabled={normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount}
-          >
-            {simpleMode ? 'Suivant' : 'Diapo suivante'}
-          </button>
+          {!shouldUseCanvaInBrowse ? (
+            <button
+              type="button"
+              className="presentation-slide-add"
+              onClick={() => {
+                const nextStep = normalized.canvaSlideCount > 0
+                  ? Math.min(normalized.canvaSlideCount, canvaStep + 1)
+                  : canvaStep + 1;
+                setCanvaStep(nextStep);
+                setCanvaRuntimeUrl(injectSlideNumberIntoUrl(normalized.canvaLiveUrl, nextStep));
+              }}
+              disabled={normalized.canvaSlideCount > 0 && canvaStep >= normalized.canvaSlideCount}
+            >
+              {simpleMode ? 'Suivant' : 'Diapo suivante'}
+            </button>
+          ) : null}
         </div>
       ) : isSlideshow ? (
         <div className="slideshow-nav">
@@ -2476,11 +2548,11 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
           ) : null}
         </div>
       )}
-      {isCanvaLive ? (
+      {(isCanvaLive || shouldUseCanvaInBrowse) ? (
         <div className="canva-live-shell">
           {hasUploadedFallbackSlides && !publicCanvaLoaded ? (
             <iframe
-              src={canvaRuntimeUrl || normalized.canvaLiveUrl}
+              src={shouldUseCanvaInBrowse ? injectSlideNumberIntoUrl(normalized.canvaLiveUrl, activeIndex + 1) : (canvaRuntimeUrl || normalized.canvaLiveUrl)}
               title={`canva-live-public-loader-${normalized.presentationName || 'presentation'}`}
               className="canva-live-loader-frame"
               loading="lazy"
@@ -2491,7 +2563,7 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
               }}
             />
           ) : null}
-          {!simpleMode ? (
+          {!simpleMode && !shouldUseCanvaInBrowse ? (
             <div className="canva-live-note">
               Slide detectee depuis l URL : {detectedCanvaStep || '?'}.
               URL runtime : {canvaRuntimeUrl || normalized.canvaLiveUrl || 'aucune'}.
@@ -2507,7 +2579,7 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
             }}
           >
             <iframe
-              src={canvaRuntimeUrl || normalized.canvaLiveUrl}
+              src={shouldUseCanvaInBrowse ? injectSlideNumberIntoUrl(normalized.canvaLiveUrl, activeIndex + 1) : (canvaRuntimeUrl || normalized.canvaLiveUrl)}
               title={`canva-live-${normalized.presentationName || 'presentation'}`}
               className="canva-live-frame"
               loading="lazy"
@@ -2838,6 +2910,8 @@ function AnimationBlockEditor({
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? normalizeTimelineActions(block.actions)
     : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', soundPitch: 1, startSec: 0, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
+  const timelineTrackRef = useRef(null);
+  const [timelineTrackWidth, setTimelineTrackWidth] = useState(0);
   const getOriginSpriteDimensions = () => ({
     width: Math.max(40, Number(block?.actorWidth || actorState.width || 140)),
     height: Math.max(40, Number(block?.actorHeight || actorState.height || 140))
@@ -2907,6 +2981,19 @@ function AnimationBlockEditor({
     const syncSize = () => {
       const rect = node.getBoundingClientRect();
       setOverlaySize({ width: rect.width, height: rect.height });
+    };
+    syncSize();
+    const observer = new window.ResizeObserver(() => syncSize());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const node = timelineTrackRef.current;
+    if (!node || typeof window === 'undefined' || !window.ResizeObserver) return undefined;
+    const syncSize = () => {
+      const rect = node.getBoundingClientRect();
+      setTimelineTrackWidth(rect.width);
     };
     syncSize();
     const observer = new window.ResizeObserver(() => syncSize());
@@ -3131,52 +3218,34 @@ function AnimationBlockEditor({
         }
       }
       const timelineDrag = timelineDragRef.current;
-      if (timelineDrag) {
+      if (timelineDrag && timelineDrag.mode === 'resize') {
         const shellRect = timelineDrag.container?.getBoundingClientRect?.();
         if (!shellRect || shellRect.width <= 0) return;
         const ratio = Math.max(0, Math.min(1, (event.clientX - shellRect.left) / shellRect.width));
         const seconds = ratio * Math.max(1, Number(timelineDrag.totalSec || 1));
-        if (timelineDrag.mode === 'seek') {
-          const audio = audioTimelineRef.current;
-          const snappedSeconds = snapTimelineSeconds(seconds);
-          setAudioCurrentTimeSec(snappedSeconds);
-          if (audio) audio.currentTime = snappedSeconds;
-        } else if (timelineDrag.mode === 'move') {
-          const targetIndex = actions.findIndex((action) => String(action.id || '') === String(timelineDrag.actionId || ''));
-          if (targetIndex < 0) return;
-          const previousEnd = targetIndex > 0
-            ? Number(actions[targetIndex - 1]?.startSec || 0) + Number(actions[targetIndex - 1]?.durationSec || 0)
-            : 0;
-          const nextStartSec = snapTimelineSeconds(Math.max(previousEnd, seconds - Number(timelineDrag.offsetSec || 0)));
-          const nextActions = actions.map((action, index) => (
-            index === targetIndex ? { ...action, startSec: nextStartSec } : action
-          ));
-          updateActions(nextActions);
-        } else if (timelineDrag.mode === 'resize') {
-          const targetIndex = actions.findIndex((action) => String(action.id || '') === String(timelineDrag.actionId || ''));
-          if (targetIndex < 0) return;
-          const current = actions[targetIndex];
-          const nextNeighbor = actions[targetIndex + 1] || null;
-          const minDuration = 0.5;
-          const maxDuration = nextNeighbor
-            ? Math.max(minDuration, (Number(nextNeighbor.startSec || 0) + Number(nextNeighbor.durationSec || 0)) - Number(current.startSec || 0) - minDuration)
-            : Math.max(minDuration, totalTimelineSec - Number(current.startSec || 0));
-          const nextDuration = snapTimelineSeconds(Math.max(minDuration, Math.min(maxDuration, seconds - Number(timelineDrag.startSec || 0))));
-          const nextActions = actions.map((action, index) => {
-            if (index === targetIndex) return { ...action, durationSec: nextDuration };
-            if (index === targetIndex + 1) {
-              const nextStart = snapTimelineSeconds(Number(current.startSec || 0) + nextDuration);
-              const nextEnd = Number(action.startSec || 0) + Number(action.durationSec || 0);
-              return {
-                ...action,
-                startSec: nextStart,
-                durationSec: Math.max(minDuration, nextEnd - nextStart)
-              };
-            }
-            return action;
-          });
-          updateActions(nextActions);
-        }
+        const targetIndex = actions.findIndex((action) => String(action.id || '') === String(timelineDrag.actionId || ''));
+        if (targetIndex < 0) return;
+        const current = actions[targetIndex];
+        const nextNeighbor = actions[targetIndex + 1] || null;
+        const minDuration = MIN_TIMELINE_ACTION_DURATION_SEC;
+        const maxDuration = nextNeighbor
+          ? Math.max(minDuration, (Number(nextNeighbor.startSec || 0) + Number(nextNeighbor.durationSec || 0)) - Number(current.startSec || 0) - minDuration)
+          : Math.max(minDuration, totalTimelineSec - Number(current.startSec || 0));
+        const nextDuration = snapTimelineSeconds(Math.max(minDuration, Math.min(maxDuration, seconds - Number(timelineDrag.startSec || 0))));
+        const nextActions = actions.map((action, index) => {
+          if (index === targetIndex) return { ...action, durationSec: nextDuration };
+          if (index === targetIndex + 1) {
+            const nextStart = snapTimelineSeconds(Number(current.startSec || 0) + nextDuration);
+            const nextEnd = Number(action.startSec || 0) + Number(action.durationSec || 0);
+            return {
+              ...action,
+              startSec: nextStart,
+              durationSec: Math.max(minDuration, nextEnd - nextStart)
+            };
+          }
+          return action;
+        });
+        updateActions(nextActions);
       }
     };
     const onMouseUp = () => {
@@ -3263,13 +3332,13 @@ function AnimationBlockEditor({
     const nextStartSec = Math.max(0, Number(lastAction?.startSec || 0) + Number(lastAction?.durationSec || 0));
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, frameDurationSec: 0.18, startSec: nextStartSec, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, frameDurationSec: 0.18, startSec: nextStartSec, durationSec: Math.max(2, MIN_TIMELINE_ACTION_DURATION_SEC), spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
     ]);
   };
 
   const removeAction = (actionId) => {
     if (actions.length <= 1) return;
-    updateActions(actions.filter((action) => action.id !== actionId));
+    updateActions(compactTimelineActions(actions.filter((action) => action.id !== actionId)));
     if (String(selectedActionId || '') === String(actionId || '')) {
       const fallback = actions.find((action) => String(action.id || '') !== String(actionId || ''));
       setSelectedActionId(String(fallback?.id || ''));
@@ -3298,6 +3367,61 @@ function AnimationBlockEditor({
       }
       return { ...action, frames, selectedFrameIndex: nextSelected };
     }));
+  };
+
+  const insertActionAtPlayhead = (actionId) => {
+    const sourceAction = actions.find((action) => String(action.id || '') === String(actionId || ''));
+    if (!sourceAction) return;
+    const playheadStartSec = snapTimelineSeconds(Math.max(0, Number(audioCurrentTimeSec || 0)));
+    const clonedAction = {
+      ...sourceAction,
+      id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      startSec: playheadStartSec,
+      durationSec: Math.max(MIN_TIMELINE_ACTION_DURATION_SEC, Number(sourceAction.durationSec || MIN_TIMELINE_ACTION_DURATION_SEC)),
+      spritesOpen: false,
+      spriteUrlOpen: false,
+      spriteEditorOpen: false,
+      mobileImportOpen: false
+    };
+    const sortedActions = [...actions].sort((left, right) => Number(left.startSec || 0) - Number(right.startSec || 0));
+    const nextActions = [];
+    let inserted = false;
+    let carryStartSec = playheadStartSec + clonedAction.durationSec;
+
+    sortedActions.forEach((action) => {
+      const currentStartSec = Number(action.startSec || 0);
+      const currentDurationSec = Math.max(MIN_TIMELINE_ACTION_DURATION_SEC, Number(action.durationSec || MIN_TIMELINE_ACTION_DURATION_SEC));
+      const currentEndSec = currentStartSec + currentDurationSec;
+
+      if (!inserted && currentEndSec <= playheadStartSec) {
+        nextActions.push(action);
+        return;
+      }
+      if (!inserted) {
+        nextActions.push(clonedAction);
+        inserted = true;
+      }
+      nextActions.push({
+        ...action,
+        startSec: Math.max(currentStartSec, carryStartSec),
+        durationSec: currentDurationSec
+      });
+      carryStartSec = Math.max(currentStartSec, carryStartSec) + currentDurationSec;
+    });
+
+    if (!inserted) {
+      nextActions.push(clonedAction);
+    }
+
+    updateActions(nextActions);
+    setSelectedActionId(String(clonedAction.id || ''));
+  };
+
+  const removeSelectedTimelineAction = (actionId) => {
+    if (actions.length <= 1) return;
+    const nextActions = compactTimelineActions(actions.filter((action) => String(action.id || '') !== String(actionId || '')));
+    updateActions(nextActions);
+    setSelectedActionId(String(nextActions[0]?.id || ''));
   };
 
   const toggleSpritesOpen = (actionId) => {
@@ -4278,16 +4402,44 @@ function AnimationBlockEditor({
     }, Math.max(50, Number(action.frameDurationSec || 0.18) * 1000));
   };
 
+  const getActionPreviewFrame = (action) => {
+    if (!action) {
+      return {
+        frameUrl: String(block?.actorImageUrl || ''),
+        width: Number(block?.actorWidth || actorState.width || 140),
+        height: Number(block?.actorHeight || actorState.height || 140)
+      };
+    }
+    const selectedIndex = Number(action.selectedFrameIndex);
+    if (selectedIndex === -1) {
+      return {
+        frameUrl: String(block?.actorImageUrl || ''),
+        width: Number(block?.actorWidth || actorState.width || 140),
+        height: Number(block?.actorHeight || actorState.height || 140)
+      };
+    }
+    const selectedFrame = selectedIndex >= 0 ? action.frames?.[selectedIndex] : null;
+    const fallbackFrame = Array.isArray(action.frames) && action.frames.length > 0 ? action.frames[0] : null;
+    const normalizedFrame = typeof (selectedFrame || fallbackFrame) === 'string'
+      ? createSpriteFrame(selectedFrame || fallbackFrame)
+      : (selectedFrame || fallbackFrame);
+    return {
+      frameUrl: String(normalizedFrame?.url || block?.actorImageUrl || ''),
+      width: Number(normalizedFrame?.width || block?.actorWidth || actorState.width || 140),
+      height: Number(normalizedFrame?.height || block?.actorHeight || actorState.height || 140)
+    };
+  };
+
   const showActionFrame = (action) => {
     if (!action) return;
-    const frames = Array.isArray(action.frames) && action.frames.length > 0
-      ? action.frames.map((frame) => (typeof frame === 'string' ? frame : frame?.url)).filter(Boolean)
-      : [block?.actorImageUrl].filter(Boolean);
+    const previewFrame = getActionPreviewFrame(action);
     setSelectedActionId(String(action.id || ''));
     setLoopFrameState({ actionId: '', frameIndex: -1 });
     setActorState((prev) => ({
       ...prev,
-      frameUrl: String(frames[0] || block?.actorImageUrl || ''),
+      frameUrl: previewFrame.frameUrl,
+      width: previewFrame.width,
+      height: previewFrame.height,
       actionName: action.name || 'Action'
     }));
   };
@@ -4529,23 +4681,24 @@ function AnimationBlockEditor({
               onChange={(e) => seekTimeline(e.target.value)}
               className="animation-audio-scrubber"
             />
-            <div
-              className="animation-sequence-track"
-              onMouseDown={(event) => {
-                timelineDragRef.current = {
-                  mode: 'seek',
-                  container: event.currentTarget,
-                  totalSec: totalTimelineSec
-                };
-              }}
-            >
+            <div className="animation-sequence-track" ref={timelineTrackRef}>
               <div
                 className="animation-sequence-playhead"
                 style={{ left: `${(Math.min(totalTimelineSec, audioCurrentTimeSec) / Math.max(totalTimelineSec, 0.1)) * 100}%` }}
               />
-              {actions.map((action, index) => {
-                const left = (Number(action.startSec || 0) / Math.max(totalTimelineSec, 0.1)) * 100;
-                const width = (Number(action.durationSec || 0.5) / Math.max(totalTimelineSec, 0.1)) * 100;
+              {(() => {
+                let renderedRightPx = 0;
+                return actions.map((action, index) => {
+                const trackWidthPx = Math.max(0, Number(timelineTrackWidth || 0));
+                const rawLeftPx = trackWidthPx > 0
+                  ? (Number(action.startSec || 0) / Math.max(totalTimelineSec, 0.1)) * trackWidthPx
+                  : 0;
+                const rawWidthPx = trackWidthPx > 0
+                  ? (Number(action.durationSec || MIN_TIMELINE_ACTION_DURATION_SEC) / Math.max(totalTimelineSec, 0.1)) * trackWidthPx
+                  : 0;
+                const leftPx = trackWidthPx > 0 ? Math.max(rawLeftPx, renderedRightPx) : rawLeftPx;
+                const widthPx = trackWidthPx > 0 ? Math.max(rawWidthPx, MIN_TIMELINE_ACTION_WIDTH_PX) : MIN_TIMELINE_ACTION_WIDTH_PX;
+                renderedRightPx = leftPx + widthPx;
                 const isActive = String(selectedActionId || activeTimelineAction?.id || '') === String(action.id || '');
                 const colorHue = (index * 67) % 360;
                 return (
@@ -4553,21 +4706,13 @@ function AnimationBlockEditor({
                     key={`timeline_${action.id}`}
                     className={`animation-sequence-segment ${isActive ? 'active' : ''}`}
                     style={{
-                      left: `${left}%`,
-                      width: `${Math.max(width, 4)}%`,
+                      left: trackWidthPx > 0 ? `${leftPx}px` : `${(Number(action.startSec || 0) / Math.max(totalTimelineSec, 0.1)) * 100}%`,
+                      width: trackWidthPx > 0 ? `${widthPx}px` : `${Math.max((Number(action.durationSec || MIN_TIMELINE_ACTION_DURATION_SEC) / Math.max(totalTimelineSec, 0.1)) * 100, 4)}%`,
                       background: `hsl(${colorHue} 62% 34%)`
                     }}
-                    onMouseDown={(event) => {
+                    onClick={(event) => {
                       event.stopPropagation();
-                      setSelectedActionId(String(action.id || ''));
-                      timelineDragRef.current = {
-                        mode: 'move',
-                        actionId: action.id,
-                        container: event.currentTarget.parentElement,
-                        totalSec: totalTimelineSec,
-                        offsetSec: ((event.clientX - event.currentTarget.getBoundingClientRect().left) / Math.max(event.currentTarget.getBoundingClientRect().width, 1)) * Number(action.durationSec || 0.5),
-                        durationSec: Number(action.durationSec || 0.5)
-                      };
+                      showActionFrame(action);
                     }}
                   >
                     <span>{action.name || `Action ${index + 1}`}</span>
@@ -4587,7 +4732,8 @@ function AnimationBlockEditor({
                     />
                   </div>
                 );
-              })}
+                });
+              })()}
             </div>
           </div>
 
@@ -4612,6 +4758,8 @@ function AnimationBlockEditor({
                 <div className="animation-compact-actions">
                   <button type="button" className="icon-btn" onClick={() => toggleSpritesOpen(action.id)} aria-label="Afficher les sprites">👤</button>
                   <button type="button" className={playingActionId === action.id ? 'playing active icon-btn' : 'icon-btn'} onClick={() => void toggleActionLoop(action)}>{playingActionId === action.id ? '■' : '▶'}</button>
+                  <button type="button" className="icon-btn" style={{ color: '#b91c1c' }} onClick={() => removeSelectedTimelineAction(action.id)} aria-label="Supprimer cette action de la timeline">-</button>
+                  <button type="button" className="icon-btn" style={{ color: '#15803d' }} onClick={() => insertActionAtPlayhead(action.id)} aria-label="Ajouter cette action sur la timeline au curseur">+</button>
                 </div>
                 <div className="animation-speed-controls animation-speed-controls-inline">
                   <button type="button" onClick={() => adjustSpriteSpeed(action.id, 0.05)}>-</button>
@@ -5127,7 +5275,7 @@ export default function App() {
   const [inputFirst, setInputFirst] = useState('');
   const [selectedProfile, setSelectedProfile] = useState(initialUser ? {
     id: initialUser.id,
-    type: 'student',
+    type: String(initialUser.role || '').trim().toLowerCase() === 'student' ? 'student' : 'teacher',
     firstName: initialUser.firstName || '',
     lastName: initialUser.lastName || '',
     className: initialUser.currentClass || ''
@@ -5189,6 +5337,16 @@ export default function App() {
   const loadWeb5e = useCallback(async () => {
     const localContent = isLocalSessionMode ? readLocalWeb5eContent() : null;
     const cachedPublicEntries = readPublicEntriesCache();
+    if (Object.keys(cachedPublicEntries).length > 0) {
+      const { nextContentMap: cachedContentMap, nextEntryDocs: cachedEntryDocs } = hydrateContentMapFromPublicEntries(cachedPublicEntries, user);
+      setPublicEntriesByKey(cachedPublicEntries);
+      setEntryDocsByKey((prev) => ({ ...prev, ...cachedEntryDocs }));
+      setContentMap((prev) => ({
+        ...prev,
+        ...cachedContentMap,
+        ...(localContent && typeof localContent === 'object' ? localContent : {})
+      }));
+    }
     if (localContent && typeof localContent === 'object') {
       setContentMap((prev) => ({ ...prev, ...localContent }));
     }
@@ -5235,18 +5393,9 @@ export default function App() {
         nextContentMap[sectionKey] = { ...(DEFAULT_CONTENT[sectionKey] || {}), ...(nextContentMap[sectionKey] || {}) };
       });
 
-      const mergedPublicEntriesByKey = { ...cachedPublicEntries };
-      Object.entries(nextPublicEntriesByKey).forEach(([key, rows]) => {
-        const nextRows = Array.isArray(rows) ? rows : [];
-        const cachedRows = Array.isArray(mergedPublicEntriesByKey[key]) ? mergedPublicEntriesByKey[key] : [];
-        const seen = new Set();
-        mergedPublicEntriesByKey[key] = [...nextRows, ...cachedRows].filter((row) => {
-          const rowId = String(row?._id || '');
-          if (rowId && seen.has(rowId)) return false;
-          if (rowId) seen.add(rowId);
-          return true;
-        });
-      });
+      // When the server is reachable, its public entries are the source of truth.
+      // Keeping stale cached rows here would resurrect deleted presentations.
+      const mergedPublicEntriesByKey = { ...nextPublicEntriesByKey };
 
       Object.keys(nextTabDocs).forEach((docKey) => {
         const [sectionKey, tabKey] = String(docKey || '').split(':');
@@ -5353,7 +5502,7 @@ export default function App() {
     setUser(bridgedUser);
     setSelectedProfile({
       id: bridgedUser.id,
-      type: 'student',
+      type: String(bridgedUser.role || '').trim().toLowerCase() === 'student' ? 'student' : 'teacher',
       firstName: bridgedUser.firstName || '',
       lastName: bridgedUser.lastName || '',
       className: bridgedUser.currentClass || ''
@@ -5712,27 +5861,39 @@ export default function App() {
     void persistBlocks(nextBlocks);
   };
 
-  const openPresentationInEditor = (row) => {
-    if (!row?.presentation) return;
-    const docKey = `${activeSection}:${currentTabId}`;
-    const targetIndex = isTeacher
-      ? (presentationBlocks[0]?.index ?? blocks.findIndex((block) => block?.type === 'text'))
-      : row.index;
-    const normalizedPresentation = normalizePresentationBlock(row.presentation);
-    const editableBlock = {
+  const buildPresentationBlockForOpen = (row) => {
+    if (!row?.presentation && !row?.sourceBlock) return null;
+    const sourcePresentation = row?.sourceBlock && typeof row.sourceBlock === 'object'
+      ? row.sourceBlock
+      : row.presentation;
+    const normalizedPresentation = normalizePresentationBlock(sourcePresentation);
+    return {
       ...normalizedPresentation,
       activeEditorTab: 'slides',
       presentationValidated: false
     };
+  };
+
+  const openPresentationInEditor = (row, options = {}) => {
+    if (!row?.presentation && !row?.sourceBlock) return;
+    const docKey = `${activeSection}:${currentTabId}`;
+    const previewOnly = options?.previewOnly === true;
+    const targetIndex = isTeacher
+      ? (presentationBlocks[0]?.index ?? blocks.findIndex((block) => block?.type === 'text'))
+      : row.index;
+    const editableBlock = buildPresentationBlockForOpen(row);
+    if (!editableBlock) return;
     if (targetIndex >= 0 && blocks[targetIndex]?.type === 'text') {
       replaceBlock(targetIndex, editableBlock);
-      setEditingPresentationBlockIndex(targetIndex);
+      setEditingPresentationBlockIndex(previewOnly ? -1 : targetIndex);
+      setPreviewPresentationBlockIndex(previewOnly ? targetIndex : -1);
     } else {
       const nextBlocks = [...blocks, editableBlock];
       updateBlocks(nextBlocks);
       queueAutosave(nextBlocks);
       void persistBlocks(nextBlocks);
-      setEditingPresentationBlockIndex(nextBlocks.length - 1);
+      setEditingPresentationBlockIndex(previewOnly ? -1 : (nextBlocks.length - 1));
+      setPreviewPresentationBlockIndex(previewOnly ? (nextBlocks.length - 1) : -1);
     }
     if (row?.entryId) {
       const matchingEntry = currentPublicEntries.find((entry) => String(entry?._id || '') === String(row.entryId || '')) || null;
@@ -5760,51 +5921,86 @@ export default function App() {
 
   const deleteRemotePresentationEntry = async (row) => {
     const entryId = String(row?.entryId || '').trim();
+    const docKey = `${activeSection}:${currentTabId}`;
+    const publicationKey = buildPresentationPublicationKey(row?.presentation || row?.sourceBlock || {});
+    const matchingEntryIds = Array.from(new Set(
+      currentPublicEntries
+        .filter((entry) => (
+          Array.isArray(entry?.blocks)
+          && entry.blocks.some((block) => (
+            block?.type === 'text'
+            && buildPresentationPublicationKey(block) === publicationKey
+          ))
+        ))
+        .map((entry) => String(entry?._id || '').trim())
+        .filter(Boolean)
+    ));
+    const entryIdsToDelete = matchingEntryIds.length > 0
+      ? matchingEntryIds
+      : [entryId].filter(Boolean);
     const removeEntryLocally = () => {
       setPublicEntriesByKey((prev) => {
         const next = {};
         Object.entries(prev || {}).forEach(([key, rows]) => {
-          const filtered = (Array.isArray(rows) ? rows : []).filter((entry) => String(entry?._id || '') !== entryId);
+          const filtered = (Array.isArray(rows) ? rows : []).filter((entry) => !entryIdsToDelete.includes(String(entry?._id || '').trim()));
           if (filtered.length > 0) next[key] = filtered;
         });
         writePublicEntriesCache(next);
         return next;
       });
+      setEntryDocsByKey((prev) => {
+        if (!entryIdsToDelete.includes(String(prev?.[docKey]?._id || '').trim())) return prev;
+        const next = { ...prev };
+        delete next[docKey];
+        return next;
+      });
+      if (entryIdsToDelete.includes(String(currentEntry?._id || '').trim())) {
+        updateBlocks([]);
+      }
     };
-    if (!entryId) {
+    if (entryIdsToDelete.length === 0) {
       window.alert('Suppression impossible: entree distante introuvable.');
       return;
     }
-    if (entryId.startsWith('cache:')) {
+    if (entryIdsToDelete.every((id) => id.startsWith('cache:'))) {
       removeEntryLocally();
       return;
     }
     if (!window.confirm('Supprimer cette presentation de la BDD ?')) return;
-    const res = await fetch(resolveWeb5eApiUrl(`/api/web5e/entries/${encodeURIComponent(entryId)}`), {
-      method: 'DELETE'
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 404) {
-      removeEntryLocally();
-      return;
-    }
-    if (!res.ok || !data?.ok) {
-      const rawError = String(data?.error || '').trim();
-      if (/ENOTFOUND|MongoDB|mongodb/i.test(rawError)) {
-        window.alert('MongoDB inaccessible: suppression BDD impossible pour le moment.');
+    for (const targetEntryId of entryIdsToDelete) {
+      if (!targetEntryId || targetEntryId.startsWith('cache:')) continue;
+      const res = await fetch(resolveWeb5eApiUrl(`/api/web5e/entries/${encodeURIComponent(targetEntryId)}`), {
+        method: 'DELETE',
+        headers: {
+          'x-web5e-user-role': String(user?.role || ''),
+          'x-web5e-user-first-name': String(user?.firstName || ''),
+          'x-web5e-user-last-name': String(user?.lastName || '')
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 404) {
+        continue;
+      }
+      if (!res.ok || !data?.ok) {
+        const rawError = String(data?.error || '').trim();
+        if (/ENOTFOUND|MongoDB|mongodb/i.test(rawError)) {
+          window.alert('MongoDB inaccessible: suppression BDD impossible pour le moment.');
+          return;
+        }
+        window.alert(rawError || 'Suppression impossible');
         return;
       }
-      window.alert(rawError || 'Suppression impossible');
-      return;
     }
     removeEntryLocally();
-    if (String(currentEntry?._id || '') === entryId) {
-      updateBlocks([]);
-    }
     void loadWeb5e();
   };
 
-  const isTeacher = clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
+  const normalizedUserRole = String(user?.role || '').trim().toLowerCase();
+  const isTeacher = (
+    normalizedUserRole === 'teacher'
+    || normalizedUserRole === 'prof'
+    || normalizedUserRole === 'admin'
+  ) && clean(user?.lastName) === 'vuillet' && (clean(user?.firstName) === 'jp' || clean(user?.firstName) === 'jean');
   const currentEntry = entryDocsByKey[`${activeSection}:${currentTabId}`];
   const currentPublicEntries = Array.isArray(publicEntriesByKey[`${activeSection}:${currentTabId}`])
     ? publicEntriesByKey[`${activeSection}:${currentTabId}`]
@@ -5827,6 +6023,7 @@ export default function App() {
       .filter(({ block }) => block?.type === 'text' && isPresentationCreated(block))
       .map(({ block, blockIndex, entryIndex: publicEntryIndex }) => ({
         index: blockIndex,
+        sourceBlock: block,
         presentation: normalizePresentationBlock(block),
         publicEntryIndex,
         authorName: String(entry?.authorName || ''),
@@ -5842,6 +6039,7 @@ export default function App() {
   const validatedPresentations = user
     ? (isTeacher ? allPublishedPresentations : validatedPresentationsFromCurrentBlocks)
     : allPublishedPresentations;
+  const [previewPresentationBlockIndex, setPreviewPresentationBlockIndex] = useState(-1);
   useEffect(() => {
     if (user) return;
     try {
@@ -5904,6 +6102,7 @@ export default function App() {
   const visibleArticleBlocks = user
     ? articleBlocks.filter(({ block, index }) => {
         if (block.type !== 'text') return true;
+        if (isTeacher && previewPresentationBlockIndex >= 0) return index === previewPresentationBlockIndex;
         if (isTeacher) return hasLockedPresentationEditing && index === editingPresentationBlockIndex;
         if (studentHasValidatedPresentation) return hasLockedPresentationEditing && index === editingPresentationBlockIndex;
         return index === singleVisiblePresentationIndex;
@@ -6393,8 +6592,7 @@ export default function App() {
                             type="button"
                             className="presentation-slide-add"
                             onClick={() => {
-                              setOpenedValidatedPresentationMode('browse');
-                              setOpenedValidatedPresentationIndex(index);
+                              openPresentationInEditor(row, { previewOnly: true });
                             }}
                           >
                             Ouvrir
@@ -6443,17 +6641,22 @@ export default function App() {
 
         {openedValidatedPresentationIndex >= 0 && validatedPresentations[openedValidatedPresentationIndex] ? (
           <div className="validated-presentation-opened">
-            <PublicPresentationViewer
-              presentation={validatedPresentations[openedValidatedPresentationIndex].presentation}
-              sectionKey={activeSection}
-              tabKey={currentTabId}
-              blockIndex={validatedPresentations[openedValidatedPresentationIndex].index}
-              tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
-              entryId={entryDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
-              mode={openedValidatedPresentationMode}
-              presentationNumber={openedValidatedPresentationIndex + 1}
-              simpleMode={!user}
-            />
+            {!(isTeacher && openedValidatedPresentationMode === 'browse') ? (
+              <PublicPresentationViewer
+                presentation={
+                  validatedPresentations[openedValidatedPresentationIndex].sourceBlock
+                  || validatedPresentations[openedValidatedPresentationIndex].presentation
+                }
+                sectionKey={activeSection}
+                tabKey={currentTabId}
+                blockIndex={validatedPresentations[openedValidatedPresentationIndex].index}
+                tabId={tabDocsByKey[`${activeSection}:${currentTabId}`]?._id || ''}
+                entryId={validatedPresentations[openedValidatedPresentationIndex].entryId || ''}
+                mode={openedValidatedPresentationMode}
+                presentationNumber={openedValidatedPresentationIndex + 1}
+                simpleMode={!user}
+              />
+            ) : null}
           </div>
         ) : null}
 
@@ -6495,6 +6698,7 @@ export default function App() {
                   block={block}
                   onChange={(nextBlock) => replaceBlock(index, nextBlock)}
                   readOnly={!user}
+                  previewOnly={previewPresentationBlockIndex === index}
                   sectionKey={activeSection}
                   tabKey={currentTabId}
                   blockIndex={index}

@@ -146,6 +146,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
     const [generatingClassSprites, setGeneratingClassSprites] = useState(false);
     const [imageCameraError, setImageCameraError] = useState('');
     const [imageCameraReady, setImageCameraReady] = useState(false);
+    const [imageCameraRequestNonce, setImageCameraRequestNonce] = useState(0);
     const [selectedSpriteUrl, setSelectedSpriteUrl] = useState('');
     const [spriteEditorOpen, setSpriteEditorOpen] = useState(false);
     const [spriteAnimationDraft, setSpriteAnimationDraft] = useState(null);
@@ -252,6 +253,44 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
             setImageCameraReady(false);
         };
 
+        const tryOpenCameraStream = async () => {
+            const attempts = [
+                { video: { facingMode: { ideal: 'environment' } }, audio: false },
+                { video: { facingMode: { ideal: 'user' } }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            let lastError = null;
+            for (const constraints of attempts) {
+                try {
+                    return await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            if (navigator.mediaDevices?.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+                const videoInputs = Array.isArray(devices)
+                    ? devices.filter((device) => device.kind === 'videoinput' && String(device.deviceId || '').trim())
+                    : [];
+                for (const device of videoInputs) {
+                    try {
+                        return await navigator.mediaDevices.getUserMedia({
+                            video: {
+                                deviceId: { exact: device.deviceId }
+                            },
+                            audio: false
+                        });
+                    } catch (error) {
+                        lastError = error;
+                    }
+                }
+            }
+
+            throw lastError || new Error('camera_unavailable');
+        };
+
         const startImageCamera = async () => {
             if (!selectedRecorder || studioTab !== 'image') {
                 stopImageCamera();
@@ -264,18 +303,7 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                     throw new Error('media_devices_unavailable');
                 }
                 stopImageCamera();
-                let stream = null;
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { ideal: 'environment' } },
-                        audio: false
-                    });
-                } catch (_) {
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        video: true,
-                        audio: false
-                    });
-                }
+                const stream = await tryOpenCameraStream();
                 streamRef.current = stream;
                 if (imageVideoRef.current) {
                     imageVideoRef.current.srcObject = stream;
@@ -289,13 +317,44 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                     setImageCameraReady(true);
                 }
             } catch (error) {
-                setImageCameraError("Caméra indisponible.");
+                const errorName = String(error?.name || '').trim();
+                const errorMessage = String(error?.message || '').trim();
+                if (errorName === 'NotAllowedError' || /permission/i.test(errorMessage)) {
+                    setImageCameraError("Accès caméra refusé.");
+                } else if (errorName === 'NotReadableError' || /notreadable|trackstart|concurrent|start/i.test(errorMessage)) {
+                    setImageCameraError("Caméra occupée ou bloquée par le système.");
+                } else if (errorName === 'NotFoundError') {
+                    setImageCameraError("Aucune caméra disponible.");
+                } else {
+                    setImageCameraError("Caméra détectée mais indisponible.");
+                }
             }
         };
 
         void startImageCamera();
         return () => stopImageCamera();
-    }, [selectedRecorder, studioTab]);
+    }, [selectedRecorder, studioTab, imageCameraRequestNonce]);
+
+    useEffect(() => {
+        if (studioTab !== 'image') return;
+        if (!imageVideoRef.current || !streamRef.current) return;
+        if (imageVideoRef.current.srcObject !== streamRef.current) {
+            imageVideoRef.current.srcObject = streamRef.current;
+        }
+        const videoEl = imageVideoRef.current;
+        const markReady = () => {
+            setImageCameraReady(true);
+            videoEl.play?.().catch(() => {});
+        };
+        if (videoEl.readyState >= 1) {
+            markReady();
+            return undefined;
+        }
+        videoEl.onloadedmetadata = markReady;
+        return () => {
+            if (imageVideoRef.current) imageVideoRef.current.onloadedmetadata = null;
+        };
+    }, [studioTab, selectedRecorder, imageCameraReady]);
 
     const filtered = useMemo(() => {
         const key = norm(globalClass || '');
@@ -1274,13 +1333,41 @@ export default function ExposesManager({ globalClass, globalClassId = '' }) {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    {imageCameraReady || imageCameraError ? (
+                                    {selectedRecorder ? (
                                         <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
                                             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                                                 <div className="flex flex-wrap items-center gap-3">
-                                                    <button type="button" className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg" onClick={capturePresenterImage} disabled={!imageCameraReady || uploadingImages}>
-                                                        {uploadingImages ? 'Envoi...' : 'Prendre photo'}
+                                                    <button
+                                                        type="button"
+                                                        className="px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black text-[12px] uppercase shadow-lg"
+                                                        onClick={() => {
+                                                            if (!imageCameraReady) {
+                                                                setImageCameraError('');
+                                                                setImageCameraRequestNonce((prev) => prev + 1);
+                                                                return;
+                                                            }
+                                                            capturePresenterImage();
+                                                        }}
+                                                        disabled={uploadingImages}
+                                                    >
+                                                        {uploadingImages ? 'Envoi...' : (imageCameraReady ? 'Prendre photo' : 'Activer caméra')}
                                                     </button>
+                                                    <button
+                                                        type="button"
+                                                        className="px-5 py-3 rounded-2xl border border-slate-200 bg-white font-black text-[12px] uppercase text-slate-700"
+                                                        onClick={() => imageInputRef.current?.click()}
+                                                        disabled={uploadingImages}
+                                                    >
+                                                        Importer / appareil photo
+                                                    </button>
+                                                    <input
+                                                        ref={imageInputRef}
+                                                        type="file"
+                                                        accept="image/*"
+                                                        capture="environment"
+                                                        className="hidden-file-input"
+                                                        onChange={(e) => void uploadPresenterImages(e.target.files)}
+                                                    />
                                                     <div className="text-[12px] font-black text-slate-500">{selectedRecorder.presenterName || selectedRecorder.studentLabel}</div>
                                                 </div>
                                                 <button
