@@ -116,7 +116,7 @@ export default function ProfHeader({ user, onLogout }) {
         {/* --- VERSION BUREAU (Classe 'desktop-only-header' gérée par CSS strict) --- */}
         <div className="desktop-only-header p-8 pb-4 justify-between items-center bg-white border-b hidden md:flex">
           <div className="text-left">
-            <h2 className="text-2xl font-black text-slate-800 uppercase">{user.firstName} {user.lastName}</h2>
+            <h2 className="text-2xl font-black text-red-600 uppercase">{user.firstName} {user.lastName}</h2>
             <div className="flex items-center gap-2 mt-1">
               <div className={`w-3 h-3 rounded-full ${drive.ok ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
               <span className="text-[10px] font-black uppercase text-slate-400">
@@ -146,7 +146,7 @@ export default function ProfHeader({ user, onLogout }) {
             {/* GAUCHE : IDENTITÉ */}
             <div className="flex items-center gap-2 overflow-hidden">
                 <div className={`w-2 h-2 shrink-0 rounded-full ${drive.ok ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                <span className="font-black text-slate-800 text-xs uppercase truncate">
+                <span className="font-black text-red-600 text-xs uppercase truncate">
                     {user.firstName} {user.lastName}
                 </span>
             </div>
