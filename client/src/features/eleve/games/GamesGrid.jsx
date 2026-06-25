@@ -1,5 +1,5 @@
-// @signatures: GamesGrid, loadData, handleSelectActivity, handleStartGame
-import React, { useState, useEffect } from 'react';
+// @signatures: GamesGrid, loadData, handlePlayTapping, handleSelectActivity, handleStartGame
+import React, { useState, useEffect, useMemo } from 'react';
 import GamePlayer from './GamePlayer';
 import DashboardFolder from '../components/DashboardFolder';
 
@@ -34,6 +34,24 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
 
   useEffect(() => { loadData(); }, [user]);
 
+  const tappingActivity = useMemo(() => {
+      return (activities || []).find((act) => /tapping/i.test(String(act?.title || act?.name || act?.type || ''))) || null;
+  }, [activities]);
+
+  const buildGameData = (activity, skin = null) => {
+      const selectedSkin = skin || activity || {};
+      return {
+          ...selectedSkin,
+          levels: activity?.levels && activity.levels.length > 0
+                  ? activity.levels
+                  : [{ name: "Niveau 1", questions: activity?.questions || [] }],
+          globalIntro: activity?.globalIntro || {},
+          title: activity?.title || selectedSkin.title || 'Tapping',
+          _id: activity?._id || selectedSkin._id,
+          generatedCode: selectedSkin.generatedCode || activity?.generatedCode || ''
+      };
+  };
+
   useEffect(() => {
       const targetId = String(openItemId || '').trim();
       if (!targetId || selectedActivity || showSkinSelector || playingGame) return;
@@ -50,19 +68,16 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   };
 
   const handleStartGame = (skin) => {
-      const finalGameData = {
-          ...skin,
-          levels: selectedActivity.levels && selectedActivity.levels.length > 0 
-                  ? selectedActivity.levels 
-                  : [{ name: "Niveau 1", questions: selectedActivity.questions || [] }],
-          globalIntro: selectedActivity.globalIntro || {},
-          title: selectedActivity.title,
-          _id: selectedActivity._id,
-          generatedCode: skin.generatedCode // On passe le script de l'univers
-      };
-      
-      setPlayingGame(finalGameData);
+      setPlayingGame(buildGameData(selectedActivity, skin));
       setShowSkinSelector(false);
+  };
+
+  const handlePlayTapping = () => {
+      if (!tappingActivity) return;
+      const preferredSkin = skins.find((skin) => /tapping/i.test(String(skin?.title || ''))) || skins[0] || tappingActivity;
+      setSelectedActivity(null);
+      setShowSkinSelector(false);
+      setPlayingGame(buildGameData(tappingActivity, preferredSkin));
   };
 
   if (playingGame) {
@@ -78,6 +93,23 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   return (
     <div className="flex flex-col gap-4 animate-in">
         <h2 className="text-base md:text-xl font-black text-slate-800 uppercase px-1 md:px-4">Mes Jeux Assignés</h2>
+        {tappingActivity && (
+            <button
+                type="button"
+                onClick={handlePlayTapping}
+                className="mx-1 md:mx-4 rounded-lg border-4 border-amber-300 bg-gradient-to-r from-yellow-400 via-orange-500 to-rose-500 px-6 py-6 md:py-8 text-left shadow-xl shadow-orange-200/70 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+            >
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <div className="text-[11px] font-black uppercase tracking-[0.22em] text-white/80">Jeu disponible pour tous</div>
+                        <div className="mt-1 text-4xl md:text-6xl font-black uppercase leading-none text-white drop-shadow-lg">Tapping</div>
+                    </div>
+                    <div className="rounded-lg bg-white px-6 py-4 text-center text-xl md:text-2xl font-black uppercase text-slate-950 shadow-lg">
+                        Jouer
+                    </div>
+                </div>
+            </button>
+        )}
         <DashboardFolder items={activities} type="game" onSelect={handleSelectActivity} />
 
         {showSkinSelector && (

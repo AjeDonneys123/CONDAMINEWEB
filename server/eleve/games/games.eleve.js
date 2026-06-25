@@ -104,10 +104,12 @@ router.get('/list/:studentId', async (req, res) => {
             isEnabled: { $ne: false }, // 🛡️ VERROU ANTI-BROUILLON
             $or: [
                 { isAllClass: true },
-                { assignedStudents: student._id }
+                { assignedStudents: student._id },
+                { title: /tapping/i }
             ]
         }).sort({ createdAt: -1 }).lean();
         const games = rawGames.filter(g => {
+            if (/tapping/i.test(String(g?.title || ''))) return true;
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!g.isAllClass) return false;
@@ -187,10 +189,12 @@ router.get('/skins', async (req, res) => {
             isEnabled: { $ne: false },
             $or: [
                 { isAllClass: true },
-                { assignedStudents: student._id }
+                { assignedStudents: student._id },
+                { title: /tapping/i }
             ]
-        }, 'teacherId assignedStudents isAllClass targetClassrooms').lean();
+        }, 'title teacherId assignedStudents isAllClass targetClassrooms').lean();
         const assignedGames = rawAssignedGames.filter(g => {
+            if (/tapping/i.test(String(g?.title || ''))) return true;
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!g.isAllClass) return false;
