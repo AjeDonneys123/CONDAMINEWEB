@@ -12,6 +12,7 @@ import DashboardFolder from '../components/DashboardFolder';
 export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   const [activities, setActivities] = useState([]);
   const [skins, setSkins] = useState([]);
+  const [tappingProject, setTappingProject] = useState(null);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showSkinSelector, setShowSkinSelector] = useState(false);
   const [playingGame, setPlayingGame] = useState(null);
@@ -21,13 +22,15 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
     setLoading(true);
     try {
         const sId = user._id || user.id;
-        const [actRes, skinRes] = await Promise.all([
+        const [actRes, skinRes, tappingRes] = await Promise.all([
             fetch(`/api/eleve/games/list/${sId}`).then(r => r.json()),
-            fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json())
+            fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json()),
+            fetch('/api/eleve/games/tapping-project').then(r => r.ok ? r.json() : null)
         ]);
         
         setActivities((actRes || []).map(a => ({ ...a, actType: 'game' })));
         setSkins(skinRes || []);
+        setTappingProject(tappingRes || null);
     } catch(e) { console.error("Load Games Error", e); }
     setLoading(false);
   };
@@ -52,15 +55,32 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
       };
   };
 
+  const buildTappingProjectData = (project) => ({
+      ...project,
+      title: 'Tapping',
+      _id: project?._id,
+      generatedCode: project?.generatedCode || '',
+      scenes: project?.scenes || [],
+      globalIntro: project?.globalIntro || {},
+      levels: project?.levels && project.levels.length > 0
+          ? project.levels
+          : [{ name: 'Tapping', questions: [] }],
+      isStudioTapping: true
+  });
+
   useEffect(() => {
       const targetId = String(openItemId || '').trim();
       if (!targetId || selectedActivity || showSkinSelector || playingGame) return;
+      if (tappingProject && (targetId === '__tapping__' || targetId === String(tappingProject._id || ''))) {
+          setPlayingGame(buildTappingProjectData(tappingProject));
+          if (onOpenHandled) onOpenHandled();
+          return;
+      }
       const target = (activities || []).find((a) => String(a?._id || '') === targetId);
       if (!target) return;
-      setSelectedActivity(target);
-      setShowSkinSelector(true);
+      setPlayingGame(buildGameData(target, target));
       if (onOpenHandled) onOpenHandled();
-  }, [openItemId, activities, selectedActivity, showSkinSelector, playingGame, onOpenHandled]);
+  }, [openItemId, activities, tappingProject, selectedActivity, showSkinSelector, playingGame, onOpenHandled]);
 
   const handleSelectActivity = (act) => {
       setSelectedActivity(act);
@@ -73,11 +93,14 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   };
 
   const handlePlayTapping = () => {
-      if (!tappingActivity) return;
-      const preferredSkin = skins.find((skin) => /tapping/i.test(String(skin?.title || ''))) || skins[0] || tappingActivity;
+      if (!tappingProject && !tappingActivity) return;
       setSelectedActivity(null);
       setShowSkinSelector(false);
-      setPlayingGame(buildGameData(tappingActivity, preferredSkin));
+      if (tappingProject) {
+          setPlayingGame(buildTappingProjectData(tappingProject));
+          return;
+      }
+      setPlayingGame(buildGameData(tappingActivity, tappingActivity));
   };
 
   if (playingGame) {
@@ -93,18 +116,18 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   return (
     <div className="flex flex-col gap-4 animate-in">
         <h2 className="text-base md:text-xl font-black text-slate-800 uppercase px-1 md:px-4">Mes Jeux Assignés</h2>
-        {tappingActivity && (
+        {(tappingProject || tappingActivity) && (
             <button
                 type="button"
                 onClick={handlePlayTapping}
-                className="mx-1 md:mx-4 rounded-lg border-4 border-amber-300 bg-gradient-to-r from-yellow-400 via-orange-500 to-rose-500 px-6 py-6 md:py-8 text-left shadow-xl shadow-orange-200/70 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                className="mx-1 md:mx-4 rounded-lg border-4 border-red-600 bg-red-600 px-6 py-6 md:py-8 text-left shadow-xl shadow-red-200/70 transition-transform hover:scale-[1.01] active:scale-[0.99]"
             >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                         <div className="text-[11px] font-black uppercase tracking-[0.22em] text-white/80">Jeu disponible pour tous</div>
                         <div className="mt-1 text-4xl md:text-6xl font-black uppercase leading-none text-white drop-shadow-lg">Tapping</div>
                     </div>
-                    <div className="rounded-lg bg-white px-6 py-4 text-center text-xl md:text-2xl font-black uppercase text-slate-950 shadow-lg">
+                    <div className="rounded-lg bg-white px-6 py-4 text-center text-xl md:text-2xl font-black uppercase text-red-700 shadow-lg">
                         Jouer
                     </div>
                 </div>

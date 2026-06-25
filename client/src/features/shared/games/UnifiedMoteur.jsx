@@ -148,6 +148,11 @@ const getTrophyForLevel = (levelIndex, totalLevels) => {
 
 const getNextTrophy = (rank = 0) => TROPHY_TIERS.find((tier) => tier.rank === Number(rank || 0) + 1) || null;
 
+const getTrophyByRank = (rank = 0) => {
+    const n = Math.max(0, Math.min(3, Number(rank || 0)));
+    return TROPHY_TIERS.find((tier) => tier.rank === n) || null;
+};
+
 const installCanvasTextSafety = (ctx, getCandidates) => {
     if (!ctx || ctx.__textSafetyInstalled) return;
     ctx.__textSafetyInstalled = true;
@@ -262,6 +267,19 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     
     // --- NOUVEAU : GESTION DES ERREURS DE SCRIPT ---
     const [scriptError, setScriptError] = useState(null);
+    const forceTypingMode = gameData?.forceTypingMode === true;
+    const isStudioTapping = gameData?.isStudioTapping === true || /tapping/i.test(String(gameData?.title || ''));
+    const tappingStorageKey = `conda_tapping_${String(user?._id || user?.id || 'local')}_${String(gameData?._id || 'project')}`;
+    const [tappingTrophyRank, setTappingTrophyRank] = useState(() => {
+        if (typeof window === 'undefined') return 0;
+        const saved = window.localStorage.getItem(`${tappingStorageKey}_rank`);
+        return Math.max(0, Math.min(3, Number(saved || 0)));
+    });
+    const [tappingRequiredLetters, setTappingRequiredLetters] = useState(() => {
+        if (typeof window === 'undefined') return 0;
+        return Math.max(0, Number(window.localStorage.getItem(`${tappingStorageKey}_required`) || 0));
+    });
+    const [tappingNotice, setTappingNotice] = useState('');
 
     const canvasRef = useRef(null);
     const frameIdRef = useRef(null);
@@ -275,6 +293,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const keysPressed = useRef({});
     const mobileControlTimers = useRef({});
     const soundEnabledRef = useRef(true);
+    const tappingRankRef = useRef(tappingTrophyRank);
+    const tappingRequiredLettersRef = useRef(tappingRequiredLetters);
+    const tappingAwardLockRef = useRef(false);
 
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
@@ -288,7 +309,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                     triggerGlobalEvent("DEFAITE"); 
                 }
                 break;
-            case 'WIN_ROUND': updateBarLogic(true); break;
+            case 'WIN_ROUND':
+                if (isStudioTapping) handleTappingVictory();
+                else updateBarLogic(true);
+                break;
             case 'FAIL_ROUND': updateBarLogic(false); break;
             case 'NEXT_Q': changeQuestionLogic(); break;
             case 'SET_BOSS': setActiveBossVisual(!!value); bossModeRef.current = !!value; break;
@@ -478,7 +502,60 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         } catch(e) {}
     };
 
+    const persistTappingProgress = (rank, requiredLetters) => {
+        tappingRankRef.current = rank;
+        tappingRequiredLettersRef.current = requiredLetters;
+        setTappingTrophyRank(rank);
+        setTappingRequiredLetters(requiredLetters);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(`${tappingStorageKey}_rank`, String(rank));
+            window.localStorage.setItem(`${tappingStorageKey}_required`, String(requiredLetters));
+        }
+    };
+
+    const getCurrentTappingLetterCount = () => {
+        const selected = gameInstanceRef.current?.selectedLetters;
+        if (selected && typeof selected.size === 'number') return selected.size;
+        return 0;
+    };
+
+    const handleTappingVictory = () => {
+        if (!isStudioTapping || tappingAwardLockRef.current) return;
+        tappingAwardLockRef.current = true;
+        setTimeout(() => { tappingAwardLockRef.current = false; }, 1200);
+
+        const nextRank = Math.max(1, Math.min(3, Number(tappingRankRef.current || 0) + 1));
+        const earnedTrophy = getTrophyByRank(nextRank) || TROPHY_TIERS[2];
+        const currentLetters = Math.max(1, getCurrentTappingLetterCount());
+        const nextRequiredLetters = nextRank >= 3 ? currentLetters : currentLetters + 5;
+        const score = Number(gameInstanceRef.current?.totalScore || gameInstanceRef.current?.score || 0);
+
+        if (gameInstanceRef.current) {
+            gameInstanceRef.current.isStopped = true;
+            if (gameInstanceRef.current.state) gameInstanceRef.current.state = 'setup';
+        }
+        setEngineStarted(true);
+        setShowLevelIntro(false);
+        setShowGameOver(false);
+        setTappingNotice('');
+        persistTappingProgress(nextRank, nextRequiredLetters);
+        triggerGlobalEvent("VICTOIRE");
+        setTrophyAward({
+            ...earnedTrophy,
+            levelIndex: nextRank - 1,
+            score,
+            hasNextChallenge: nextRank < 3,
+            nextTrophy: getNextTrophy(nextRank),
+            requiredLetters: nextRequiredLetters
+        });
+        setShowGameComplete(true);
+    };
+
     const triggerWinSequence = async () => {
+        if (isStudioTapping) {
+            handleTappingVictory();
+            return;
+        }
         const isGameFinished = !allLevels[currentLevelIdx + 1];
         const earnedTrophy = getTrophyForLevel(currentLevelIdx, allLevels.length);
         const finalScore = lives * 100 + ((currentLevelIdx + 1) * 50);
@@ -526,6 +603,18 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     };
 
     const handleNextTrophyChallenge = () => {
+        if (isStudioTapping) {
+            setShowGameComplete(false);
+            setTrophyAward(null);
+            setTappingNotice(`Ajoute ${Math.max(0, tappingRequiredLettersRef.current - getCurrentTappingLetterCount())} lettres de plus pour rejouer.`);
+            if (gameInstanceRef.current) {
+                gameInstanceRef.current.isStopped = false;
+                gameInstanceRef.current.state = 'setup';
+            }
+            setEngineStarted(true);
+            setShowLevelIntro(false);
+            return;
+        }
         if (!trophyAward?.hasNextChallenge) return;
         setShowGameComplete(false);
         setTrophyAward(null);
@@ -568,21 +657,25 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         setIsReady(false);
         projectRef.current = gameData; 
         const scene = gameData.scenes?.[0];
-        if (scene) {
-            const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-            const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+        if (!scene) {
             if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            let loadedCount = 0;
-            if (imgs.length === 0) setIsReady(true);
-            imgs.forEach(url => { 
-                const rKey = resolveUrl(url); 
-                const img = new Image(); img.crossOrigin = "anonymous"; 
-                img.onload = () => { imageAssetsRef.current.set(rKey, img); loadedCount++; setLoadProgress(`${Math.round(loadedCount/imgs.length*100)}%`); if (loadedCount >= imgs.length) setIsReady(true); };
-                img.onerror = () => { loadedCount++; if (loadedCount >= imgs.length) setIsReady(true); };
-                img.src = rKey; 
-            });
-            snds.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
+            setLoadProgress("");
+            setIsReady(true);
+            return;
         }
+        const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+        const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        let loadedCount = 0;
+        if (imgs.length === 0) setIsReady(true);
+        imgs.forEach(url => { 
+            const rKey = resolveUrl(url); 
+            const img = new Image(); img.crossOrigin = "anonymous"; 
+            img.onload = () => { imageAssetsRef.current.set(rKey, img); loadedCount++; setLoadProgress(`${Math.round(loadedCount/imgs.length*100)}%`); if (loadedCount >= imgs.length) setIsReady(true); };
+            img.onerror = () => { loadedCount++; if (loadedCount >= imgs.length) setIsReady(true); };
+            img.src = rKey; 
+        });
+        snds.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
     }, [gameData]);
 
     const handleAnswerClick = (val) => {
@@ -685,6 +778,33 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 return;
             }
 
+            if (isStudioTapping && instance) {
+                const originalStartLevel = typeof instance.startLevel === 'function' ? instance.startLevel.bind(instance) : null;
+                if (originalStartLevel) {
+                    instance.startLevel = (index = 0) => {
+                        const required = Number(tappingRequiredLettersRef.current || 0);
+                        const selectedCount = Number(instance.selectedLetters?.size || 0);
+                        if (required > 0 && selectedCount < required) {
+                            const missing = required - selectedCount;
+                            setTappingNotice(`Ajoute encore ${missing} lettre${missing > 1 ? 's' : ''} pour rejouer.`);
+                            return;
+                        }
+                        setTappingNotice('');
+                        originalStartLevel(index);
+                    };
+                }
+                const originalStart = typeof instance.start === 'function' ? instance.start.bind(instance) : null;
+                if (originalStart) {
+                    instance.start = () => {
+                        originalStart();
+                        const required = Number(tappingRequiredLettersRef.current || 0);
+                        if (required > 0) {
+                            setTappingNotice(`Pour la prochaine coupe, sélectionne ${required} lettres.`);
+                        }
+                    };
+                }
+            }
+
             gameInstanceRef.current = instance; if (instance.start) instance.start();
             
             const tick = () => {
@@ -711,6 +831,24 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     useEffect(() => {
         soundEnabledRef.current = isSoundOn;
     }, [isSoundOn]);
+
+    useEffect(() => {
+        if (!isStudioTapping || typeof window === 'undefined') return;
+        const rank = Math.max(0, Math.min(3, Number(window.localStorage.getItem(`${tappingStorageKey}_rank`) || 0)));
+        const required = Math.max(0, Number(window.localStorage.getItem(`${tappingStorageKey}_required`) || 0));
+        tappingRankRef.current = rank;
+        tappingRequiredLettersRef.current = required;
+        setTappingTrophyRank(rank);
+        setTappingRequiredLetters(required);
+    }, [isStudioTapping, tappingStorageKey]);
+
+    useEffect(() => {
+        tappingRankRef.current = tappingTrophyRank;
+    }, [tappingTrophyRank]);
+
+    useEffect(() => {
+        tappingRequiredLettersRef.current = tappingRequiredLetters;
+    }, [tappingRequiredLetters]);
 
     useEffect(() => {
         const hDown = (e) => keysPressed.current[e.code] = true;
@@ -861,7 +999,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                     <div className={"absolute w-full flex justify-between pointer-events-none z-30 " + (isMobileViewport ? 'top-2 px-2 gap-2' : 'top-6 px-10')}>
                         <div onClick={handleHeartClick} className={"bg-slate-900/80 rounded-2xl border-2 border-slate-700 shadow-lg pointer-events-auto cursor-pointer " + (isMobileViewport ? 'p-2 px-3 text-2xl' : 'p-3 px-6 text-3xl')}>{"❤️".repeat(lives)}</div>
                         <div className={isMobileViewport ? 'flex-1 mx-1' : 'flex-1 mx-10'}>
-                            <div onClick={handleQuestionClick} className={"bg-slate-900/95 text-white font-black rounded-2xl border-2 text-center border-slate-600 cursor-pointer pointer-events-auto " + (isMobileViewport ? 'py-2 px-3 text-base leading-tight' : 'py-4 px-10 text-xl') + " " + (activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
+                            <div onClick={handleQuestionClick} className={"bg-slate-900/95 text-white font-black rounded-2xl border-2 text-center border-slate-600 cursor-pointer pointer-events-auto " + (isMobileViewport ? 'py-2 px-3 text-base leading-tight' : 'py-4 px-10 text-xl') + " " + ((activeBossVisual || forceTypingMode) ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
                                 {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : levelQuestions[currentQIndex]?.q}
                             </div>
                         </div>
@@ -873,13 +1011,18 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                             ))}
                         </div>
                     </div>
-                    <canvas ref={canvasRef} width={800} height={450} className={(isMobileViewport ? "w-[96vw] h-[56vh] max-h-[62vh] aspect-auto " : "aspect-video ") + "shadow-2xl bg-black border-4 " + (activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800') + " rounded-lg"} />
+                    <canvas ref={canvasRef} width={800} height={450} className={(isMobileViewport ? "w-[96vw] h-[56vh] max-h-[62vh] aspect-auto " : "aspect-video ") + "shadow-2xl bg-black border-4 " + ((activeBossVisual || forceTypingMode) ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800') + " rounded-lg"} />
+                    {isStudioTapping && tappingNotice && !showGameComplete && (
+                        <div className="absolute top-20 right-4 z-50 max-w-[360px] rounded-2xl border-2 border-yellow-300 bg-slate-950/90 px-5 py-3 text-right text-sm md:text-base font-black uppercase text-yellow-200 shadow-2xl">
+                            {tappingNotice}
+                        </div>
+                    )}
                     {showAnswerUI && levelQuestions[currentQIndex] && !showStageClear && !showGameComplete && !showGameOver && (
                         <div className={"absolute w-full flex justify-center pointer-events-auto z-30 " + (isMobileViewport ? 'bottom-3 px-2' : 'bottom-10 px-10')}>
-                            {activeBossVisual ? (
+                            {(activeBossVisual || forceTypingMode) ? (
                                 <div className={"flex w-full max-w-2xl animate-in slide-in-from-bottom " + (isMobileViewport ? 'gap-2' : 'gap-4')}>
                                     <input autoFocus className={"flex-1 bg-slate-900 border-4 border-red-600 text-white font-black rounded-2xl text-center outline-none " + (isMobileViewport ? 'text-xl py-2 px-3' : 'text-3xl py-4 px-8')} value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} placeholder="TAPE TA RÉPONSE..." />
-                                    <button onClick={() => handleAnswerClick(userInput)} className={"bg-red-600 text-white rounded-2xl font-black border-b-8 border-red-800 uppercase " + (isMobileViewport ? 'px-4 text-sm' : 'px-10 text-xl')}>Attaquer</button>
+                                    <button onClick={() => handleAnswerClick(userInput)} className={"bg-red-600 text-white rounded-2xl font-black border-b-8 border-red-800 uppercase " + (isMobileViewport ? 'px-4 text-sm' : 'px-10 text-xl')}>Valider</button>
                                 </div>
                             ) : (
                                 <div className={"grid grid-cols-2 md:grid-cols-4 w-full max-w-5xl " + (isMobileViewport ? 'gap-2' : 'gap-4')}>
@@ -923,6 +1066,27 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             )}
 
             <div className="absolute top-2 right-4 flex items-center gap-2 z-[7000]">
+                {isStudioTapping && (
+                    <div className="flex items-center gap-1 bg-slate-950/75 border-2 border-white/20 rounded-full px-3 py-2 shadow-2xl">
+                        {TROPHY_TIERS.map((tier) => {
+                            const won = tappingTrophyRank >= tier.rank;
+                            const tone = tier.key === 'bronze'
+                                ? 'text-orange-400'
+                                : tier.key === 'silver'
+                                    ? 'text-slate-200'
+                                    : 'text-yellow-300';
+                            return (
+                                <span
+                                    key={tier.key}
+                                    className={`text-2xl leading-none drop-shadow ${won ? tone : 'text-slate-600 grayscale opacity-50'}`}
+                                    title={`Trophée ${tier.label}`}
+                                >
+                                    🏆
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
                 <button
                     onClick={() => setIsSoundOn(prev => !prev)}
                     className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-base font-black border-2 border-white/20"

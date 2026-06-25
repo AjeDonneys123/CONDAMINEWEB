@@ -155,6 +155,44 @@ router.get('/status-summary/:studentId', async (req, res) => {
             await studentDoc.save();
         }
         const student = studentDoc.toObject();
+        const StudioProject = mongoose.model('StudioProject');
+        const tappingProject = await StudioProject.findOne({
+            title: /tapping/i,
+            isTrashed: { $ne: true }
+        }, '_id title')
+            .sort({ isProduction: -1, updatedAt: -1, createdAt: -1 })
+            .lean();
+
+        if (!tappingProject) return res.json({ disciplines: [] });
+
+        const totalCrosses = (student.behaviorRecords || [])
+            .reduce((sum, record) => sum + Number(record?.crosses || 0), 0);
+        const totalBonuses = (student.behaviorRecords || [])
+            .reduce((sum, record) => sum + Number(record?.bonuses || 0), 0);
+
+        return res.json({
+            disciplines: [{
+                subject: 'JEUX',
+                teachers: [],
+                crosses: totalCrosses,
+                bonuses: totalBonuses,
+                homework: { total: 0, done: 0, todo: 0, todoTitles: [] },
+                games: { total: 1, done: 0, started: 0, todo: 1, todoTitles: ['Tapping'] },
+                activities: {
+                    total: 1,
+                    done: 0,
+                    todo: 1,
+                    todoTitles: ['🎮 Tapping'],
+                    todoItems: [{
+                        id: String(tappingProject._id),
+                        type: 'tapping',
+                        title: 'Tapping',
+                        label: '🎮 Tapping'
+                    }],
+                    savedItems: []
+                }
+            }]
+        });
 
         const classTargets = await buildStudentClassTargets(studentDoc);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
@@ -248,99 +286,29 @@ router.get('/status-summary/:studentId', async (req, res) => {
             entry.bonuses += Number(record.bonuses || 0);
         }
 
-        const rawHomeworks = await Homework.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean();
-        const homeworks = rawHomeworks.filter(hw => {
-            const assigned = (hw.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!hw.isAllClass) return false;
-            return matchesClassTargets(hw.targetClassrooms, classTargetKeys);
-        });
+        const homeworks = [];
 
         const rawGames = await GameLevel.find({
             isTestGame: { $ne: true },
             isEnabled: { $ne: false },
             $or: [
                 { isAllClass: true },
-                { assignedStudents: student._id }
+                { assignedStudents: student._id },
+                { title: /tapping/i }
             ]
         }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean();
         const games = rawGames.filter(game => {
             const assigned = (game.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
+            if (/tapping/i.test(String(game?.title || ''))) return true;
             if (!game.isAllClass) return false;
             return matchesClassTargets(game.targetClassrooms, classTargetKeys);
         });
-        const rawLearningModules = await LearningModule.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms completions').lean();
-        const learningModules = rawLearningModules.filter((m) => {
-            const assigned = (m.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!m.isAllClass) return false;
-            return matchesClassTargets(m.targetClassrooms, classTargetKeys);
-        });
-        const rawExposes = await Expose.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms presentations').lean();
-        const exposes = rawExposes.filter((x) => {
-            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!x.isAllClass) return false;
-            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
-        });
-        const rawLectures = await Lecture.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms submissions').lean();
-        const lectures = rawLectures.filter((x) => {
-            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!x.isAllClass) return false;
-            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
-        });
-        const rawComments = await CommentActivity.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms submissions').lean();
-        const comments = rawComments.filter((x) => {
-            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!x.isAllClass) return false;
-            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
-        });
-        const rawProductions = await Production.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms submissions productionType').lean();
-        const productions = rawProductions.filter((x) => {
-            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!x.isAllClass) return false;
-            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
-        });
+        const learningModules = [];
+        const exposes = [];
+        const lectures = [];
+        const comments = [];
+        const productions = [];
 
         const chapterIds = [...new Set(
             [...homeworks, ...games, ...learningModules, ...exposes, ...lectures, ...comments, ...productions]
@@ -532,7 +500,9 @@ router.get('/status-summary/:studentId', async (req, res) => {
             }
         }
 
-        const disciplines = [...disciplineMap.values()].sort((a, b) => a.subject.localeCompare(b.subject, 'fr'));
+        const disciplines = [...disciplineMap.values()]
+            .filter((entry) => Number(entry?.activities?.total || 0) > 0)
+            .sort((a, b) => a.subject.localeCompare(b.subject, 'fr'));
         res.json({ disciplines });
     } catch (e) {
         res.status(500).json({ disciplines: [], error: e.message });

@@ -169,6 +169,25 @@ router.get('/list/:studentId', async (req, res) => {
     }
 });
 
+// Projet Studio Tapping accessible directement aux élèves
+router.get('/tapping-project', async (req, res) => {
+    try {
+        const StudioProject = mongoose.model('StudioProject');
+        const project = await StudioProject.findOne({
+            title: /tapping/i,
+            isTrashed: { $ne: true }
+        })
+            .sort({ isProduction: -1, updatedAt: -1, createdAt: -1 })
+            .lean();
+
+        if (!project) return res.json(null);
+        res.json(project);
+    } catch (e) {
+        console.error("❌ Error tapping project:", e.message);
+        res.status(500).json(null);
+    }
+});
+
 // 2. Skins (Projets Studio terminés)
 router.get('/skins', async (req, res) => {
     try {
