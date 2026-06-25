@@ -131,6 +131,23 @@ const normalizeTextKey = (value = '') =>
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]/g, '');
 
+const TROPHY_TIERS = [
+    { key: 'bronze', label: 'bronze', rank: 1, icon: '🏆', gradient: 'from-amber-700 via-orange-500 to-yellow-600' },
+    { key: 'silver', label: 'argent', rank: 2, icon: '🏆', gradient: 'from-slate-500 via-zinc-200 to-slate-600' },
+    { key: 'gold', label: 'or', rank: 3, icon: '🏆', gradient: 'from-yellow-500 via-amber-300 to-orange-500' }
+];
+
+const getTrophyForLevel = (levelIndex, totalLevels) => {
+    const total = Math.max(1, Number(totalLevels || 1));
+    const idx = Math.max(0, Number(levelIndex || 0));
+    if (idx >= total - 1) return TROPHY_TIERS[2];
+    if (idx >= total - 2) return TROPHY_TIERS[1];
+    if (idx >= total - 3) return TROPHY_TIERS[0];
+    return null;
+};
+
+const getNextTrophy = (rank = 0) => TROPHY_TIERS.find((tier) => tier.rank === Number(rank || 0) + 1) || null;
+
 const installCanvasTextSafety = (ctx, getCandidates) => {
     if (!ctx || ctx.__textSafetyInstalled) return;
     ctx.__textSafetyInstalled = true;
@@ -231,6 +248,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const [showStageClear, setShowStageClear] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
     const [showGameComplete, setShowGameComplete] = useState(false);
+    const [trophyAward, setTrophyAward] = useState(null);
     const [zoomMedia, setZoomMedia] = useState(null);
     const [activeBossVisual, setActiveBossVisual] = useState(false);
     const [isShake, setIsShake] = useState(false);
@@ -444,21 +462,54 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         } else { triggerWinSequence(); }
     };
 
+    const saveProgress = async (levelReached, score) => {
+        if (isStudioTest || !user || !gameData?._id) return;
+        try {
+            await fetch('/api/games/save-progress', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    studentId: user._id || user.id,
+                    gameId: gameData._id,
+                    score,
+                    levelReached
+                })
+            });
+        } catch(e) {}
+    };
+
     const triggerWinSequence = async () => {
         const isGameFinished = !allLevels[currentLevelIdx + 1];
-        if (!isStudioTest && user && gameData?._id) {
-            try {
-                await fetch('/api/games/save-progress', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ studentId: user._id || user.id, gameId: gameData._id, score: lives * 100, levelReached: isGameFinished ? 1 : 0 })
-                });
-            } catch(e) {}
+        const earnedTrophy = getTrophyForLevel(currentLevelIdx, allLevels.length);
+        const finalScore = lives * 100 + ((currentLevelIdx + 1) * 50);
+        await saveProgress(earnedTrophy?.rank || 0, finalScore);
+
+        if (earnedTrophy) {
+            triggerGlobalEvent("VICTOIRE");
+            if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
+            setEngineStarted(false);
+            setTrophyAward({
+                ...earnedTrophy,
+                levelIndex: currentLevelIdx,
+                score: finalScore,
+                hasNextChallenge: !isGameFinished,
+                nextTrophy: getNextTrophy(earnedTrophy.rank)
+            });
+            setShowGameComplete(true);
+            return;
         }
+
         if (isGameFinished) {
             triggerGlobalEvent("VICTOIRE");
             if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
             setEngineStarted(false);
+            setTrophyAward({
+                ...TROPHY_TIERS[2],
+                levelIndex: currentLevelIdx,
+                score: finalScore,
+                hasNextChallenge: false,
+                nextTrophy: null
+            });
             setShowGameComplete(true);
         } 
         else { 
@@ -472,6 +523,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 setShowLevelIntro(true); 
             }, 3000); 
         }
+    };
+
+    const handleNextTrophyChallenge = () => {
+        if (!trophyAward?.hasNextChallenge) return;
+        setShowGameComplete(false);
+        setTrophyAward(null);
+        setShowStageClear(false);
+        setFeedback(null);
+        setUserInput("");
+        setCurrentLevelIdx(p => p + 1);
+        setShowLevelIntro(true);
     };
 
     useEffect(() => {
@@ -495,7 +557,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 liveData.current.qStates = initialStates;
                 liveData.current.qIndex = 0; liveData.current.lives = 4;
                 setQuestionStates(initialStates); setCurrentQIndex(0); setLives(4); setActiveBossVisual(false); bossModeRef.current = false;
-                setShowLevelIntro(true); setScriptError(null);
+                setShowLevelIntro(true); setScriptError(null); setShowGameComplete(false); setTrophyAward(null);
             }
         };
         initGame();
@@ -730,15 +792,28 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             )}
 
             {showGameComplete && (
-                <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-indigo-700 flex flex-col items-center justify-center animate-in zoom-in p-10 text-center">
-                    <div className="text-[120px] mb-2">🏆</div>
-                    <h1 className="text-7xl font-black text-white uppercase tracking-tighter mb-4">VICTOIRE</h1>
-                    <p className="text-white/90 font-bold uppercase tracking-widest mb-8">Tous les niveaux sont terminés</p>
-                    <div className="bg-white/20 backdrop-blur-md rounded-3xl p-6 border-2 border-white/40 mb-8">
-                        <div className="text-xs font-black text-white/70 uppercase mb-2">Score Final</div>
-                        <div className="text-5xl font-black text-white">{lives * 100 + (allLevels.length * 50)} PTS</div>
+                <div className={`absolute inset-0 z-[7000] bg-gradient-to-br ${trophyAward?.gradient || TROPHY_TIERS[2].gradient} flex flex-col items-center justify-center animate-in zoom-in p-6 md:p-10 text-center`}>
+                    <div className="text-[110px] md:text-[140px] mb-2 drop-shadow-2xl">{trophyAward?.icon || '🏆'}</div>
+                    <h1 className="text-5xl md:text-7xl font-black text-white uppercase tracking-tighter mb-3">Trophée {trophyAward?.label || 'or'}</h1>
+                    <p className="text-white/90 font-black uppercase tracking-widest mb-8 max-w-2xl">
+                        {trophyAward?.hasNextChallenge
+                            ? `Victoire ! Tu peux jouer tout de suite pour le trophée ${trophyAward.nextTrophy?.label || 'suivant'} avec 5 lettres de plus.`
+                            : 'Victoire totale ! Tu as remporté le dernier trophée.'}
+                    </p>
+                    <div className="bg-white/20 backdrop-blur-md rounded-3xl p-6 border-2 border-white/40 mb-8 min-w-[260px]">
+                        <div className="text-xs font-black text-white/70 uppercase mb-2">Score</div>
+                        <div className="text-5xl font-black text-white">{trophyAward?.score || (lives * 100 + (allLevels.length * 50))} PTS</div>
                     </div>
-                    <button onClick={onExit} className="px-10 py-4 bg-white text-indigo-700 font-black text-xl rounded-2xl uppercase">Retour menu</button>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        {trophyAward?.hasNextChallenge && (
+                            <button onClick={handleNextTrophyChallenge} className="px-8 md:px-10 py-4 bg-white text-slate-950 font-black text-lg md:text-xl rounded-2xl uppercase shadow-2xl hover:scale-105 transition-transform">
+                                +5 lettres
+                            </button>
+                        )}
+                        <button onClick={onExit} className="px-8 md:px-10 py-4 bg-slate-950/80 text-white font-black text-lg md:text-xl rounded-2xl uppercase border-2 border-white/30">
+                            Retour menu
+                        </button>
+                    </div>
                 </div>
             )}
             

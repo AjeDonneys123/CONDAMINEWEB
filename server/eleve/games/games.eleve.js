@@ -216,11 +216,26 @@ router.get('/skins', async (req, res) => {
 router.post('/save-progress', async (req, res) => {
     const { studentId, gameId, score, levelReached } = req.body;
     try {
-        await mongoose.model('GameProgress').findOneAndUpdate(
-            { studentId, gameId },
-            { lastScore: score, levelReached, updatedAt: new Date() },
-            { upsert: true }
-        );
+        const safeLevelReached = Math.max(0, Number(levelReached || 0));
+        const existing = await mongoose.model('GameProgress').findOne({ studentId, gameId });
+        if (existing) {
+            await mongoose.model('GameProgress').updateOne(
+                { _id: existing._id },
+                {
+                    lastScore: score,
+                    levelReached: Math.max(Number(existing.levelReached || 0), safeLevelReached),
+                    updatedAt: new Date()
+                }
+            );
+        } else {
+            await mongoose.model('GameProgress').create({
+                studentId,
+                gameId,
+                lastScore: score,
+                levelReached: safeLevelReached,
+                updatedAt: new Date()
+            });
+        }
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

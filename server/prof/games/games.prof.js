@@ -75,6 +75,35 @@ router.get('/progress', async (req, res) => {
     }
 });
 
+router.post('/save-progress', async (req, res) => {
+    try {
+        const { studentId, gameId, score, levelReached } = req.body;
+        const safeLevelReached = Math.max(0, Number(levelReached || 0));
+        const existing = await GameProgress.findOne({ studentId, gameId });
+        if (existing) {
+            await GameProgress.updateOne(
+                { _id: existing._id },
+                {
+                    lastScore: score,
+                    levelReached: Math.max(Number(existing.levelReached || 0), safeLevelReached),
+                    updatedAt: new Date()
+                }
+            );
+        } else {
+            await GameProgress.create({
+                studentId,
+                gameId,
+                lastScore: score,
+                levelReached: safeLevelReached,
+                updatedAt: new Date()
+            });
+        }
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
