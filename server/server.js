@@ -111,6 +111,7 @@ safeLoad('/api/homework', './prof/homework/homework.prof');
 safeLoad('/api/games', './prof/games/games.prof');
 safeLoad('/api/learning', './prof/learning/learning.prof');
 safeLoad('/api/exposes', './prof/exposes/exposes.prof');
+safeLoad('/api/courses', './prof/courses/courses.prof');
 safeLoad('/api/lectures', './prof/lectures/lectures.prof');
 safeLoad('/api/fiches', './prof/fiches/fiches.prof');
 safeLoad('/api/productions', './prof/productions/productions.prof');

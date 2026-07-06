@@ -25,6 +25,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [swapSource, setSwapSource] = useState(null);
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
+    const [classPoints, setClassPoints] = useState(0);
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
     const fileInputRef = useRef(null);
@@ -59,6 +60,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         rows: clsInfo.layout.rows || 5 
                     });
                 }
+                setClassPoints(clsInfo.classPoints || 0);
             }
             const queryParams = myId ? `?teacherId=${myId}` : '';
             const res = await fetch(`/api/classroom/plan/${globalClassId}${queryParams}`);
@@ -69,6 +71,37 @@ export default function ClassroomManager({ globalClassId, user }) {
             }
         } catch(e) { console.error(e); }
         setLoading(false);
+    };
+
+    const updateClassPoints = async (change) => {
+        try {
+            const res = await fetch(`/api/classroom/${globalClassId}/live-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: change > 0 ? 'add-point' : 'remove-point' })
+            });
+            if (res.ok) {
+                const updatedCls = await res.json();
+                setClassPoints(updatedCls.classPoints || 0);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const highlightStudentOnBoard = async (student) => {
+        if (!student?._id) return;
+        const displayName = getDisplayName(student);
+        try {
+            await fetch(`/api/classroom/${globalClassId}/live-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'highlight', studentName: displayName })
+            });
+            setActionFlash('highlight');
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     useEffect(() => { loadData(); }, [globalClassId, myId]);
@@ -633,6 +666,13 @@ export default function ClassroomManager({ globalClassId, user }) {
                         {voiceListening ? '🎙️ ON' : '🎙️'}
                     </button>
                 </div>
+                
+                <div className="class-points-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', padding: '4px 10px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                    <button className="pts-btn" onClick={() => updateClassPoints(-1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>-</button>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#1e3a8a', minWidth: '45px', textAlign: 'center' }}>🏆 {classPoints} pts</span>
+                    <button className="pts-btn" onClick={() => updateClassPoints(1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                </div>
+
                 <button
                     className={`cm-swap-btn ${isSwapMode ? 'active' : ''}`}
                     onClick={() => {
@@ -770,6 +810,18 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {/* BOUTON REMPLACÉ : SUPPRIMER PUNITION */}
                             <button className="act-btn btn-cancel-punish" onClick={() => addBehavior(selectedStudent._id, 'REMOVE_PUNISHMENT')}>
                                 ⚖️ LEVER PUNITION
+                            </button>
+
+                            {/* NOUVELLE SECTION INTERACTION TABLEAU */}
+                            <div className="drawer-section-title" style={{ gridColumn: 'span 2', fontSize: '0.8rem', fontWeight: 900, color: '#64748b', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>
+                                🖥️ ÉCRAN DE LA CLASSE (TABLEAU)
+                            </div>
+                            <button
+                                className="act-btn btn-highlight"
+                                onClick={() => highlightStudentOnBoard(selectedStudent)}
+                                style={{ gridColumn: 'span 2', background: '#ffe4e6', color: '#be123c', border: '2px solid #fecdd3', flexDirection: 'row', justifyContent: 'center', gap: '8px' }}
+                            >
+                                🔴 SIGNALER AU TABLEAU
                             </button>
                         </div>
                         {showNoteInput && (

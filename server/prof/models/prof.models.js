@@ -138,7 +138,12 @@ const Models = {
             separators: { type: [Number], default: [] },
             cols: { type: Number, default: 6 },
             rows: { type: Number, default: 5 }
-        }
+        },
+        classPoints: { type: Number, default: 0 },
+        activeStudentHighlight: { type: String, default: null },
+        activeStudentHighlightTime: { type: Date, default: null },
+        activeStudentBonusAlert: { type: String, default: null },
+        activeStudentBonusAlertTime: { type: Date, default: null }
     }),
 
     Student: getModel('Student', StudentSchema),
@@ -237,6 +242,32 @@ const Models = {
                 selectedForPresenter: { type: Boolean, default: false },
                 createdAt: Date,
                 updatedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
+    Course: getModel('Course', {
+        title: { type: String, required: true, trim: true },
+        description: { type: String, default: '', trim: true },
+        slidesUrl: { type: String, required: true, trim: true },
+        presentationId: { type: String, required: true, trim: true },
+        embedUrl: { type: String, required: true, trim: true },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', default: null },
+        targetClassroomId: { type: String, required: true, index: true },
+        targetClassroomName: { type: String, default: '', trim: true },
+        isEnabled: { type: Boolean, default: true },
+        overlays: {
+            type: [{
+                type: { type: String, enum: ['character', 'video'], required: true },
+                sourceUrl: { type: String, default: '' },
+                title: { type: String, default: '' },
+                slideNumber: { type: Number, default: 1 },
+                startSec: { type: Number, default: 0 },
+                x: { type: Number, default: 70 },
+                y: { type: Number, default: 70 },
+                width: { type: Number, default: 24 }
             }],
             default: []
         },

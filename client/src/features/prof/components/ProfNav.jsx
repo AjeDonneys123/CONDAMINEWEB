@@ -3,7 +3,7 @@ import React from 'react';
 export default function ProfNav({ activeTab, onTabChange, user }) {
   const allTabs = {
       activities: { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-      exposes: { id: 'exposes', label: '🗣️ EXPOSÉS', color: 'bg-rose-600' },
+      exposes: { id: 'exposes', label: '📚 COURS', color: 'bg-rose-600' },
       classroom: { id: 'classroom', label: '🎓 CLASSE', color: 'bg-emerald-600' },
       scans: { id: 'scans', label: '📸 SCAN', color: 'bg-orange-500' },
       studio: { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600', hideOnMobile: true }, 

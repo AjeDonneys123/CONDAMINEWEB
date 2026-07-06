@@ -354,7 +354,23 @@ router.post('/behavior', async (req, res) => {
                 await assignPunishmentTemplate(s, teacherId);
             }
         }
-        if (type === 'BONUS') r.bonuses++;
+        if (type === 'BONUS') {
+            r.bonuses++;
+            try {
+                const clsId = s.classId || s.assignedGroups?.[0];
+                if (clsId) {
+                    const displayName = String(s.nickname || '').trim() || String(s.firstName || '');
+                    await Classroom.findByIdAndUpdate(clsId, {
+                        $set: {
+                            activeStudentBonusAlert: `Félicitations à ${displayName} !`,
+                            activeStudentBonusAlertTime: new Date()
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error("[LIVE BONUS ALERT ERROR] failed to set live bonus:", err.message);
+            }
+        }
         if (type === 'REMOVE_CROSS') {
             r.crosses = Math.max(0, Number(r.crosses || 0) - 1);
             if (r.crosses <= 0) r.nextCrossRemovalAt = null;
@@ -385,6 +401,32 @@ router.post('/behavior', async (req, res) => {
         s.markModified('behaviorRecords');
         await s.save(); res.json(s);
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/:classId/live-action', async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const { action, studentName } = req.body;
+        const cls = await Classroom.findById(classId);
+        if (!cls) return res.status(404).json({ error: "Classe introuvable" });
+
+        if (action === 'highlight') {
+            cls.activeStudentHighlight = studentName;
+            cls.activeStudentHighlightTime = new Date();
+        } else if (action === 'bonus') {
+            cls.activeStudentBonusAlert = `Félicitations à ${studentName} !`;
+            cls.activeStudentBonusAlertTime = new Date();
+        } else if (action === 'add-point') {
+            cls.classPoints = (cls.classPoints || 0) + 1;
+        } else if (action === 'remove-point') {
+            cls.classPoints = Math.max(0, (cls.classPoints || 0) - 1);
+        }
+
+        await cls.save();
+        res.json(cls);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;

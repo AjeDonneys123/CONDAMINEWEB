@@ -9,7 +9,7 @@ import ConsoleReporter from './components/ConsoleReporter';
 import StudioDashboard from './studio/StudioDashboard'; 
 import ClassroomManager from './classroom/ClassroomManager'; 
 import ScansStudio from './scans/ScansStudio';
-import ExposesManager from './exposes/ExposesManager';
+import CoursesManager from './courses/CoursesManager';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ProfPage.css';
 
@@ -156,7 +156,7 @@ export default function ProfPage({ user, onLogout }) {
           ) : (
              <>
                 {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
-                {tab === 'exposes' && <ExposesManager globalClass={currentClassName} globalClassId={selectedClassId} />}
+                {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} launchIntent={scanLaunchIntent} />}
                 {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
