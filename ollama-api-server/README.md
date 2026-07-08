@@ -37,6 +37,12 @@ Teste :
 curl http://localhost:8787/health
 ```
 
+Pour l’installation complète sur l’ordinateur fixe, suis :
+
+```txt
+SETUP_FIXED_COMPUTER.md
+```
+
 ## Configuration
 
 Dans `.env` :
