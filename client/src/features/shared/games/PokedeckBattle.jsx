@@ -40,7 +40,34 @@ const LESSON_CARDS = [
 
 const clean = (value) => String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 
-export default function PokedeckBattle({ onExit, onDefense, onEnemyAttack }) {
+function AnimatedFighter({ actor, actionNames, resolveUrl, facingFrame = 0, resting = false, role, label }) {
+    const action = actionNames
+        .map((name) => actor?.actions?.find((item) => clean(item?.name) === clean(name)))
+        .find(Boolean) || actor?.actions?.[0];
+    const frames = action?.frames || [];
+    const [frameIndex, setFrameIndex] = useState(resting ? facingFrame : 0);
+
+    useEffect(() => {
+        setFrameIndex(resting ? Math.min(facingFrame, Math.max(0, frames.length - 1)) : 0);
+        if (resting || frames.length < 2) return undefined;
+        const timer = setInterval(() => {
+            setFrameIndex((index) => (index + 1) % frames.length);
+        }, Math.max(70, Number(action?.speed) || 120));
+        return () => clearInterval(timer);
+    }, [action, facingFrame, resting]);
+
+    const frameUrl = frames[frameIndex]?.url || frames[0]?.url;
+    return (
+        <div className={`pokedeck-fighter ${role}`}>
+            {frameUrl
+                ? <img src={resolveUrl?.(frameUrl) || frameUrl} alt={label} />
+                : <div className="pokedeck-sprite-missing">SPRITE<br />MANQUANT</div>}
+            <b>{label}</b>
+        </div>
+    );
+}
+
+export default function PokedeckBattle({ onExit, onDefense, onEnemyAttack, heroSprite, enemySprite, resolveUrl }) {
     const [round, setRound] = useState(0);
     const [phase, setPhase] = useState('enemy');
     const [defenseType, setDefenseType] = useState('');
@@ -55,6 +82,12 @@ export default function PokedeckBattle({ onExit, onDefense, onEnemyAttack }) {
     const timersRef = useRef([]);
     const card = LESSON_CARDS[round % LESSON_CARDS.length];
     const shuffledOptions = useMemo(() => [...card.options].sort(() => Math.random() - .5), [card.id]);
+    const heroActions = phase === 'defense-animation'
+        ? (defenseType === 'super' ? ['SUPER DEFENSE', 'DEFENSE', 'COMBAT'] : ['BLOCK', 'BLOQUER', 'PETITE DEFENSE', 'COMBAT'])
+        : ['IDLE', 'MARCHE BAS', 'MARCHE'];
+    const enemyActions = rayActive
+        ? ['ATTAQUER', 'ATTAQUE', 'COMBAT', 'PARLER']
+        : ['IDLE', 'MARCHE BAS', 'MARCHE'];
 
     const schedule = (callback, delay) => {
         const timer = setTimeout(callback, delay);
@@ -149,9 +182,9 @@ export default function PokedeckBattle({ onExit, onDefense, onEnemyAttack }) {
             </div>
 
             <div className="pokedeck-arena">
-                <div className="pokedeck-fighter hero">🛡️<b>HÉROS</b></div>
+                <AnimatedFighter actor={enemySprite} actionNames={enemyActions} resolveUrl={resolveUrl} facingFrame={0} resting={!rayActive} role="enemy" label="HÉRODOTE" />
                 <div className={`pokedeck-purple-ray ${rayActive ? 'active' : ''}`} />
-                <div className="pokedeck-fighter enemy">👤<b>HÉRODOTE</b></div>
+                <AnimatedFighter actor={heroSprite} actionNames={heroActions} resolveUrl={resolveUrl} facingFrame={1} resting={phase !== 'defense-animation'} role="hero" label="HÉROS" />
             </div>
 
             <div className="pokedeck-panel">

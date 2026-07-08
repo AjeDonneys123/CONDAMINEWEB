@@ -998,6 +998,13 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         holdPokedeckAction(enemy, ['ATTAQUER', 'ATTAQUE', 'COMBAT', 'PARLER'], 999);
     };
 
+    const pokedeckActors = projectRef.current?.scenes?.[0]?.actors || [];
+    const pokedeckInstance = gameInstanceRef.current;
+    const pokedeckHeroProxy = pokedeckInstance?.player || pokedeckInstance?.P1 || pokedeckInstance?.p1 || pokedeckInstance?.HEROS || pokedeckInstance?.ACTOR_1;
+    const pokedeckEnemyProxy = pokedeckInstance?.shen || pokedeckInstance?.SHEN || pokedeckInstance?.Herodote || pokedeckInstance?.HERODOTE || pokedeckInstance?.PNJ || pokedeckInstance?.NPC || pokedeckInstance?.ACTOR_2;
+    const pokedeckHeroSprite = pokedeckActors.find((actor) => actor.id === pokedeckHeroProxy?.id) || pokedeckActors[0];
+    const pokedeckEnemySprite = pokedeckActors.find((actor) => actor.id === pokedeckEnemyProxy?.id) || pokedeckActors[1];
+
     return (
         <div className={"fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center " + (isShake ? 'animate-shake' : '')}>
             {showPokedeckBattle && (
@@ -1005,6 +1012,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                     onExit={() => setShowPokedeckBattle(false)}
                     onDefense={animatePokedeckDefense}
                     onEnemyAttack={animatePokedeckEnemyAttack}
+                    heroSprite={pokedeckHeroSprite}
+                    enemySprite={pokedeckEnemySprite}
+                    resolveUrl={resolveUrl}
                 />
             )}
             
