@@ -20,6 +20,7 @@ const loadConfig = () => {
         port: positiveInteger('PORT', 8787),
         ollamaBaseUrl: String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim().replace(/\/$/, ''),
         defaultModel: String(process.env.DEFAULT_MODEL || 'llama3.1:8b').trim(),
+        fastModel: String(process.env.FAST_MODEL || process.env.DEFAULT_FAST_MODEL || 'llama3.2:3b').trim(),
         requestTimeoutMs: positiveInteger('REQUEST_TIMEOUT_MS', 120000),
         maxConcurrent: positiveInteger('MAX_CONCURRENT', 1),
         maxQueue: positiveInteger('MAX_QUEUE', 20),

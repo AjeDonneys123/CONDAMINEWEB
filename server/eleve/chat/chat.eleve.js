@@ -178,7 +178,11 @@ const buildChatRequest = async ({ student, message, history }) => {
         aiOptions: needsExamStructure
             ? { numPredict: 520, temperature: 0.25 }
             : isShortQuestion
-                ? { numPredict: 80, temperature: 0.1 }
+                ? {
+                    model: String(process.env.OLLAMA_API_FAST_MODEL || 'llama3.2:3b').trim(),
+                    numPredict: 80,
+                    temperature: 0.1
+                }
             : { numPredict: 220, temperature: 0.2 }
     };
 };
