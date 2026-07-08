@@ -104,6 +104,30 @@ examples/condamine-ollama-api.service
 
 Il faudra adapter `WorkingDirectory` selon le chemin réel sur ton ordinateur fixe.
 
+## Brancher Condamine dessus
+
+Dans le `.env` du site Condamine, mets :
+
+```env
+OLLAMA_API_SERVER_URL=http://IP_DE_TON_ORDI_FIXE:8787
+OLLAMA_API_KEY=TA_CLE
+OLLAMA_API_MODEL=llama3.1:8b
+```
+
+Condamine utilisera automatiquement ce serveur en priorité dès que `OLLAMA_API_SERVER_URL` est présent.
+
+Tu peux aussi forcer le choix :
+
+```env
+AI_PROVIDER=ollama_server
+```
+
+Et pour revenir à Gemini :
+
+```env
+AI_PROVIDER=gemini
+```
+
 ## Notes importantes
 
 - Ce serveur ne rend pas les modèles “magiquement gratuits” : il utilise ton matériel local. Le coût devient surtout l’électricité et la puissance de l’ordinateur.
