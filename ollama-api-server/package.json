@@ -1,0 +1,18 @@
+{
+  "name": "condamine-ollama-api-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Passerelle authentifiee entre Condamine et Ollama",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}

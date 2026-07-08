@@ -96,9 +96,45 @@ const AIEngine = {
         }
     },
 
+    askOllamaServer: async (prompt, systemInstruction = "") => {
+        const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
+        const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
+        const model = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        if (!baseUrl || !apiKey || !model) return "";
+        const userText = Array.isArray(prompt)
+            ? prompt.map((p) => String(p?.text || '')).join('\n\n').trim()
+            : String(prompt || '').trim();
+        if (!userText) return "";
+        try {
+            const response = await fetch(`${baseUrl}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: String(systemInstruction || '') },
+                        { role: 'user', content: userText }
+                    ]
+                })
+            });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`OLLAMA_SERVER_HTTP_${response.status}: ${errText.slice(0, 300)}`);
+            }
+            const data = await response.json();
+            return String(data?.message?.content || '').trim();
+        } catch (e) {
+            console.error('AI Ollama Server Error:', e.message);
+            return "";
+        }
+    },
+
     ask: async (prompt, systemInstruction = "", options = {}) => {
         await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+        if (provider === 'ollama_server') {
+            return (await AIEngine.askOllamaServer(prompt, systemInstruction)) || "[]";
+        }
         const useLocalFirst = provider === 'local' || provider === 'ollama';
         if (useLocalFirst) {
             const localText = await AIEngine.askLocal(prompt, systemInstruction);
