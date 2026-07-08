@@ -48,6 +48,42 @@
   line-height: 1;
 }
 
+.eleve-chat-local-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+  border-radius: 999px;
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.eleve-chat-local-badge span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
+}
+
+.eleve-chat-error {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.eleve-chat-thinking {
+  color: #64748b;
+  font-style: italic;
+}
+
 .eleve-chat-open-btn,
 .eleve-chat-send-btn,
 .eleve-chat-install-link {

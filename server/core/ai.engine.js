@@ -15,20 +15,6 @@ const resolveGeminiApiKey = () => {
     return '';
 };
 
-const promptToText = (prompt) => {
-    if (Array.isArray(prompt)) {
-        return prompt.map((p) => String(p?.text || '')).join('\n\n').trim();
-    }
-    return String(prompt || '').trim();
-};
-
-const resolveProvider = () => {
-    const configured = String(process.env.AI_PROVIDER || '').toLowerCase().trim();
-    if (configured) return configured;
-    if (String(process.env.OLLAMA_API_SERVER_URL || '').trim()) return 'ollama_server';
-    return 'gemini';
-};
-
 const AIEngine = {
     normalizeKeys: (obj) => {
         if (typeof obj !== 'object' || obj === null) return obj;
@@ -73,54 +59,13 @@ const AIEngine = {
         }
     },
 
-    askOllamaServer: async (prompt, systemInstruction = "") => {
-        const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
-        const model = String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '').trim();
-        const apiKey = String(process.env.OLLAMA_API_KEY || process.env.OLLAMA_SERVER_API_KEY || '').trim();
-        const userText = promptToText(prompt);
-        if (!baseUrl || !userText) return "";
-
-        const controller = new AbortController();
-        const timeoutMs = Number(process.env.OLLAMA_API_TIMEOUT_MS || 120000);
-        const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 120000);
-
-        try {
-            const headers = { 'Content-Type': 'application/json' };
-            if (apiKey) headers['x-api-key'] = apiKey;
-
-            const response = await fetch(`${baseUrl}/api/chat`, {
-                method: 'POST',
-                headers,
-                signal: controller.signal,
-                body: JSON.stringify({
-                    ...(model ? { model } : {}),
-                    prompt: userText,
-                    system: String(systemInstruction || ''),
-                    temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.3),
-                    maxTokens: Number(process.env.OLLAMA_API_MAX_TOKENS || 900)
-                })
-            });
-
-            if (!response.ok) {
-                const errText = await response.text().catch(() => '');
-                throw new Error(`OLLAMA_SERVER_HTTP_${response.status}: ${errText.slice(0, 300)}`);
-            }
-
-            const data = await response.json();
-            return String(data?.text || data?.message?.content || '').trim();
-        } catch (e) {
-            console.error('AI Ollama Server Error:', e.message);
-            return "";
-        } finally {
-            clearTimeout(timeout);
-        }
-    },
-
     askLocal: async (prompt, systemInstruction = "") => {
         const baseUrl = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim();
         const model = String(process.env.OLLAMA_MODEL || 'qwen2.5:14b-instruct').trim();
         if (!baseUrl || !model) return "";
-        const userText = promptToText(prompt);
+        const userText = Array.isArray(prompt)
+            ? prompt.map((p) => String(p?.text || '')).join('\n\n').trim()
+            : String(prompt || '').trim();
         if (!userText) return "";
         try {
             const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
@@ -151,21 +96,49 @@ const AIEngine = {
         }
     },
 
-    ask: async (prompt, systemInstruction = "", options = {}) => {
-        const provider = resolveProvider();
-        const useOllamaServerFirst = ['ollama_server', 'ollama-api', 'ollama_api', 'remote_ollama'].includes(provider);
-        const useLocalFirst = provider === 'local' || provider === 'ollama';
-
-        if (useOllamaServerFirst) {
-            const serverText = await AIEngine.askOllamaServer(prompt, systemInstruction);
-            if (serverText) return serverText;
+    askOllamaServer: async (prompt, systemInstruction = "") => {
+        const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
+        const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
+        const model = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        if (!baseUrl || !apiKey || !model) return "";
+        const userText = Array.isArray(prompt)
+            ? prompt.map((p) => String(p?.text || '')).join('\n\n').trim()
+            : String(prompt || '').trim();
+        if (!userText) return "";
+        try {
+            const response = await fetch(`${baseUrl}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: String(systemInstruction || '') },
+                        { role: 'user', content: userText }
+                    ]
+                })
+            });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`OLLAMA_SERVER_HTTP_${response.status}: ${errText.slice(0, 300)}`);
+            }
+            const data = await response.json();
+            return String(data?.message?.content || '').trim();
+        } catch (e) {
+            console.error('AI Ollama Server Error:', e.message);
+            return "";
         }
+    },
 
+    ask: async (prompt, systemInstruction = "", options = {}) => {
+        const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+        if (provider === 'ollama_server') {
+            return (await AIEngine.askOllamaServer(prompt, systemInstruction)) || "[]";
+        }
+        const useLocalFirst = provider === 'local' || provider === 'ollama';
         if (useLocalFirst) {
             const localText = await AIEngine.askLocal(prompt, systemInstruction);
             if (localText) return localText;
         }
-
         await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const apiKey = resolveGeminiApiKey();
         if (!apiKey) return "ERROR_KEY";

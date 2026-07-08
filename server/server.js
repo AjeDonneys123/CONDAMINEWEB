@@ -202,6 +202,7 @@ safeLoad('/api/eleve/fiches', './eleve/fiches/fiches.eleve');
 safeLoad('/api/eleve/productions', './eleve/productions/productions.eleve');
 safeLoad('/api/eleve/comments', './eleve/comments/comments.eleve');
 safeLoad('/api/eleve/revisions', './eleve/revisions/revisions.eleve');
+safeLoad('/api/eleve/chat', './eleve/chat/chat.eleve');
 safeLoad('/api/web5e', './web5e/web5e.routes');
 
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
