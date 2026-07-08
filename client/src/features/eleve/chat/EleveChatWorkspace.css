@@ -113,6 +113,82 @@
   font-weight: 700;
 }
 
+.eleve-chat-diagnostic {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eleve-chat-diagnostic.done {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.eleve-chat-diagnostic.error {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.eleve-chat-diagnostic-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.eleve-chat-diagnostic-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.eleve-chat-diagnostic-subtitle {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.eleve-chat-diagnostic-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: #0f172a;
+  color: white;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.eleve-chat-diagnostic-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.eleve-chat-diagnostic-log {
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #d1fae5;
+  padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.eleve-chat-diagnostic-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .eleve-chat-warning {
   border: 1px solid #fecaca;
   background: #fff1f2;

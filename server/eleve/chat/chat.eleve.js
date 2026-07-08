@@ -50,6 +50,21 @@ const isExamWritingRequest = (message = '') => {
     return /\b(brevet|developpement construit|sujet type|redaction|paragraphe argumente|traite ce sujet|compose|introduction|conclusion)\b/.test(text);
 };
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const openNdjsonStream = (res) => {
+    res.status(200);
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+};
+
+const writeNdjson = (res, payload) => {
+    res.write(`${JSON.stringify(payload)}\n`);
+    res.flush?.();
+};
+
 const buildChapterContext = async (message, student) => {
     const Chapter = mongoose.model('Chapter');
     const explicitLevel = requestedSchoolLevel(message);
@@ -135,6 +150,82 @@ const buildChatRequest = async ({ student, message, history }) => {
             : { numPredict: 220, temperature: 0.2 }
     };
 };
+
+router.get('/diagnostic/stream', async (_req, res) => {
+    const startedAt = Date.now();
+    openNdjsonStream(res);
+    writeNdjson(res, {
+        type: 'server',
+        label: 'headers_sent',
+        text: 'Chunk serveur 1/4: connexion ouverte.',
+        elapsedMs: Date.now() - startedAt
+    });
+    await wait(500);
+    writeNdjson(res, {
+        type: 'server',
+        label: 'after_500ms',
+        text: 'Chunk serveur 2/4: +500 ms.',
+        elapsedMs: Date.now() - startedAt
+    });
+    await wait(1000);
+    writeNdjson(res, {
+        type: 'server',
+        label: 'after_1500ms',
+        text: 'Chunk serveur 3/4: +1500 ms.',
+        elapsedMs: Date.now() - startedAt
+    });
+    await wait(1000);
+    writeNdjson(res, {
+        type: 'server',
+        label: 'after_2500ms',
+        text: 'Chunk serveur 4/4: +2500 ms.',
+        elapsedMs: Date.now() - startedAt
+    });
+    res.end(`${JSON.stringify({ done: true, elapsedMs: Date.now() - startedAt })}\n`);
+});
+
+router.post('/diagnostic/ollama-stream', async (_req, res) => {
+    const startedAt = Date.now();
+    try {
+        openNdjsonStream(res);
+        writeNdjson(res, {
+            type: 'server',
+            label: 'ollama_request_start',
+            text: 'Demande envoyee a Ollama...',
+            elapsedMs: Date.now() - startedAt
+        });
+        let chunks = 0;
+        const answer = await AIEngine.askOllamaServerStream(
+            'Reponds exactement en francais: test streaming OK.',
+            'Tu es un test de streaming. Reponds tres court, sans introduction.',
+            (text) => {
+                chunks += 1;
+                writeNdjson(res, {
+                    type: 'ai',
+                    label: 'ollama_chunk',
+                    text,
+                    chunkIndex: chunks,
+                    elapsedMs: Date.now() - startedAt
+                });
+            },
+            { numPredict: 30, temperature: 0 }
+        );
+        res.end(`${JSON.stringify({
+            done: true,
+            answerLength: String(answer || '').length,
+            chunks,
+            elapsedMs: Date.now() - startedAt
+        })}\n`);
+    } catch (error) {
+        console.error('Student chat diagnostic error:', error.message);
+        if (!res.headersSent) return res.status(503).json({ error: "Diagnostic streaming indisponible." });
+        res.end(`${JSON.stringify({
+            error: error.message || 'Diagnostic streaming indisponible.',
+            done: true,
+            elapsedMs: Date.now() - startedAt
+        })}\n`);
+    }
+});
 
 router.post('/message', async (req, res) => {
     try {

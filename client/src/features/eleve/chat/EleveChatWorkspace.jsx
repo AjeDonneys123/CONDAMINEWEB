@@ -9,6 +9,8 @@ export default function EleveChatWorkspace({ user }) {
   const [pending, setPending] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState('');
+  const [diagnostic, setDiagnostic] = useState(null);
+  const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const threadRef = useRef(null);
 
   useEffect(() => {
@@ -95,6 +97,96 @@ export default function EleveChatWorkspace({ user }) {
     }
   };
 
+  const addDiagnosticLine = (line) => {
+    setDiagnostic((current) => ({
+      status: current?.status || 'running',
+      lines: [...(current?.lines || []), line].slice(-80)
+    }));
+  };
+
+  const runOneDiagnostic = async ({ label, url, options }) => {
+    const startedAt = performance.now();
+    let firstNetworkChunkMs = null;
+    let firstTextMs = null;
+    let events = 0;
+    let textChunks = 0;
+    let text = '';
+    addDiagnosticLine(`▶ ${label}`);
+    const response = await fetch(url, options);
+    addDiagnosticLine(`  headers: ${Math.round(performance.now() - startedAt)} ms | HTTP ${response.status}`);
+    if (!response.ok || !response.body) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`${label}: HTTP ${response.status} ${body.slice(0, 120)}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (value && firstNetworkChunkMs === null) {
+        firstNetworkChunkMs = Math.round(performance.now() - startedAt);
+        addDiagnosticLine(`  1er paquet reseau: ${firstNetworkChunkMs} ms`);
+      }
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split('\n');
+      buffer = done ? '' : (lines.pop() || '');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        events += 1;
+        const data = JSON.parse(line);
+        if (data.error) throw new Error(`${label}: ${data.error}`);
+        if (data.text) {
+          textChunks += 1;
+          text += String(data.text);
+          if (firstTextMs === null) {
+            firstTextMs = Math.round(performance.now() - startedAt);
+            addDiagnosticLine(`  1er texte visible: ${firstTextMs} ms`);
+          }
+        }
+        if (data.label || data.elapsedMs !== undefined) {
+          addDiagnosticLine(`  event ${events}: ${data.label || 'done'} | serveur ${data.elapsedMs ?? '?'} ms`);
+        }
+      }
+      if (done) break;
+    }
+    addDiagnosticLine(`✓ ${label}: ${Math.round(performance.now() - startedAt)} ms, ${events} events, ${textChunks} morceaux texte`);
+    if (text) addDiagnosticLine(`  aperçu: ${text.slice(0, 120)}`);
+    return { firstNetworkChunkMs, firstTextMs, events, textChunks };
+  };
+
+  const runStreamingDiagnostic = async () => {
+    if (diagnosticRunning) return;
+    setDiagnosticRunning(true);
+    setDiagnostic({ status: 'running', lines: ['Diagnostic streaming lance...'] });
+    try {
+      await runOneDiagnostic({
+        label: 'Test serveur pur, sans IA',
+        url: '/api/eleve/chat/diagnostic/stream'
+      });
+      await runOneDiagnostic({
+        label: 'Test Ollama reel',
+        url: '/api/eleve/chat/diagnostic/ollama-stream',
+        options: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        }
+      });
+      setDiagnostic((current) => ({
+        status: 'done',
+        lines: [...(current?.lines || []), '✅ Diagnostic termine. Si le test serveur pur arrive tard, le probleme vient du proxy/deploiement. Si seul Ollama arrive tard, le probleme vient du modele ou du Mac.']
+      }));
+    } catch (diagError) {
+      setDiagnostic((current) => ({
+        status: 'error',
+        lines: [...(current?.lines || []), `❌ ${diagError.message || 'Diagnostic impossible.'}`]
+      }));
+    } finally {
+      setDiagnosticRunning(false);
+    }
+  };
+
   return (
     <div className="eleve-chat-page">
       <div className="eleve-chat-shell">
@@ -108,6 +200,32 @@ export default function EleveChatWorkspace({ user }) {
 
         <div className="eleve-chat-subtitle">
           Pose une question sur tes cours. Conda peut t&apos;expliquer et te guider sans faire le travail a ta place.
+        </div>
+
+        <div className={`eleve-chat-diagnostic ${diagnostic?.status || ''}`}>
+          <div className="eleve-chat-diagnostic-head">
+            <div>
+              <div className="eleve-chat-diagnostic-title">Test streaming</div>
+              <div className="eleve-chat-diagnostic-subtitle">
+                Mesure si les morceaux arrivent vraiment au navigateur.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="eleve-chat-diagnostic-btn"
+              onClick={runStreamingDiagnostic}
+              disabled={diagnosticRunning}
+            >
+              {diagnosticRunning ? 'Test en cours…' : 'Tester'}
+            </button>
+          </div>
+          {diagnostic && (
+            <div className="eleve-chat-diagnostic-log">
+              {diagnostic.lines.map((line, index) => (
+                <div key={`${index}-${line}`} className="eleve-chat-diagnostic-line">{line}</div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="eleve-chat-thread" ref={threadRef}>
