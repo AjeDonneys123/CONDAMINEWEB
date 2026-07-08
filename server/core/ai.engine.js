@@ -15,6 +15,10 @@ const resolveGeminiApiKey = () => {
     return '';
 };
 
+const promptToText = (prompt) => Array.isArray(prompt)
+    ? prompt.map((part) => String(part?.text || '')).join('\n\n').trim()
+    : String(prompt || '').trim();
+
 const AIEngine = {
     normalizeKeys: (obj) => {
         if (typeof obj !== 'object' || obj === null) return obj;
@@ -114,7 +118,11 @@ const AIEngine = {
                     messages: [
                         { role: 'system', content: String(systemInstruction || '') },
                         { role: 'user', content: userText }
-                    ]
+                    ],
+                    options: {
+                        temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.2),
+                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 320)
+                    }
                 })
             });
             if (!response.ok) {
@@ -126,6 +134,66 @@ const AIEngine = {
         } catch (e) {
             console.error('AI Ollama Server Error:', e.message);
             return "";
+        }
+    },
+
+    askOllamaServerStream: async (prompt, systemInstruction = "", onChunk = () => {}) => {
+        const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
+        const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
+        const model = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        const userText = promptToText(prompt);
+        if (!baseUrl || !apiKey || !model || !userText) return '';
+
+        const controller = new AbortController();
+        const timeoutMs = Number(process.env.OLLAMA_API_TIMEOUT_MS || 120000);
+        const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 120000);
+        let complete = '';
+        let buffer = '';
+        try {
+            const response = await fetch(`${baseUrl}/chat/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: String(systemInstruction || '') },
+                        { role: 'user', content: userText }
+                    ],
+                    options: {
+                        temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.2),
+                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 320)
+                    }
+                })
+            });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`OLLAMA_STREAM_HTTP_${response.status}: ${errText.slice(0, 300)}`);
+            }
+            for await (const chunk of response.body) {
+                buffer += chunk.toString('utf8');
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    const data = JSON.parse(line);
+                    if (data.error) throw new Error(data.error);
+                    const text = String(data?.message?.content || '');
+                    if (text) {
+                        complete += text;
+                        onChunk(text);
+                    }
+                }
+            }
+            return complete.trim();
+        } catch (error) {
+            if (complete) throw error;
+            console.warn('AI Ollama streaming indisponible, repli sans streaming:', error.message);
+            const fallback = await AIEngine.askOllamaServer(prompt, systemInstruction);
+            if (fallback) onChunk(fallback);
+            return fallback;
+        } finally {
+            clearTimeout(timeout);
         }
     },
 

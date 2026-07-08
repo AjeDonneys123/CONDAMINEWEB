@@ -28,23 +28,55 @@ export default function EleveChatWorkspace({ user }) {
     setPending(true);
 
     try {
-      const response = await fetch('/api/eleve/chat/message', {
+      const payload = {
+        studentId,
+        message: text,
+        history: messages.slice(-MAX_HISTORY).map((item) => ({
+          role: item.role === 'assistant' ? 'assistant' : 'student',
+          text: String(item.text || '').slice(0, 2000)
+        }))
+      };
+      const response = await fetch('/api/eleve/chat/message/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId,
-          message: text,
-          history: messages.slice(-MAX_HISTORY).map((item) => ({
-            role: item.role === 'assistant' ? 'assistant' : 'student',
-            text: String(item.text || '').slice(0, 2000)
-          }))
-        })
+        body: JSON.stringify(payload)
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error || `Erreur HTTP ${response.status}`);
-      const answer = String(data?.answer || '').trim();
-      if (!answer) throw new Error("L'IA n'a pas renvoye de reponse.");
-      setMessages((current) => [...current, { role: 'assistant', text: answer }]);
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || `Erreur HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let answer = '';
+      let assistantAdded = false;
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = buffer.split('\n');
+        buffer = done ? '' : (lines.pop() || '');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const data = JSON.parse(line);
+          if (data.error) throw new Error(data.error);
+          const chunk = String(data.text || '');
+          if (!chunk) continue;
+          answer += chunk;
+          if (!assistantAdded) {
+            assistantAdded = true;
+            setMessages((current) => [...current, { role: 'assistant', text: answer }]);
+          } else {
+            setMessages((current) => current.map((item, index) =>
+              index === current.length - 1 && item.role === 'assistant'
+                ? { ...item, text: answer }
+                : item
+            ));
+          }
+        }
+        if (done) break;
+      }
+      if (!answer.trim()) throw new Error("L'IA n'a pas renvoye de reponse.");
     } catch (requestError) {
       setError(requestError.message || "L'IA locale est momentanement indisponible.");
     } finally {

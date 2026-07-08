@@ -100,10 +100,11 @@ const createApp = (config, dependencies = {}) => {
                         body: JSON.stringify({
                             model,
                             stream: false,
+                            keep_alive: '30m',
                             messages,
                             options: {
                                 temperature: 0.3,
-                                num_predict: 700,
+                                num_predict: 320,
                                 ...(req.body?.options || {})
                             }
                         })
@@ -125,6 +126,60 @@ const createApp = (config, dependencies = {}) => {
             res.status(error.status || (timedOut ? 504 : 502)).json({
                 error: timedOut ? 'OLLAMA_TIMEOUT' : String(error.message || 'OLLAMA_UNAVAILABLE')
             });
+        }
+    });
+
+    app.post('/chat/stream', async (req, res) => {
+        const messages = req.body?.messages;
+        const model = String(req.body?.model || config.defaultModel).trim();
+        if (!Array.isArray(messages) || !messages.length || !model) {
+            res.status(400).json({ error: 'INVALID_REQUEST' });
+            return;
+        }
+
+        try {
+            await enqueue(async () => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+                try {
+                    const response = await fetchImpl(`${config.ollamaBaseUrl}/api/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
+                        body: JSON.stringify({
+                            model,
+                            stream: true,
+                            keep_alive: '30m',
+                            messages,
+                            options: {
+                                temperature: 0.2,
+                                num_predict: 320,
+                                ...(req.body?.options || {})
+                            }
+                        })
+                    });
+                    if (!response.ok) {
+                        const detail = await response.text().catch(() => '');
+                        const error = new Error(detail || `OLLAMA_HTTP_${response.status}`);
+                        error.status = 502;
+                        throw error;
+                    }
+
+                    res.status(200);
+                    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+                    res.setHeader('Cache-Control', 'no-cache, no-transform');
+                    res.setHeader('X-Accel-Buffering', 'no');
+                    res.flushHeaders?.();
+                    for await (const chunk of response.body) res.write(chunk);
+                    res.end();
+                } finally {
+                    clearTimeout(timer);
+                }
+            });
+        } catch (error) {
+            const code = error?.name === 'AbortError' ? 'OLLAMA_TIMEOUT' : String(error.message || 'OLLAMA_UNAVAILABLE');
+            if (!res.headersSent) res.status(error.status || 502).json({ error: code });
+            else res.end(`${JSON.stringify({ error: code, done: true })}\n`);
         }
     });
 

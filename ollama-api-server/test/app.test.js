@@ -55,4 +55,31 @@ test('chat transmet la requete a Ollama', async (t) => {
     assert.equal(response.status, 200);
     assert.equal((await response.json()).message.content, 'Salut');
     assert.equal(forwarded.stream, false);
+    assert.equal(forwarded.keep_alive, '30m');
+    assert.equal(forwarded.options.num_predict, 320);
+});
+
+test('chat diffuse progressivement la reponse Ollama', async (t) => {
+    let forwarded;
+    const instance = await start(async (_url, options) => {
+        forwarded = JSON.parse(options.body);
+        return {
+            ok: true,
+            body: (async function* stream() {
+                yield Buffer.from('{"message":{"content":"Bon"},"done":false}\n');
+                yield Buffer.from('{"message":{"content":"jour"},"done":true}\n');
+            })()
+        };
+    });
+    t.after(() => instance.server.close());
+    const response = await fetch(`${instance.url}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': config.apiKey },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'Bonjour' }] })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Bon.*jour/s);
+    assert.equal(forwarded.stream, true);
+    assert.equal(forwarded.keep_alive, '30m');
+    assert.equal(forwarded.options.num_predict, 320);
 });
