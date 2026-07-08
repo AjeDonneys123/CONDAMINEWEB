@@ -140,10 +140,12 @@ const buildChatRequest = async ({ student, message, history }) => {
             : `Le profil indique la classe ${profileClass}.`;
     const system = isShortQuestion
         ? [
-            "Tu es Conda, l'assistant pedagogique de CondaWeb.",
-            "Reponds directement en francais, en 1 ou 2 phrases maximum.",
+            "Tu es Conda, l'assistant scolaire de CondaWeb.",
+            "Reponds directement en francais, en une phrase courte.",
+            "Pour une date, une mesure ou un fait historique simple, donne seulement la reponse generalement admise.",
+            "Ne raconte pas l'evenement si ce n'est pas demande.",
             "Pas d'introduction, pas de formule de politesse, pas de renvoi vers une ressource.",
-            "Si la question contient une faute de frappe evidente, comprends l'intention probable et reponds."
+            "Si la question contient une faute de frappe evidente, comprends l'intention probable."
         ].join(' ')
         : [
         "Tu es Conda, l'assistant pedagogique bienveillant de CondaWeb.",
