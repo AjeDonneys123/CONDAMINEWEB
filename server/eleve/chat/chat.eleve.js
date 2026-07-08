@@ -50,6 +50,15 @@ const isExamWritingRequest = (message = '') => {
     return /\b(brevet|developpement construit|sujet type|redaction|paragraphe argumente|traite ce sujet|compose|introduction|conclusion)\b/.test(text);
 };
 
+const isShortKnowledgeQuestion = (message = '') => {
+    const raw = String(message || '').trim();
+    const text = normalize(raw);
+    if (!raw || raw.length > 160) return false;
+    if (isCatalogQuestion(raw) || isExamWritingRequest(raw)) return false;
+    return raw.includes('?')
+        || /^(qui|que|quoi|quand|ou|comment|combien|pourquoi|quelle?|quels?|quelles?|cite|donne|explique vite|resume vite)\b/.test(text);
+};
+
 const getInstantAnswer = (message = '', student = {}) => {
     const text = normalize(message).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
     const firstName = String(student?.firstName || '').trim();
@@ -111,10 +120,11 @@ const buildChapterContext = async (message, student) => {
 const buildChatRequest = async ({ student, message, history }) => {
     const needsCatalog = isCatalogQuestion(message);
     const needsExamStructure = !needsCatalog && isExamWritingRequest(message);
+    const isShortQuestion = !needsCatalog && !needsExamStructure && isShortKnowledgeQuestion(message);
     const chapterContext = needsCatalog
         ? await buildChapterContext(message, student)
         : { explicitLevel: requestedSchoolLevel(message), selectedLevel: '', text: '' };
-    const transcript = history
+    const transcript = isShortQuestion ? '' : history
         .map((item) => `${item.role === 'assistant' ? 'Conda' : 'Eleve'}: ${item.text}`)
         .join('\n');
     const prompt = [
@@ -128,7 +138,14 @@ const buildChatRequest = async ({ student, message, history }) => {
         : chapterContext.explicitLevel
             ? `La question indique explicitement le niveau ${chapterContext.explicitLevel}e. Utilise ce niveau et ignore toute classe differente dans le profil.`
             : `Le profil indique la classe ${profileClass}.`;
-    const system = [
+    const system = isShortQuestion
+        ? [
+            "Tu es Conda, l'assistant pedagogique de CondaWeb.",
+            "Reponds directement en francais, en 1 ou 2 phrases maximum.",
+            "Pas d'introduction, pas de formule de politesse, pas de renvoi vers une ressource.",
+            "Si la question contient une faute de frappe evidente, comprends l'intention probable et reponds."
+        ].join(' ')
+        : [
         "Tu es Conda, l'assistant pedagogique bienveillant de CondaWeb.",
         `L'eleve s'appelle ${String(student.firstName || 'eleve')}.`,
         levelRule,
@@ -160,6 +177,8 @@ const buildChatRequest = async ({ student, message, history }) => {
         streamPreamble: needsExamStructure ? "Modèle type brevet :\n\n" : "",
         aiOptions: needsExamStructure
             ? { numPredict: 520, temperature: 0.25 }
+            : isShortQuestion
+                ? { numPredict: 80, temperature: 0.1 }
             : { numPredict: 220, temperature: 0.2 }
     };
 };
