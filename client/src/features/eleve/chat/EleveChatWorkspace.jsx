@@ -11,6 +11,7 @@ export default function EleveChatWorkspace({ user }) {
   const [error, setError] = useState('');
   const [diagnostic, setDiagnostic] = useState(null);
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
+  const [chatMetrics, setChatMetrics] = useState(null);
   const threadRef = useRef(null);
 
   useEffect(() => {
@@ -30,6 +31,16 @@ export default function EleveChatWorkspace({ user }) {
     setError('');
     setPending(true);
     setStreaming(false);
+    const chatStartedAt = performance.now();
+    let firstHeaderMs = null;
+    let firstNetworkChunkMs = null;
+    let firstTextMs = null;
+    let chatEvents = 0;
+    let chatTextChunks = 0;
+    setChatMetrics({
+      status: 'running',
+      lines: ['Message envoye. En attente des headers serveur...']
+    });
 
     try {
       const payload = {
@@ -45,6 +56,14 @@ export default function EleveChatWorkspace({ user }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      firstHeaderMs = Math.round(performance.now() - chatStartedAt);
+      setChatMetrics({
+        status: 'running',
+        lines: [
+          `Headers serveur: ${firstHeaderMs} ms | HTTP ${response.status}`,
+          'Lecture du flux streaming...'
+        ]
+      });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data?.error || `Erreur HTTP ${response.status}`);
@@ -57,21 +76,51 @@ export default function EleveChatWorkspace({ user }) {
       let assistantAdded = false;
       while (true) {
         const { value, done } = await reader.read();
+        if (value && firstNetworkChunkMs === null) {
+          firstNetworkChunkMs = Math.round(performance.now() - chatStartedAt);
+          setChatMetrics((current) => ({
+            status: 'running',
+            lines: [
+              ...(current?.lines || []),
+              `1er paquet reseau: ${firstNetworkChunkMs} ms`
+            ]
+          }));
+        }
         buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
         const lines = buffer.split('\n');
         buffer = done ? '' : (lines.pop() || '');
         for (const line of lines) {
           if (!line.trim()) continue;
+          chatEvents += 1;
           const data = JSON.parse(line);
           if (data.error) throw new Error(data.error);
           const chunk = String(data.text || '');
           if (!chunk) continue;
+          chatTextChunks += 1;
           answer += chunk;
           if (!assistantAdded) {
             assistantAdded = true;
             setStreaming(true);
+            firstTextMs = Math.round(performance.now() - chatStartedAt);
+            setChatMetrics((current) => ({
+              status: 'streaming',
+              lines: [
+                ...(current?.lines || []),
+                `1er texte visible: ${firstTextMs} ms`,
+                `Streaming actif: ${chatTextChunks} morceau texte recu.`
+              ]
+            }));
             setMessages((current) => [...current, { role: 'assistant', text: answer }]);
           } else {
+            if (chatTextChunks % 8 === 0) {
+              setChatMetrics((current) => ({
+                status: 'streaming',
+                lines: [
+                  ...(current?.lines || []).slice(0, 8),
+                  `Streaming actif: ${chatTextChunks} morceaux texte recus.`
+                ]
+              }));
+            }
             setMessages((current) => current.map((item, index) =>
               index === current.length - 1 && item.role === 'assistant'
                 ? { ...item, text: answer }
@@ -82,7 +131,22 @@ export default function EleveChatWorkspace({ user }) {
         if (done) break;
       }
       if (!answer.trim()) throw new Error("L'IA n'a pas renvoye de reponse.");
+      setChatMetrics((current) => ({
+        status: 'done',
+        lines: [
+          ...(current?.lines || []),
+          `Fin: ${Math.round(performance.now() - chatStartedAt)} ms`,
+          `Resume: headers ${firstHeaderMs ?? '?'} ms | 1er paquet ${firstNetworkChunkMs ?? '?'} ms | 1er texte ${firstTextMs ?? '?'} ms | ${chatTextChunks} morceaux texte | ${chatEvents} events`
+        ]
+      }));
     } catch (requestError) {
+      setChatMetrics((current) => ({
+        status: 'error',
+        lines: [
+          ...(current?.lines || []),
+          `Erreur apres ${Math.round(performance.now() - chatStartedAt)} ms: ${requestError.message || 'inconnue'}`
+        ]
+      }));
       setError(requestError.message || "L'IA locale est momentanement indisponible.");
     } finally {
       setPending(false);
@@ -219,13 +283,20 @@ export default function EleveChatWorkspace({ user }) {
               {diagnosticRunning ? 'Test en cours…' : 'Tester'}
             </button>
           </div>
-          {diagnostic && (
-            <div className="eleve-chat-diagnostic-log">
-              {diagnostic.lines.map((line, index) => (
-                <div key={`${index}-${line}`} className="eleve-chat-diagnostic-line">{line}</div>
-              ))}
-            </div>
-          )}
+          <div className="eleve-chat-diagnostic-log">
+            {(diagnostic?.lines?.length ? diagnostic.lines : ['Aucun diagnostic manuel lance. Clique sur Tester.']).map((line, index) => (
+              <div key={`${index}-${line}`} className="eleve-chat-diagnostic-line">{line}</div>
+            ))}
+          </div>
+        </div>
+
+        <div className={`eleve-chat-diagnostic chat ${chatMetrics?.status || ''}`}>
+          <div className="eleve-chat-diagnostic-title">Mesure du dernier message</div>
+          <div className="eleve-chat-diagnostic-log compact">
+            {(chatMetrics?.lines?.length ? chatMetrics.lines : ['Aucun message mesure pour le moment.']).map((line, index) => (
+              <div key={`${index}-${line}`} className="eleve-chat-diagnostic-line">{line}</div>
+            ))}
+          </div>
         </div>
 
         <div className="eleve-chat-thread" ref={threadRef}>
