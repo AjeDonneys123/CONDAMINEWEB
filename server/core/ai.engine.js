@@ -100,7 +100,7 @@ const AIEngine = {
         }
     },
 
-    askOllamaServer: async (prompt, systemInstruction = "") => {
+    askOllamaServer: async (prompt, systemInstruction = "", requestOptions = {}) => {
         const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
         const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
         const model = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
@@ -120,8 +120,8 @@ const AIEngine = {
                         { role: 'user', content: userText }
                     ],
                     options: {
-                        temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.2),
-                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 220)
+                        temperature: Number(requestOptions.temperature ?? process.env.OLLAMA_API_TEMPERATURE ?? 0.2),
+                        num_predict: Number(requestOptions.numPredict ?? process.env.OLLAMA_API_MAX_TOKENS ?? 220)
                     }
                 })
             });
@@ -137,7 +137,7 @@ const AIEngine = {
         }
     },
 
-    askOllamaServerStream: async (prompt, systemInstruction = "", onChunk = () => {}) => {
+    askOllamaServerStream: async (prompt, systemInstruction = "", onChunk = () => {}, requestOptions = {}) => {
         const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
         const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
         const model = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
@@ -161,8 +161,8 @@ const AIEngine = {
                         { role: 'user', content: userText }
                     ],
                     options: {
-                        temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.2),
-                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 220)
+                        temperature: Number(requestOptions.temperature ?? process.env.OLLAMA_API_TEMPERATURE ?? 0.2),
+                        num_predict: Number(requestOptions.numPredict ?? process.env.OLLAMA_API_MAX_TOKENS ?? 220)
                     }
                 })
             });
@@ -189,7 +189,7 @@ const AIEngine = {
         } catch (error) {
             if (complete) throw error;
             console.warn('AI Ollama streaming indisponible, repli sans streaming:', error.message);
-            const fallback = await AIEngine.askOllamaServer(prompt, systemInstruction);
+            const fallback = await AIEngine.askOllamaServer(prompt, systemInstruction, requestOptions);
             if (fallback) onChunk(fallback);
             return fallback;
         } finally {
@@ -200,7 +200,7 @@ const AIEngine = {
     ask: async (prompt, systemInstruction = "", options = {}) => {
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         if (provider === 'ollama_server') {
-            return (await AIEngine.askOllamaServer(prompt, systemInstruction)) || "[]";
+            return (await AIEngine.askOllamaServer(prompt, systemInstruction, options)) || "[]";
         }
         const useLocalFirst = provider === 'local' || provider === 'ollama';
         if (useLocalFirst) {

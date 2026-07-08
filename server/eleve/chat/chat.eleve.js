@@ -45,6 +45,11 @@ const chapterMatchesLevel = (chapter, level) => {
 
 const isCatalogQuestion = (message = '') => /\b(chapitre|cours|programme|lecon|sequence|onglet|ressource|fiche)\b/.test(normalize(message));
 
+const isExamWritingRequest = (message = '') => {
+    const text = normalize(message);
+    return /\b(brevet|developpement construit|sujet type|redaction|paragraphe argumente|traite ce sujet|compose|introduction|conclusion)\b/.test(text);
+};
+
 const buildChapterContext = async (message, student) => {
     const Chapter = mongoose.model('Chapter');
     const explicitLevel = requestedSchoolLevel(message);
@@ -77,6 +82,7 @@ const buildChapterContext = async (message, student) => {
 
 const buildChatRequest = async ({ student, message, history }) => {
     const needsCatalog = isCatalogQuestion(message);
+    const needsExamStructure = !needsCatalog && isExamWritingRequest(message);
     const chapterContext = needsCatalog
         ? await buildChapterContext(message, student)
         : { explicitLevel: requestedSchoolLevel(message), selectedLevel: '', text: '' };
@@ -104,10 +110,30 @@ const buildChatRequest = async ({ student, message, history }) => {
         needsCatalog
             ? "Si le catalogue ne permet pas de repondre exactement, dis-le simplement et demande une precision."
             : "Donne d'abord la reponse utile. Ne renvoie pas l'eleve vers une ressource et ne commence pas par une formule de bienvenue.",
-        "Reponds en francais en 2 a 5 phrases courtes, precises et sans phrase de remplissage.",
-        "Aide a comprendre sans faire integralement un devoir note a la place de l'eleve."
+        needsExamStructure
+            ? [
+                "Mode brevet/developpement construit: respecte les attentes scolaires.",
+                "Structure obligatoirement la reponse avec les titres: Introduction, Developpement, Conclusion.",
+                "Dans l'introduction: presente le sujet, situe rapidement le contexte, puis annonce une problematique simple.",
+                "Dans le developpement: fais 2 ou 3 paragraphes courts avec des idees clairement separees, des exemples precis et du vocabulaire historique.",
+                "Dans la conclusion: reponds nettement a la problematique et ouvre par une phrase de bilan.",
+                "Termine par une courte ligne 'A retenir' avec 2 ou 3 points importants.",
+                "Reste concis: l'objectif est une copie de brevet claire, pas un long cours.",
+                "Ne dis pas que tu ne peux pas faire le devoir: donne un modele a comprendre et a reformuler."
+            ].join(' ')
+            : "Reponds en francais en 2 a 5 phrases courtes, precises et sans phrase de remplissage.",
+        needsExamStructure
+            ? "Pour rester pedagogique, signale implicitement que c'est un modele a apprendre/reformuler, sans sermonner l'eleve."
+            : "Aide a comprendre sans faire integralement un devoir note a la place de l'eleve."
     ].join(' ');
-    return { prompt, system };
+    return {
+        prompt,
+        system,
+        streamPreamble: needsExamStructure ? "Modèle type brevet :\n\n" : "",
+        aiOptions: needsExamStructure
+            ? { numPredict: 520, temperature: 0.25 }
+            : { numPredict: 220, temperature: 0.2 }
+    };
 };
 
 router.post('/message', async (req, res) => {
@@ -124,11 +150,12 @@ router.post('/message', async (req, res) => {
         if (!student) return res.status(404).json({ error: 'Eleve introuvable.' });
 
         const history = cleanHistory(req.body?.history);
-        const { prompt, system } = await buildChatRequest({ student, message, history });
+        const { prompt, system, aiOptions } = await buildChatRequest({ student, message, history });
 
         const answer = String(await AIEngine.ask(prompt, system, {
             route: '/api/eleve/chat/message',
-            feature: 'student-chat'
+            feature: 'student-chat',
+            ...aiOptions
         }) || '').trim();
         if (!answer || answer === '[]' || answer === 'ERROR_KEY') {
             return res.status(503).json({ error: "L'IA locale est momentanement indisponible." });
@@ -152,7 +179,7 @@ router.post('/message/stream', async (req, res) => {
         const student = await Student.findById(studentId, 'firstName currentClass').lean();
         if (!student) return res.status(404).json({ error: 'Eleve introuvable.' });
         const history = cleanHistory(req.body?.history);
-        const { prompt, system } = await buildChatRequest({ student, message, history });
+        const { prompt, system, aiOptions, streamPreamble } = await buildChatRequest({ student, message, history });
 
         res.status(200);
         res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -160,10 +187,12 @@ router.post('/message/stream', async (req, res) => {
         res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders?.();
 
+        if (streamPreamble) res.write(`${JSON.stringify({ text: streamPreamble })}\n`);
+
         const answer = await AIEngine.askOllamaServerStream(prompt, system, (text) => {
             res.write(`${JSON.stringify({ text })}\n`);
-        });
-        if (!answer) throw new Error('EMPTY_AI_RESPONSE');
+        }, aiOptions);
+        if (!answer && !streamPreamble) throw new Error('EMPTY_AI_RESPONSE');
         res.end(`${JSON.stringify({ done: true })}\n`);
     } catch (error) {
         console.error('Student chat stream error:', error.message);

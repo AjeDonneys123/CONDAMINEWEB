@@ -7,6 +7,7 @@ export default function EleveChatWorkspace({ user }) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [pending, setPending] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState('');
   const threadRef = useRef(null);
 
@@ -26,6 +27,7 @@ export default function EleveChatWorkspace({ user }) {
     setInput('');
     setError('');
     setPending(true);
+    setStreaming(false);
 
     try {
       const payload = {
@@ -65,6 +67,7 @@ export default function EleveChatWorkspace({ user }) {
           answer += chunk;
           if (!assistantAdded) {
             assistantAdded = true;
+            setStreaming(true);
             setMessages((current) => [...current, { role: 'assistant', text: answer }]);
           } else {
             setMessages((current) => current.map((item, index) =>
@@ -81,6 +84,7 @@ export default function EleveChatWorkspace({ user }) {
       setError(requestError.message || "L'IA locale est momentanement indisponible.");
     } finally {
       setPending(false);
+      setStreaming(false);
     }
   };
 
@@ -118,7 +122,7 @@ export default function EleveChatWorkspace({ user }) {
               <div className="eleve-chat-text">{message.text}</div>
             </div>
           ))}
-          {pending && (
+          {pending && !streaming && (
             <div className="eleve-chat-bubble assistant">
               <div className="eleve-chat-label">Conda</div>
               <div className="eleve-chat-text eleve-chat-thinking">Reflechit…</div>
