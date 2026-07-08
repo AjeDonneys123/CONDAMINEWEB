@@ -121,7 +121,7 @@ const AIEngine = {
                     ],
                     options: {
                         temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.2),
-                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 320)
+                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 220)
                     }
                 })
             });
@@ -162,7 +162,7 @@ const AIEngine = {
                     ],
                     options: {
                         temperature: Number(process.env.OLLAMA_API_TEMPERATURE || 0.2),
-                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 320)
+                        num_predict: Number(process.env.OLLAMA_API_MAX_TOKENS || 220)
                     }
                 })
             });

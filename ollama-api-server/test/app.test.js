@@ -56,7 +56,7 @@ test('chat transmet la requete a Ollama', async (t) => {
     assert.equal((await response.json()).message.content, 'Salut');
     assert.equal(forwarded.stream, false);
     assert.equal(forwarded.keep_alive, '30m');
-    assert.equal(forwarded.options.num_predict, 320);
+    assert.equal(forwarded.options.num_predict, 220);
 });
 
 test('chat diffuse progressivement la reponse Ollama', async (t) => {
@@ -81,5 +81,5 @@ test('chat diffuse progressivement la reponse Ollama', async (t) => {
     assert.match(await response.text(), /Bon.*jour/s);
     assert.equal(forwarded.stream, true);
     assert.equal(forwarded.keep_alive, '30m');
-    assert.equal(forwarded.options.num_predict, 320);
+    assert.equal(forwarded.options.num_predict, 220);
 });

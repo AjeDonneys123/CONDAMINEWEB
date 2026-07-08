@@ -104,7 +104,7 @@ const createApp = (config, dependencies = {}) => {
                             messages,
                             options: {
                                 temperature: 0.3,
-                                num_predict: 320,
+                                num_predict: 220,
                                 ...(req.body?.options || {})
                             }
                         })
@@ -153,7 +153,7 @@ const createApp = (config, dependencies = {}) => {
                             messages,
                             options: {
                                 temperature: 0.2,
-                                num_predict: 320,
+                                num_predict: 220,
                                 ...(req.body?.options || {})
                             }
                         })

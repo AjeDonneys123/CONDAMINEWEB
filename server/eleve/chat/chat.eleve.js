@@ -43,6 +43,8 @@ const chapterMatchesLevel = (chapter, level) => {
     return (!shared && !classroom) || shared === level || classroom.startsWith(level);
 };
 
+const isCatalogQuestion = (message = '') => /\b(chapitre|cours|programme|lecon|sequence|onglet|ressource|fiche)\b/.test(normalize(message));
+
 const buildChapterContext = async (message, student) => {
     const Chapter = mongoose.model('Chapter');
     const explicitLevel = requestedSchoolLevel(message);
@@ -74,7 +76,10 @@ const buildChapterContext = async (message, student) => {
 };
 
 const buildChatRequest = async ({ student, message, history }) => {
-    const chapterContext = await buildChapterContext(message, student);
+    const needsCatalog = isCatalogQuestion(message);
+    const chapterContext = needsCatalog
+        ? await buildChapterContext(message, student)
+        : { explicitLevel: requestedSchoolLevel(message), selectedLevel: '', text: '' };
     const transcript = history
         .map((item) => `${item.role === 'assistant' ? 'Conda' : 'Eleve'}: ${item.text}`)
         .join('\n');
@@ -84,17 +89,22 @@ const buildChatRequest = async ({ student, message, history }) => {
         `Nouveau message de l'eleve: ${message}`
     ].filter(Boolean).join('\n\n');
     const profileClass = String(student.currentClass || 'classe inconnue');
-    const levelRule = chapterContext.explicitLevel
-        ? `La question indique explicitement le niveau ${chapterContext.explicitLevel}e. Utilise ce niveau et ignore toute classe differente dans le profil.`
-        : `Le profil indique la classe ${profileClass}.`;
+    const levelRule = !needsCatalog
+        ? "La classe du profil n'est pas pertinente pour cette question: ne la mentionne pas."
+        : chapterContext.explicitLevel
+            ? `La question indique explicitement le niveau ${chapterContext.explicitLevel}e. Utilise ce niveau et ignore toute classe differente dans le profil.`
+            : `Le profil indique la classe ${profileClass}.`;
     const system = [
         "Tu es Conda, l'assistant pedagogique bienveillant de CondaWeb.",
         `L'eleve s'appelle ${String(student.firstName || 'eleve')}.`,
         levelRule,
-        "Pour toute question sur les cours ou chapitres, utilise exclusivement le catalogue CondaWeb fourni.",
-        "N'invente jamais un titre, un programme officiel, une classe ou une information absente du catalogue.",
-        "Si le catalogue ne permet pas de repondre exactement, dis-le simplement et demande une precision.",
-        "Reponds en francais en 2 a 6 phrases courtes, sans phrase de remplissage.",
+        needsCatalog
+            ? "La question porte sur l'organisation des cours. Utilise exclusivement le catalogue CondaWeb fourni et n'invente aucun titre."
+            : "La question porte sur des connaissances. Reponds directement avec tes connaissances fiables sans parler du catalogue, du profil ou de la classe.",
+        needsCatalog
+            ? "Si le catalogue ne permet pas de repondre exactement, dis-le simplement et demande une precision."
+            : "Donne d'abord la reponse utile. Ne renvoie pas l'eleve vers une ressource et ne commence pas par une formule de bienvenue.",
+        "Reponds en francais en 2 a 5 phrases courtes, precises et sans phrase de remplissage.",
         "Aide a comprendre sans faire integralement un devoir note a la place de l'eleve."
     ].join(' ');
     return { prompt, system };
