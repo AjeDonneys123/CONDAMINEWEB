@@ -103,7 +103,8 @@ const AIEngine = {
     askOllamaServer: async (prompt, systemInstruction = "", requestOptions = {}) => {
         const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
         const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
-        const model = String(requestOptions.model || process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        const defaultModel = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        const model = String(requestOptions.model || defaultModel).trim();
         if (!baseUrl || !apiKey || !model) return "";
         const userText = Array.isArray(prompt)
             ? prompt.map((p) => String(p?.text || '')).join('\n\n').trim()
@@ -133,6 +134,14 @@ const AIEngine = {
             return String(data?.message?.content || '').trim();
         } catch (e) {
             console.error('AI Ollama Server Error:', e.message);
+            if (requestOptions.model && model !== defaultModel && !requestOptions._fallbackTried) {
+                console.warn(`AI Ollama Server: modele ${model} indisponible, repli sur ${defaultModel}`);
+                return AIEngine.askOllamaServer(prompt, systemInstruction, {
+                    ...requestOptions,
+                    model: defaultModel,
+                    _fallbackTried: true
+                });
+            }
             return "";
         }
     },
@@ -140,7 +149,8 @@ const AIEngine = {
     askOllamaServerStream: async (prompt, systemInstruction = "", onChunk = () => {}, requestOptions = {}) => {
         const baseUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
         const apiKey = String(process.env.OLLAMA_API_KEY || '').trim();
-        const model = String(requestOptions.model || process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        const defaultModel = String(process.env.OLLAMA_API_MODEL || 'llama3.1:8b').trim();
+        const model = String(requestOptions.model || defaultModel).trim();
         const userText = promptToText(prompt);
         if (!baseUrl || !apiKey || !model || !userText) return '';
 
@@ -188,6 +198,14 @@ const AIEngine = {
             return complete.trim();
         } catch (error) {
             if (complete) throw error;
+            if (requestOptions.model && model !== defaultModel && !requestOptions._fallbackTried) {
+                console.warn(`AI Ollama streaming: modele ${model} indisponible, repli sur ${defaultModel}:`, error.message);
+                return AIEngine.askOllamaServerStream(prompt, systemInstruction, onChunk, {
+                    ...requestOptions,
+                    model: defaultModel,
+                    _fallbackTried: true
+                });
+            }
             console.warn('AI Ollama streaming indisponible, repli sans streaming:', error.message);
             const fallback = await AIEngine.askOllamaServer(prompt, systemInstruction, requestOptions);
             if (fallback) onChunk(fallback);
