@@ -49,11 +49,17 @@ const buildChapterContext = async (message, student) => {
     const profileLevel = String(student?.currentClass || '').match(/[1-6]/)?.[0] || '';
     const selectedLevel = explicitLevel || profileLevel;
     const chapters = await Chapter.find({ isArchived: { $ne: true } }, 'title section classroom sharedLevel createdAt').lean();
-    const relevant = chapters
-        .filter((chapter) => chapterMatchesLevel(chapter, selectedLevel))
+    const normalizedMessage = normalize(message);
+    const subjectWords = ['histoire', 'geographie', 'geo', 'francais', 'math', 'science', 'anglais', 'espagnol', 'philo', 'economie'];
+    const requestedSubjects = subjectWords.filter((word) => normalizedMessage.includes(word));
+    const levelChapters = chapters.filter((chapter) => chapterMatchesLevel(chapter, selectedLevel));
+    const subjectChapters = requestedSubjects.length
+        ? levelChapters.filter((chapter) => requestedSubjects.some((word) => normalize(chapter.section).includes(word)))
+        : [];
+    const relevant = (subjectChapters.length ? subjectChapters : levelChapters)
         .sort((left, right) => String(left.section || '').localeCompare(String(right.section || ''), 'fr')
             || String(left.title || '').localeCompare(String(right.title || ''), 'fr', { numeric: true }))
-        .slice(0, 80);
+        .slice(0, 30);
     const catalog = relevant.map((chapter) => {
         const target = String(chapter.classroom || chapter.sharedLevel || 'tous niveaux').trim();
         return `- ${String(chapter.section || 'General').trim()} | ${String(chapter.title || '').trim()} | cible: ${target}`;
