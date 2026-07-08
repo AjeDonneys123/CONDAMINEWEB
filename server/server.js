@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const fetch = require('node-fetch');
 const { getAiGuardStatus } = require('./services/aiGuard.service');
 
 dotenv.config();
@@ -61,6 +62,73 @@ app.get('/api/system/apply-status', async (req, res) => {
         return res.json({ status: "OK", message: "Kernel Stable" });
     } catch (_) {
         return res.json({ status: "OK", message: "Kernel Stable" });
+    }
+});
+
+app.get('/api/system/ai-status', async (req, res) => {
+    const configuredProvider = String(process.env.AI_PROVIDER || '').toLowerCase().trim();
+    const ollamaServerUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
+    const provider = configuredProvider || (ollamaServerUrl ? 'ollama_server' : 'gemini');
+    const isOllamaServer = ['ollama_server', 'ollama-api', 'ollama_api', 'remote_ollama'].includes(provider);
+    const maskUrl = (url) => {
+        if (!url) return '';
+        try {
+            const u = new URL(url);
+            return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`;
+        } catch (_) {
+            return url.replace(/(https?:\/\/)([^/@]+@)?/i, '$1');
+        }
+    };
+
+    if (!isOllamaServer) {
+        return res.json({
+            ok: true,
+            status: 'OK',
+            provider,
+            localAi: false,
+            message: provider === 'gemini' ? 'IA Gemini active.' : `Fournisseur IA actif: ${provider}.`
+        });
+    }
+
+    if (!ollamaServerUrl) {
+        return res.json({
+            ok: false,
+            status: 'ERROR',
+            provider,
+            localAi: true,
+            message: 'AI_PROVIDER demande le serveur Ollama, mais OLLAMA_API_SERVER_URL est absent.'
+        });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+        const response = await fetch(`${ollamaServerUrl}/health`, { signal: controller.signal });
+        const data = response.ok ? await response.json().catch(() => ({})) : {};
+        return res.json({
+            ok: response.ok,
+            status: response.ok ? 'OK' : 'ERROR',
+            provider,
+            localAi: true,
+            url: maskUrl(ollamaServerUrl),
+            defaultModel: data?.defaultModel || process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '',
+            models: Array.isArray(data?.models) ? data.models.slice(0, 12) : [],
+            elapsedMs: data?.elapsedMs,
+            message: response.ok
+                ? 'Serveur Ollama local joignable.'
+                : `Serveur Ollama non joignable (${response.status}).`
+        });
+    } catch (e) {
+        return res.json({
+            ok: false,
+            status: 'ERROR',
+            provider,
+            localAi: true,
+            url: maskUrl(ollamaServerUrl),
+            message: `Serveur Ollama non joignable: ${e.message}`
+        });
+    } finally {
+        clearTimeout(timeout);
     }
 });
 
