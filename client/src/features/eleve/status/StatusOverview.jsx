@@ -68,21 +68,19 @@ export default function StatusOverview({ user, onOpenActivity }) {
 
             {(d.activities?.todoItems?.length > 0) && (
               <div className="status-todo">
-                {(d.activities.todoItems || []).map((it, idx) => (
-                  <div key={`${it.type}_${it.id}_${idx}`} className="status-play-card">
-                    <div>
-                      <div className="status-play-kicker">Jeu disponible</div>
-                      <div className="status-play-title">Tapping</div>
-                    </div>
+                <div className="mb-1">À faire:</div>
+                <div className="flex flex-wrap gap-2">
+                  {(d.activities.todoItems || []).map((it, idx) => (
                     <button
+                      key={`${it.type}_${it.id}_${idx}`}
                       type="button"
-                      className="status-play-btn"
+                      className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-black text-blue-700 hover:bg-blue-50"
                       onClick={() => onOpenActivity && onOpenActivity(it)}
                     >
-                      Jouer
+                      {it.label || it.title || 'Activité'}
                     </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
 

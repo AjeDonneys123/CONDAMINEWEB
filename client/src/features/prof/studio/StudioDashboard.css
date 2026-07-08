@@ -70,6 +70,25 @@
 .btn-mini-ctrl { width: 24px; height: 24px; background: #f1f5f9; border: none; border-radius: 6px; font-weight: 900; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
 .btn-mini-ctrl:hover { background: #e2e8f0; }
 
+.btn-sequence-preview {
+    min-width: 66px;
+    height: 26px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 7px;
+    background: #4f46e5;
+    color: white;
+    font-size: 0.62rem;
+    font-weight: 950;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(79, 70, 229, 0.28);
+}
+
+.btn-sequence-preview.playing {
+    background: #dc2626;
+    box-shadow: 0 3px 8px rgba(220, 38, 38, 0.28);
+}
+
 .speed-indicator { font-size: 0.65rem; font-weight: 900; color: #475569; min-width: 40px; text-align: center; }
 
 /* GRILLE FRAMES */
@@ -82,6 +101,9 @@
     overflow-y: auto; padding: 4px;
     background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
 }
+.seq-frames-grid:focus { outline: 3px solid rgba(79, 70, 229, .3); border-color: #4f46e5; }
+.seq-frames-grid.is-pasting { opacity: .65; pointer-events: none; }
+.seq-paste-status { grid-column: 1 / -1; display: grid; place-items: center; color: #4f46e5; font-size: .7rem; font-weight: 950; }
 .seq-frame {
     background: white; border: 2px solid #f1f5f9; border-radius: 10px;
     display: flex; align-items: center; justify-content: center; cursor: pointer;
@@ -143,6 +165,41 @@
     transition: transform 0.2s;
 }
 .btn-magic-clean:hover { transform: scale(1.05); filter: brightness(1.1); }
+
+.btn-sprite-selector {
+    flex: 1;
+    padding: 8px;
+    border: 0;
+    border-radius: 10px;
+    background: #0f766e;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 950;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(15, 118, 110, 0.3);
+}
+
+.sprite-selector-backdrop { position: fixed; inset: 0; z-index: 30000; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.9); }
+.sprite-selector-modal { width: min(1100px, 96vw); max-height: 94vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: white; box-shadow: 0 30px 80px rgba(0,0,0,.45); }
+.sprite-selector-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
+.sprite-selector-head div { display: flex; flex-direction: column; gap: 4px; }
+.sprite-selector-head strong { color: #0f172a; font-size: 1.1rem; }
+.sprite-selector-head span { color: #64748b; font-size: .78rem; font-weight: 700; }
+.sprite-selector-head button { width: 38px; height: 38px; border: 0; border-radius: 50%; background: #f1f5f9; font-size: 24px; cursor: pointer; }
+.sprite-selector-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 24px; background: #f8fafc; }
+.sprite-selector-tools label, .sprite-selector-tools button { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 10px; background: white; color: #334155; font-size: .7rem; font-weight: 900; cursor: pointer; }
+.sprite-selector-tools label { background: #4f46e5; color: white; }
+.sprite-selector-tools input { display: none; }
+.sprite-selector-tools span { margin-left: auto; color: #4f46e5; font-size: .75rem; font-weight: 950; }
+.sprite-selector-workspace { min-height: 300px; flex: 1; display: grid; place-items: center; overflow: auto; padding: 20px; background: #e2e8f0; }
+.sprite-selector-workspace canvas { max-width: 100%; border-radius: 8px; background: white; cursor: crosshair; box-shadow: 0 8px 30px rgba(15,23,42,.2); touch-action: none; }
+.sprite-selector-workspace canvas.hidden { display: none; }
+.sprite-selector-empty { color: #64748b; font-weight: 900; }
+.sprite-selector-error { padding: 10px 24px; background: #fee2e2; color: #b91c1c; font-size: .75rem; font-weight: 900; }
+.sprite-selector-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #e2e8f0; }
+.sprite-selector-footer button { padding: 12px 18px; border: 0; border-radius: 10px; background: #e2e8f0; color: #334155; font-weight: 950; cursor: pointer; }
+.sprite-selector-footer button.primary { background: #0f766e; color: white; }
+.sprite-selector-footer button:disabled, .sprite-selector-tools button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* --- CENTRE & DROITE --- */
 .studio-col-center { padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }

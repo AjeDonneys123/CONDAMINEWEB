@@ -38,6 +38,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
     const [editingId, setEditingId] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
     const [playingCourse, setPlayingCourse] = useState(null);
+    const [playerMode, setPlayerMode] = useState('presentation');
     const [liveClassroom, setLiveClassroom] = useState(null);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
@@ -294,7 +295,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                                     </div>
                                     {course.description && <p>{course.description}</p>}
                                     <div className="course-card-actions">
-                                        <button type="button" onClick={() => setPlayingCourse(course)}>PRÉSENTER</button>
+                                        <button type="button" onClick={() => {
+                                            setPlayerMode('presentation');
+                                            setPlayingCourse(course);
+                                        }}>PRÉSENTER</button>
                                         <a
                                             className="course-google-edit-link"
                                             href={getEditUrl(course.slidesUrl)}
@@ -321,7 +325,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                         <button type="button" onClick={() => setPlayingCourse(null)} aria-label="Fermer">×</button>
                     </div>
                     <div className="course-player-stage">
-                        <iframe title={playingCourse.title} src={getEditUrl(playingCourse.slidesUrl)} allowFullScreen />
+                        <iframe
+                            title={playingCourse.title}
+                            src={playerMode === 'presentation'
+                                ? getEmbedUrl(playingCourse.slidesUrl)
+                                : getEditUrl(playingCourse.slidesUrl)}
+                            allowFullScreen
+                        />
                         
                         {/* COMPTEUR DE POINTS DE LA CLASSE EN HAUT A DROITE */}
                         <div className="live-class-points">
@@ -364,6 +374,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                                 )
                             ))}
                         </div>}
+                    </div>
+                    <div className="course-player-mode-switch" aria-label="Mode d'affichage">
+                        <button
+                            type="button"
+                            className={playerMode === 'edit' ? 'active' : ''}
+                            onClick={() => setPlayerMode('edit')}
+                        >ÉDITION</button>
+                        <button
+                            type="button"
+                            className={playerMode === 'presentation' ? 'active' : ''}
+                            onClick={() => setPlayerMode('presentation')}
+                        >PRÉSENTATION</button>
                     </div>
                 </div>
             )}

@@ -1,6 +1,7 @@
 // @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound, handleImportZombieSounds
 import React, { useState, useEffect, useRef } from 'react';
 import SoundExpert from '../studioComp/SoundExpert';
+import SpriteSelectorModal from '../studioComp/SpriteSelectorModal';
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
@@ -17,6 +18,8 @@ export default function StudioLeftPanel({
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
     const [importingSounds, setImportingSounds] = useState(false); // État pour le chargement import
+    const [spriteSelectorOpen, setSpriteSelectorOpen] = useState(false);
+    const [pastingFrames, setPastingFrames] = useState(false);
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
 
@@ -201,8 +204,71 @@ export default function StudioLeftPanel({
         saveProject(next);
     };
 
+    const handleAddSelectedSprites = (frames) => {
+        if (!Array.isArray(frames) || frames.length === 0 || leftTab !== 'actions') return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find((item) => item.id === selectedActorId);
+        const action = actor?.actions?.[selectedActionIdx];
+        if (!action) return;
+        action.frames = [...(action.frames || []), ...frames];
+        saveProject(next);
+        setSpriteSelectorOpen(false);
+    };
+
+    const appendFramesToCurrentAction = (frames) => {
+        if (!Array.isArray(frames) || frames.length === 0 || leftTab !== 'actions') return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find((item) => item.id === selectedActorId);
+        const action = actor?.actions?.[selectedActionIdx];
+        if (!action) return;
+        action.frames = [...(action.frames || []), ...frames];
+        saveProject(next);
+    };
+
+    const handleSequencerPaste = async (event) => {
+        if (leftTab !== 'actions' || !selectedAction || pastingFrames) return;
+        const clipboardItems = Array.from(event.clipboardData?.items || []);
+        const imageFiles = clipboardItems
+            .filter((item) => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+            .map((item) => item.getAsFile())
+            .filter(Boolean);
+        const pastedText = String(event.clipboardData?.getData('text/plain') || '').trim();
+        const isImageUrl = /^(?:https?:\/\/|data:image\/|\/api\/)/i.test(pastedText);
+        if (imageFiles.length === 0 && !isImageUrl) return;
+
+        event.preventDefault();
+        setPastingFrames(true);
+        try {
+            const uploadedFrames = [];
+            for (const file of imageFiles) {
+                const form = new FormData();
+                form.append('file', file, file.name || `sprite-colle-${Date.now()}.png`);
+                const response = await fetch('/api/studio/upload-asset', { method: 'POST', body: form });
+                const data = await response.json();
+                if (!response.ok || !data?.url) throw new Error(data?.error || 'Upload impossible');
+                uploadedFrames.push({ url: data.url, name: file.name || 'sprite-colle.png', type: 'image' });
+            }
+            if (isImageUrl) {
+                uploadedFrames.push({ url: pastedText, name: `sprite-url-${Date.now()}.png`, type: 'image' });
+            }
+            appendFramesToCurrentAction(uploadedFrames);
+        } catch (error) {
+            alert(`Collage impossible : ${error.message}`);
+        } finally {
+            setPastingFrames(false);
+        }
+    };
+
     return (
         <div className="studio-col-left">
+            {spriteSelectorOpen && (
+                <SpriteSelectorModal
+                    initialImageUrl={selectedAction?.frames?.[selectedFrameIdx ?? 0]?.url || ''}
+                    resolveUrl={resolveUrl}
+                    onCancel={() => setSpriteSelectorOpen(false)}
+                    onApply={handleAddSelectedSprites}
+                />
+            )}
             <div className="studio-tab-header">
                 <button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button>
                 <button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button>
@@ -264,15 +330,39 @@ export default function StudioLeftPanel({
                             <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
                             
-                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>
-                                {isPreviewPlaying ? '⏹️' : '▶️'}
+                            <button
+                                type="button"
+                                className={`btn-sequence-preview ${isPreviewPlaying ? 'playing' : ''}`}
+                                onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}
+                                title="Tester seulement l'animation sélectionnée"
+                                style={{
+                                    minWidth: 72,
+                                    height: 28,
+                                    padding: '0 10px',
+                                    border: 0,
+                                    borderRadius: 7,
+                                    background: isPreviewPlaying ? '#dc2626' : '#4f46e5',
+                                    color: '#ffffff',
+                                    fontSize: 10,
+                                    fontWeight: 950,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {isPreviewPlaying ? '■ STOP' : '▶ PLAY'}
                             </button>
                         </div>
                     </div>
                     
                     {/* GRILLE D'IMAGES (Seulement pour les Actions Acteur) */}
                     {leftTab === 'actions' && (
-                        <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
+                        <div
+                            className={`seq-frames-grid custom-scrollbar ${pastingFrames ? 'is-pasting' : ''}`}
+                            style={{height: '110px', minHeight: '110px'}}
+                            tabIndex={0}
+                            onPaste={handleSequencerPaste}
+                            onClick={(event) => event.currentTarget.focus()}
+                            title="Clique ici puis colle une image avec Ctrl+V ou Cmd+V"
+                        >
                             {selectedAction.frames.map((frame, fIdx) => (
                                 <div key={fIdx} 
                                     className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
@@ -286,6 +376,7 @@ export default function StudioLeftPanel({
                                 </div>
                             ))}
                             <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                            {pastingFrames && <div className="seq-paste-status">COLLAGE...</div>}
                         </div>
                     )}
                     
@@ -334,6 +425,11 @@ export default function StudioLeftPanel({
                             {leftTab === 'actions' && (
                                 <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={() => handleSmartAIClean()} disabled={cleaning || !selectedAction?.frames || selectedAction?.frames?.length === 0} title="Détourage IA">
                                     ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'DÉTOURER' : 'TOUT CLEAN')}
+                                </button>
+                            )}
+                            {leftTab === 'actions' && (
+                                <button className="btn-sprite-selector" type="button" onClick={() => setSpriteSelectorOpen(true)} title="Découper plusieurs sprites dans une planche">
+                                    ✂️ SPRITES
                                 </button>
                             )}
                         </div>

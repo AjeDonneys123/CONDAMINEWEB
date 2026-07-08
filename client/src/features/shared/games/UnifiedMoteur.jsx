@@ -4,6 +4,8 @@ import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
+import PokedeckBattle from './PokedeckBattle';
+import './PokedeckBattle.css';
 
 /**
  * 🧠 UNIFIED MOTEUR V9.5 (DEBUG & BRIDGE)
@@ -239,7 +241,7 @@ const installCanvasTextSafety = (ctx, getCandidates) => {
     };
 };
 
-export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, user }) {
+export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, quickTest = false, user }) {
     const [lives, setLives] = useState(4);
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -264,6 +266,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const [engineStarted, setEngineStarted] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(false);
     const [isSoundOn, setIsSoundOn] = useState(true);
+    const [showPokedeckBattle, setShowPokedeckBattle] = useState(false);
     
     // --- NOUVEAU : GESTION DES ERREURS DE SCRIPT ---
     const [scriptError, setScriptError] = useState(null);
@@ -296,6 +299,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const tappingRankRef = useRef(tappingTrophyRank);
     const tappingRequiredLettersRef = useRef(tappingRequiredLetters);
     const tappingAwardLockRef = useRef(false);
+    const pokedeckInteractionLockRef = useRef(false);
 
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
@@ -701,6 +705,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
+    useEffect(() => {
+        if (!quickTest || !isReady || engineStarted) return;
+        startCurrentLevel();
+    }, [quickTest, isReady, engineStarted]);
+
     const handleHeartClick = () => {
         if (!isCheatMode()) return;
         liveData.current.lives = Math.max(0, liveData.current.lives - 1);
@@ -806,6 +815,20 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             }
 
             gameInstanceRef.current = instance; if (instance.start) instance.start();
+            const isPokedeckGame = /pokedeck|poke deck/i.test(String(projectRef.current?.title || ''));
+
+            const getPokedeckActors = () => ({
+                player: instance?.player || instance?.P1 || instance?.p1 || instance?.HEROS || instance?.ACTOR_1 || null,
+                shen: instance?.shen || instance?.SHEN || instance?.Herodote || instance?.HERODOTE || instance?.PNJ || instance?.NPC || instance?.ACTOR_2 || null
+            });
+
+            const startPokedeckCombat = () => {
+                if (pokedeckInteractionLockRef.current) return;
+                pokedeckInteractionLockRef.current = true;
+                setTimeout(() => { pokedeckInteractionLockRef.current = false; }, 500);
+
+                setShowPokedeckBattle(true);
+            };
             
             const tick = () => {
                 try {
@@ -813,7 +836,62 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                         if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                         instance.isBossPhase = bossModeRef.current;
                         instance.currentQIndex = liveData.current.qIndex;
-                        if (instance.update) instance.update(); 
+                        let previousPlayerPosition = null;
+                        const pokedeckActors = isPokedeckGame ? getPokedeckActors() : null;
+                        if (pokedeckActors?.player) {
+                            previousPlayerPosition = { x: pokedeckActors.player.x, y: pokedeckActors.player.y };
+                            if (keysPressed.current.ArrowLeft) {
+                                pokedeckActors.player.facingFrame = 3;
+                                pokedeckActors.player.flipX = String(pokedeckActors.player.currentAction || '').toUpperCase() !== 'IDLE';
+                            } else if (keysPressed.current.ArrowRight) {
+                                pokedeckActors.player.facingFrame = 2;
+                                pokedeckActors.player.flipX = false;
+                            } else if (keysPressed.current.ArrowUp) {
+                                pokedeckActors.player.facingFrame = 1;
+                                pokedeckActors.player.flipX = false;
+                            } else if (keysPressed.current.ArrowDown) {
+                                pokedeckActors.player.facingFrame = 0;
+                                pokedeckActors.player.flipX = false;
+                            } else if (String(pokedeckActors.player.currentAction || '').toUpperCase() === 'IDLE') {
+                                pokedeckActors.player.frameIdx = pokedeckActors.player.facingFrame || 0;
+                                pokedeckActors.player.flipX = false;
+                            }
+                        }
+
+                        if (instance.update) instance.update();
+
+                        // Le script peut appeler MARCHE DROITE pour réutiliser les
+                        // mêmes frames à gauche. La flèche reste la source fiable
+                        // de la dernière orientation après l'update du script.
+                        if (pokedeckActors?.player) {
+                            if (keysPressed.current.ArrowLeft) {
+                                pokedeckActors.player.facingFrame = 3;
+                                pokedeckActors.player.flipX = true;
+                            } else if (keysPressed.current.ArrowRight) {
+                                pokedeckActors.player.facingFrame = 2;
+                                pokedeckActors.player.flipX = false;
+                            } else if (keysPressed.current.ArrowUp) {
+                                pokedeckActors.player.facingFrame = 1;
+                                pokedeckActors.player.flipX = false;
+                            } else if (keysPressed.current.ArrowDown) {
+                                pokedeckActors.player.facingFrame = 0;
+                                pokedeckActors.player.flipX = false;
+                            } else if (String(pokedeckActors.player.currentAction || '').toUpperCase() === 'IDLE') {
+                                pokedeckActors.player.frameIdx = pokedeckActors.player.facingFrame || 0;
+                                pokedeckActors.player.flipX = false;
+                            }
+                        }
+
+                        if (pokedeckActors?.player && pokedeckActors?.shen) {
+                            const dx = Math.abs(Number(pokedeckActors.player.x) - Number(pokedeckActors.shen.x));
+                            const dy = Math.abs(Number(pokedeckActors.player.y) - Number(pokedeckActors.shen.y));
+                            if (dx < 8 && dy < 13 && previousPlayerPosition) {
+                                pokedeckActors.player.x = previousPlayerPosition.x;
+                                pokedeckActors.player.y = previousPlayerPosition.y;
+                            }
+                            const spacePressed = Boolean(keysPressed.current.Space || keysPressed.current[' '] || keysPressed.current.Spacebar);
+                            if (spacePressed && dx < 15 && dy < 19) startPokedeckCombat();
+                        }
                         if (instance._render) instance._render(); 
                         if (instance.draw) instance.draw();
                     }
@@ -851,8 +929,20 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     }, [tappingRequiredLetters]);
 
     useEffect(() => {
-        const hDown = (e) => keysPressed.current[e.code] = true;
-        const hUp = (e) => keysPressed.current[e.code] = false;
+        const setKeyboardEventState = (event, pressed) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
+                event.preventDefault();
+            }
+            const aliases = new Set([
+                event.code,
+                event.key,
+                String(event.key || '').toLowerCase(),
+                String(event.key || '').toUpperCase()
+            ].filter(Boolean));
+            aliases.forEach((key) => { keysPressed.current[key] = pressed; });
+        };
+        const hDown = (e) => setKeyboardEventState(e, true);
+        const hUp = (e) => setKeyboardEventState(e, false);
         window.addEventListener('keydown', hDown); window.addEventListener('keyup', hUp);
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
@@ -875,8 +965,48 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
 
     const introMedia = getIntroMedia();
 
+    const holdPokedeckAction = (actor, candidateNames, frameNumber) => {
+        if (!actor) return;
+        const normalizeActionName = (value) => String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+        const actorData = projectRef.current?.scenes?.[0]?.actors?.find((row) => row.id === actor.id);
+        const available = actorData?.actions || [];
+        const action = candidateNames
+            .map((name) => available.find((row) => normalizeActionName(row?.name) === normalizeActionName(name)))
+            .find(Boolean);
+        if (!action) return;
+        actor.play(action.name, false);
+        const targetIndex = Math.max(0, Math.min((action.frames?.length || 1) - 1, frameNumber - 1));
+        const wait = Math.max(180, Math.min(1400, targetIndex * (Number(action.speed) || 100)));
+        setTimeout(() => {
+            actor.currentAction = action.name;
+            actor.frameIdx = targetIndex;
+            actor.loop = false;
+            actor.isAnimFinished = true;
+        }, wait);
+    };
+
+    const animatePokedeckDefense = (type) => {
+        const instance = gameInstanceRef.current;
+        const hero = instance?.player || instance?.P1 || instance?.HEROS || instance?.ACTOR_1;
+        if (type === 'super') holdPokedeckAction(hero, ['SUPER DEFENSE', 'DEFENSE', 'COMBAT'], 6);
+        else holdPokedeckAction(hero, ['BLOCK', 'BLOQUER', 'PETITE DEFENSE', 'COMBAT'], 4);
+    };
+
+    const animatePokedeckEnemyAttack = () => {
+        const instance = gameInstanceRef.current;
+        const enemy = instance?.shen || instance?.SHEN || instance?.Herodote || instance?.HERODOTE || instance?.ACTOR_2;
+        holdPokedeckAction(enemy, ['ATTAQUER', 'ATTAQUE', 'COMBAT', 'PARLER'], 999);
+    };
+
     return (
         <div className={"fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center " + (isShake ? 'animate-shake' : '')}>
+            {showPokedeckBattle && (
+                <PokedeckBattle
+                    onExit={() => setShowPokedeckBattle(false)}
+                    onDefense={animatePokedeckDefense}
+                    onEnemyAttack={animatePokedeckEnemyAttack}
+                />
+            )}
             
             {/* ALERT ERREUR SCRIPT */}
             {scriptError && (

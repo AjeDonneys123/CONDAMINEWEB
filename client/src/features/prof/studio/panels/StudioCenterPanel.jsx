@@ -56,7 +56,7 @@ export default function StudioCenterPanel({
     stageRef, currentScene, resolveUrl, selectedActorId, selectedAction,
     isPreviewPlaying, previewFrameIdx, selectedFrameIdx, handleStageMouseDown,
     selectedActor, handleUpdateProp, saveProject, setIsPlaying, project,
-    code, setCode
+    code, setCode, setIsPreviewPlaying
 }) {
     const [showQuizManager, setShowQuizManager] = useState(false);
     const [testGame, setTestGame] = useState(null);
@@ -131,10 +131,22 @@ export default function StudioCenterPanel({
         handleUpdateProp('scale', clampedPct / 100);
     };
 
-    const handlePlayTest = async () => {
+    const launchGameTest = async (quickTest = false) => {
         await saveProject();
-        setIsPlaying(true);
+        let activeTestGame = testGame;
+        if (!activeTestGame) {
+            try {
+                activeTestGame = await api.get('/games/test-data');
+                if (activeTestGame) setTestGame(activeTestGame);
+            } catch (e) {
+                console.error('Chargement des questions de test impossible', e);
+            }
+        }
+        setIsPlaying({ testGame: activeTestGame || null, quickTest });
     };
+
+    const handlePlayTest = () => launchGameTest(false);
+    const handleQuickPlay = () => launchGameTest(true);
 
     return (
         <div className="studio-col-center custom-scrollbar relative">
@@ -220,7 +232,29 @@ export default function StudioCenterPanel({
                 <button onClick={openQuizManager} className={`btn-view-quiz ${loading ? 'animate-pulse' : ''}`}>
                     {loading ? '...' : '🎓 CONFIG TEST & PROD'}
                 </button>
-                <button onClick={handlePlayTest} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg tracking-widest">▶ TESTER</button>
+                <button
+                    type="button"
+                    onClick={handleQuickPlay}
+                    title="Lancer immédiatement le jeu pour tester les déplacements"
+                    style={{
+                        marginLeft: 'auto',
+                        minWidth: 118,
+                        padding: '10px 16px',
+                        border: 0,
+                        borderRadius: 12,
+                        background: '#0ea5e9',
+                        color: '#ffffff',
+                        fontSize: 11,
+                        fontWeight: 950,
+                        letterSpacing: '0.06em',
+                        cursor: 'pointer',
+                        opacity: 1,
+                        boxShadow: '0 8px 18px rgba(14, 165, 233, 0.28)'
+                    }}
+                >
+                    ▶ PLAY
+                </button>
+                <button onClick={handlePlayTest} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg tracking-widest">▶ TESTER</button>
             </div>
 
             <div className="code-editor-box">

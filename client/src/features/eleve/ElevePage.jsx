@@ -65,7 +65,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       const type = String(item?.type || '').toLowerCase();
       const id = String(item?.id || '').trim();
       if (!type || !id) return;
-      if (type === 'game' || type === 'tapping') {
+      if (type === 'game') {
           setPendingActivity({ type, id, title: String(item?.title || '') });
           setTab('jeux');
           return;
@@ -94,6 +94,22 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       if (String(pendingActivity.type || '') !== String(type || '')) return;
       setPendingActivity(null);
   };
+
+  const userClass = String(freshUser?.currentClass || user?.currentClass || '').trim().toUpperCase();
+  const is5eStudent = /^5/.test(userClass) || freshUser?.isTestAccount === true || user?.isTestAccount === true;
+  const bridgeUser = encodeURIComponent(window.btoa(JSON.stringify({
+    id: freshUser?.id || freshUser?._id || user?.id || user?._id || '',
+    _id: freshUser?._id || user?._id || '',
+    firstName: freshUser?.firstName || user?.firstName || '',
+    lastName: freshUser?.lastName || user?.lastName || '',
+    currentClass: freshUser?.currentClass || user?.currentClass || '',
+    isTestAccount: freshUser?.isTestAccount === true || user?.isTestAccount === true,
+    role: 'student'
+  })));
+  const projet5eBaseUrl = String(
+    import.meta.env.VITE_WEB5E_PUBLIC_URL || window.localStorage.getItem('web5ePublicUrl') || 'https://web5e-hu3he1y6x-jeanvuillets-projects.vercel.app'
+  ).trim().replace(/\/+$/, '');
+  const projet5eUrl = `${projet5eBaseUrl}?bridgeUser=${bridgeUser}#bridgeUser=${bridgeUser}`;
 
   return (
     <div className="eleve-page-wrapper">
@@ -163,11 +179,64 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             {tab === 'jeux' && (
               <GamesGrid
                 user={freshUser}
-                openItemId={pendingActivity?.type === 'game' || pendingActivity?.type === 'tapping' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch(pendingActivity?.type === 'tapping' ? 'tapping' : 'game')}
+                openItemId={pendingActivity?.type === 'game' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('game')}
               />
             )}
           </div>
+          {is5eStudent && (
+            <section className="eleve-external-link-card">
+              <div className="eleve-external-link-copy">
+                <div className="eleve-external-link-kicker">Projet 5e</div>
+                <div className="eleve-external-link-title">Entrer dans Projet 5e</div>
+                <div className="eleve-external-link-sub">
+                  Le site public sur l’eau et l’énergie s’ouvre directement avec ta session élève. Tu arrives sur ton espace sans te reconnecter.
+                </div>
+              </div>
+              <div className="eleve-external-link-actions">
+                {projet5eBaseUrl ? (
+                  <a
+                    className="eleve-external-link-btn"
+                    href={projet5eUrl}
+                    onClick={() => {
+                      try {
+                        window.name = JSON.stringify({
+                          web5eBridgeUser: {
+                            id: freshUser?.id || freshUser?._id || user?.id || user?._id || '',
+                            _id: freshUser?._id || user?._id || '',
+                            firstName: freshUser?.firstName || user?.firstName || '',
+                            lastName: freshUser?.lastName || user?.lastName || '',
+                            currentClass: freshUser?.currentClass || user?.currentClass || '',
+                            isTestAccount: freshUser?.isTestAccount === true || user?.isTestAccount === true,
+                            role: 'student'
+                          }
+                        });
+                      } catch (_) {}
+                    }}
+                  >
+                    Ouvrir Projet 5e
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="eleve-external-link-btn"
+                    onClick={() => {
+                      const value = window.prompt(
+                        'Colle l’URL publique exacte du site Projet 5e (domaine vercel.app public ou domaine custom).',
+                        'https://'
+                      );
+                      const nextUrl = String(value || '').trim().replace(/\/+$/, '');
+                      if (!nextUrl) return;
+                      window.localStorage.setItem('web5ePublicUrl', nextUrl);
+                      window.location.reload();
+                    }}
+                  >
+                    Configurer Projet 5e
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
         </div>
         <BugReportWidget user={freshUser} />
     </div>
