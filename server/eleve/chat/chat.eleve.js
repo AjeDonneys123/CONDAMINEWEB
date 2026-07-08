@@ -50,6 +50,19 @@ const isExamWritingRequest = (message = '') => {
     return /\b(brevet|developpement construit|sujet type|redaction|paragraphe argumente|traite ce sujet|compose|introduction|conclusion)\b/.test(text);
 };
 
+const getInstantAnswer = (message = '', student = {}) => {
+    const text = normalize(message).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const firstName = String(student?.firstName || '').trim();
+    if (/^(bonjour|bonsoir|salut|coucou|hello|bjr|slt)( je suis la| tu es la| t es la| es tu la| est tu la)?$/.test(text)
+        || /\b(es tu la|est tu la|tu es la|t es la)\b/.test(text)) {
+        return `Oui${firstName ? ` ${firstName}` : ''}, je suis là. Pose-moi ta question de cours, et je te réponds clairement.`;
+    }
+    if (/^(merci|merci beaucoup|ok merci|d accord merci)$/.test(text)) {
+        return "Avec plaisir. Si tu veux, envoie une autre question ou un sujet à travailler.";
+    }
+    return '';
+};
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const openNdjsonStream = (res) => {
@@ -240,6 +253,9 @@ router.post('/message', async (req, res) => {
         const student = await Student.findById(studentId, 'firstName currentClass').lean();
         if (!student) return res.status(404).json({ error: 'Eleve introuvable.' });
 
+        const instantAnswer = getInstantAnswer(message, student);
+        if (instantAnswer) return res.json({ ok: true, answer: instantAnswer, provider: 'instant' });
+
         const history = cleanHistory(req.body?.history);
         const { prompt, system, aiOptions } = await buildChatRequest({ student, message, history });
 
@@ -269,14 +285,23 @@ router.post('/message/stream', async (req, res) => {
         const Student = mongoose.model('Student');
         const student = await Student.findById(studentId, 'firstName currentClass').lean();
         if (!student) return res.status(404).json({ error: 'Eleve introuvable.' });
+
+        const instantAnswer = getInstantAnswer(message, student);
+        if (instantAnswer) {
+            openNdjsonStream(res);
+            writeNdjson(res, { text: instantAnswer, elapsedMs: 0, source: 'instant' });
+            return res.end(`${JSON.stringify({ done: true, elapsedMs: 0 })}\n`);
+        }
+
         const history = cleanHistory(req.body?.history);
         const { prompt, system, aiOptions, streamPreamble } = await buildChatRequest({ student, message, history });
 
-        res.status(200);
-        res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache, no-transform');
-        res.setHeader('X-Accel-Buffering', 'no');
-        res.flushHeaders?.();
+        const startedAt = Date.now();
+        openNdjsonStream(res);
+        writeNdjson(res, {
+            status: "Connexion au modele local...",
+            elapsedMs: Date.now() - startedAt
+        });
 
         if (streamPreamble) res.write(`${JSON.stringify({ text: streamPreamble })}\n`);
 

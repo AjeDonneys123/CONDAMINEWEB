@@ -8,6 +8,7 @@ export default function EleveChatWorkspace({ user }) {
   const [messages, setMessages] = useState([]);
   const [pending, setPending] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [streamStatus, setStreamStatus] = useState('');
   const [error, setError] = useState('');
   const [diagnostic, setDiagnostic] = useState(null);
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
@@ -31,6 +32,7 @@ export default function EleveChatWorkspace({ user }) {
     setError('');
     setPending(true);
     setStreaming(false);
+    setStreamStatus('Connexion au serveur IA...');
     const chatStartedAt = performance.now();
     let firstHeaderMs = null;
     let firstNetworkChunkMs = null;
@@ -94,6 +96,18 @@ export default function EleveChatWorkspace({ user }) {
           chatEvents += 1;
           const data = JSON.parse(line);
           if (data.error) throw new Error(data.error);
+          if (data.status) {
+            const statusMs = Math.round(performance.now() - chatStartedAt);
+            setStreamStatus(String(data.status));
+            setChatMetrics((current) => ({
+              status: 'running',
+              lines: [
+                ...(current?.lines || []),
+                `Statut serveur: ${statusMs} ms | ${data.status}`
+              ].slice(-12)
+            }));
+            continue;
+          }
           const chunk = String(data.text || '');
           if (!chunk) continue;
           chatTextChunks += 1;
@@ -151,6 +165,7 @@ export default function EleveChatWorkspace({ user }) {
     } finally {
       setPending(false);
       setStreaming(false);
+      setStreamStatus('');
     }
   };
 
@@ -314,7 +329,7 @@ export default function EleveChatWorkspace({ user }) {
           {pending && !streaming && (
             <div className="eleve-chat-bubble assistant">
               <div className="eleve-chat-label">Conda</div>
-              <div className="eleve-chat-text eleve-chat-thinking">Reflechit…</div>
+              <div className="eleve-chat-text eleve-chat-thinking">{streamStatus || 'Reflechit…'}</div>
             </div>
           )}
         </div>
