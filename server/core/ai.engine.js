@@ -130,7 +130,6 @@ const AIEngine = {
     },
 
     ask: async (prompt, systemInstruction = "", options = {}) => {
-        await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         if (provider === 'ollama_server') {
             return (await AIEngine.askOllamaServer(prompt, systemInstruction)) || "[]";
@@ -140,6 +139,7 @@ const AIEngine = {
             const localText = await AIEngine.askLocal(prompt, systemInstruction);
             if (localText) return localText;
         }
+        await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const apiKey = resolveGeminiApiKey();
         if (!apiKey) return "ERROR_KEY";
 

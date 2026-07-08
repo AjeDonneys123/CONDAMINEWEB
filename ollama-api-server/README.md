@@ -26,6 +26,8 @@ OLLAMA_API_KEY=LA_MEME_CLE_QUE_SUR_L_IMAC
 OLLAMA_API_MODEL=llama3.1:8b
 ```
 
+L'onglet `CHAT` de l'espace eleve appelle `/api/eleve/chat/message`. Cette route reste sur le backend Condamine (Render dans la configuration actuelle), puis le backend appelle cette passerelle avec la cle API. La cle ne doit jamais etre envoyee au navigateur.
+
 Pour un site heberge sur Internet, utiliser un tunnel HTTPS Cloudflare ou Tailscale vers `http://127.0.0.1:8787`. Ne jamais publier directement `11434`.
 
 ## Demarrage automatique sur cet iMac
