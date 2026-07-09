@@ -59,6 +59,12 @@ const isShortKnowledgeQuestion = (message = '') => {
         || /^(qui|que|quoi|quand|ou|comment|combien|pourquoi|quelle?|quels?|quelles?|cite|donne|explique vite|resume vite)\b/.test(text);
 };
 
+const needsConversationMemory = (message = '', history = []) => {
+    if (!Array.isArray(history) || !history.length) return false;
+    const text = normalize(message);
+    return /\b(pourquoi|alors|avant|precedent|tu as dit|tu as repondu|t as dit|t as repondu|ta reponse|erreur|corrige|faux|incoherent|mensonge|plus gros que|et l|et le|et la|ca|cela|ceci|il|elle|lui)\b/.test(text);
+};
+
 const getInstantAnswer = (message = '', student = {}) => {
     const text = normalize(message).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
     const firstName = String(student?.firstName || '').trim();
@@ -121,10 +127,12 @@ const buildChatRequest = async ({ student, message, history }) => {
     const needsCatalog = isCatalogQuestion(message);
     const needsExamStructure = !needsCatalog && isExamWritingRequest(message);
     const isShortQuestion = !needsCatalog && !needsExamStructure && isShortKnowledgeQuestion(message);
+    const needsMemory = isShortQuestion && needsConversationMemory(message, history);
     const chapterContext = needsCatalog
         ? await buildChapterContext(message, student)
         : { explicitLevel: requestedSchoolLevel(message), selectedLevel: '', text: '' };
-    const transcript = isShortQuestion ? '' : history
+    const transcript = (isShortQuestion && !needsMemory ? [] : history)
+        .slice(needsMemory ? -6 : -12)
         .map((item) => `${item.role === 'assistant' ? 'Conda' : 'Eleve'}: ${item.text}`)
         .join('\n');
     const prompt = [
@@ -142,11 +150,12 @@ const buildChatRequest = async ({ student, message, history }) => {
         ? [
             "Tu es Conda, l'assistant scolaire de CondaWeb.",
             "Reponds directement en francais, en une phrase courte.",
+            needsMemory ? "Tiens compte de la conversation precedente. Si tu as donne une reponse fausse, reconnais l'erreur clairement et corrige-la." : "",
             "Pour une date, une mesure ou un fait historique simple, donne seulement la reponse generalement admise.",
             "Ne raconte pas l'evenement si ce n'est pas demande.",
             "Pas d'introduction, pas de formule de politesse, pas de renvoi vers une ressource.",
             "Si la question contient une faute de frappe evidente, comprends l'intention probable."
-        ].join(' ')
+        ].filter(Boolean).join(' ')
         : [
         "Tu es Conda, l'assistant pedagogique bienveillant de CondaWeb.",
         `L'eleve s'appelle ${String(student.firstName || 'eleve')}.`,
@@ -180,7 +189,9 @@ const buildChatRequest = async ({ student, message, history }) => {
         aiOptions: needsExamStructure
             ? { numPredict: 520, temperature: 0.25 }
             : isShortQuestion
-                ? {
+                ? needsMemory
+                    ? { numPredict: 160, temperature: 0.1 }
+                    : {
                     model: String(process.env.OLLAMA_API_FAST_MODEL || 'llama3.2:3b').trim(),
                     numPredict: 80,
                     temperature: 0.1
