@@ -111,6 +111,11 @@ const AIEngine = {
             : String(prompt || '').trim();
         if (!userText) return "";
         try {
+            requestOptions.onStatus?.({
+                phase: 'request',
+                model,
+                message: `Modele IA utilise: ${model}`
+            });
             const response = await fetch(`${baseUrl}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
@@ -136,6 +141,12 @@ const AIEngine = {
             console.error('AI Ollama Server Error:', e.message);
             if (requestOptions.model && model !== defaultModel && !requestOptions._fallbackTried) {
                 console.warn(`AI Ollama Server: modele ${model} indisponible, repli sur ${defaultModel}`);
+                requestOptions.onStatus?.({
+                    phase: 'fallback',
+                    model: defaultModel,
+                    previousModel: model,
+                    message: `Modele rapide indisponible, repli sur ${defaultModel}`
+                });
                 return AIEngine.askOllamaServer(prompt, systemInstruction, {
                     ...requestOptions,
                     model: defaultModel,
@@ -160,6 +171,11 @@ const AIEngine = {
         let complete = '';
         let buffer = '';
         try {
+            requestOptions.onStatus?.({
+                phase: 'request',
+                model,
+                message: `Modele IA utilise: ${model}`
+            });
             const response = await fetch(`${baseUrl}/chat/stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
@@ -200,6 +216,12 @@ const AIEngine = {
             if (complete) throw error;
             if (requestOptions.model && model !== defaultModel && !requestOptions._fallbackTried) {
                 console.warn(`AI Ollama streaming: modele ${model} indisponible, repli sur ${defaultModel}:`, error.message);
+                requestOptions.onStatus?.({
+                    phase: 'fallback',
+                    model: defaultModel,
+                    previousModel: model,
+                    message: `Modele rapide indisponible, repli sur ${defaultModel}`
+                });
                 return AIEngine.askOllamaServerStream(prompt, systemInstruction, onChunk, {
                     ...requestOptions,
                     model: defaultModel,

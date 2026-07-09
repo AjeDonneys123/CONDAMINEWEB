@@ -332,7 +332,16 @@ router.post('/message/stream', async (req, res) => {
 
         const answer = await AIEngine.askOllamaServerStream(prompt, system, (text) => {
             res.write(`${JSON.stringify({ text })}\n`);
-        }, aiOptions);
+        }, {
+            ...aiOptions,
+            onStatus: (status) => writeNdjson(res, {
+                status: status.message || 'Connexion au modele local...',
+                model: status.model,
+                previousModel: status.previousModel,
+                phase: status.phase,
+                elapsedMs: Date.now() - startedAt
+            })
+        });
         if (!answer && !streamPreamble) throw new Error('EMPTY_AI_RESPONSE');
         res.end(`${JSON.stringify({ done: true })}\n`);
     } catch (error) {
