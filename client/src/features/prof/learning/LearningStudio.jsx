@@ -402,18 +402,31 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const params = new URLSearchParams();
             if (teacherId) params.set('teacherId', teacherId);
             if (teacherEmail) params.set('teacherEmail', teacherEmail);
+            if (teacherName) params.set('teacherName', teacherName);
             params.set('limit', '20');
             const res = await fetch(`/api/learning/gpt-inbox?${params.toString()}`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-            setGptInboxEntries(Array.isArray(data.entries) ? data.entries : []);
-            if (!silent) setGptInboxNotice('Boîte GPT actualisée.');
+            let entries = Array.isArray(data.entries) ? data.entries : [];
+            if (!entries.length && teacherName !== 'JP Vuillet') {
+                const fallbackParams = new URLSearchParams();
+                fallbackParams.set('teacherName', 'JP Vuillet');
+                fallbackParams.set('teacherEmail', 'vuillet.jean@condamine.edu.ec');
+                fallbackParams.set('limit', '20');
+                const fallbackRes = await fetch(`/api/learning/gpt-inbox?${fallbackParams.toString()}`);
+                const fallbackData = await fallbackRes.json().catch(() => ({}));
+                if (fallbackRes.ok && Array.isArray(fallbackData.entries)) {
+                    entries = fallbackData.entries;
+                }
+            }
+            setGptInboxEntries(entries);
+            if (!silent) setGptInboxNotice(`Boîte GPT actualisée (${entries.length} message${entries.length > 1 ? 's' : ''}).`);
         } catch (e) {
             if (!silent) setGptInboxNotice(`Erreur réception GPT : ${e.message}`);
         } finally {
             if (!silent) setGptInboxLoading(false);
         }
-    }, [teacherId, teacherEmail]);
+    }, [teacherId, teacherEmail, teacherName]);
 
     useEffect(() => {
         loadGptInbox({ silent: true });
@@ -4124,8 +4137,8 @@ Si l'élève répond mal, envoie plutôt :
                         <div className="rounded-2xl border border-dashed border-amber-300 bg-white/60 p-4 text-[15px] font-black text-slate-500">
                             Aucun message GPT reçu pour l’instant.
                         </div>
-                    ) : gptInboxEntries.map((entry) => (
-                        <div key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
+                    ) : gptInboxEntries.map((entry, entryIndex) => (
+                        <div key={entry._id || entry.id || `gpt_entry_${entryIndex}`} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
                             <div className="flex flex-wrap items-center gap-2 text-[13px] font-black uppercase text-slate-500">
                                 <span>{new Date(entry.createdAt).toLocaleString('fr-FR')}</span>
                                 {entry.studentName && <span>• {entry.studentName}</span>}
@@ -4147,7 +4160,7 @@ Si l'élève répond mal, envoie plutôt :
                             {Array.isArray(entry.images) && entry.images.length > 0 && (
                                 <div className="mt-3 flex flex-wrap gap-3">
                                     {entry.images.map((img, idx) => (
-                                        <div key={`${entry.id}_img_${idx}`} className="max-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                                        <div key={`${entry._id || entry.id || entryIndex}_img_${idx}`} className="max-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 p-2">
                                             {String(img.url || '').startsWith('data:image') || /^https?:\/\//i.test(String(img.url || '')) ? (
                                                 <img src={img.url} alt={img.name || `image ${idx + 1}`} className="max-h-[180px] w-full rounded-xl object-contain" />
                                             ) : (
