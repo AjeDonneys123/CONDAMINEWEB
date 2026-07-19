@@ -22,6 +22,11 @@ const extractGoogleSlidesId = (url = '') => {
     const m = raw.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/i);
     return m?.[1] ? String(m[1]).trim() : '';
 };
+const extractGoogleSlidesPageObjectId = (url = '') => {
+    const raw = String(url || '').trim();
+    const m = raw.match(/(?:[?#&]slide=)(?:id\.)?([a-zA-Z0-9_-]+)/i);
+    return m?.[1] ? String(m[1]).trim() : '';
+};
 const buildSlidesThumbnailProxyUrl = (presentationId = '', objectId = '', slideNumber = '') => {
     const pid = String(presentationId || '').trim();
     const oid = String(objectId || '').trim();
@@ -29,6 +34,12 @@ const buildSlidesThumbnailProxyUrl = (presentationId = '', objectId = '', slideN
     const params = new URLSearchParams({ presentationId: pid, pageObjectId: oid });
     if (String(slideNumber || '').trim()) params.set('slideNumber', String(slideNumber).trim());
     return `/api/learning/slides/thumbnail?${params.toString()}`;
+};
+const buildSpecificGoogleSlidePreviewUrl = (url = '') => {
+    const presentationId = extractGoogleSlidesId(url);
+    const pageObjectId = extractGoogleSlidesPageObjectId(url);
+    if (!presentationId || !pageObjectId) return '';
+    return buildSlidesThumbnailProxyUrl(presentationId, pageObjectId);
 };
 const toGoogleSlidesReadOnlyUrl = (url = '') => {
     const raw = String(url || '').trim();
@@ -314,6 +325,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [synonymDraft, setSynonymDraft] = useState('');
     const [savingStepData, setSavingStepData] = useState(false);
     const [importingSheet, setImportingSheet] = useState(false);
+    const [recordingQuestionCell, setRecordingQuestionCell] = useState(null); // { rowIdx, field }
     const [sourcePickerKind, setSourcePickerKind] = useState(''); // '' | 'video' | 'sheet'
     const [sourcePickerExistingUrl, setSourcePickerExistingUrl] = useState('');
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
@@ -778,14 +790,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     ? options[answerIdx]
                     : '';
                 const answer = String(r?.answer || r?.expectedAnswer || answerFromOptions || '').trim();
-                return { question, answer };
+                const expectedKeywords = Array.isArray(r?.expectedKeywords)
+                    ? r.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
+                    : [];
+                return { question, answer, expectedKeywords, generatedByAi: r?.generatedByAi === true };
             })
-            .filter((r) => r.question || r.answer)
+            .filter((r) => r.question || r.answer || r.expectedKeywords.length)
             .slice(0, 20);
     const patchFromQuestionPairs = (pairs = []) => {
         const clean = normalizeQuestionPairs(pairs);
         const firstQuestion = String(clean[0]?.question || '').trim();
         const answers = clean.map((p) => String(p.answer || '').trim()).filter(Boolean);
+        const explicitKeywords = clean
+            .flatMap((p) => Array.isArray(p.expectedKeywords) ? p.expectedKeywords : [])
+            .map((w) => String(w || '').trim().toLowerCase())
+            .filter(Boolean);
         const keywordBag = answers
             .join(' ')
             .toLowerCase()
@@ -796,12 +815,167 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             questionAnswerPairs: clean,
             customQuestion: firstQuestion || '',
             redHighlights: answers.slice(0, 30),
-            keywords: [...new Set(keywordBag)].slice(0, 20)
+            keywords: [...new Set([...explicitKeywords, ...keywordBag])].slice(0, 30)
         };
     };
     const updateQuestionPairs = (pairs = []) => {
         if (!step || step.type !== 'question') return;
         updateStep(activeStep, patchFromQuestionPairs(pairs));
+    };
+    const updateQuestionPairsDraft = (rows = []) => {
+        if (!step || step.type !== 'question') return;
+        const firstQuestion = String(rows[0]?.question || '').trim();
+        const explicitKeywords = rows
+            .flatMap((p) => Array.isArray(p?.expectedKeywords) ? p.expectedKeywords : [])
+            .map((w) => String(w || '').trim().toLowerCase())
+            .filter(Boolean);
+        const answerKeywords = rows
+            .map((p) => String(p?.answer || '').trim())
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .split(/[^a-z0-9àâäéèêëîïôöùûüÿçœæ'-]+/i)
+            .map((w) => w.trim())
+            .filter((w) => w.length >= 3);
+        updateStep(activeStep, {
+            questionAnswerPairs: rows,
+            customQuestion: firstQuestion || '',
+            redHighlights: rows.map((p) => String(p?.answer || '').trim()).filter(Boolean).slice(0, 30),
+            keywords: [...new Set([...explicitKeywords, ...answerKeywords])].slice(0, 30)
+        });
+    };
+    const getQuestionPairRowsForEditor = () => {
+        const rawRows = Array.isArray(step?.questionAnswerPairs) ? step.questionAnswerPairs : [];
+        if (rawRows.length > 0) {
+            const legacyQuestion = String(step?.customQuestion || '').trim();
+            const legacyAnswers = Array.isArray(step?.redHighlights)
+                ? step.redHighlights.map((x) => String(x || '').trim()).filter(Boolean)
+                : [];
+            const legacyKeywords = Array.isArray(step?.keywords)
+                ? step.keywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 30)
+                : [];
+            return rawRows.map((row, idx) => {
+                const question = String(row?.question || row?.q || '').trim()
+                    || (idx === 0 ? legacyQuestion : '');
+                const answer = String(row?.answer || row?.expectedAnswer || '').trim()
+                    || String(legacyAnswers[idx] || '').trim();
+                const expectedKeywords = Array.isArray(row?.expectedKeywords) && row.expectedKeywords.length > 0
+                    ? row.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
+                    : legacyKeywords;
+                return {
+                    ...row,
+                    question,
+                    answer,
+                    expectedKeywords,
+                    generatedByAi: row?.generatedByAi === true
+                };
+            });
+        }
+        const previewRows = normalizeQuestionPairs(step?.aiPreviewQuestions || []);
+        if (previewRows.length > 0) return previewRows.map((row) => ({ ...row, generatedByAi: true }));
+        const question = String(step?.customQuestion || '').trim();
+        const answer = Array.isArray(step?.redHighlights)
+            ? step.redHighlights.map((x) => String(x || '').trim()).filter(Boolean).join('\n')
+            : '';
+        const expectedKeywords = Array.isArray(step?.keywords)
+            ? step.keywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 30)
+            : [];
+        if (!question && !answer && expectedKeywords.length === 0) return [];
+        return [{ question, answer, expectedKeywords, generatedByAi: false }];
+    };
+    const getQuestionPairRowsForEditorOrPlaceholders = () => {
+        const rows = getQuestionPairRowsForEditor();
+        if (rows.length > 0) return rows;
+        const count = Math.max(1, Math.min(20, Number(step?.questionCount || 3)));
+        return Array.from({ length: count }, (_, idx) => ({
+            question: '',
+            answer: '',
+            expectedKeywords: [],
+            generatedByAi: false,
+            placeholder: true,
+            placeholderLabel: `Question ${idx + 1}`
+        }));
+    };
+    const updateQuestionPairRow = (rowIdx = 0, patch = {}) => {
+        if (!step || step.type !== 'question') return;
+        const rows = [...getQuestionPairRowsForEditor()];
+        rows[rowIdx] = { ...(rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] }), ...patch };
+        updateQuestionPairsDraft(rows);
+    };
+    const moveQuestionPairRow = (fromIdx = 0, toIdx = 0) => {
+        if (!step || step.type !== 'question') return;
+        const rows = [...getQuestionPairRowsForEditor()];
+        if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= rows.length || toIdx >= rows.length) return;
+        const [moved] = rows.splice(fromIdx, 1);
+        rows.splice(toIdx, 0, moved);
+        updateQuestionPairsDraft(rows);
+    };
+    const renderStructuredAnswerPreview = (value = '') => {
+        const text = String(value || '');
+        const lines = text.replace(/\r/g, '\n').split('\n');
+        const hasStructuredDash = lines.some((line) => /^\s*[-–—•]\s*/.test(line));
+        if (!hasStructuredDash) return null;
+        return (
+            <div className="mt-1 rounded-xl border border-red-100 bg-red-50/40 px-3 py-2 text-[12px] font-bold text-slate-700 leading-snug">
+                <div className="text-[10px] font-black uppercase text-red-500 mb-1">
+                    Tirets rouges = blocs attendus vérifiés séparément
+                </div>
+                <div className="space-y-0.5">
+                    {lines.map((line, idx) => {
+                        const match = String(line || '').match(/^(\s*)([-–—•])(\s*)(.*)$/);
+                        if (!match) {
+                            return <div key={`structured_line_${idx}`}>{line || ' '}</div>;
+                        }
+                        return (
+                            <div key={`structured_line_${idx}`}>
+                                <span>{match[1]}</span>
+                                <span className="text-red-600 font-black">{match[2]}</span>
+                                <span>{match[3]}{match[4]}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+    const startQuestionCellDictation = (rowIdx = 0, field = 'question') => {
+        if (typeof window === 'undefined') return;
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("Micro non disponible dans ce navigateur. Essaie Chrome.");
+            return;
+        }
+        const targetField = field === 'answer' ? 'answer' : 'question';
+        const rec = new SpeechRecognition();
+        rec.lang = 'fr-FR';
+        rec.interimResults = false;
+        rec.continuous = false;
+        setRecordingQuestionCell({ rowIdx, field: targetField });
+        rec.onresult = (event) => {
+            const transcript = Array.from(event.results || [])
+                .map((result) => String(result?.[0]?.transcript || '').trim())
+                .filter(Boolean)
+                .join(' ')
+                .trim();
+            if (!transcript) return;
+            const rows = [...(Array.isArray(step?.questionAnswerPairs) ? step.questionAnswerPairs : [])];
+            const current = rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] };
+            const previous = String(current[targetField] || '').trim();
+            rows[rowIdx] = {
+                ...current,
+                [targetField]: previous ? `${previous} ${transcript}` : transcript
+            };
+            updateQuestionPairsDraft(rows);
+        };
+        rec.onerror = () => {
+            alert("Dictée micro impossible. Vérifie l'autorisation du micro.");
+        };
+        rec.onend = () => setRecordingQuestionCell(null);
+        try {
+            rec.start();
+        } catch (_) {
+            setRecordingQuestionCell(null);
+        }
     };
 
     const handleAnnotMouseDown = (e) => {
@@ -901,12 +1075,14 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const rows = await res.json();
             const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
+            const pairs = normalizeQuestionPairs(clean).map((pair) => ({ ...pair, generatedByAi: true }));
             const qStep = {
                 ...emptyStep('question'),
                 title: `Questions ${step.type === 'sheet' ? 'Fiche' : 'Vidéo'}`,
                 materialSource: step.type === 'sheet' ? `sheet:${step.id}` : `video:${step.id}`,
                 materialText: sourceText,
-                aiPreviewQuestions: clean
+                aiPreviewQuestions: clean,
+                ...patchFromQuestionPairs(pairs)
             };
             setFormData((prev) => {
                 const steps = [...(prev.steps || [])];
@@ -984,8 +1160,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const qRes = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const rows = await qRes.json();
             const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
+            const pairs = normalizeQuestionPairs(clean).map((pair) => ({ ...pair, generatedByAi: true }));
             updateStep(activeStep, {
                 aiPreviewQuestions: clean,
+                ...patchFromQuestionPairs(pairs),
                 materialSource: 'slides',
                 materialText: String(extracted.combinedText || '')
             });
@@ -997,7 +1175,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const refreshKnownSegments = async (url, stepId = '') => {
         const safeUrl = String(url || '').trim();
-        const safeStepId = String(stepId || '').trim();
+        const safeStepId = '';
         const reqId = ++knownSegmentsReqRef.current;
         knownSegmentsUrlRef.current = `${safeUrl}::${safeStepId}`;
         if (!teacherId || !safeUrl) {
@@ -1182,7 +1360,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
     const cutCurrentSegment = async () => {
         if (!step || step.type !== 'video' || !step.videoUrl) return;
-        const cutAt = getEditorCurrentSecond();
+        const cutAt = Math.max(
+            getEditorCurrentSecond(),
+            Math.floor(Number(editorCurrentAbsSec || 0)),
+            Math.floor(Number(timelineCurrentSec || 0))
+        );
         if (selectedSegment) {
             const sid = String(selectedSegment._id || selectedSegment.id || '').trim();
             const segStart = Math.max(0, Number(selectedSegment.startSec || 0));
@@ -1219,7 +1401,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             setEditorPlaybackMode('segment');
             return;
         }
-        const start = Math.max(0, Number(segmentStart || 0));
+        const lastKnownEndBeforeCut = (Array.isArray(knownSegments) ? knownSegments : [])
+            .map((seg) => Math.max(0, Number(seg?.endSec || seg?.startSec || 0)))
+            .filter((sec) => sec > 0 && sec < cutAt)
+            .sort((a, b) => b - a)[0] || 0;
+        const rawStart = Math.max(0, Number(segmentStart || 0));
+        const start = rawStart < cutAt ? rawStart : lastKnownEndBeforeCut;
         if (cutAt <= start) {
             alert("Avance la lecture avant de couper.");
             return;
@@ -1304,6 +1491,42 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             return;
         }
         setEmbedPreviewSeekSec(start);
+        setEditorEmbedReloadKey(Date.now());
+    };
+    const continueAfterSelectedSegment = () => {
+        const lastKnownEnd = (Array.isArray(knownSegments) ? knownSegments : [])
+            .map((seg) => Math.max(0, Number(seg?.endSec || seg?.startSec || 0)))
+            .sort((a, b) => b - a)[0] || 0;
+        const baseEnd = selectedSegment
+            ? Math.max(0, Number(selectedSegment.endSec || selectedSegment.startSec || 0))
+            : Math.max(0, Number(lastKnownEnd || segmentEnd || segmentStart || editorCurrentAbsSec || 0));
+        const nextStart = Math.max(0, Math.floor(baseEnd));
+        setSelectedSegmentId('');
+        setSelectedSegmentLabel('');
+        setSelectedSegmentTranscript('');
+        setLastSavedSegmentLabel('');
+        setLastSavedSegmentTranscript('');
+        setSegmentStart(nextStart);
+        setSegmentEnd(nextStart);
+        setSegmentEndFollowPlayhead(true);
+        setSegmentLabel('');
+        setSegmentPreviewRelSec(0);
+        setPreviewSegmentMode(false);
+        setEditorPlaybackMode('video');
+        setEmbedPreviewSeekSec(null);
+        seekEditorTo(nextStart);
+        if (editorIsDirect && videoEditorRef.current) {
+            videoEditorRef.current.play().catch(() => {});
+            return;
+        }
+        if (youtubeEditorPlayerRef.current?.seekTo) {
+            try {
+                youtubeEditorPlayerRef.current.seekTo(nextStart, true);
+                youtubeEditorPlayerRef.current.playVideo?.();
+            } catch (_) {}
+            return;
+        }
+        setEmbedPreviewSeekSec(nextStart);
         setEditorEmbedReloadKey(Date.now());
     };
     const removeKnownSegment = async (seg) => {
@@ -1467,6 +1690,74 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         window.addEventListener('mouseup', onUp);
     };
     const selectedSegment = knownSegments.find((s) => String(s._id || s.id || '') === selectedSegmentId) || null;
+    const getQuestionSectionMapFromAnyStep = (sourceStep = null) => {
+        if (!sourceStep) return {};
+        const objectCandidates = [
+            sourceStep.questionSectionQuestions,
+            sourceStep.sheetSectionQuestions,
+            sourceStep.videoSectionQuestions,
+            sourceStep.sectionQuestions,
+            sourceStep.zoneQuestions
+        ];
+        for (const candidate of objectCandidates) {
+            if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+            const clean = {};
+            Object.keys(candidate).forEach((key) => {
+                const rows = Array.isArray(candidate[key]) ? candidate[key] : [];
+                const usable = rows
+                    .map((row) => ({
+                        q: String(row?.q || row?.question || '').trim(),
+                        question: String(row?.question || row?.q || '').trim(),
+                        expectedAnswer: String(row?.expectedAnswer || row?.answer || '').trim(),
+                        expectedKeywords: Array.isArray(row?.expectedKeywords)
+                            ? row.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
+                            : String(row?.expectedKeywords || '')
+                                .split(',')
+                                .map((x) => x.trim())
+                                .filter(Boolean),
+                        generatedByAi: row?.generatedByAi === true
+                    }))
+                    .filter((row) => row.question || row.expectedAnswer || row.expectedKeywords.length > 0);
+                if (usable.length > 0) clean[String(key)] = usable;
+            });
+            if (Object.keys(clean).length > 0) return clean;
+        }
+        const pairs = Array.isArray(sourceStep.questionAnswerPairs) ? sourceStep.questionAnswerPairs : [];
+        const pairRows = pairs
+            .map((pair) => ({
+                q: String(pair?.question || pair?.q || '').trim(),
+                question: String(pair?.question || pair?.q || '').trim(),
+                expectedAnswer: String(pair?.expectedAnswer || pair?.answer || '').trim(),
+                expectedKeywords: Array.isArray(pair?.expectedKeywords)
+                    ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
+                    : String(pair?.expectedKeywords || '')
+                        .split(',')
+                        .map((x) => x.trim())
+                        .filter(Boolean),
+                generatedByAi: pair?.generatedByAi === true
+            }))
+            .filter((row) => row.question || row.expectedAnswer || row.expectedKeywords.length > 0);
+        if (pairRows.length > 0) return { 0: pairRows };
+        const fallbackQuestion = String(sourceStep.customQuestion || '').trim();
+        const fallbackAnswer = Array.isArray(sourceStep.redHighlights)
+            ? sourceStep.redHighlights.map((x) => String(x || '').trim()).filter(Boolean).join('\n')
+            : '';
+        const fallbackKeywords = Array.isArray(sourceStep.keywords)
+            ? sourceStep.keywords.map((x) => String(x || '').trim()).filter(Boolean)
+            : [];
+        if (fallbackQuestion || fallbackAnswer || fallbackKeywords.length > 0) {
+            return {
+                0: [{
+                    q: fallbackQuestion,
+                    question: fallbackQuestion,
+                    expectedAnswer: fallbackAnswer,
+                    expectedKeywords: fallbackKeywords,
+                    generatedByAi: false
+                }]
+            };
+        }
+        return {};
+    };
     const questionTextSources = useMemo(() => getQuestionTextSources(), [formData.steps, step?.id]);
     const questionSources = useMemo(() => getQuestionSources(), [formData.steps, allGames, formData.chapterId, step?.id]);
     const videoSources = useMemo(() => getCandidateVideos(), [formData.steps, allGames, formData.chapterId]);
@@ -1478,14 +1769,22 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     );
     const questionSectionsFromDb = useMemo(() => {
         if (!step || step.type !== 'question') return [];
-        const map = (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object')
-            ? step.questionSectionQuestions
-            : {};
+        let map = getQuestionSectionMapFromAnyStep(step);
+        if (Object.keys(map).length === 0) {
+            const sourceInfo = getForcedQuestionSourceForIndex(activeStep);
+            const sourceStep = sourceInfo?.stepId
+                ? (formData.steps || []).find((s) => String(s?.id || '') === String(sourceInfo.stepId))
+                : null;
+            const fallbackMap = getQuestionSectionMapFromAnyStep(sourceStep);
+            if (fallbackMap && typeof fallbackMap === 'object' && Object.keys(fallbackMap).length > 0) {
+                map = fallbackMap;
+            }
+        }
         return Object.keys(map)
             .map((k) => ({ idx: Number(k), rows: Array.isArray(map[k]) ? map[k] : [] }))
             .filter((x) => Number.isFinite(x.idx) && x.rows.length > 0)
             .sort((a, b) => a.idx - b.idx);
-    }, [step?.id, step?.questionSectionQuestions, step?.type]);
+    }, [activeStep, formData.steps, step?.id, step?.questionSectionQuestions, step?.type]);
     const selectedQuestionSource = useMemo(() => {
         if (step?.type === 'question' && forcedQuestionSource?.value) {
             return resolveQuestionSource(forcedQuestionSource.value) || getSelectedQuestionSource(step);
@@ -1596,7 +1895,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const loadQuestionSourceText = async ({ openKeyword = false, quietMissingVideoText = false } = {}) => {
         if (!step || step.type !== 'question') return '';
-        const source = getSelectedQuestionSource(step);
+        const source = getSelectedQuestionSource(step)
+            || (forcedQuestionSource?.value ? resolveQuestionSource(forcedQuestionSource.value) : null);
         if (!source?.url) {
             alert("Choisis d'abord une source.");
             return '';
@@ -1676,11 +1976,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setLoadingQuestionSourceText(true);
         try {
             const sourceRef = String(step.sourceSheetUrl || '').trim();
+            const sourceUrl = String(source.url || '').trim();
+            const cacheRef = sourceUrl ? `${sourceRef}|${sourceUrl}` : sourceRef;
             const cachedSourceRef = String(step.materialSource || '').trim();
             const cachedText = String(step.materialText || '').trim();
-            if (cachedText && sourceRef && cachedSourceRef === sourceRef) {
+            if (cachedText && cacheRef && cachedSourceRef === cacheRef) {
                 if (openKeyword) {
-                    setKeywordMaterialSource(sourceRef);
+                    setKeywordMaterialSource(cacheRef);
                     setKeywordMaterialText(cachedText);
                     setKeywordSelectedText('');
                     setKeywordSelectionSpan(null);
@@ -1694,9 +1996,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             }
             const localText = String(source.text || '').trim();
             if (localText) {
-                updateStep(activeStep, { materialSource: String(step.sourceSheetUrl || ''), materialText: localText });
+                updateStep(activeStep, { materialSource: cacheRef, materialText: localText });
                 if (openKeyword) {
-                    setKeywordMaterialSource(String(step.sourceSheetUrl || `sheet:${step.id}`));
+                    setKeywordMaterialSource(cacheRef || String(step.sourceSheetUrl || `sheet:${step.id}`));
                     setKeywordMaterialText(localText);
                     setKeywordSelectedText('');
                     setKeywordSelectionSpan(null);
@@ -1716,9 +2018,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const data = await res.json();
             if (!res.ok || !data?.text) throw new Error(data?.error || 'Extraction impossible');
             const extracted = String(data.text || '');
-            updateStep(activeStep, { materialSource: String(step.sourceSheetUrl || ''), materialText: extracted });
+            updateStep(activeStep, { materialSource: cacheRef, materialText: extracted });
             if (openKeyword) {
-                setKeywordMaterialSource(String(step.sourceSheetUrl || `sheet:${step.id}`));
+                setKeywordMaterialSource(cacheRef || String(step.sourceSheetUrl || `sheet:${step.id}`));
                 setKeywordMaterialText(extracted);
                 setKeywordSelectedText('');
                 setKeywordSelectionSpan(null);
@@ -1811,19 +2113,40 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const wanted = Math.max(1, Math.min(20, Number(step.questionCount || 3)));
         setAiTesting(true);
         try {
-            let sourceText = String(step.materialText || '').trim();
+            const source = getSelectedQuestionSource(step)
+                || (forcedQuestionSource?.value ? resolveQuestionSource(forcedQuestionSource.value) : null);
+            const sourceRef = source?.type === 'sheet'
+                ? `${String(step.sourceSheetUrl || forcedQuestionSource?.value || '').trim()}|${String(source?.url || '').trim()}`
+                : source?.type === 'video'
+                    ? String(step.sourceVideoRef || forcedQuestionSource?.value || '').trim()
+                    : source?.type === 'slides'
+                        ? String(step.sourceSlidesUrl || '').trim()
+                        : String(step.materialSource || '').trim();
+            const cacheMatches = sourceRef && String(step.materialSource || '').trim() === sourceRef;
+            let sourceText = cacheMatches ? String(step.materialText || '').trim() : '';
             if (!sourceText) sourceText = String(await loadQuestionSourceText({ openKeyword: false }) || '').trim();
-            if (!sourceText) throw new Error("Aucun texte source disponible.");
-            const res = await fetch('/api/learning/generate-question-answers', {
+            if (!sourceText) {
+                const sourceLabel = forcedQuestionSource?.label || selectedQuestionSource?.url || 'source précédente';
+                throw new Error(`Aucun texte source disponible pour "${sourceLabel}". Si c'est une image, l'OCR IA n'a pas réussi à extraire le texte.`);
+            }
+            const res = await fetch('/api/learning/generate-section-questions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sourceText, count: wanted, teacherId })
+                body: JSON.stringify({
+                    sectionText: sourceText,
+                    sourceAnswers: [],
+                    count: wanted,
+                    teacherId
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Génération impossible');
-            const pairs = normalizeQuestionPairs(data?.pairs || []);
+            const pairs = normalizeQuestionPairs(data?.rows || data?.pairs || [])
+                .map((pair) => ({ ...pair, generatedByAi: true }));
             if (!pairs.length) throw new Error('Aucune question générée');
-            updateStep(activeStep, patchFromQuestionPairs(pairs));
+            const manualRows = (Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])
+                .filter((pair) => pair?.generatedByAi !== true);
+            updateStep(activeStep, patchFromQuestionPairs([...manualRows, ...pairs]));
         } catch (e) {
             alert(`Génération impossible: ${e.message}`);
         }
@@ -2758,9 +3081,17 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
     const getCurrentSectionQuestionsMap = () => {
         if (!step) return {};
-        if (step.type === 'question') return (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object') ? step.questionSectionQuestions : {};
-        if (step.type === 'video') return (step.videoSectionQuestions && typeof step.videoSectionQuestions === 'object') ? step.videoSectionQuestions : {};
-        if (step.type === 'sheet') return (step.sheetSectionQuestions && typeof step.sheetSectionQuestions === 'object') ? step.sheetSectionQuestions : {};
+        if (step.type === 'question') {
+            const own = getQuestionSectionMapFromAnyStep(step);
+            if (Object.keys(own).length > 0) return own;
+            const sourceInfo = getForcedQuestionSourceForIndex(activeStep);
+            const sourceStep = sourceInfo?.stepId
+                ? (formData.steps || []).find((s) => String(s?.id || '') === String(sourceInfo.stepId))
+                : null;
+            const fallbackMap = getQuestionSectionMapFromAnyStep(sourceStep);
+            return (fallbackMap && typeof fallbackMap === 'object') ? fallbackMap : {};
+        }
+        if (step.type === 'video' || step.type === 'sheet') return getQuestionSectionMapFromAnyStep(step);
         return {};
     };
     const updateCurrentSectionQuestionsMap = (nextMap = {}) => {
@@ -2899,6 +3230,56 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
         removeZoneQuestion(zoneIdx, rowIdx);
     };
+    const renderSectionQuestionEditor = (sectionIdx, q, i) => (
+        <div key={`db_q_${sectionIdx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
+            <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="text-[11px] font-black uppercase text-indigo-700">
+                    Question {i + 1}
+                </div>
+                <button
+                    type="button"
+                    className="v84-del-btn"
+                    onClick={() => removeZoneQuestion(sectionIdx, i)}
+                    title="Supprimer question"
+                >
+                    ✕
+                </button>
+            </div>
+            <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Question</div>
+            <textarea
+                rows={2}
+                className="v84-q-input !text-[13px] !leading-snug"
+                value={String(q?.question || q?.q || '')}
+                onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder={`Question ${i + 1}`}
+            />
+            <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Réponse attendue</div>
+            <textarea
+                rows={2}
+                className="v84-q-input !text-[13px] !leading-snug"
+                value={String(q?.expectedAnswer || '')}
+                onChange={(e) => updateZoneQuestion(sectionIdx, i, { expectedAnswer: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="Réponse attendue"
+            />
+            {renderStructuredAnswerPreview(q?.expectedAnswer || '')}
+            <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Mots-clés attendus</div>
+            <input
+                className="v84-ans-input !text-[12px]"
+                value={Array.isArray(q?.expectedKeywords) ? q.expectedKeywords.join(', ') : ''}
+                onChange={(e) => updateZoneQuestion(sectionIdx, i, {
+                    expectedKeywords: e.target.value
+                        .split(',')
+                        .map((x) => x.trim())
+                        .filter(Boolean)
+                        .slice(0, 30)
+                })}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="marne, verdun, armistice"
+            />
+        </div>
+    );
     const saveCurrentStepDataNow = async () => {
         if (!step) return;
         if (!formData?._id) {
@@ -2911,6 +3292,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             if (step.type === 'question') {
                 patch.materialText = String(step.materialText || '');
                 patch.questionSlideTextMap = sanitizeSlideTextMap(step.questionSlideTextMap);
+                patch.questionAnswerPairs = Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [];
                 patch.questionSectionQuestions = step.questionSectionQuestions || {};
             } else if (step.type === 'sheet') {
                 patch.sheetText = String(step.sheetText || '');
@@ -2934,8 +3316,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         }
         setSavingStepData(false);
     };
-    const handleImportSheetFile = async (e) => {
-        const file = e?.target?.files?.[0];
+    const importSheetFile = async (file) => {
         if (!file || !step || step.type !== 'sheet') return;
         setImportingSheet(true);
         try {
@@ -2944,12 +3325,41 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd });
             const data = await res.json();
             if (!res.ok || !data?.url) throw new Error(data?.error || "Erreur import");
-            updateStep(activeStep, { sheetUrl: String(data.url || '') });
+            updateStep(activeStep, {
+                sheetUrl: String(data.url || ''),
+                sheetText: '',
+                sheetSlideTextMap: {}
+            });
         } catch (err) {
             alert(`Import fiche impossible: ${err.message || 'Erreur réseau'}`);
         }
         setImportingSheet(false);
+    };
+    const handleImportSheetFile = async (e) => {
+        const file = e?.target?.files?.[0];
+        await importSheetFile(file);
         if (e?.target) e.target.value = null;
+    };
+    const handlePasteSheet = async (event) => {
+        if (!step || step.type !== 'sheet') return;
+        const items = Array.from(event.clipboardData?.items || []);
+        const fileItem = items.find((item) => item.kind === 'file');
+        const file = fileItem?.getAsFile ? fileItem.getAsFile() : null;
+        if (file) {
+            event.preventDefault();
+            event.stopPropagation();
+            const ext = String(file.type || '').includes('jpeg') ? 'jpg' : 'png';
+            const safeFile = file instanceof File
+                ? new File([file], file.name || `fiche-collee-${Date.now()}.${ext}`, { type: file.type || 'image/png' })
+                : file;
+            await importSheetFile(safeFile);
+            return;
+        }
+        const text = String(event.clipboardData?.getData('text/plain') || '').trim();
+        if (/^(https?:\/\/|\/api\/|data:image\/)/i.test(text)) {
+            event.preventDefault();
+            updateStep(activeStep, { sheetUrl: text, sheetText: '', sheetSlideTextMap: {} });
+        }
     };
     const generateQuestionsForActiveZone = async () => {
         if (!step) return;
@@ -2990,11 +3400,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const withForced = clean.map((row) => {
                 const base = Array.isArray(row?.expectedKeywords) ? row.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean) : [];
                 const merged = [...new Set([...base, ...forcedKeywords])].slice(0, 20);
-                return { ...row, expectedKeywords: merged };
+                return { ...row, expectedKeywords: merged, generatedByAi: true };
             });
             const map = getCurrentSectionQuestionsMap();
-            const existing = Array.isArray(map[String(zoneIdx)]) ? map[String(zoneIdx)] : [];
-            const next = { ...map, [String(zoneIdx)]: [...existing, ...withForced] };
+            const manualRows = Array.isArray(map[String(zoneIdx)])
+                ? map[String(zoneIdx)].filter((row) => row?.generatedByAi !== true)
+                : [];
+            const next = { ...map, [String(zoneIdx)]: [...manualRows, ...withForced] };
             updateCurrentSectionQuestionsMap(next);
         } catch (e) {
             alert(String(e?.message || "Erreur génération questions."));
@@ -3042,6 +3454,23 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             setLastSavedSegmentTranscript('');
         }
     }, [step?.type, step?.videoUrl, teacherId]);
+
+    useEffect(() => {
+        if (!step || step.type !== 'video') return;
+        if (!Array.isArray(knownSegments) || knownSegments.length === 0) return;
+        const active = knownSegments.find((seg) =>
+            Number(seg?.startSec || 0) === Number(step.startSec || 0)
+            && Number(seg?.endSec || 0) === Number(step.endSec || 0)
+        );
+        if (!active) return;
+        const sid = String(active._id || active.id || '');
+        if (!sid || sid === selectedSegmentId) return;
+        setSelectedSegmentId(sid);
+        setSelectedSegmentLabel(String(active.label || ''));
+        setSelectedSegmentTranscript(String(active.transcript || ''));
+        setLastSavedSegmentLabel(String(active.label || ''));
+        setLastSavedSegmentTranscript(String(active.transcript || ''));
+    }, [knownSegments, step?.id, step?.type, step?.startSec, step?.endSec, selectedSegmentId]);
 
     useEffect(() => {
         if (!selectedSegmentId) return;
@@ -3790,6 +4219,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             className="v84-ans-input"
                                             value={step.sheetUrl || ''}
                                             onChange={(e) => updateStep(activeStep, { sheetUrl: e.target.value })}
+                                            onPaste={handlePasteSheet}
                                             placeholder="/api/structure/proxy/..."
                                         />
                                         <button
@@ -3809,13 +4239,28 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         onChange={handleImportSheetFile}
                                     />
                                     <div className="hw-section-title mt-4">Aperçu fiche</div>
-                                    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden h-[220px]">
+                                    <div
+                                        className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden h-[220px]"
+                                        tabIndex={0}
+                                        onPaste={handlePasteSheet}
+                                        title="Clique ici puis Ctrl/Cmd+V pour coller une image ou une URL de fiche"
+                                    >
                                         {!String(step.sheetUrl || '').trim() ? (
-                                            <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">Ajoute une URL de fiche pour voir l'aperçu.</div>
+                                            <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm text-center px-4">
+                                                Ajoute une URL de fiche pour voir l'aperçu.
+                                                <br />
+                                                Ctrl/Cmd+V ici pour coller une image.
+                                            </div>
                                         ) : isImageLike(resolveDriveAssetUrl(step.sheetUrl || '')) ? (
                                             <img
                                                 src={resolveDriveAssetUrl(step.sheetUrl || '')}
                                                 alt="aperçu fiche"
+                                                className="w-full h-full object-contain bg-white"
+                                            />
+                                        ) : isGoogleSlidesUrl(step.sheetUrl || '') && buildSpecificGoogleSlidePreviewUrl(step.sheetUrl || '') ? (
+                                            <img
+                                                src={buildSpecificGoogleSlidePreviewUrl(step.sheetUrl || '')}
+                                                alt="aperçu slide Google Slides"
                                                 className="w-full h-full object-contain bg-white"
                                             />
                                         ) : (
@@ -3975,6 +4420,37 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     <div className="mt-2 text-[12px] font-bold text-slate-500">
                                         Segment actif: {Math.max(0, Number(step.startSec || 0))}s → {Math.max(0, Number(step.endSec || 0)) > 0 ? `${Math.max(0, Number(step.endSec || 0))}s` : 'fin'}
                                     </div>
+                                    <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 p-3">
+                                        <div className="hw-section-title !mt-0">Séquence vidéo utilisée par cette étape</div>
+                                        <select
+                                            className="v84-ans-input"
+                                            value={selectedSegmentId}
+                                            onFocus={() => {
+                                                if (String(step.videoUrl || '').trim()) refreshKnownSegments(step.videoUrl, step.id);
+                                            }}
+                                            onChange={(e) => {
+                                                const sid = String(e.target.value || '');
+                                                if (!sid) {
+                                                    setSelectedSegmentId('');
+                                                    updateStep(activeStep, { startSec: 0, endSec: 0, videoTranscript: '' });
+                                                    return;
+                                                }
+                                                const seg = knownSegments.find((s) => String(s._id || s.id || '') === sid);
+                                                if (seg) applyKnownSegment(seg);
+                                            }}
+                                            disabled={!String(step.videoUrl || '').trim()}
+                                        >
+                                            <option value="">Vidéo entière / aucune séquence</option>
+                                            {knownSegments.map((seg, i) => {
+                                                const sid = String(seg._id || seg.id || '');
+                                                const label = String(seg.label || `Séquence ${i + 1}`);
+                                                return <option key={sid || i} value={sid}>{label} ({seg.startSec}-{seg.endSec || 'fin'})</option>;
+                                            })}
+                                        </select>
+                                        <div className="mt-2 text-[11px] font-bold text-violet-700">
+                                            Choisis ici une des séquences créées pour cette URL vidéo.
+                                        </div>
+                                    </div>
                                     <div className="hw-section-title mt-4">Nombre de questions sur cette séquence</div>
                                     <input
                                         type="number"
@@ -4119,84 +4595,172 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3 max-h-[440px] overflow-auto">
                                             {questionSectionsFromDb.map((section) => (
                                                 <div key={`sec_db_${section.idx}`} className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-2">
-                                                    <div className="text-[11px] font-black uppercase text-indigo-700 mb-2">
-                                                        Section {section.idx + 1}
+                                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                                        <div className="text-[11px] font-black uppercase text-indigo-700">
+                                                            Section {section.idx + 1} · questions IA modifiables
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="v84-res-btn upload !px-2 !py-1 !text-[10px]"
+                                                            onClick={() => addZoneQuestion(section.idx)}
+                                                        >
+                                                            + Question
+                                                        </button>
                                                     </div>
                                                     <div className="space-y-2">
-                                                        {section.rows.map((q, i) => (
-                                                            <div key={`db_q_${section.idx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
-                                                                <div className="text-[11px] font-black uppercase text-slate-400">Question</div>
-                                                                <div className="text-[13px] font-bold text-slate-700">{q?.question || q?.q || '—'}</div>
-                                                                <div className="text-[11px] font-black uppercase text-slate-400 mt-1">Réponse attendue</div>
-                                                                <div className="text-[12px] font-semibold text-slate-600">{q?.expectedAnswer || '—'}</div>
-                                                            </div>
-                                                        ))}
+                                                        {section.rows.map((q, i) => renderSectionQuestionEditor(section.idx, q, i))}
                                                     </div>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                                    <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Questions</div>
-                                                    <div className="space-y-2 max-h-[380px] overflow-auto pr-1">
-                                                        {(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : []).map((pair, i) => (
-                                                            <textarea
-                                                                key={`q_${i}`}
-                                                                rows={2}
-                                                                className="v84-q-input"
-                                                                value={pair?.question || ''}
-                                                                onChange={(e) => {
-                                                                    const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
-                                                                    rows[i] = { ...(rows[i] || {}), question: e.target.value };
-                                                                    updateQuestionPairs(rows);
-                                                                }}
-                                                                placeholder={`Question ${i + 1}`}
-                                                            />
-                                                        ))}
-                                                    </div>
+                                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                                                <div className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.75fr)_44px] gap-0 bg-slate-50 border-b border-slate-200">
+                                                    <div className="px-2 py-2 text-[11px] font-black uppercase text-slate-400 text-center">↕</div>
+                                                    <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Questions</div>
+                                                    <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Réponses</div>
+                                                    <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Mots-clés</div>
+                                                    <div className="px-2 py-2 text-[11px] font-black uppercase text-slate-400 text-center">✕</div>
                                                 </div>
-                                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                                    <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Réponses attendues</div>
-                                                    <div className="space-y-2 max-h-[380px] overflow-auto pr-1">
-                                                        {(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : []).map((pair, i) => (
-                                                            <div key={`a_wrap_${i}`} className="flex items-start gap-2">
-                                                                <textarea
-                                                                    rows={2}
-                                                                    className="v84-q-input"
-                                                                    value={pair?.answer || ''}
-                                                                    onChange={(e) => {
-                                                                        const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
-                                                                        rows[i] = { ...(rows[i] || {}), answer: e.target.value };
-                                                                        updateQuestionPairs(rows);
-                                                                    }}
-                                                                    placeholder={`Réponse attendue ${i + 1}`}
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    className="v84-del-btn mt-1"
-                                                                    onClick={() => {
-                                                                        const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
-                                                                        rows.splice(i, 1);
-                                                                        updateQuestionPairs(rows);
+                                                <div className="max-h-[430px] overflow-auto">
+                                                    {getQuestionPairRowsForEditorOrPlaceholders().map((pair, i) => {
+                                                        const isQuestionRecording = recordingQuestionCell
+                                                            && Number(recordingQuestionCell.rowIdx) === Number(i)
+                                                            && recordingQuestionCell.field === 'question';
+                                                        const isAnswerRecording = recordingQuestionCell
+                                                            && Number(recordingQuestionCell.rowIdx) === Number(i)
+                                                            && recordingQuestionCell.field === 'answer';
+                                                        return (
+                                                            <div
+                                                                key={`qa_row_${i}`}
+                                                                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.75fr)_44px] gap-0 border-b border-slate-100 last:border-b-0"
+                                                                onDragOver={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.dataTransfer.dropEffect = 'move';
+                                                                }}
+                                                                onDrop={(e) => {
+                                                                    e.preventDefault();
+                                                                    const from = Number(e.dataTransfer.getData('text/plain'));
+                                                                    moveQuestionPairRow(from, i);
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    className="flex flex-col items-center justify-center gap-1 bg-slate-50 text-slate-400 font-black cursor-grab select-none"
+                                                                    title="Glisse pour déplacer"
+                                                                    draggable
+                                                                    onDragStart={(e) => {
+                                                                        e.dataTransfer.setData('text/plain', String(i));
+                                                                        e.dataTransfer.effectAllowed = 'move';
                                                                     }}
                                                                 >
-                                                                    ✕
-                                                                </button>
+                                                                    <span>⋮⋮</span>
+                                                                    <span className={`text-[9px] px-1 rounded ${pair?.generatedByAi ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                                        {pair?.generatedByAi ? 'IA' : 'PROF'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-2 border-l border-slate-100">
+                                                                    <div className="flex gap-1">
+                                                                        <textarea
+                                                                            rows={3}
+                                                                            className="v84-q-input !text-[13px] !leading-snug"
+                                                                            value={pair?.question || ''}
+                                                                            onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
+                                                                            onKeyDown={(e) => e.stopPropagation()}
+                                                                            placeholder={pair?.placeholderLabel || `Question ${i + 1}`}
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isQuestionRecording ? 'bg-red-500 text-white' : ''}`}
+                                                                            onClick={() => startQuestionCellDictation(i, 'question')}
+                                                                            title="Dicter la question"
+                                                                        >
+                                                                            🎙️
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="p-2 border-l border-slate-100">
+                                                                    <div className="flex gap-1">
+                                                                        <textarea
+                                                                            rows={3}
+                                                                            className="v84-q-input !text-[13px] !leading-snug"
+                                                                            value={pair?.answer || ''}
+                                                                            onChange={(e) => updateQuestionPairRow(i, { answer: e.target.value })}
+                                                                            onKeyDown={(e) => e.stopPropagation()}
+                                                                            placeholder={`Réponse attendue ${i + 1}`}
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isAnswerRecording ? 'bg-red-500 text-white' : ''}`}
+                                                                            onClick={() => startQuestionCellDictation(i, 'answer')}
+                                                                            title="Dicter la réponse attendue"
+                                                                        >
+                                                                            🎙️
+                                                                        </button>
+                                                                    </div>
+                                                                    {renderStructuredAnswerPreview(pair?.answer || '')}
+                                                                </div>
+                                                                <div className="p-2 border-l border-slate-100">
+                                                                    <textarea
+                                                                        rows={3}
+                                                                        className="v84-q-input !text-[13px] !leading-snug"
+                                                                        value={Array.isArray(pair?.expectedKeywords) ? pair.expectedKeywords.join(', ') : ''}
+                                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                                        onChange={(e) => updateQuestionPairRow(i, {
+                                                                            expectedKeywords: e.target.value
+                                                                                .split(',')
+                                                                                .map((x) => x.trim().toLowerCase())
+                                                                                .filter(Boolean)
+                                                                                .slice(0, 20)
+                                                                        })}
+                                                                        placeholder="marne, verdun, armistice"
+                                                                    />
+                                                                </div>
+                                                                <div className="flex items-center justify-center border-l border-slate-100">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="v84-del-btn"
+                                                                        onClick={() => {
+                                                                            const rows = [...getQuestionPairRowsForEditor()];
+                                                                            rows.splice(i, 1);
+                                                                            updateQuestionPairsDraft(rows);
+                                                                        }}
+                                                                        title="Supprimer la ligne"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                        ))}
-                                                    </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                            <div className="mt-3 flex items-center gap-2">
+                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                <label className="text-[11px] font-black uppercase text-slate-500">Nombre</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="20"
+                                                    className="v84-ans-input !w-[90px]"
+                                                    value={Number(step.questionCount || 3)}
+                                                    onChange={(e) => updateStep(activeStep, { questionCount: Math.max(1, Math.min(20, Number(e.target.value || 3))) })}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700"
+                                                    onClick={generateQuestionAnswerPairsFromSource}
+                                                    disabled={aiTesting || !(selectedQuestionSource?.url || forcedQuestionSource?.value)}
+                                                    title="Génère les questions, réponses attendues et mots-clés depuis la fiche ou vidéo précédente."
+                                                >
+                                                    {aiTesting ? 'Génération...' : '✨ Générer depuis fiche précédente'}
+                                                </button>
                                                 <button
                                                     type="button"
                                                     className="v84-res-btn upload"
                                                     onClick={() => {
-                                                        const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
-                                                        rows.push({ question: '', answer: '' });
-                                                        updateQuestionPairs(rows);
+                                                        const rows = [...getQuestionPairRowsForEditor()];
+                                                        rows.push({ question: '', answer: '', expectedKeywords: [], generatedByAi: false });
+                                                        updateQuestionPairsDraft(rows);
                                                     }}
                                                 >
                                                     + Ajouter ligne manuelle
@@ -4609,6 +5173,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                 Play section
                                             </button>
                                         )}
+                                        <button
+                                            className="v84-res-btn upload bg-emerald-600 text-white whitespace-nowrap"
+                                            onClick={continueAfterSelectedSegment}
+                                            title="Lire la suite de la vidéo à partir de la fin de cette section ou du dernier segment"
+                                        >
+                                            Suite
+                                        </button>
                                         {selectedSegmentId && (
                                             <button
                                                 className="v84-res-btn upload bg-red-600 text-white whitespace-nowrap"
@@ -4984,7 +5555,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         onClick={generateQuestionsForActiveZone}
                                         disabled={aiTesting || !String(keywordMaterialText || '').trim()}
                                     >
-                                        {aiTesting ? 'Génération...' : 'Générer questions + mots-clés'}
+                                        {aiTesting ? 'Génération...' : 'Générer IA (garde manuel)'}
                                     </button>
                                     <button
                                         type="button"
@@ -5078,6 +5649,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                     className="v84-q-input"
                                                     value={String(q.q || q.question || '')}
                                                     onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
+                                                    onKeyDown={(e) => e.stopPropagation()}
                                                     placeholder={`Question ${i + 1}`}
                                                 />
                                                 <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Réponse attendue</div>
@@ -5086,8 +5658,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                     className="v84-q-input"
                                                     value={String(q.expectedAnswer || '')}
                                                     onChange={(e) => updateZoneQuestion(sectionIdx, i, { expectedAnswer: e.target.value })}
+                                                    onKeyDown={(e) => e.stopPropagation()}
                                                     placeholder="Réponse attendue"
                                                 />
+                                                {renderStructuredAnswerPreview(q.expectedAnswer || '')}
                                                 <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Mots-clés attendus</div>
                                                 <div className="flex flex-wrap gap-1">
                                                     {(Array.isArray(q.expectedKeywords) ? q.expectedKeywords : []).map((kw, kwIdx) => (

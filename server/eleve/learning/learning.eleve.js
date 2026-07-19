@@ -2,8 +2,17 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
+const FormData = require('form-data');
+const multer = require('multer');
 const AIEngine = require('../../core/ai.engine');
 const ProfDrive = require('../../prof/core/drive.prof');
+
+const learningAudioUpload = multer({
+    dest: path.join(process.cwd(), 'public', 'uploads', 'temp'),
+    limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 function addClassTarget(set, value) {
     const normalized = String(value || '')
@@ -291,6 +300,65 @@ router.post('/progress', async (req, res) => {
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/transcribe-audio', learningAudioUpload.single('audio'), async (req, res) => {
+    const tempPath = req.file?.path || '';
+    try {
+        const apiKey = String(process.env.OPENAI_API_KEY || '').trim();
+        if (!apiKey) return res.status(400).json({ ok: false, error: 'OPENAI_API_KEY absente' });
+        if (!req.file || !tempPath) return res.status(400).json({ ok: false, error: 'Audio manquant' });
+
+        const durationMs = Math.max(0, Number(req.body?.durationMs || 0));
+        if (durationMs > 47000) {
+            return res.status(400).json({ ok: false, error: 'Audio trop long. Maximum 45 secondes.' });
+        }
+
+        const stat = fs.statSync(tempPath);
+        if (!stat.size || stat.size < 800) return res.status(400).json({ ok: false, error: 'Audio trop court ou vide' });
+
+        const model = String(process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe').trim();
+        const form = new FormData();
+        form.append('model', model);
+        form.append('language', 'fr');
+        form.append('response_format', 'json');
+        const uploadedMime = String(req.file.mimetype || 'audio/webm').split(';')[0] || 'audio/webm';
+        form.append('file', fs.createReadStream(tempPath), {
+            filename: req.file.originalname || `learning-answer-${Date.now()}.webm`,
+            contentType: uploadedMime
+        });
+
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                ...form.getHeaders()
+            },
+            body: form
+        });
+        const body = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+        if (!response.ok) {
+            return res.status(response.status).json({
+                ok: false,
+                error: String(body?.error?.message || body?.raw || `OpenAI HTTP ${response.status}`).slice(0, 500)
+            });
+        }
+
+        const text = String(body?.text || '').replace(/\s+/g, ' ').trim();
+        return res.json({
+            ok: true,
+            text: text.slice(0, 4000),
+            model,
+            durationMs,
+            bytes: stat.size
+        });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: String(e?.message || 'Transcription impossible') });
+    } finally {
+        if (tempPath) {
+            try { fs.unlinkSync(tempPath); } catch (_) {}
+        }
     }
 });
 

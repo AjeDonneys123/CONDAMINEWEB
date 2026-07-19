@@ -5,6 +5,16 @@ import './EleveHeader.css';
 export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange, hidePunishmentAlert = false }) {
   const isJean = user.firstName === 'Jean' && user.lastName === 'Vuillet';
   const [nowMs, setNowMs] = useState(Date.now());
+  const classKey = String(user.currentClass || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+  const trainingTabLabel = /^3/.test(classKey)
+    ? '🎓 DNB'
+    : /^(2|2DE|SECONDE)/.test(classKey)
+      ? '🧠 ENTRAÎNEMENT'
+      : '🧠 ENTRAÎNEMENT';
 
   // --- LOGIQUE STATS ---
   const behaviorRecords = Array.isArray(user.behaviorRecords) ? user.behaviorRecords : [];
@@ -155,8 +165,9 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         {/* Onglets à Gauche */}
         <div className="nav-tabs">
             <button onClick={() => onTabChange('status')} className={`tab-item ${activeTab === 'status' ? 'tab-active' : ''}`}>📊 STATUS</button>
+            <button onClick={() => onTabChange('courses')} className={`tab-item ${activeTab === 'courses' ? 'tab-active' : ''}`}>📚 COURS</button>
             <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
-            <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-active' : ''}`}>🇫🇷 FRANÇAIS</button>
+            <button onClick={() => onTabChange('training')} className={`tab-item ${activeTab === 'training' ? 'tab-active' : ''}`}>{trainingTabLabel}</button>
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
             <button onClick={() => onTabChange('chat')} className={`tab-item ${activeTab === 'chat' ? 'tab-active' : ''}`}>💬 CHAT</button>
         </div>

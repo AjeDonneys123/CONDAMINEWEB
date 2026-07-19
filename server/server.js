@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fetch = require('node-fetch');
 const { getAiGuardStatus } = require('./services/aiGuard.service');
+const AIEngine = require('./core/ai.engine');
 
 dotenv.config();
 const app = express();
@@ -132,6 +133,167 @@ app.get('/api/system/ai-status', async (req, res) => {
     }
 });
 
+app.post('/api/system/ai-diagnostic', async (req, res) => {
+    const startedAt = Date.now();
+    const maskSecret = (value) => {
+        const str = String(value || '').trim();
+        if (!str) return { present: false, length: 0, preview: '' };
+        return { present: true, length: str.length };
+    };
+    const maskUrl = (url) => {
+        if (!url) return '';
+        try {
+            const u = new URL(url);
+            return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`;
+        } catch (_) {
+            return String(url).replace(/(https?:\/\/)([^/@]+@)?/i, '$1');
+        }
+    };
+    const runStep = async (label, fn) => {
+        const t0 = Date.now();
+        try {
+            const data = await fn();
+            return { label, ok: true, ms: Date.now() - t0, ...data };
+        } catch (e) {
+            return {
+                label,
+                ok: false,
+                ms: Date.now() - t0,
+                error: String(e?.message || e || 'Erreur inconnue').slice(0, 1000)
+            };
+        }
+    };
+    const timeoutSignal = (ms) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ms);
+        return { signal: controller.signal, clear: () => clearTimeout(timeout) };
+    };
+
+    const provider = String(process.env.AI_PROVIDER || '').toLowerCase().trim() || 'gemini';
+    const ollamaUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
+    const ollamaKey = String(process.env.OLLAMA_API_KEY || '').trim();
+    const ollamaModel = String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || 'llama3.1:8b').trim();
+    const geminiKey = String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY || '').trim();
+    const geminiModel = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+    const correctionPrompt = [
+        'Réponds uniquement en JSON strict.',
+        'Corrige cette mini-réponse DNB et renvoie un JSON court avec exactement les clés suivantes:',
+        '{"score":0,"max_score":20,"score_label":"0/20","grade":"A|B|C","copie_annotee":[{"extrait_eleve":"","correction":"","conseil":"","statut":"bon|partiel|faux"}],"bareme":[{"item":"","points":0,"max":0,"comment":""}],"attentes":[""],"reussites":[""],"manques":[""],"feedback_fond":""}',
+        'Important: maximum 1 élément par tableau et phrases courtes.',
+        '',
+        'Consigne: Relevez un extrait qui définit une gigafactory.',
+        'Correction attendue: usine de fabrication de batteries et de leurs composants.',
+        'Réponse élève: ces usines de fabrication de batteries et de leurs composants'
+    ].join('\n');
+
+    const steps = [];
+    steps.push(await runStep('Configuration serveur', async () => ({
+        provider,
+        ollama: {
+            url: maskUrl(ollamaUrl),
+            key: maskSecret(ollamaKey),
+            model: ollamaModel
+        },
+        gemini: {
+            key: maskSecret(geminiKey),
+            model: geminiModel
+        }
+    })));
+
+    steps.push(await runStep('Ollama health', async () => {
+        if (!ollamaUrl) throw new Error('OLLAMA_API_SERVER_URL absent');
+        const timer = timeoutSignal(7000);
+        try {
+            const response = await fetch(`${ollamaUrl}/health`, { signal: timer.signal });
+            const text = await response.text();
+            let json = null;
+            try { json = JSON.parse(text); } catch (_) {}
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);
+            return { status: response.status, body: json || text.slice(0, 500) };
+        } finally {
+            timer.clear();
+        }
+    }));
+
+    steps.push(await runStep('Ollama JSON correction', async () => {
+        if (!ollamaUrl) throw new Error('OLLAMA_API_SERVER_URL absent');
+        if (!ollamaKey) throw new Error('OLLAMA_API_KEY absent');
+        const timer = timeoutSignal(35000);
+        try {
+            const response = await fetch(`${ollamaUrl}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': ollamaKey },
+                signal: timer.signal,
+                body: JSON.stringify({
+                    model: ollamaModel,
+                    messages: [
+                        { role: 'system', content: 'Tu es un correcteur DNB. Tu réponds uniquement en JSON strict.' },
+                        { role: 'user', content: correctionPrompt }
+                    ],
+                    options: { temperature: 0, num_predict: 650 }
+                })
+            });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 800)}`);
+            let payload = {};
+            try { payload = JSON.parse(text); } catch (_) {}
+            const raw = String(payload?.message?.content || text || '').trim();
+            const parsed = AIEngine.sanitizeJSON(raw);
+            return {
+                model: ollamaModel,
+                rawPreview: raw.slice(0, 900),
+                parsedOk: !!parsed,
+                parsed
+            };
+        } finally {
+            timer.clear();
+        }
+    }));
+
+    steps.push(await runStep('Gemini JSON correction', async () => {
+        if (!geminiKey) throw new Error('GEMINI_API_KEY / GOOGLE_API_KEY absent');
+        const timer = timeoutSignal(35000);
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': geminiKey
+                },
+                signal: timer.signal,
+                body: JSON.stringify({
+                    generationConfig: { temperature: 0, maxOutputTokens: 4096, responseMimeType: 'application/json' },
+                    systemInstruction: { parts: [{ text: 'Tu es un correcteur DNB. Tu réponds uniquement en JSON strict.' }] },
+                    contents: [{ role: 'user', parts: [{ text: correctionPrompt }] }]
+                })
+            });
+            const data = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data).slice(0, 1000)}`);
+            const candidate = data?.candidates?.[0] || {};
+            const raw = String(candidate?.content?.parts?.map((p) => p?.text || '').join('\n') || '').trim();
+            const parsed = AIEngine.sanitizeJSON(raw);
+            return {
+                model: geminiModel,
+                finishReason: candidate?.finishReason || '',
+                rawLength: raw.length,
+                rawPreview: raw.slice(0, 1800),
+                parsedOk: !!parsed,
+                parsed
+            };
+        } finally {
+            timer.clear();
+        }
+    }));
+
+    res.json({
+        ok: steps.every((step) => step.ok),
+        generatedAt: new Date().toISOString(),
+        totalMs: Date.now() - startedAt,
+        steps
+    });
+});
+
 // 3. PROXY RAW
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id', '/api/prof/structure/proxy/:id'], async (req, res) => {
@@ -198,6 +360,7 @@ safeLoad('/api/eleve/learning', './eleve/learning/learning.eleve');
 safeLoad('/api/eleve/control-recovery', './eleve/control-recovery/controlRecovery.eleve');
 safeLoad('/api/eleve/exposes', './eleve/exposes/exposes.eleve');
 safeLoad('/api/eleve/lectures', './eleve/lectures/lectures.eleve');
+safeLoad('/api/eleve/courses', './eleve/courses/courses.eleve');
 safeLoad('/api/eleve/fiches', './eleve/fiches/fiches.eleve');
 safeLoad('/api/eleve/productions', './eleve/productions/productions.eleve');
 safeLoad('/api/eleve/comments', './eleve/comments/comments.eleve');

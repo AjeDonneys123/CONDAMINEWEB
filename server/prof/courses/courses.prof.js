@@ -43,6 +43,7 @@ const normalizeCourse = (body = {}) => {
         targetClassroomId,
         targetClassroomName: String(body.targetClassroomName || '').trim(),
         isEnabled: body.isEnabled !== false,
+        publishedUntilSlide: Math.max(0, Math.floor(Number(body.publishedUntilSlide || 0))),
         overlays: Array.isArray(body.overlays) ? body.overlays : []
     };
 };
@@ -87,6 +88,21 @@ router.patch('/:id/enabled', async (req, res) => {
             req.params.id,
             { $set: { isEnabled: req.body?.isEnabled !== false } },
             { new: true }
+        ).lean();
+        if (!row) return res.status(404).json({ error: 'Cours introuvable' });
+        res.json(row);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.patch('/:id/progress', async (req, res) => {
+    try {
+        const publishedUntilSlide = Math.max(0, Math.floor(Number(req.body?.publishedUntilSlide || 0)));
+        const row = await Course.findByIdAndUpdate(
+            req.params.id,
+            { $set: { publishedUntilSlide } },
+            { new: true, runValidators: true }
         ).lean();
         if (!row) return res.status(404).json({ error: 'Cours introuvable' });
         res.json(row);

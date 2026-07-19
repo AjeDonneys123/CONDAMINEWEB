@@ -5,7 +5,28 @@ const WARNING_PCT = Number(process.env.AI_FREE_WARNING_PCT || 15);
 const HARD_BLOCK_PCT = Number(process.env.AI_FREE_BLOCK_PCT || 0);
 
 async function getAiGuardStatus({ teacherId = '' } = {}) {
-    const fallback = await getDailyFreeTierStatus({ teacherId });
+    let fallback = null;
+    try {
+        fallback = await Promise.race([
+            getDailyFreeTierStatus({ teacherId }),
+            new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+        ]);
+    } catch (_) {
+        fallback = null;
+    }
+    if (!fallback) {
+        return {
+            blocked: false,
+            warning: true,
+            remainingPct: 100,
+            remainingUsd: 0,
+            spentUsd: 0,
+            budgetUsd: 0,
+            exact: false,
+            source: 'guard_unavailable',
+            message: "Budget IA momentanément indisponible : génération autorisée pour ne pas bloquer l'élève."
+        };
+    }
     const cloudSpend = EXACT_BILLING_ENABLED
         ? await getCurrentDayAiSpend().catch(() => null)
         : null;

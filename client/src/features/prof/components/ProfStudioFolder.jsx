@@ -39,6 +39,8 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const [editingSection, setEditingSection] = useState(null); 
 
     const [deleteTarget, setDeleteTarget] = useState(null); 
+    const [draggedActivity, setDraggedActivity] = useState(null);
+    const [dropChapterId, setDropChapterId] = useState('');
 
     const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
     const isObjectId = (v) => /^[a-f0-9]{24}$/i.test(String(v || '').trim());
@@ -127,6 +129,30 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         }
         const names = ids.map((id) => studentNameById.get(id) || id);
         return names.join(', ');
+    };
+    const getActivityIcon = (it = {}) => {
+        if (it.actType === 'homework' && String(it.assessmentKind || '') === 'dnb') return '🎓';
+        if (it.actType === 'homework') return '📝';
+        if (it.actType === 'game') return '🎮';
+        if (it.actType === 'scan') return '📸';
+        if (it.actType === 'learning') return '🧠';
+        if (it.actType === 'expose') return '🗣️';
+        if (it.actType === 'lecture') return '📖';
+        if (it.actType === 'fiche') return '🗂️';
+        if (it.actType === 'production') return '🏗️';
+        if (it.actType === 'comment') return '🧾';
+        return '📝';
+    };
+    const getActivityApiBase = (type = '') => {
+        if (type === 'homework') return '/api/homework';
+        if (type === 'game') return '/api/games';
+        if (type === 'learning') return '/api/learning';
+        if (type === 'expose') return '/api/exposes';
+        if (type === 'lecture') return '/api/lectures';
+        if (type === 'comment') return '/api/comments';
+        if (type === 'production') return '/api/productions';
+        if (type === 'fiche') return '/api/fiches';
+        return '';
     };
 
     // --- CHARGEMENT ---
@@ -266,9 +292,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         if (!item?._id) return;
         if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(item.actType)) return;
         const nextValue = item.isEnabled === false;
-        const base = item.actType === 'homework'
-            ? '/api/homework'
-            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : (item.actType === 'expose' ? '/api/exposes' : (item.actType === 'lecture' ? '/api/lectures' : (item.actType === 'comment' ? '/api/comments' : (item.actType === 'production' ? '/api/productions' : '/api/fiches'))))));
+        const base = getActivityApiBase(item.actType);
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -278,6 +302,34 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
             alert("Impossible de changer le statut actif/inactif.");
             return;
         }
+        if (onRefresh) onRefresh();
+    }
+
+    async function handleMoveActivityToChapter(item, targetChapterId) {
+        const id = String(item?._id || '').trim();
+        const chapterId = String(targetChapterId || '').trim();
+        if (!id || !chapterId || String(item?.chapterId || '') === chapterId) return;
+        const base = getActivityApiBase(item.actType);
+        if (!base) return;
+        const payload = {
+            ...item,
+            _id: id,
+            chapterId
+        };
+        delete payload.actType;
+        delete payload.status;
+        delete payload.chapterTitle;
+        delete payload.chapterSection;
+        const res = await fetch(base, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            alert("Impossible de déplacer cette activité.");
+            return;
+        }
+        setOpenChaps(prev => ({ ...prev, [chapterId]: true }));
         if (onRefresh) onRefresh();
     }
 
@@ -477,7 +529,23 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                         const isLastSurvivor = activeSection.toUpperCase() === "GÉNÉRAL" && filteredChapters.length <= 1;
 
                         return (
-                            <div key={chap._id} className="bg-white border-2 rounded-[30px] overflow-hidden shadow-sm border-slate-100">
+                            <div
+                                key={chap._id}
+                                className={`bg-white border-2 rounded-[30px] overflow-hidden shadow-sm transition-colors ${dropChapterId === String(chap._id) ? 'border-violet-400 bg-violet-50/40' : 'border-slate-100'}`}
+                                onDragOver={(e) => {
+                                    if (!draggedActivity) return;
+                                    e.preventDefault();
+                                    setDropChapterId(String(chap._id));
+                                }}
+                                onDragLeave={() => setDropChapterId('')}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    const item = draggedActivity;
+                                    setDraggedActivity(null);
+                                    setDropChapterId('');
+                                    if (item) handleMoveActivityToChapter(item, chap._id);
+                                }}
+                            >
                                 <div className="p-5 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-inner" style={{ backgroundColor: activeColor }}>{isOpen ? '📂' : '📁'}</div>
@@ -505,9 +573,24 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                 {isOpen && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">
                                         {chapItems.map(it => (
-                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-start gap-3 shadow-sm border border-slate-100">
+                                            <div
+                                                key={it._id}
+                                                draggable={['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(it.actType)}
+                                                onDragStart={(e) => {
+                                                    e.stopPropagation();
+                                                    setDraggedActivity(it);
+                                                    e.dataTransfer.effectAllowed = 'move';
+                                                    e.dataTransfer.setData('text/plain', `${it.actType}:${it._id}`);
+                                                }}
+                                                onDragEnd={() => {
+                                                    setDraggedActivity(null);
+                                                    setDropChapterId('');
+                                                }}
+                                                className={`bg-white p-3 rounded-2xl flex justify-between items-start gap-3 shadow-sm border border-slate-100 ${draggedActivity?._id === it._id ? 'opacity-50 cursor-grabbing' : 'cursor-grab'}`}
+                                                title="Glisse cette activité dans un autre dossier pour la déplacer"
+                                            >
                                                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : (it.actType === 'lecture' ? '📖' : (it.actType === 'fiche' ? '🗂️' : (it.actType === 'production' ? '🏗️' : '📝'))))))}</span>
+                                                    <span className="text-xl">{getActivityIcon(it)}</span>
                                                     <div className="min-w-0 flex-1">
                                                         <div className="font-black text-slate-700 text-xs uppercase truncate">{it.title}</div>
                                                     {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche' || it.actType === 'production') && (

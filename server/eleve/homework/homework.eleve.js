@@ -346,7 +346,20 @@ router.get('/list/:studentId', async (req, res) => {
             return matchesClassTargets(hw.targetClassrooms, classTargetKeys);
         });
 
-        res.json(homeworks);
+        const chapterIds = [...new Set(homeworks.map((hw) => String(hw.chapterId || '')).filter(Boolean))];
+        const chapters = chapterIds.length > 0
+            ? await mongoose.model('Chapter').find({ _id: { $in: chapterIds } }, '_id title section').lean()
+            : [];
+        const chapterById = new Map(chapters.map((chapter) => [String(chapter._id), chapter]));
+
+        res.json(homeworks.map((hw) => {
+            const chapter = chapterById.get(String(hw.chapterId || ''));
+            return {
+                ...hw,
+                chapterTitle: chapter?.title || hw.chapterTitle || '',
+                chapterSection: chapter?.section || hw.chapterSection || ''
+            };
+        }));
     } catch (e) {
         console.error("❌ [ELEVE HW LIST] studentId=%s error=%s", req.params.studentId, e.message);
         res.status(500).json([]);
@@ -677,14 +690,40 @@ router.post('/submit', async (req, res) => {
 
     const hw = await Homework.findById(homeworkId);
     const lvl = hw.levels[levelIndex];
+    const compactCorrection = lvl?.compactCorrection && typeof lvl.compactCorrection === 'object'
+        ? lvl.compactCorrection
+        : null;
 
     const student = await Student.findById(playerId, 'currentClass').lean();
-    const analysis = await EleveAI.analyze(userText, lvl.instruction, lvl.aiHints, student?.currentClass || '');
-    const spellingMistakes = await EleveAI.extractSpellingMistakes({
-        userText,
-        instruction: lvl?.instruction || '',
-        studentClass: student?.currentClass || ''
-    });
+    const correctionContext = {
+        assessmentKind: hw?.assessmentKind || '',
+        dnbSection: lvl?.dnbSection || '',
+        dnbSubject: lvl?.dnbSubject || '',
+        maxPoints: Number(compactCorrection?.total_points || lvl?.maxPoints || 0) || (hw?.assessmentKind === 'dnb' && lvl?.dnbSection === 'docs' ? 20 : 10),
+        hasCompactCorrection: Boolean(compactCorrection)
+    };
+    const analysis = String(hw?.assessmentKind || '') === 'dnb'
+        ? await EleveAI.correctDnbSimple({
+            userText,
+            instruction: lvl?.instruction || '',
+            aiHints: compactCorrection ? JSON.stringify(compactCorrection) : (lvl?.aiHints || ''),
+            studentClass: student?.currentClass || '',
+            context: correctionContext
+        })
+        : await EleveAI.analyze(userText, lvl.instruction, lvl.aiHints, student?.currentClass || '', correctionContext);
+    let spellingMistakes = [];
+    try {
+        spellingMistakes = await Promise.race([
+            EleveAI.extractSpellingMistakes({
+                userText,
+                instruction: lvl?.instruction || '',
+                studentClass: student?.currentClass || ''
+            }),
+            new Promise((resolve) => setTimeout(() => resolve([]), 8000))
+        ]);
+    } catch (e) {
+        spellingMistakes = [];
+    }
     const cleanFeedback = stripUnderlinedMarkup(analysis?.feedback_fond || '');
     
     const antiCheatSnapshot = sanitizeAntiCheat(antiCheat);

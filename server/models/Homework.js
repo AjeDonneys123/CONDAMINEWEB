@@ -22,6 +22,14 @@ const HomeworkSchema = new mongoose.Schema({
         instruction: String,
         instructionUrls: [String],
         aiHints: String,
+        aiHintUrls: [String],
+        compactCorrection: mongoose.Schema.Types.Mixed,
+        compactCorrectionSourceHash: String,
+        compactCorrectionGeneratedAt: String,
+        compactCorrectionError: String,
+        maxPoints: Number,
+        dnbSection: String,
+        dnbSubject: String,
         attachmentUrls: [String]
     }],
 

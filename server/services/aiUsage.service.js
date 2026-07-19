@@ -102,7 +102,7 @@ async function logGeminiUsage({
     const estimatedOutputCostUsd = (candidateTokens / 1000000) * pricing.outputPerMillionUsd;
     const estimatedTotalCostUsd = estimatedInputCostUsd + estimatedOutputCostUsd;
 
-    await recordUsage({
+    recordUsage({
         provider: 'gemini',
         source,
         teacherId,

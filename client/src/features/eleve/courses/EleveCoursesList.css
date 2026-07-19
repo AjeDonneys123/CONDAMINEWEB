@@ -1,0 +1,251 @@
+.eleve-courses-page {
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+  border: 1px solid #fed7aa;
+  border-radius: 28px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  padding: 24px;
+}
+
+.eleve-courses-head {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.eleve-courses-kicker {
+  color: #ea580c;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eleve-courses-head h2 {
+  color: #1e293b;
+  font-size: 34px;
+  line-height: 1;
+  margin: 4px 0 0;
+}
+
+.eleve-courses-limit {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 10px 14px;
+}
+
+.eleve-courses-error,
+.eleve-courses-empty {
+  border-radius: 18px;
+  font-weight: 900;
+  padding: 18px;
+}
+
+.eleve-courses-error {
+  background: #fff1f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.eleve-courses-empty {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-height: 160px;
+}
+
+.eleve-courses-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+}
+
+.eleve-courses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eleve-course-card {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 18px;
+  color: #334155;
+  cursor: pointer;
+  padding: 14px;
+  text-align: left;
+}
+
+.eleve-course-card.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.12);
+}
+
+.eleve-course-card span {
+  display: block;
+  font-size: 15px;
+  font-weight: 1000;
+}
+
+.eleve-course-card small {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 5px;
+}
+
+.eleve-course-viewer {
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-radius: 24px;
+  padding: 18px;
+}
+
+.eleve-course-viewer-title {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.eleve-course-viewer-title h3 {
+  color: #1e293b;
+  font-size: 24px;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.eleve-course-viewer-title p {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  margin: 6px 0 0;
+}
+
+.eleve-course-viewer-title span {
+  background: #f1f5f9;
+  border-radius: 999px;
+  color: #475569;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 11px;
+}
+
+.eleve-course-slide-stage {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+}
+
+.eleve-course-slide-frame {
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: #0f172a;
+  border-radius: 18px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.eleve-course-slide-frame img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.eleve-course-arrow {
+  background: #2563eb;
+  border: none;
+  border-radius: 16px;
+  color: white;
+  cursor: pointer;
+  font-size: 42px;
+  font-weight: 900;
+  height: 72px;
+}
+
+.eleve-course-arrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.eleve-course-slide-meta {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 900;
+  margin: 12px 0;
+  text-align: center;
+}
+
+.eleve-course-rail {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.eleve-course-chip {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  cursor: pointer;
+  flex: 0 0 120px;
+  overflow: hidden;
+  padding: 6px;
+}
+
+.eleve-course-chip.active {
+  border-color: #2563eb;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+}
+
+.eleve-course-chip img {
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.eleve-course-chip span {
+  color: #334155;
+  display: block;
+  font-size: 11px;
+  font-weight: 1000;
+  margin-top: 5px;
+}
+
+@media (max-width: 820px) {
+  .eleve-courses-head,
+  .eleve-course-viewer-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .eleve-courses-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .eleve-course-slide-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .eleve-course-arrow {
+    height: 48px;
+  }
+}

@@ -259,6 +259,71 @@
     font-weight: 600;
 }
 
+.course-progress-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 14px;
+    padding: 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: #eff6ff;
+}
+
+.course-progress-box strong,
+.course-progress-box span {
+    display: block;
+}
+
+.course-progress-box strong {
+    color: #1e3a8a;
+    font-size: 11px;
+    font-weight: 1000;
+    text-transform: uppercase;
+}
+
+.course-progress-box span {
+    color: #475569;
+    font-size: 12px;
+    font-weight: 800;
+    margin-top: 2px;
+}
+
+.course-progress-controls,
+.course-player-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.course-progress-controls button,
+.course-progress-controls input,
+.course-player-progress button,
+.course-player-progress input {
+    border: 1px solid #93c5fd;
+    border-radius: 10px;
+    font-weight: 1000;
+    text-align: center;
+}
+
+.course-progress-controls button,
+.course-player-progress button {
+    width: 34px;
+    height: 34px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}
+
+.course-progress-controls input,
+.course-player-progress input {
+    width: 62px;
+    height: 34px;
+    background: white;
+    color: #1e293b;
+}
+
 .course-state {
     flex: 0 0 auto;
     border: 1px solid #86efac;
@@ -350,7 +415,7 @@
     white-space: nowrap;
 }
 
-.course-player-toolbar button {
+.course-player-toolbar > button {
     width: 42px;
     height: 42px;
     border: 1px solid #64748b;
@@ -359,6 +424,32 @@
     color: #fff;
     font-size: 28px;
     cursor: pointer;
+}
+
+.course-player-progress {
+    padding: 8px 10px;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.7);
+}
+
+.course-player-progress span {
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 900;
+    margin-right: 4px;
+}
+
+.course-player-progress button {
+    border-color: #60a5fa;
+    background: #2563eb;
+    border-radius: 999px;
+    font-size: 16px;
+}
+
+.course-player-progress input {
+    border-color: #60a5fa;
+    border-radius: 999px;
 }
 
 .course-player-stage {

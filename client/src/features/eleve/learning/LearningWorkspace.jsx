@@ -108,13 +108,16 @@ function extractQuestionItems(step = null, module = null) {
     const pairs = Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [];
     pairs.forEach((pair, idx) => {
         const question = String(pair?.question || '').trim();
-        const expectedAnswer = String(pair?.answer || '').trim();
-        if (!question && !expectedAnswer) return;
+        const expectedAnswer = String(pair?.answer || pair?.expectedAnswer || '').trim();
+        const expectedKeywords = Array.isArray(pair?.expectedKeywords)
+            ? pair.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean)
+            : [];
+        if (!question && !expectedAnswer && expectedKeywords.length === 0) return;
         out.push({
             id: `pair_${idx}`,
             question,
             expectedAnswer,
-            expectedKeywords: []
+            expectedKeywords
         });
     });
     if (out.length > 0) return out;
@@ -130,6 +133,84 @@ function extractQuestionItems(step = null, module = null) {
 function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '') {
     const txt = normalize(answerText);
     const textWords = txt.split(/[^a-z0-9'-]+/i).map((w) => w.trim()).filter(Boolean);
+    const expectedAnswer = String(questionItem?.expectedAnswer || '').trim();
+
+    const tokenizeStrict = (value = '') => normalize(value)
+        .split(/[^a-z0-9]+/i)
+        .map((w) => w.trim())
+        .filter(Boolean);
+
+    const extractExpectedBlocks = (raw = '') => {
+        const source = String(raw || '').replace(/\r/g, '\n');
+        const lineBlocks = source
+            .split('\n')
+            .map((line) => {
+                const match = String(line || '').trim().match(/^[-–—•]\s*(.+)$/);
+                return match ? match[1].trim() : '';
+            })
+            .filter(Boolean);
+        if (lineBlocks.length >= 2) return lineBlocks;
+        const inlineBlocks = Array.from(source.matchAll(/(?:^|\s)[-–—•]\s*([^-\n–—•]+?)(?=(?:\s[-–—•]\s*)|$)/g))
+            .map((m) => String(m?.[1] || '').trim())
+            .filter((block) => block.length >= 3);
+        return inlineBlocks.length >= 2 ? inlineBlocks : [];
+    };
+
+    const blockKeywords = (block = '') => {
+        const stop = new Set([
+            'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux',
+            'et', 'ou', 'en', 'dans', 'sur', 'pour', 'par', 'avec', 'sans', 'est',
+            'sont', 'c', 'ce', 'cet', 'cette', 'ces', 'que', 'qui'
+        ]);
+        return [...new Set(tokenizeStrict(block)
+            .filter((w) => /\d/.test(w) || (w.length >= 4 && !stop.has(w))))];
+    };
+
+    const hasKeywordGroupNear = (words = [], group = []) => {
+        const wanted = [...new Set(group || [])].filter(Boolean);
+        if (wanted.length === 0) return true;
+        const positions = new Map(wanted.map((kw) => [kw, []]));
+        words.forEach((word, idx) => {
+            wanted.forEach((kw) => {
+                if (word === kw || word.includes(kw) || kw.includes(word)) {
+                    positions.get(kw).push(idx);
+                }
+            });
+        });
+        if (wanted.some((kw) => !positions.get(kw)?.length)) return false;
+        const firstPositions = positions.get(wanted[0]) || [];
+        const maxSpan = Math.max(4, wanted.length + 1);
+        return firstPositions.some((start) => {
+            let min = start;
+            let max = start;
+            for (const kw of wanted.slice(1)) {
+                const nearest = (positions.get(kw) || [])
+                    .map((pos) => ({ pos, dist: Math.abs(pos - start) }))
+                    .sort((a, b) => a.dist - b.dist)[0]?.pos;
+                if (!Number.isFinite(nearest)) return false;
+                min = Math.min(min, nearest);
+                max = Math.max(max, nearest);
+            }
+            return max - min <= maxSpan;
+        });
+    };
+
+    const expectedBlocks = extractExpectedBlocks(expectedAnswer)
+        .map((block) => ({ raw: block, keywords: blockKeywords(block) }))
+        .filter((block) => block.keywords.length > 0);
+    if (expectedBlocks.length >= 2) {
+        const answerWords = tokenizeStrict(answerText);
+        const matchedBlocks = expectedBlocks.filter((block) => hasKeywordGroupNear(answerWords, block.keywords));
+        const missingBlocks = expectedBlocks.filter((block) => !hasKeywordGroupNear(answerWords, block.keywords));
+        return {
+            ok: matchedBlocks.length === expectedBlocks.length,
+            required: expectedBlocks.length,
+            matched: matchedBlocks.map((block) => block.raw),
+            missing: missingBlocks.map((block) => block.raw),
+            expectedAnswer,
+            blockMode: true
+        };
+    }
 
     const simplifyWord = (w = '') => {
         let out = String(w || '').trim();
@@ -220,7 +301,6 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
             };
         })
         .filter((k) => k.variants.length > 0);
-    const expectedAnswer = String(questionItem?.expectedAnswer || '').trim();
     const minMatches = Math.max(1, Number(step?.minKeywordMatches || 1));
 
     if (keys.length === 0) {
@@ -313,6 +393,9 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [videoCongratsShown, setVideoCongratsShown] = useState(false);
     const [answerText, setAnswerText] = useState('');
     const [recording, setRecording] = useState(false);
+    const [transcribingAudio, setTranscribingAudio] = useState(false);
+    const [pendingAudio, setPendingAudio] = useState(null); // { blob, url, durationMs, bytes }
+    const [pendingTranscript, setPendingTranscript] = useState('');
     const [micMutedByUser, setMicMutedByUser] = useState(false);
     const [isAiSpeaking, setIsAiSpeaking] = useState(false);
     const [recordError, setRecordError] = useState('');
@@ -355,10 +438,35 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const sheetTimesRef = useRef({});
     const speechRef = useRef(null);
     const recognitionRef = useRef(null);
+    const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const audioContextRef = useRef(null);
+    const audioAnalyserRef = useRef(null);
+    const audioPreviewRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const pendingAudioRef = useRef(null);
+    const recordedTranscriptRef = useRef('');
+    const recordingStartedAtRef = useRef(0);
+    const lastVoiceAtRef = useRef(0);
+    const voiceDetectedRef = useRef(false);
+    const recordingMonitorRef = useRef(0);
+    const recordingMaxTimerRef = useRef(0);
     const studyRecognitionRef = useRef(null);
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
+
+    const clearPendingAudio = () => {
+        const previous = pendingAudioRef.current;
+        if (previous?.url) {
+            try { URL.revokeObjectURL(previous.url); } catch (_) {}
+        }
+        pendingAudioRef.current = null;
+        setPendingAudio(null);
+        recordedTranscriptRef.current = '';
+        setPendingTranscript('');
+    };
+
     const currentSheetKey = String(currentStep?.id || `step_${stepIndex}`);
     const sheetText = String(currentStep?.sheetText || '');
     const sheetPinkRanges = useMemo(() => normalizeRanges(currentStep?.sheetPinkRanges || [], sheetText.length), [currentStep?.sheetPinkRanges, sheetText.length]);
@@ -516,6 +624,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         setVideoUseProxyFallback(false);
         setVideoCongratsShown(false);
         setAnswerText('');
+        clearPendingAudio();
         setGateHint('');
         setQuestionCursor(0);
         setQuestionFeedback(null);
@@ -732,8 +841,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                     setRecordError("Lecture terminée. Clique sur « Activer micro » pour reprendre.");
                     return;
                 }
-                setRecordError('');
-                setTimeout(() => startRecording(), 160);
+                setRecordError("Lecture terminée. Clique sur « Enregistrer » quand tu es prêt.");
             }
         };
         utter.onerror = () => {
@@ -743,7 +851,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                     setRecordError("Lecture terminée. Clique sur « Activer micro » pour reprendre.");
                     return;
                 }
-                setTimeout(() => startRecording(), 160);
+                setRecordError("Lecture terminée. Clique sur « Enregistrer » quand tu es prêt.");
             }
         };
         window.speechSynthesis.cancel();
@@ -766,47 +874,332 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         return () => clearTimeout(t);
     }, [currentStep?.id, currentStep?.type, questionCursor, generatedQuestion, isCorrectionLock]);
 
-    const startRecording = () => {
+    const cleanupAudioRecording = async () => {
+        if (recordingMonitorRef.current) {
+            cancelAnimationFrame(recordingMonitorRef.current);
+            recordingMonitorRef.current = 0;
+        }
+        if (recordingMaxTimerRef.current) {
+            clearTimeout(recordingMaxTimerRef.current);
+            recordingMaxTimerRef.current = 0;
+        }
+        try { mediaStreamRef.current?.getTracks?.().forEach((track) => track.stop()); } catch (_) {}
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+        audioAnalyserRef.current = null;
+        try {
+            if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+                await audioContextRef.current.close();
+            }
+        } catch (_) {}
+        audioContextRef.current = null;
+    };
+
+    const transcribeRecordedAudio = async (blob, durationMs = 0) => {
+        setMicMutedByUser(true);
+        if (!blob || blob.size < 800) {
+            setRecordError("Audio trop court ou vide.");
+            return;
+        }
+        if (durationMs > 47000) {
+            setRecordError("Réponse trop longue : limite 45 secondes.");
+            return;
+        }
+        setTranscribingAudio(true);
+        setRecordError("Transcription en cours...");
+        try {
+            const fd = new FormData();
+            const blobType = String(blob.type || '');
+            const ext = blobType.includes('mp4')
+                ? 'mp4'
+                : (blobType.includes('aac') ? 'aac' : 'webm');
+            fd.append('audio', blob, `reponse-apprentissage-${Date.now()}.${ext}`);
+            fd.append('durationMs', String(Math.max(0, Math.round(durationMs || 0))));
+            fd.append('moduleId', String(module?._id || ''));
+            fd.append('stepId', String(currentStep?.id || ''));
+            fd.append('question', String(generatedQuestion || '').slice(0, 1000));
+            const res = await fetch('/api/eleve/learning/transcribe-audio', {
+                method: 'POST',
+                body: fd
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data?.ok) throw new Error(String(data?.error || 'Transcription impossible'));
+            const text = String(data?.text || '').trim();
+            if (!text) {
+                setRecordError("Aucun texte détecté dans l'audio.");
+                return;
+            }
+            setAnswerText((prev) => {
+                const before = String(prev || '').trim();
+                return before ? `${before} ${text}` : text;
+            });
+            setQuestionFeedback(null);
+            setAiErrorPanel(null);
+            setMicMutedByUser(true);
+            clearPendingAudio();
+            setRecordError(`Transcription OK (${Math.round(Number(durationMs || 0) / 1000)}s).`);
+        } catch (e) {
+            setRecordError(String(e?.message || 'Transcription impossible.'));
+        } finally {
+            setTranscribingAudio(false);
+        }
+    };
+
+    const applyPendingBrowserTranscript = () => {
+        const audio = pendingAudioRef.current || pendingAudio;
+        if (!audio?.blob) {
+            setRecordError("Aucun enregistrement à transcrire.");
+            return;
+        }
+        const text = String(pendingTranscript || audio?.transcript || recordedTranscriptRef.current || '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!text) {
+            setRecordError("Aucune transcription navigateur captée. Réécoute l'audio puis refais l'enregistrement si besoin.");
+            return;
+        }
+        setAnswerText((prev) => {
+            const before = String(prev || '').trim();
+            return before ? `${before} ${text}` : text;
+        });
+        setQuestionFeedback(null);
+        setAiErrorPanel(null);
+        setMicMutedByUser(true);
+        clearPendingAudio();
+        setRecordError("Transcription navigateur ajoutée.");
+    };
+
+    const playPendingAudio = async () => {
+        const audio = pendingAudioRef.current || pendingAudio;
+        if (!audio?.url) {
+            setRecordError("Aucun audio à écouter.");
+            return;
+        }
+        try {
+            try {
+                audioPreviewRef.current?.pause?.();
+                audioPreviewRef.current.currentTime = 0;
+            } catch (_) {}
+            const el = new Audio(audio.url);
+            audioPreviewRef.current = el;
+            el.currentTime = 0;
+            await el.play();
+            setRecordError(`Lecture audio (${Math.round(Number(audio.durationMs || 0) / 1000)}s, ${Math.round(Number(audio.bytes || 0) / 1024)} Ko, ${String(audio.type || 'auto')}).`);
+        } catch (e) {
+            setRecordError(`Lecture impossible : ${String(e?.message || 'audio non lisible')}`);
+        }
+    };
+
+    const startBrowserDictation = () => {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
-            setRecordError("Reconnaissance vocale non disponible sur ce navigateur.");
+            setRecordError("Dictée navigateur non disponible. Essaie Chrome ou utilise la saisie clavier.");
+            setMicMutedByUser(true);
+            return false;
+        }
+        try { recognitionRef.current?.stop?.(); } catch (_) {}
+        const rec = new SR();
+        rec.lang = 'fr-FR';
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.onresult = (event) => {
+            const text = Array.from(event.results || [])
+                .map((r) => r?.[0]?.transcript || '')
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (!text) return;
+            setAnswerText(text);
+            setQuestionFeedback(null);
+            setAiErrorPanel(null);
+        };
+        rec.onerror = () => {
+            recognitionRef.current = null;
+            setRecording(false);
+            setMicMutedByUser(true);
+            setRecordError("Micro navigateur arrêté ou indisponible.");
+        };
+        rec.onend = () => {
+            recognitionRef.current = null;
+            setRecording(false);
+        };
+        recognitionRef.current = rec;
+        setRecording(true);
+        setMicMutedByUser(false);
+        setRecordError("Dictée navigateur active, comme dans Web5e.");
+        rec.start();
+        return true;
+    };
+
+    const monitorVoiceAndSilence = () => {
+        const analyser = audioAnalyserRef.current;
+        const recorder = mediaRecorderRef.current;
+        if (!analyser || !recorder || recorder.state !== 'recording') return;
+        const data = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i += 1) {
+            const v = (data[i] - 128) / 128;
+            sum += v * v;
+        }
+        const rms = Math.sqrt(sum / Math.max(1, data.length));
+        const now = Date.now();
+        const elapsed = now - Number(recordingStartedAtRef.current || now);
+        if (rms > 0.018) {
+            voiceDetectedRef.current = true;
+            lastVoiceAtRef.current = now;
+        }
+        if (elapsed > 8000 && !voiceDetectedRef.current) {
+            setRecordError("Aucune voix détectée : enregistrement annulé.");
+            setMicMutedByUser(true);
+            stopRecording({ transcribe: false });
+            return;
+        }
+        if (
+            voiceDetectedRef.current &&
+            elapsed > 1300 &&
+            now - Number(lastVoiceAtRef.current || now) > 1600
+        ) {
+            stopRecording({ transcribe: true });
+            return;
+        }
+        recordingMonitorRef.current = requestAnimationFrame(monitorVoiceAndSilence);
+    };
+
+    const startRecording = async () => {
+        if (!navigator?.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+            setRecordError("Enregistrement audio non disponible sur ce navigateur.");
             setMicMutedByUser(true);
             return;
         }
-        if (recording || isAiSpeaking) return;
+        if (recording || transcribingAudio || isAiSpeaking) return;
         setRecordError('');
-        const rec = new SR();
-        rec.lang = 'fr-FR';
-        rec.interimResults = true;
-        rec.continuous = true;
-        rec.onresult = (event) => {
-            const text = Array.from(event.results).map(r => r[0]?.transcript || '').join(' ').trim();
-            setAnswerText(text);
-        };
-        rec.onerror = () => {
+        recordedTranscriptRef.current = '';
+        setPendingTranscript('');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            mediaStreamRef.current = stream;
+            mediaRecorderRef.current = recorder;
+            audioChunksRef.current = [];
+            recordingStartedAtRef.current = Date.now();
+            lastVoiceAtRef.current = Date.now();
+            voiceDetectedRef.current = true;
+
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SR) {
+                try { recognitionRef.current?.stop?.(); } catch (_) {}
+                try {
+                    const rec = new SR();
+                    rec.lang = 'fr-FR';
+                    rec.continuous = true;
+                    rec.interimResults = true;
+                    rec.onresult = (event) => {
+                        const text = Array.from(event.results || [])
+                            .map((r) => r?.[0]?.transcript || '')
+                            .join(' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                        recordedTranscriptRef.current = text;
+                    };
+                    rec.onerror = () => {
+                        // L'audio reste utilisable même si la dictée navigateur lâche.
+                    };
+                    rec.onend = () => {
+                        if (recognitionRef.current === rec) recognitionRef.current = null;
+                    };
+                    recognitionRef.current = rec;
+                    rec.start();
+                } catch (_) {
+                    recognitionRef.current = null;
+                }
+            }
+
+            recorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
+            };
+            recorder.onerror = () => {
+                setRecordError("Micro refusé ou indisponible.");
+                setMicMutedByUser(true);
+                setRecording(false);
+                cleanupAudioRecording();
+            };
+            recorder.onstop = async () => {
+                const durationMs = Math.max(0, Date.now() - Number(recordingStartedAtRef.current || Date.now()));
+                const chunks = [...(audioChunksRef.current || [])];
+                const shouldKeepAudio = recorder.__shouldTranscribe !== false;
+                setRecording(false);
+                await cleanupAudioRecording();
+                audioChunksRef.current = [];
+                if (!shouldKeepAudio) return;
+                const chunkTypes = chunks.map((chunk) => String(chunk?.type || '')).filter(Boolean);
+                const recordedMimeType = String(recorder.mimeType || chunkTypes[0] || '').trim();
+                const blob = recordedMimeType
+                    ? new Blob(chunks, { type: recordedMimeType })
+                    : new Blob(chunks);
+                if (!blob || blob.size < 800) {
+                    setRecordError("Audio trop court ou vide.");
+                    setMicMutedByUser(true);
+                    return;
+                }
+                clearPendingAudio();
+                const url = URL.createObjectURL(blob);
+                const browserTranscript = String(recordedTranscriptRef.current || '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                const nextAudio = {
+                    blob,
+                    url,
+                    durationMs,
+                    bytes: blob.size,
+                    type: recordedMimeType || blob.type || 'auto',
+                    chunkTypes,
+                    transcript: browserTranscript
+                };
+                pendingAudioRef.current = nextAudio;
+                setPendingAudio(nextAudio);
+                setPendingTranscript(browserTranscript);
+                setMicMutedByUser(true);
+                setRecordError(browserTranscript
+                    ? `Audio prêt (${Math.round(durationMs / 1000)}s). Écoute-le puis clique sur Transcrire.`
+                    : `Audio prêt (${Math.round(durationMs / 1000)}s), mais aucune transcription navigateur captée. Écoute-le puis refais si besoin.`
+                );
+            };
+
+            recorder.start();
+            setRecording(true);
+            recordingMaxTimerRef.current = setTimeout(() => {
+                setRecordError("Limite 45 secondes atteinte : audio prêt.");
+                stopRecording({ transcribe: true });
+            }, 45000);
+        } catch (_) {
             setRecording(false);
             setMicMutedByUser(true);
             setRecordError("Micro refusé ou indisponible.");
-        };
-        rec.onend = () => setRecording(false);
-        rec.start();
-        recognitionRef.current = rec;
-        setRecording(true);
+            await cleanupAudioRecording();
+        }
     };
 
-    const stopRecording = () => {
+    const stopRecording = ({ transcribe = true } = {}) => {
         try { recognitionRef.current?.stop?.(); } catch (_) {}
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') {
+            recorder.__shouldTranscribe = transcribe;
+            try { recorder.stop(); } catch (_) {}
+            return;
+        }
+        cleanupAudioRecording();
         setRecording(false);
     };
 
     const toggleRecording = () => {
-        const micEnabled = !micMutedByUser;
-        if (isAiSpeaking && !micEnabled) return;
-        if (micEnabled) {
+        if (transcribingAudio) return;
+        if (recording) {
             setMicMutedByUser(true);
-            stopRecording();
+            stopRecording({ transcribe: true });
             return;
         }
+        if (isAiSpeaking) return;
         setMicMutedByUser(false);
         setRecordError('');
         startRecording();
@@ -815,14 +1208,9 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     useEffect(() => {
         if (currentStep?.type !== 'question') return;
         if (isCorrectionLock) {
-            stopRecording();
-            return;
+            stopRecording({ transcribe: true });
         }
-        if (micMutedByUser) return;
-        if (isAiSpeaking) return;
-        const t = setTimeout(() => startRecording(), 200);
-        return () => clearTimeout(t);
-    }, [currentStep?.id, currentStep?.type, questionCursor, micMutedByUser, isAiSpeaking, recording, isCorrectionLock]);
+    }, [currentStep?.id, currentStep?.type, questionCursor, isCorrectionLock]);
 
     const saveProgress = async (payload) => {
         const studentId = String(user._id || user.id);
@@ -1022,6 +1410,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     useEffect(() => {
         return () => {
+            try { stopRecording({ transcribe: false }); } catch (_) {}
             try { studyRecognitionRef.current?.stop?.(); } catch (_) {}
         };
     }, []);
@@ -1526,10 +1915,58 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                             <>
                                 <div className="learning-actions">
                                     <button className="learning-btn ghost" onClick={speakQuestion}>🔊 Lire la question</button>
-                                    <button className={`learning-btn ${!micMutedByUser ? 'danger' : ''}`} onClick={toggleRecording}>
-                                        {!micMutedByUser ? '🔇 Couper le micro' : '🎙️ Activer micro'}
+                                    <button
+                                        className={`learning-btn ${recording ? 'danger' : ''}`}
+                                        onClick={toggleRecording}
+                                        disabled={transcribingAudio}
+                                    >
+                                        {transcribingAudio
+                                            ? '⏳ Transcription...'
+                                            : (recording ? '⏹️ Arrêter' : '🎙️ Enregistrer')}
                                     </button>
+                                    {pendingAudio?.blob && (
+                                        <button
+                                            className="learning-btn"
+                                            onClick={applyPendingBrowserTranscript}
+                                            disabled={recording || transcribingAudio}
+                                        >
+                                            📝 Transcrire
+                                        </button>
+                                    )}
                                 </div>
+                                {pendingAudio?.url && (
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 12,
+                                        flexWrap: 'wrap',
+                                        margin: '10px 0 8px'
+                                    }}>
+                                        <audio ref={audioPreviewRef} src={pendingAudio.url} preload="metadata" />
+                                        <button
+                                            type="button"
+                                            className="learning-btn ghost"
+                                            onClick={playPendingAudio}
+                                            disabled={recording || transcribingAudio}
+                                            style={{ padding: '10px 14px' }}
+                                        >
+                                            ▶️ Play
+                                        </button>
+                                        <span style={{ color: '#64748b', fontWeight: 800 }}>
+                                            {Math.round(Number(pendingAudio.durationMs || 0) / 1000)}s · {Math.round(Number(pendingAudio.bytes || 0) / 1024)} Ko · {String(pendingAudio.type || '').split(';')[0] || 'audio'}
+                                            {pendingTranscript ? ' · texte capté' : ' · pas de texte capté'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="learning-btn ghost"
+                                            onClick={clearPendingAudio}
+                                            disabled={recording || transcribingAudio}
+                                            style={{ padding: '10px 14px' }}
+                                        >
+                                            🗑️ Refaire
+                                        </button>
+                                    </div>
+                                )}
                                 {recordError && <div className="learning-error">{recordError}</div>}
                                 <textarea
                                     value={answerText}

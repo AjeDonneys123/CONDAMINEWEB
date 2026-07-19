@@ -150,6 +150,7 @@ const Models = {
 
     Homework: getModel('Homework', {
         title: String, subject: String, isPunishment: { type: Boolean, default: false },
+        assessmentKind: { type: String, enum: ['', 'dnb', 'rqp', 'commentaire'], default: '' },
         targetClassrooms: [String], chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, levels: Array,
         assignedStudents: [mongoose.Schema.Types.ObjectId], isAllClass: { type: Boolean, default: true },
@@ -258,6 +259,7 @@ const Models = {
         targetClassroomId: { type: String, required: true, index: true },
         targetClassroomName: { type: String, default: '', trim: true },
         isEnabled: { type: Boolean, default: true },
+        publishedUntilSlide: { type: Number, default: 0, min: 0 },
         overlays: {
             type: [{
                 type: { type: String, enum: ['character', 'video'], required: true },

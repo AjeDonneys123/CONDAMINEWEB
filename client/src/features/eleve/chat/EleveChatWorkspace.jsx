@@ -13,7 +13,21 @@ export default function EleveChatWorkspace({ user }) {
   const [diagnostic, setDiagnostic] = useState(null);
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const [chatMetrics, setChatMetrics] = useState(null);
+  const [aiStatus, setAiStatus] = useState({ label: 'IA', model: '' });
   const threadRef = useRef(null);
+
+  useEffect(() => {
+    fetch('/api/eleve/chat/status')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data) return;
+        setAiStatus({
+          label: data.label || data.provider || 'IA',
+          model: data.model || ''
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!threadRef.current) return;
@@ -244,17 +258,21 @@ export default function EleveChatWorkspace({ user }) {
         url: '/api/eleve/chat/diagnostic/stream'
       });
       await runOneDiagnostic({
-        label: 'Test Ollama reel',
-        url: '/api/eleve/chat/diagnostic/ollama-stream',
+        label: 'Test IA active reelle',
+        url: '/api/eleve/chat/message/stream',
         options: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          body: JSON.stringify({
+            studentId: user?._id || user?.id,
+            message: 'Réponds exactement : test IA OK.',
+            history: []
+          })
         }
       });
       setDiagnostic((current) => ({
         status: 'done',
-        lines: [...(current?.lines || []), '✅ Diagnostic termine. Si le test serveur pur arrive tard, le probleme vient du proxy/deploiement. Si seul Ollama arrive tard, le probleme vient du modele ou du Mac.']
+        lines: [...(current?.lines || []), '✅ Diagnostic termine. Si le test serveur pur arrive tard, le probleme vient du proxy/deploiement. Si seul le test IA arrive tard, le probleme vient du modele/API.']
       }));
     } catch (diagError) {
       setDiagnostic((current) => ({
@@ -271,10 +289,10 @@ export default function EleveChatWorkspace({ user }) {
       <div className="eleve-chat-shell">
         <div className="eleve-chat-head">
           <div>
-            <div className="eleve-chat-kicker">IA locale active</div>
+            <div className="eleve-chat-kicker">IA active</div>
             <h2>Discussion avec Conda</h2>
           </div>
-          <div className="eleve-chat-local-badge"><span /> Ollama</div>
+          <div className="eleve-chat-local-badge"><span /> {aiStatus.label}{aiStatus.model ? ` · ${aiStatus.model}` : ''}</div>
         </div>
 
         <div className="eleve-chat-subtitle">
@@ -284,9 +302,9 @@ export default function EleveChatWorkspace({ user }) {
         <div className={`eleve-chat-diagnostic ${diagnostic?.status || ''}`}>
           <div className="eleve-chat-diagnostic-head">
             <div>
-              <div className="eleve-chat-diagnostic-title">Test streaming</div>
+              <div className="eleve-chat-diagnostic-title">Test IA</div>
               <div className="eleve-chat-diagnostic-subtitle">
-                Mesure si les morceaux arrivent vraiment au navigateur.
+                Mesure le serveur puis l&apos;IA active du chat.
               </div>
             </div>
             <button

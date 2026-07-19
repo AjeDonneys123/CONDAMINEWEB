@@ -2,13 +2,33 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Homework.css';
 
+// CORRECTION V380 : Résolution d'URL Intelligente
+const resolveSource = (url) => {
+    if (!url) return '';
+    // Cas 1 : URL complète (ex: https://...)
+    if (url.startsWith('http')) return url;
+    // Cas 1b : URL API déjà prête (ex: /api/structure/proxy/...)
+    if (url.startsWith('/api/')) return url;
+    // Cas 2 : Upload local (ex: /uploads/...)
+    if (url.startsWith('/uploads')) return url;
+    // Cas 2b : Toute URL absolue locale
+    if (url.startsWith('/')) return url;
+    // Cas 3 : ID Drive ou autre -> Proxy
+    return `/api/structure/proxy/${url}`;
+};
+
 export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [pageIdx, setPageIdx] = useState(0);
   const [activeDocIdx, setActiveDocIdx] = useState(0);
   const [activeInstrIdx, setActiveInstrIdx] = useState(0);
   const [splitTopPercent, setSplitTopPercent] = useState(65);
   const [isResizingSplit, setIsResizingSplit] = useState(false);
+  const [bottomLeftPercent, setBottomLeftPercent] = useState(40);
+  const [isResizingBottomSplit, setIsResizingBottomSplit] = useState(false);
   const [answer, setAnswer] = useState('');
+  const [fillBoxesByPage, setFillBoxesByPage] = useState({});
+  const [activeFillBoxId, setActiveFillBoxId] = useState('');
+  const [fillDrag, setFillDrag] = useState(null);
   const [draftText, setDraftText] = useState('');
   const [draftDoc, setDraftDoc] = useState({
     loading: false,
@@ -81,6 +101,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
   const [docState, setDocState] = useState({ scale: 1, x: 0, y: 0, dragging: false, startX: 0, startY: 0 });
   const [instrState, setInstrState] = useState({ scale: 1, x: 0, y: 0, dragging: false, startX: 0, startY: 0 });
+  const [bottomSplitDrag, setBottomSplitDrag] = useState(null);
   const homeworkStartTsRef = useRef(Date.now());
   const pageStartTsRef = useRef(Date.now());
   const workViewRef = useRef({ page: 0, idx: 0, startedAt: Date.now() });
@@ -94,8 +115,15 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const lastDraftSyncedRef = useRef('');
 
   const currentPage = homework.levels[pageIdx];
+  const currentSourceLevelIndex = Number.isFinite(Number(currentPage?._sourceLevelIndex))
+    ? Number(currentPage._sourceLevelIndex)
+    : pageIdx;
   const instrDocs = currentPage.instructionUrls || [];
   const workDocs = currentPage.attachmentUrls || [];
+  const isFillPage = String(currentPage?.responseMode || '') === 'fill';
+  const fillPageKey = `${homework?._id || 'homework'}_${currentSourceLevelIndex}`;
+  const fillBoxes = fillBoxesByPage[fillPageKey] || [];
+  const fillBackgroundUrl = instrDocs[0] || workDocs[0] || '';
 
   const hiddenHomeworkPrompt = useMemo(() => {
     const levelLabel = String(user?.currentClass || homework?.targetLevel || 'niveau non precise').trim();
@@ -226,21 +254,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     };
   };
 
-  // CORRECTION V380 : Résolution d'URL Intelligente
-  const resolveSource = (url) => {
-      if (!url) return '';
-      // Cas 1 : URL complète (ex: https://...)
-      if (url.startsWith('http')) return url;
-      // Cas 1b : URL API déjà prête (ex: /api/structure/proxy/...)
-      if (url.startsWith('/api/')) return url;
-      // Cas 2 : Upload local (ex: /uploads/...)
-      if (url.startsWith('/uploads')) return url;
-      // Cas 2b : Toute URL absolue locale
-      if (url.startsWith('/')) return url;
-      // Cas 3 : ID Drive ou autre -> Proxy
-      return `/api/structure/proxy/${url}`;
-  };
-
   useEffect(() => {
     const detectExtension = () => {
       const attrReady = typeof document !== 'undefined' && document.documentElement?.getAttribute('data-chatgmini-extension') === 'ready';
@@ -347,6 +360,28 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   }, [isResizingSplit]);
 
   useEffect(() => {
+    if (!bottomSplitDrag) return;
+    const handleMove = (e) => {
+      const deltaY = Number(e.clientY || 0) - bottomSplitDrag.startY;
+      const nextWidth = (Number(e.clientX || 0) / window.innerWidth) * 100;
+      setBottomLeftPercent(Math.max(22, Math.min(72, nextWidth)));
+      setInstrState((prev) => ({ ...prev, y: bottomSplitDrag.baseY + deltaY }));
+    };
+    const handleUp = () => {
+      setBottomSplitDrag(null);
+      setIsResizingBottomSplit(false);
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+  }, [bottomSplitDrag]);
+
+  useEffect(() => {
     if (!showQuestionModal) return;
     setQuestionModalDocIdx(activeInstrIdx || 0);
   }, [showQuestionModal, activeInstrIdx]);
@@ -434,7 +469,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const fetchDraftDocStatus = async () => {
     try {
       const sid = user?._id || user?.id;
-      const res = await fetch(`/api/eleve/homework/draft-doc/status?homeworkId=${encodeURIComponent(homework._id)}&playerId=${encodeURIComponent(sid)}&levelIndex=${encodeURIComponent(pageIdx)}`);
+      const res = await fetch(`/api/eleve/homework/draft-doc/status?homeworkId=${encodeURIComponent(homework._id)}&playerId=${encodeURIComponent(sid)}&levelIndex=${encodeURIComponent(currentSourceLevelIndex)}`);
       const data = await res.json();
       if (!res.ok || !data?.ok) throw new Error(data?.error || 'Brouillon indisponible');
       setDraftDoc((prev) => ({
@@ -464,7 +499,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       const res = await fetch('/api/eleve/homework/draft-doc/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ homeworkId: homework._id, levelIndex: pageIdx, playerId: sid })
+        body: JSON.stringify({ homeworkId: homework._id, levelIndex: currentSourceLevelIndex, playerId: sid })
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) throw new Error(data?.error || 'Création brouillon impossible');
@@ -495,7 +530,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           homeworkId: homework._id,
-          levelIndex: pageIdx,
+          levelIndex: currentSourceLevelIndex,
           playerId: sid,
           text: payloadText
         })
@@ -563,7 +598,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
   const handleModalAction = () => {
       if (!aiResult) return;
-      const g = aiResult.grade;
+      const g = String(aiResult.grade || 'A');
       if (g === 'C' || g.includes('C')) { setAnswer(''); setAiResult(null); }
       else if (g === 'B' || g.includes('B')) {
           setAiResult(null);
@@ -575,7 +610,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
   const getModalConfig = () => {
       if (!aiResult) return {};
-      const g = aiResult.grade;
+      const g = String(aiResult.grade || 'A');
       if (g === 'C' || g.includes('C')) return { title: "TRAVAIL INSUFFISANT (C)", btn: "RECOMMENCER À ZÉRO ↺", color: "#ef4444", msg: "Ta réponse va être effacée." };
       if (g === 'B' || g.includes('B')) return { title: "COMPÉTENCE EN COURS (B)", btn: "ENVOYER AU PROF ➔", color: "#eab308", msg: "Copie validée pour le suivi prof." };
       if (g === 'A+' || g.includes('+')) return { title: "EXCELLENT TRAVAIL (A+)", btn: "PAGE SUIVANTE ➔", color: "#14532d", msg: "Parfait !" };
@@ -587,6 +622,12 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const handleMouseDown = (e, type) => { const state = type === 'doc' ? docState : instrState; const setState = type === 'doc' ? setDocState : setInstrState; setState({ ...state, dragging: true, startX: e.clientX - state.x, startY: e.clientY - state.y }); };
   const handleMouseMove = (e, type) => { const state = type === 'doc' ? docState : instrState; const setState = type === 'doc' ? setDocState : setInstrState; if (state.dragging) { setState({ ...state, x: e.clientX - state.startX, y: e.clientY - state.startY }); } };
   const handleMouseUp = (type) => { const state = type === 'doc' ? docState : instrState; const setState = type === 'doc' ? setDocState : setInstrState; setState({ ...state, dragging: false }); };
+  const handleInstrWheel = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const delta = Number(e.deltaY || 0);
+    setInstrState((prev) => ({ ...prev, y: prev.y - delta }));
+  };
   const flagCheat = () => {
     setShowCheatAlert(true);
     setTimeout(() => setShowCheatAlert(false), 3500);
@@ -619,14 +660,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     const now = Date.now();
     const deltaChars = newValue.length - answer.length;
     const deltaTime = Math.max(1, now - lastInputTs);
-    if (deltaChars > 50) {
-      setCheatFlags((prev) => ({ ...prev, largeInserts: prev.largeInserts + 1 }));
-      flagCheat();
-    }
-    if (deltaChars > 20 && deltaTime < 30) {
-      setCheatFlags((prev) => ({ ...prev, pasteBursts: prev.pasteBursts + 1 }));
-      flagCheat();
-    }
     setLastInputTs(now);
     updateWritingTrace('answer', newValue, answer);
     setAnswer(newValue);
@@ -636,11 +669,33 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     updateWritingTrace('draft', newValue, draftText);
     setDraftText(newValue);
   };
-  const handlePaste = () => {
-    setCheatFlags((prev) => ({ ...prev, pasteBursts: prev.pasteBursts + 1 }));
-    showBehaviorNotice("⚠️ Attention au copier-coller. Rédige avec tes propres mots.");
-    flagCheat();
-  };
+  const handlePaste = () => {};
+
+  useEffect(() => {
+    if (!fillDrag) return undefined;
+    const onMove = (event) => {
+      const dx = ((event.clientX - fillDrag.startX) / Math.max(1, window.innerWidth)) * 100;
+      const dy = ((event.clientY - fillDrag.startY) / Math.max(1, window.innerHeight)) * 100;
+      if (fillDrag.mode === 'resize') {
+        updateFillBox(fillDrag.id, {
+          w: Math.max(8, Math.min(90, fillDrag.box.w + dx)),
+          h: Math.max(5, Math.min(40, fillDrag.box.h + dy))
+        });
+        return;
+      }
+      updateFillBox(fillDrag.id, {
+        x: Math.max(0, Math.min(92, fillDrag.box.x + dx)),
+        y: Math.max(0, Math.min(92, fillDrag.box.y + dy))
+      });
+    };
+    const onUp = () => setFillDrag(null);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [fillDrag]);
   const copyHomeworkChatPayload = async () => {
     const studentText = String(chatQuestion || answer || '').trim();
     if (!studentText) {
@@ -665,6 +720,94 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     } catch (e) {
       setHomeworkChatNotice("Le message n'a pas pu etre copie.");
     }
+  };
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(`conda_fill_${homework?._id || ''}`);
+      if (raw) setFillBoxesByPage(JSON.parse(raw) || {});
+    } catch (_) {}
+  }, [homework?._id]);
+
+  useEffect(() => {
+    try {
+      if (homework?._id) window.localStorage.setItem(`conda_fill_${homework._id}`, JSON.stringify(fillBoxesByPage));
+    } catch (_) {}
+  }, [fillBoxesByPage, homework?._id]);
+
+  const fillBoxesToAnswer = (boxes = fillBoxes) => boxes
+    .map((box, index) => `Zone ${index + 1}: ${String(box.text || '').trim()}`)
+    .filter((line) => !line.endsWith(':'))
+    .join('\n');
+
+  const cleanStudentAnswerForCorrection = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const hasGeneratedQuestionBlocks = /\*\*\s*\d+[\).]\s+[\s\S]*?\*\*/.test(raw) || /\s---\s/.test(raw);
+    if (!hasGeneratedQuestionBlocks) return raw;
+
+    const parts = raw
+      .split(/\s+---\s+/)
+      .map((part, index) => {
+        let cleaned = String(part || '').trim();
+        const explicitNumber = cleaned.match(/^\*\*\s*(\d+)[\).]/)?.[1] || String(index + 1);
+
+        // Retire le titre de question en gras, mais garde ce qui suit : la vraie réponse.
+        cleaned = cleaned.replace(/^\*\*\s*\d+[\).]\s+[\s\S]*?\*\*\s*/, '');
+        cleaned = cleaned.replace(/[«»]/g, '');
+        cleaned = cleaned.replace(/\*\*/g, '');
+        cleaned = cleaned.replace(/\s+\*\s+/g, ' ');
+        cleaned = cleaned.replace(/^\*\s+|\s+\*$/g, '');
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+        if (!cleaned) return '';
+        return `${explicitNumber}. ${cleaned}`;
+      })
+      .filter(Boolean);
+
+    return parts.length ? parts.join('\n') : raw;
+  };
+
+  const addFillTextBox = () => {
+    const id = `box_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const next = {
+      id,
+      x: 12,
+      y: 12 + (fillBoxes.length % 5) * 10,
+      w: 28,
+      h: 8,
+      text: ''
+    };
+    setFillBoxesByPage((prev) => ({ ...prev, [fillPageKey]: [...(prev[fillPageKey] || []), next] }));
+    setActiveFillBoxId(id);
+  };
+
+  const updateFillBox = (id, patch) => {
+    setFillBoxesByPage((prev) => ({
+      ...prev,
+      [fillPageKey]: (prev[fillPageKey] || []).map((box) => box.id === id ? { ...box, ...patch } : box)
+    }));
+  };
+
+  const removeFillBox = (id) => {
+    setFillBoxesByPage((prev) => ({
+      ...prev,
+      [fillPageKey]: (prev[fillPageKey] || []).filter((box) => box.id !== id)
+    }));
+    if (activeFillBoxId === id) setActiveFillBoxId('');
+  };
+
+  const startFillDrag = (event, box, mode = 'move') => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveFillBoxId(box.id);
+    setFillDrag({
+      id: box.id,
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      box: { ...box }
+    });
   };
   const openGeminiHelper = () => {
     document.dispatchEvent(new CustomEvent('CHATGMINI_OPEN_GEMINI'));
@@ -959,151 +1102,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   };
 
   const startVerificationFlow = async () => {
-      if (showStartGate) {
-          alert("Lis et accepte d'abord les règles de l'épreuve.");
-          return;
-      }
-      if (!answer.trim()) return;
-      if (oralRequired && !micStatus.ok) {
-          alert("🎤 Test micro requis avant envoi.");
-          const micOk = await runMicPreflight();
-          if (!micOk) {
-            setOralRequired(false);
-          }
-      }
-      const thinking = computeThinkingRisk();
-      const forceVerification =
-        thinking.answerLen >= 140 &&
-        (
-          thinking.answerEvents <= 6 ||
-          thinking.answerRevisions === 0 ||
-          thinking.approxWpm >= 50
-        );
-      const needsMoreReading = thinking.reasons.some((r) =>
-        r.includes("documents requis non consultés") ||
-        r.includes("temps de consultation des documents insuffisant") ||
-        r.includes("écriture trop rapide après ouverture")
-      );
-      if (needsMoreReading) {
-          showBehaviorNotice("📚 Merci de lire les documents avant de répondre.", 5000);
-          openWindow('question');
-          return;
-      }
-      if (cheatFlags.pasteBursts > 0) {
-          showBehaviorNotice("⚠️ Copier-coller détecté: reformule ta réponse avec tes propres mots.");
-      }
-      if (thinking.risk < 2 && !forceVerification) {
-          await submitToIA({ antiCheat: buildAntiCheatPayload(thinking, { asked: false, mode: 'no-check' }) });
-          return;
-      }
-      setVerifyState({
-        open: true,
-        loading: true,
-        question: '',
-        qcmQuestions: [],
-        qcmAnswers: [],
-        qcmDurationsMs: [],
-        qcmStartedAt: Date.now(),
-        verifyStartedAt: Date.now(),
-        challengeId: '',
-        expiresAt: 0,
-        responseText: '',
-        error: '',
-        verifying: false
-      });
-      setVerifyOralEvidence({ used: false, suspiciousHits: 0 });
-      try {
-          const res = await fetch('/api/eleve/homework/anti-cheat/challenge', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  userText: answer,
-                  instruction: currentPage.instruction || '',
-                  playerId: user._id || user.id,
-                  homeworkId: homework._id,
-                  levelIndex: pageIdx,
-                  cheatFlags,
-                  writingTrace: {
-                    answer: writingTrace.answer,
-                    draft: writingTrace.draft,
-                    firstWriteDelayMs: firstWriteTs ? firstWriteTs - sessionStartTs : 0,
-                    answerLen: answer.trim().length,
-                    draftLen: draftText.trim().length
-                  },
-                  docConsultation: thinking.docConsult,
-                  estimatedTimes: {
-                    minPageMs: thinking.minPageMs,
-                    pageElapsed: thinking.pageElapsed,
-                    expectedElapsedToCurrent: thinking.expectedElapsedToCurrent,
-                    actualGlobalElapsed: thinking.actualGlobalElapsed
-                  },
-                  taskPolicy: {
-                    requiresDraft: thinking.requiresDraft
-                  },
-                  suspicion: {
-                    score: thinking.risk,
-                    reasons: thinking.reasons
-                  }
-              })
-          }).then(r => r.json());
-          if (res?.requireSecurity === false) {
-              if (res?.clearSuspicion) {
-                  setCheatFlags({ pasteBursts: 0, largeInserts: 0, tabSwitches: 0, hiddenMs: 0, oralAIAssist: 0, fullscreenExits: 0 });
-                  setShowCheatAlert(false);
-              }
-              setVerifyState({
-                open: false,
-                loading: false,
-                question: '',
-                qcmQuestions: [],
-                qcmAnswers: [],
-                qcmDurationsMs: [],
-                qcmStartedAt: 0,
-                verifyStartedAt: 0,
-                challengeId: '',
-                expiresAt: 0,
-                responseText: '',
-                error: '',
-                verifying: false
-              });
-              await submitToIA({ antiCheat: buildAntiCheatPayload(thinking, { asked: false, mode: 'not-required' }) });
-              return;
-          }
-          if (!res?.challengeId) throw new Error(res?.error || 'Challenge indisponible');
-          const qcms = Array.isArray(res.qcmQuestions) ? res.qcmQuestions : [];
-          setVerifyState({
-            open: true,
-            loading: false,
-            question: res.question || '',
-            qcmQuestions: qcms,
-            qcmAnswers: qcms.map(() => -1),
-            qcmDurationsMs: qcms.map(() => 0),
-            qcmStartedAt: Date.now(),
-            verifyStartedAt: Date.now(),
-            challengeId: res.challengeId,
-            expiresAt: Number(res.expiresAt || 0),
-            responseText: '',
-            error: '',
-            verifying: false
-          });
-      } catch (e) {
-          setVerifyState({
-            open: false,
-            loading: false,
-            question: '',
-            qcmQuestions: [],
-            qcmAnswers: [],
-            qcmDurationsMs: [],
-            qcmStartedAt: 0,
-            verifyStartedAt: 0,
-            challengeId: '',
-            expiresAt: 0,
-            responseText: '',
-            error: String(e.message || e),
-            verifying: false
-          });
-          alert("Vérification anti-triche indisponible.");
-      }
+      await submitToIA();
   };
 
   const confirmVerification = async () => {
@@ -1168,17 +1167,57 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   };
   
   const submitToIA = async ({ antiCheat = null } = {}) => { 
-      if(!answer.trim()) return; 
+      const fillAnswer = isFillPage ? fillBoxesToAnswer() : '';
+      if(isFillPage && fillAnswer.trim()) setAnswer(fillAnswer);
+      const rawAnswer = String(isFillPage ? fillAnswer : answer || '').trim();
+      const finalAnswer = cleanStudentAnswerForCorrection(rawAnswer);
+      if(!finalAnswer) return;
       setSubmitting(true); 
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 90000);
       try { 
           try { await syncDraftToGoogleDoc(draftText); } catch (e) {}
-          await sendStudentMessageToChat();
-      } catch(e) { alert(e?.message || "Erreur serveur IA"); } 
-      setSubmitting(false); 
+          const draftDocMeta = draftDoc?.stats ? {
+            wordCount: Number(draftDoc.stats.wordCount || 0),
+            revisionCount: Number(draftDoc.stats.revisionCount || 0)
+          } : null;
+          const res = await fetch('/api/eleve/homework/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userText: finalAnswer,
+              homeworkId: homework._id,
+              levelIndex: currentSourceLevelIndex,
+              playerId: user._id || user.id,
+              antiCheat,
+              draftDocMeta
+            }),
+            signal: controller.signal
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || "Erreur serveur IA");
+          setAiResult(data);
+      } catch(e) {
+          if (e?.name === 'AbortError') {
+            alert("La correction IA met trop de temps à répondre. Réessaie dans quelques secondes ou vérifie le serveur IA.");
+          } else {
+            alert(e?.message || "Erreur serveur IA");
+          }
+      } finally {
+          window.clearTimeout(timeoutId);
+          setSubmitting(false);
+      }
   };
   const startSplitResize = (e) => {
     e.preventDefault();
     setIsResizingSplit(true);
+  };
+  const startBottomSplitResize = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizingBottomSplit(true);
+    setInstrState((prev) => ({ ...prev, dragging: false }));
+    setBottomSplitDrag({ startY: Number(e.clientY || 0), baseY: instrState.y });
   };
   const bringWindowToFront = (name) => {
     setWindowZ((prev) => {
@@ -1220,49 +1259,8 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
   return (
     <div className="homework-container v8-liseuse">
-      {showCheatAlert && <div className="cheat-alert-box">🚨 COPIER-COLLER DÉTECTÉ ! ÉCRIS TOI-MÊME.</div>}
       {behaviorNotice.open && <div className="v8-behavior-notice">{behaviorNotice.text}</div>}
       <button onClick={onQuit} className="v8-quit-btn">⬅ QUITTER</button>
-      <div className={`v8-rules-card ${suspicionRed ? 'red' : ''}`}>
-          <div className="v8-rules-head">
-              <strong>Règles & Timer</strong>
-              <span>{formatMs(pageElapsedMs)}</span>
-          </div>
-          <ul className="v8-rules-list">
-              <li>Pas de copier-coller.</li>
-              <li>Évite les changements d’onglet.</li>
-              <li>Reste en plein écran pendant l’épreuve.</li>
-              <li>Lis les documents avant de rédiger.</li>
-              <li>{oralRequired ? 'Réponse orale obligatoire aux vérifications.' : 'Mode secours: réponse texte autorisée.'}</li>
-          </ul>
-          {fullscreenSupported && (
-              <button className="v8-mic-test-btn" onClick={requestExamFullscreen}>
-                  {isFullscreen ? '🖥️ Plein écran actif' : 'Activer le plein écran'}
-              </button>
-          )}
-          <button className="v8-mic-test-btn" onClick={runMicPreflight}>
-              {micStatus.ok ? '🎤 Micro OK' : 'Tester le micro'}
-          </button>
-          {micStatus.error && <div className="v8-rules-warn">{micStatus.error}</div>}
-      </div>
-      {showStartGate && (
-          <div className="v8-startgate-overlay">
-              <div className="v8-startgate-card">
-                  <h3>Règles de l’épreuve</h3>
-                  <ul>
-                      <li>Pas de copier-coller.</li>
-                      <li>Évite les changements d’onglet.</li>
-                      <li>Plein écran obligatoire pendant l’épreuve.</li>
-                      <li>Lis les documents avant de rédiger.</li>
-                      <li>Le micro est testé au démarrage.</li>
-                  </ul>
-                  <div className="v8-startgate-actions">
-                      <button className="primary" onClick={handleAcceptExam}>J’accepte</button>
-                      <button className="ghost" onClick={() => { setOralRequired(false); setShowStartGate(false); }}>Continuer sans micro (secours)</button>
-                  </div>
-              </div>
-          </div>
-      )}
 
       {/* ZONE SUJET */}
       <div className="viewer-top-area" style={{ height: `${splitTopPercent}%` }} onMouseDown={(e) => handleMouseDown(e, 'doc')} onMouseMove={(e) => handleMouseMove(e, 'doc')} onMouseUp={() => handleMouseUp('doc')} onMouseLeave={() => handleMouseUp('doc')}>
@@ -1282,10 +1280,10 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       </div>
 
       {/* ZONE BAS */}
-      <div className="interaction-bottom-area" style={{ height: `${100 - splitTopPercent}%` }}>
-          <div className="question-panel" onDoubleClick={() => openWindow('question')}>
+      <div className={`interaction-bottom-area ${isResizingBottomSplit ? 'is-resizing-horizontal' : ''}`} style={{ height: `${100 - splitTopPercent}%` }}>
+          <div className="question-panel" style={{ width: `${bottomLeftPercent}%` }} onDoubleClick={() => openWindow('question')}>
               <div className="question-header"><div className="v8-page-badge">ÉTAPE {pageIdx + 1}</div><div className="v8-instruction-text-mini">{currentPage.instruction || "Observez le document."}</div></div>
-              <div className="v8-instruction-viewer" onMouseDown={(e) => handleMouseDown(e, 'instr')} onMouseMove={(e) => handleMouseMove(e, 'instr')} onMouseUp={() => handleMouseUp('instr')} onMouseLeave={() => handleMouseUp('instr')}>
+              <div className="v8-instruction-viewer" onWheel={handleInstrWheel} onMouseDown={(e) => handleMouseDown(e, 'instr')} onMouseMove={(e) => handleMouseMove(e, 'instr')} onMouseUp={() => handleMouseUp('instr')} onMouseLeave={() => handleMouseUp('instr')}>
                   <div className="v8-zoom-controls" style={{ bottom: '10px', right: '10px' }}><button className="btn-zoom" onClick={(e) => { e.stopPropagation(); handleZoom('instr', 0.2); }}>+</button><button className="btn-zoom" onClick={(e) => { e.stopPropagation(); handleZoom('instr', -0.2); }}>-</button></div>
                   <div className="v8-pan-container" style={{ transform: `translate(${instrState.x}px, ${instrState.y}px) scale(${instrState.scale})` }}>
                       {instrDocs.length > 0 ? (
@@ -1296,13 +1294,57 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
               {instrDocs.length > 1 && (<div className="flex gap-2 p-2 bg-white border-t border-slate-100 overflow-x-auto">{instrDocs.map((url, i) => (<img key={i} src={resolveSource(url)} onClick={() => setActiveInstrIdx(i)} className={`w-10 h-10 object-cover rounded border-2 cursor-pointer ${activeInstrIdx === i ? 'border-blue-500' : 'border-slate-200'}`} />))}</div>)}
           </div>
 
-          <div className="answer-panel">
-                      <textarea className="answer-input" value={answer} onChange={handleInputCheck} onPaste={handlePaste} placeholder="Votre réponse ici..." />
+          <div className={`v8-vertical-splitter ${isResizingBottomSplit ? 'is-active' : ''}`} onMouseDown={startBottomSplitResize}>
+              <div className="v8-vertical-splitter-grip" />
+          </div>
+
+          <div className={`answer-panel ${isFillPage ? 'fill-mode' : ''}`} style={{ width: `calc(${100 - bottomLeftPercent}% - 10px)` }}>
+              {isFillPage ? (
+                <div className="fill-answer-tool">
+                  <div className="fill-toolbar">
+                    <div>
+                      <strong>Page à remplir</strong>
+                      <span>Ajoute des zones texte puis place-les sur le document.</span>
+                    </div>
+                    <button type="button" onClick={addFillTextBox}>+ Zone texte</button>
+                  </div>
+                  <div className="fill-page-stage">
+                    {fillBackgroundUrl ? (
+                      <img src={resolveSource(fillBackgroundUrl)} className="fill-page-bg" draggable="false" />
+                    ) : (
+                      <div className="fill-empty-bg">Aucune image de page à remplir.</div>
+                    )}
+                    {fillBoxes.map((box) => (
+                      <div
+                        key={box.id}
+                        className={`fill-text-box ${activeFillBoxId === box.id ? 'active' : ''}`}
+                        style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
+                        onMouseDown={(event) => startFillDrag(event, box, 'move')}
+                      >
+                        <textarea
+                          value={box.text || ''}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onChange={(event) => updateFillBox(box.id, { text: event.target.value })}
+                          placeholder="Écris ici..."
+                        />
+                        <button type="button" className="fill-box-remove" onMouseDown={(event) => event.stopPropagation()} onClick={() => removeFillBox(box.id)}>×</button>
+                        <span className="fill-box-resize" onMouseDown={(event) => startFillDrag(event, box, 'resize')} />
+                      </div>
+                    ))}
+                  </div>
+                  <textarea className="answer-input fill-hidden-answer" value={fillBoxesToAnswer()} readOnly />
+                </div>
+              ) : (
+                <textarea className="answer-input" value={answer} onChange={handleInputCheck} placeholder="Votre réponse ici..." />
+              )}
               <div className="v8-footer-actions">
                   <div className="v8-footer-left">
                       <div className="v8-progress">PAGE {pageIdx + 1} / {homework.levels.length}</div>
                       <button className="btn-draft" onClick={() => openWindow('draft')}>BROUILLON</button>
                       <button className="btn-response-window" onClick={() => openWindow('response')}>RÉPONSE FENÊTRE</button>
+                      <button className="btn-validate-answer" onClick={startVerificationFlow} disabled={submitting || !(isFillPage ? fillBoxesToAnswer() : answer).trim()}>
+                          {submitting ? 'ENVOI...' : 'VALIDER'}
+                      </button>
                   </div>
               </div>
           </div>
@@ -1372,7 +1414,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       {draftDoc.loading && <div className="v8-draft-loading">Création du brouillon Google...</div>}
                       {!draftDoc.loading && (
                         <div className="v8-draft-fallback">
-                          <textarea className="v8-draft-input" placeholder="Écris ton brouillon ici..." value={draftText} onChange={handleDraftChange} onPaste={handlePaste} />
+                          <textarea className="v8-draft-input" placeholder="Écris ton brouillon ici..." value={draftText} onChange={handleDraftChange} />
                         </div>
                       )}
                       {draftDoc.error && <div className="v8-draft-error">{draftDoc.error}</div>}
@@ -1394,7 +1436,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       <button onClick={() => setShowResponseModal(false)} onMouseDown={(e) => e.stopPropagation()}>✕</button>
                   </div>
                   <div className="v8-layer-body">
-                      <textarea className="v8-response-input" placeholder="Rédige ta réponse ici..." value={answer} onChange={handleInputCheck} onPaste={handlePaste} />
+                      <textarea className="v8-response-input" placeholder="Rédige ta réponse ici..." value={answer} onChange={handleInputCheck} />
                   </div>
                   <div className="v8-win-resize n" onMouseDown={(e) => startWindowResize(e, 'response', 'n')} />
                   <div className="v8-win-resize s" onMouseDown={(e) => startWindowResize(e, 'response', 's')} />
@@ -1408,7 +1450,111 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       )}
       </div>
 
-      {verifyState.open && (
+      {aiResult && (
+          <div className="v8-verify-overlay">
+              <div className="v8-verify-box">
+                  <div className="v8-grade-badge">{aiResult.score_label || String(aiResult.grade || 'A')}</div>
+                  <div className="v8-verify-head">
+                      <strong>{modalConfig.title || 'Correction'}</strong>
+                  </div>
+                  <div className="v8-feedback-content">
+                      {aiResult.feedback_fond || aiResult.feedback ? (
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeFeedbackHtml(aiResult.feedback_fond || aiResult.feedback || '') }} />
+                      ) : null}
+                      {Array.isArray(aiResult.questions) && aiResult.questions.length > 0 && (
+                          <div className="v8-correction-section annotated">
+                              <h4>Correction par question</h4>
+                              {aiResult.questions.map((row, i) => (
+                                  <div key={i} className="v8-annotated-row">
+                                      <p>
+                                          <strong>Question {row.numero || i + 1}</strong>
+                                          {row.score !== null && row.score !== undefined && row.max !== null && row.max !== undefined && (
+                                              <span> — {Number(row.score)} / {Number(row.max)}</span>
+                                          )}
+                                      </p>
+                                      {row.feedback && <p><strong>Correction :</strong> {row.feedback}</p>}
+                                      {row.conseil && <p><strong>Conseil :</strong> {row.conseil}</p>}
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                      {(!Array.isArray(aiResult.questions) || aiResult.questions.length === 0) && Array.isArray(aiResult.copie_annotee) && aiResult.copie_annotee.length > 0 && (
+                          <div className="v8-correction-section annotated">
+                              <h4>Ta réponse, annotée</h4>
+                              {aiResult.copie_annotee.map((row, i) => (
+                                  <div key={i} className={`v8-annotated-row ${row.statut || ''}`}>
+                                      <blockquote>{row.extrait_eleve || 'Extrait de ta réponse'}</blockquote>
+                                      {row.correction && <p><strong>Correction :</strong> {row.correction}</p>}
+                                      {row.conseil && <p><strong>Conseil :</strong> {row.conseil}</p>}
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                      {(!Array.isArray(aiResult.questions) || aiResult.questions.length === 0) && Array.isArray(aiResult.bareme) && aiResult.bareme.length > 0 && (
+                          <div className="v8-correction-section">
+                              <h4>Barème</h4>
+                              {aiResult.bareme.map((row, i) => (
+                                  <div key={i} className="v8-bareme-row">
+                                      <strong>{row.item || `Critère ${i + 1}`}</strong>
+                                      <span>{Number(row.points ?? 0)} / {Number(row.max ?? 0)}</span>
+                                      {row.comment && <p>{row.comment}</p>}
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                      {Array.isArray(aiResult.attentes) && aiResult.attentes.length > 0 && (
+                          <div className="v8-correction-section">
+                              <h4>Attentes de correction</h4>
+                              <ul>{aiResult.attentes.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                          </div>
+                      )}
+                      {Array.isArray(aiResult.reussites) && aiResult.reussites.length > 0 && (
+                          <div className="v8-correction-section good">
+                              <h4>Réussites</h4>
+                              <ul>{aiResult.reussites.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                          </div>
+                      )}
+                      {Array.isArray(aiResult.manques) && aiResult.manques.length > 0 && (
+                          <div className="v8-correction-section missing">
+                              <h4>À améliorer</h4>
+                              <ul>{aiResult.manques.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                          </div>
+                      )}
+                      {aiResult.conseil && (
+                          <div className="v8-correction-advice">{aiResult.conseil}</div>
+                      )}
+                      {aiResult._ai_debug && (
+                          <div className="v8-correction-section">
+                              <h4>Diagnostic IA</h4>
+                              <p>
+                                  Provider : {aiResult._ai_debug.provider || '—'} ·
+                                  Modèle : {aiResult._ai_debug.model || '—'} ·
+                                  JSON : {aiResult._ai_debug.parsed ? 'lisible' : 'non parsé'} ·
+                                  Retry : {aiResult._ai_debug.retry ? 'oui' : 'non'} ·
+                                  Temps : {aiResult._ai_debug.ms || 0} ms ·
+                                  Taille : {aiResult._ai_debug.rawLength || 0}
+                              </p>
+                              {aiResult._ai_debug.inputPreview && (
+                                  <p><strong>Texte envoyé :</strong> {aiResult._ai_debug.inputPreview}</p>
+                              )}
+                              {aiResult._ai_debug.error && <p>{aiResult._ai_debug.error}</p>}
+                              {aiResult._ai_debug.rawPreview && (
+                                  <details>
+                                      <summary>Voir brut IA</summary>
+                                      <pre>{aiResult._ai_debug.rawPreview}</pre>
+                                  </details>
+                              )}
+                          </div>
+                      )}
+                  </div>
+                  <button className="v8-next-page-btn" onClick={handleModalAction}>
+                      {modalConfig.btn || 'CONTINUER'}
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {false && verifyState.open && (
           <div className="v8-verify-overlay">
               <div className="v8-verify-box">
                   <div className="v8-verify-head">

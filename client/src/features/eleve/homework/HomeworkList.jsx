@@ -3,7 +3,16 @@ import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
-export default function HomeworkList({ user, openPunishmentDirect = false, onPunishmentOpened, openItemId = '', onOpenHandled }) {
+export default function HomeworkList({
+  user,
+  openPunishmentDirect = false,
+  onPunishmentOpened,
+  openItemId = '',
+  onOpenHandled,
+  assessmentKinds = null,
+  levelFilter = null,
+  emptyTitle = ''
+}) {
   const [homeworks, setHomeworks] = useState([]);
   const [selectedHw, setSelectedHw] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -22,7 +31,29 @@ export default function HomeworkList({ user, openPunishmentDirect = false, onPun
         const subs = subRes.ok ? await subRes.json() : [];
         const submittedByHomeworkId = new Set((subs || []).map(s => String(s.homeworkId)));
 
-        setHomeworks(data.map(hw => ({
+        const allowedKinds = Array.isArray(assessmentKinds)
+          ? new Set(assessmentKinds.map((x) => String(x || '').trim()))
+          : null;
+        const filteredByKind = allowedKinds
+          ? data.filter((hw) => allowedKinds.has(String(hw.assessmentKind || '').trim()))
+          : data;
+        const filtered = levelFilter
+          ? filteredByKind
+              .filter((hw) => !levelFilter.chapterId || String(hw.chapterId || '') === String(levelFilter.chapterId))
+              .map((hw) => {
+                const matchingLevels = (hw.levels || [])
+                  .map((lvl, index) => ({ ...lvl, _sourceLevelIndex: index }))
+                  .filter((lvl) => {
+                    const sectionOk = !levelFilter.dnbSection || String(lvl.dnbSection || 'docs') === String(levelFilter.dnbSection);
+                    const subjectOk = !levelFilter.dnbSubject || String(lvl.dnbSubject || 'histoire') === String(levelFilter.dnbSubject);
+                    return sectionOk && subjectOk;
+                  });
+                return matchingLevels.length > 0 ? { ...hw, levels: matchingLevels } : null;
+              })
+              .filter(Boolean)
+          : filteredByKind;
+
+        setHomeworks(filtered.map(hw => ({
           ...hw,
           status: submittedByHomeworkId.has(String(hw._id)) ? 'done' : 'todo'
         })));
@@ -30,7 +61,7 @@ export default function HomeworkList({ user, openPunishmentDirect = false, onPun
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, [user]);
+  useEffect(() => { loadData(); }, [user, JSON.stringify(assessmentKinds), JSON.stringify(levelFilter)]);
 
   useEffect(() => {
     if (!openPunishmentDirect || selectedHw) return;
@@ -65,7 +96,15 @@ export default function HomeworkList({ user, openPunishmentDirect = false, onPun
                   {loading ? '...' : '🔄 ACTUALISER'}
               </button>
           </div>
-          <DashboardFolder items={homeworks} type="homework" onSelect={setSelectedHw} />
+          {emptyTitle && homeworks.length === 0 && !loading ? (
+            <div className="mx-4 rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center">
+              <div className="text-3xl mb-2">📁</div>
+              <div className="text-lg font-black text-slate-700">{emptyTitle}</div>
+              <div className="text-sm font-bold text-slate-400 mt-1">Ton professeur publiera les sujets ici.</div>
+            </div>
+          ) : (
+            <DashboardFolder items={homeworks} type="homework" onSelect={setSelectedHw} />
+          )}
       </div>
   );
 }

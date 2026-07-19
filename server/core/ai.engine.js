@@ -15,6 +15,8 @@ const resolveGeminiApiKey = () => {
     return '';
 };
 
+const resolveGeminiModel = () => String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+
 const promptToText = (prompt) => Array.isArray(prompt)
     ? prompt.map((part) => String(part?.text || '')).join('\n\n').trim()
     : String(prompt || '').trim();
@@ -252,28 +254,41 @@ const AIEngine = {
         if (!apiKey) return "ERROR_KEY";
 
         const parts = Array.isArray(prompt) ? prompt : [{ text: prompt }];
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+        const model = resolveGeminiModel();
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 35000);
         
         try {
             const response = await fetch(url, { 
                 method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                },
                 signal: controller.signal,
                 body: JSON.stringify({
                     contents: [{ role: "user", parts: parts }],
-                    systemInstruction: { parts: [{ text: systemInstruction }] }
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: {
+                        temperature: Number(options?.temperature ?? 0.2),
+                        maxOutputTokens: Number(options?.maxOutputTokens ?? options?.numPredict ?? 4096),
+                        ...(Number.isFinite(Number(options?.thinkingBudget)) ? { thinkingConfig: { thinkingBudget: Number(options.thinkingBudget) } } : {}),
+                        ...(options?.responseMimeType ? { responseMimeType: String(options.responseMimeType) } : {})
+                    }
                 }) 
             });
             clearTimeout(timeout);
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+            const text = (data.candidates?.[0]?.content?.parts || [])
+                .map((part) => String(part?.text || ''))
+                .join('')
+                .trim() || "[]";
             await logGeminiUsage({
                 teacherId: String(options?.teacherId || '').trim(),
                 source: 'central',
-                model: 'gemini-2.5-flash-lite',
+                model,
                 usageMetadata: data?.usageMetadata,
                 route: String(options?.route || '').trim(),
                 feature: String(options?.feature || '').trim(),
@@ -289,7 +304,7 @@ const AIEngine = {
             await logGeminiUsage({
                 teacherId: String(options?.teacherId || '').trim(),
                 source: 'central',
-                model: 'gemini-2.5-flash-lite',
+                model,
                 route: String(options?.route || '').trim(),
                 feature: String(options?.feature || '').trim(),
                 prompt,

@@ -18,11 +18,12 @@ const ProfAI = {
             throw new Error("GEMINI_API_KEY manquante");
         }
 
-        const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+        const primaryModel = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+        const models = Array.from(new Set([primaryModel, 'gemini-3.1-flash-lite', 'gemini-flash-latest']));
         let lastError = null;
 
         for (const model of models) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 45000);
 
@@ -30,7 +31,10 @@ const ProfAI = {
                 console.log(`🤖 [ProfAI] Envoi requête Gemini (${model}/central)...`);
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey
+                    },
                     signal: controller.signal,
                     body: JSON.stringify({
                         contents: [{ role: "user", parts: (Array.isArray(prompt) ? prompt : [{ text: prompt }]) }],

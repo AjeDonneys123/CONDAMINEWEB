@@ -97,9 +97,88 @@
     transition: all 0.2s;
 }
 .hw-sheet-zone:hover { border-color: #3b82f6; background: #eff6ff; }
+.hw-sheet-zone:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.14);
+}
 .hw-sheet-zone-preview { cursor: zoom-in; }
+.hw-sheet-zone-gallery {
+    height: auto;
+    min-height: 132px;
+    padding: 12px;
+    align-items: stretch;
+    justify-content: flex-start;
+    overflow: visible;
+    cursor: copy;
+}
 .hw-sheet-placeholder { display: flex; flex-direction: column; align-items: center; gap: 5px; color: #94a3b8; font-weight: 800; font-size: 0.7rem; text-transform: uppercase; }
+.hw-sheet-placeholder small {
+    color: #3b82f6;
+    font-size: 0.65rem;
+    font-weight: 900;
+}
 .hw-sheet-preview { height: 100%; width: 100%; object-fit: contain; padding: 5px; }
+.hw-sheet-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    width: 100%;
+    padding-right: 125px;
+}
+.hw-sheet-thumb {
+    width: 112px;
+    height: 108px;
+    border-radius: 14px;
+    background: white;
+    border: 1px solid #bbf7d0;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05);
+}
+.hw-sheet-thumb img {
+    width: 100%;
+    height: 78px;
+    object-fit: cover;
+    display: block;
+}
+.hw-sheet-thumb span {
+    display: block;
+    padding: 6px 8px;
+    color: #166534;
+    font-size: 0.62rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+.hw-sheet-thumb button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 999px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 900;
+    cursor: pointer;
+}
+.hw-sheet-add-more {
+    min-width: 112px;
+    height: 108px;
+    border-radius: 14px;
+    border: 2px dashed #86efac;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #16a34a;
+    font-size: 0.7rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.65);
+}
 .hw-sheet-remove {
     position: absolute; top: 10px; right: 10px;
     background: #ef4444; color: white; padding: 5px 10px;
@@ -110,8 +189,14 @@
 /* DOCUMENTS */
 .v84-hw-attachments {
     display: flex; flex-wrap: wrap; gap: 10px;
+    align-items: center;
     padding: 15px; background: #f8fafc; border-radius: 20px;
     border: 1px solid #f1f5f9; min-height: 60px;
+}
+.v84-hw-attachments:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
 }
 .v84-att-chip {
     background: white; border: 1px solid #e2e8f0;
@@ -173,6 +258,12 @@
     font-weight: 900; cursor: pointer; text-transform: uppercase;
 }
 .v84-att-add-btn:hover { background: #bae6fd; }
+.v84-att-paste-hint {
+    color: #94a3b8;
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
 
 /* IA HINTS */
 .hw-ai-box {
@@ -185,6 +276,54 @@
     min-height: 40px; resize: vertical;
 }
 .hw-ai-input::placeholder { color: #a78bfa; font-style: italic; }
+.hw-ai-docs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #c4b5fd;
+}
+.hw-ai-doc-card {
+    width: 105px;
+    height: 96px;
+    border-radius: 14px;
+    background: white;
+    border: 1px solid #ddd6fe;
+    overflow: hidden;
+    position: relative;
+    cursor: zoom-in;
+    box-shadow: 0 3px 10px rgba(88, 28, 135, 0.08);
+}
+.hw-ai-doc-card img {
+    width: 100%;
+    height: 66px;
+    object-fit: cover;
+    display: block;
+}
+.hw-ai-doc-card span {
+    display: block;
+    padding: 5px 7px;
+    color: #6d28d9;
+    font-size: 0.58rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+.hw-ai-doc-card button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 999px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 900;
+    cursor: pointer;
+}
 
 .hw-preview-modal {
     position: fixed;

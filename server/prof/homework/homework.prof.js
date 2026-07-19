@@ -3,11 +3,113 @@ const express = require('express');
 const router = express.Router();
 const { Homework, Submission, Student, HomeworkDraftDoc } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
+const AIEngine = require('../../core/ai.engine');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
+
+const hashCorrectionSource = (lvl = {}) => crypto
+    .createHash('sha1')
+    .update(JSON.stringify({
+        instruction: String(lvl.instruction || ''),
+        aiHints: String(lvl.aiHints || ''),
+        dnbSection: String(lvl.dnbSection || ''),
+        dnbSubject: String(lvl.dnbSubject || ''),
+        maxPoints: lvl.maxPoints || ''
+    }))
+    .digest('hex');
+
+async function generateCompactDnbCorrection(lvl = {}) {
+    const sourceHash = hashCorrectionSource(lvl);
+    if (lvl.compactCorrection && lvl.compactCorrectionSourceHash === sourceHash) return lvl;
+    const correctionText = String(lvl.aiHints || '').trim();
+    const instructionText = String(lvl.instruction || '').trim();
+    const manualMaxPoints = Number(lvl.maxPoints || 0);
+    if ((correctionText + instructionText).trim().length < 80) {
+        return { ...lvl, compactCorrectionSourceHash: sourceHash };
+    }
+
+    const prompt = [
+        "Tu prépares une fiche compacte de correction DNB HG-EMC pour corriger ensuite des élèves.",
+        "Réponds uniquement en JSON strict court. Pas de markdown.",
+        "Objectif: réduire le corrigé long en attendus par question et barème probable.",
+        manualMaxPoints > 0
+            ? `TOTAL IMPOSÉ PAR LE PROF: ${manualMaxPoints} points. Respecte strictement ce total.`
+            : "Si le sujet indique un total de points, respecte strictement ce total.",
+        "Si le barème question par question n'est pas donné, répartis les points selon la difficulté et le nombre d'éléments attendus.",
+        "Ne dépasse jamais le total indiqué.",
+        "",
+        `Partie: ${lvl.dnbSection || 'docs'}`,
+        `Matière: ${lvl.dnbSubject || 'histoire'}`,
+        "",
+        "SUJET / QUESTIONS:",
+        instructionText || "(non fourni)",
+        "",
+        "CORRIGÉ / AIDE PROF:",
+        correctionText || "(non fourni)",
+        "",
+        "FORMAT JSON:",
+        JSON.stringify({
+            total_points: manualMaxPoints > 0 ? manualMaxPoints : 8,
+            note: "résumé de la logique de correction",
+            questions: [
+                {
+                    numero: "1",
+                    max: 3,
+                    attendus: ["attendu précis"],
+                    valoriser: ["élément à valoriser"],
+                    erreurs_frequentes: ["oubli fréquent"]
+                }
+            ],
+            regles: [
+                "utiliser toute l'échelle des points",
+                "ne pas pénaliser une formulation différente si le sens est correct"
+            ]
+        })
+    ].join('\n');
+
+    try {
+        const raw = await AIEngine.ask(prompt, "Tu es un professeur d'histoire-géographie qui fabrique des barèmes compacts DNB. JSON strict uniquement.", {
+            route: 'prof-homework',
+            feature: 'dnb-compact-correction',
+            temperature: 0,
+            maxOutputTokens: 1400,
+            numPredict: 1400,
+            thinkingBudget: 0
+        });
+        const parsed = AIEngine.sanitizeJSON(raw);
+        if (!parsed || !Array.isArray(parsed.questions)) {
+            return {
+                ...lvl,
+                compactCorrectionError: 'Fiche compacte non générée',
+                compactCorrectionSourceHash: sourceHash
+            };
+        }
+        const finalMaxPoints = manualMaxPoints > 0
+            ? manualMaxPoints
+            : (Number(parsed.total_points || lvl.maxPoints || 0) || lvl.maxPoints);
+        const compactCorrection = {
+            ...parsed,
+            total_points: finalMaxPoints || parsed.total_points
+        };
+        return {
+            ...lvl,
+            compactCorrection,
+            compactCorrectionSourceHash: sourceHash,
+            compactCorrectionGeneratedAt: new Date().toISOString(),
+            maxPoints: finalMaxPoints
+        };
+    } catch (e) {
+        return {
+            ...lvl,
+            compactCorrectionError: String(e?.message || e || 'Erreur IA').slice(0, 300),
+            compactCorrectionSourceHash: sourceHash
+        };
+    }
+}
 
 /**
  * 📝 BLOC DEVOIRS - ISOLÉ
@@ -88,6 +190,29 @@ router.post('/', async (req, res) => {
         const data = { ...req.body };
         if (!data._id) delete data._id;
         if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
+        data.assessmentKind = ['', 'dnb', 'rqp', 'commentaire'].includes(String(data.assessmentKind || ''))
+            ? String(data.assessmentKind || '')
+            : '';
+        if (Array.isArray(data.levels)) {
+            const allowedDnbSections = new Set(['docs', 'paragraphe', 'reperes', 'emc']);
+            const allowedDnbSubjects = new Set(['histoire', 'geo', 'emc']);
+            data.levels = data.levels.map((lvl = {}) => {
+                const dnbSection = allowedDnbSections.has(String(lvl.dnbSection || '')) ? String(lvl.dnbSection) : 'docs';
+                let dnbSubject = allowedDnbSubjects.has(String(lvl.dnbSubject || '')) ? String(lvl.dnbSubject) : 'histoire';
+                if (dnbSection === 'emc') dnbSubject = 'emc';
+                if (dnbSection !== 'emc' && dnbSubject === 'emc') dnbSubject = 'histoire';
+                const maxPoints = Number(lvl.maxPoints || 0);
+                return {
+                    ...lvl,
+                    dnbSection,
+                    dnbSubject,
+                    maxPoints: Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : undefined
+                };
+            });
+            if (data.assessmentKind === 'dnb') {
+                data.levels = await Promise.all(data.levels.map((lvl) => generateCompactDnbCorrection(lvl)));
+            }
+        }
         data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
         if (data.isPunishment) {
             data.isAllClass = false;

@@ -58,6 +58,9 @@ export default function DashboardFolder({ items, type, onSelect, onDelete }) {
                             {subjectName}
                         </span>
                         {item.isPunishment && <span className="punishment-flag">⚠️ PUNITION</span>}
+                        {item.assessmentKind === 'dnb' && <span className="validation-flag">🎓 DNB</span>}
+                        {item.assessmentKind === 'rqp' && <span className="validation-flag">🧠 RQP</span>}
+                        {item.assessmentKind === 'commentaire' && <span className="validation-flag">✍️ COMMENTAIRE</span>}
                         {item.teacherValidated === true && <span className="validation-flag">✅ DEVOIR VALIDÉ</span>}
                     </div>
                     {typeof onDelete === 'function' && (

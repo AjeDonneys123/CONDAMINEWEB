@@ -40,6 +40,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
     const [playingCourse, setPlayingCourse] = useState(null);
     const [playerMode, setPlayerMode] = useState('presentation');
     const [liveClassroom, setLiveClassroom] = useState(null);
+    const [progressSavingId, setProgressSavingId] = useState('');
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
@@ -147,6 +148,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         setSaving(true);
         setError('');
         try {
+            const previousCourse = courses.find((course) => String(course._id) === editingId);
             const response = await fetch(editingId ? `/api/courses/${editingId}` : '/api/courses', {
                 method: editingId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -155,7 +157,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     teacherId: user.id || user._id || null,
                     targetClassroomId: globalClassId,
                     targetClassroomName: globalClass,
-                    overlays: courses.find((course) => String(course._id) === editingId)?.overlays || []
+                    publishedUntilSlide: previousCourse?.publishedUntilSlide || 0,
+                    overlays: previousCourse?.overlays || []
                 })
             });
             const data = await response.json();
@@ -194,6 +197,37 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
             setCourses((current) => current.filter((item) => String(item._id) !== String(course._id)));
         } catch (deleteError) {
             setError(deleteError.message);
+        }
+    };
+
+    const updatePublishedUntilSlide = async (course, nextValue) => {
+        const nextSlide = Math.max(0, Math.floor(Number(nextValue || 0)));
+        const courseId = String(course?._id || '');
+        if (!courseId) return;
+        setProgressSavingId(courseId);
+        setError('');
+        try {
+            const response = await fetch(`/api/courses/${courseId}/progress`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ publishedUntilSlide: nextSlide })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Mise à jour du marqueur impossible');
+            setCourses((current) => current.map((item) => String(item._id) === courseId ? data : item));
+            setPlayingCourse((current) => String(current?._id || '') === courseId ? data : current);
+        } catch (progressError) {
+            setError(progressError.message);
+        } finally {
+            setProgressSavingId('');
+        }
+    };
+
+    const openPresentation = (course) => {
+        setPlayerMode('presentation');
+        setPlayingCourse(course);
+        if (Math.max(0, Number(course?.publishedUntilSlide || 0)) === 0) {
+            updatePublishedUntilSlide(course, 1);
         }
     };
 
@@ -294,11 +328,34 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                                         </span>
                                     </div>
                                     {course.description && <p>{course.description}</p>}
+                                    <div className="course-progress-box">
+                                        <div>
+                                            <strong>Marqueur élèves</strong>
+                                            <span>Slides visibles : 1 → {Math.max(0, Number(course.publishedUntilSlide || 0)) || 'aucune'}</span>
+                                        </div>
+                                        <div className="course-progress-controls">
+                                            <button
+                                                type="button"
+                                                onClick={() => updatePublishedUntilSlide(course, Number(course.publishedUntilSlide || 0) - 1)}
+                                                disabled={progressSavingId === String(course._id)}
+                                            >−</button>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={Math.max(0, Number(course.publishedUntilSlide || 0))}
+                                                onChange={(event) => updatePublishedUntilSlide(course, event.target.value)}
+                                                disabled={progressSavingId === String(course._id)}
+                                                aria-label="Dernière slide visible par les élèves"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => updatePublishedUntilSlide(course, Number(course.publishedUntilSlide || 0) + 1)}
+                                                disabled={progressSavingId === String(course._id)}
+                                            >＋</button>
+                                        </div>
+                                    </div>
                                     <div className="course-card-actions">
-                                        <button type="button" onClick={() => {
-                                            setPlayerMode('presentation');
-                                            setPlayingCourse(course);
-                                        }}>PRÉSENTER</button>
+                                        <button type="button" onClick={() => openPresentation(course)}>PRÉSENTER</button>
                                         <a
                                             className="course-google-edit-link"
                                             href={getEditUrl(course.slidesUrl)}
@@ -322,6 +379,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                 <div className="course-player-backdrop" role="dialog" aria-modal="true" aria-label={playingCourse.title}>
                     <div className="course-player-toolbar">
                         <strong>{playingCourse.title}</strong>
+                        <div className="course-player-progress">
+                            <span>Élèves : slides 1 → {Math.max(0, Number(playingCourse.publishedUntilSlide || 0)) || 'aucune'}</span>
+                            <button
+                                type="button"
+                                onClick={() => updatePublishedUntilSlide(playingCourse, Number(playingCourse.publishedUntilSlide || 0) - 1)}
+                                disabled={progressSavingId === String(playingCourse._id)}
+                            >−</button>
+                            <input
+                                type="number"
+                                min="0"
+                                value={Math.max(0, Number(playingCourse.publishedUntilSlide || 0))}
+                                onChange={(event) => updatePublishedUntilSlide(playingCourse, event.target.value)}
+                                disabled={progressSavingId === String(playingCourse._id)}
+                                aria-label="Dernière slide visible par les élèves"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => updatePublishedUntilSlide(playingCourse, Number(playingCourse.publishedUntilSlide || 0) + 1)}
+                                disabled={progressSavingId === String(playingCourse._id)}
+                            >＋</button>
+                        </div>
                         <button type="button" onClick={() => setPlayingCourse(null)} aria-label="Fermer">×</button>
                     </div>
                     <div className="course-player-stage">

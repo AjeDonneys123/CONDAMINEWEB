@@ -1,7 +1,6 @@
 // @signatures: ElevePage, fetchFreshData
 import React, { useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
-import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
 import CommentsList from './comments/CommentsList';
 import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
@@ -9,6 +8,8 @@ import StatusOverview from './status/StatusOverview';
 import LearningList from './learning/LearningList';
 import HomeworkList from './homework/HomeworkList';
 import EleveChatWorkspace from './chat/EleveChatWorkspace';
+import EleveCoursesList from './courses/EleveCoursesList';
+import ExamTrainingHub from './training/ExamTrainingHub';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
@@ -144,6 +145,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           />
           <div className="eleve-main-content">
             {tab === 'status' && <StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} />}
+            {tab === 'courses' && <EleveCoursesList user={freshUser} />}
             {tab === 'controles' && (
               <ControlRecoveryList
                 user={freshUser}
@@ -175,7 +177,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
               />
             )}
             {tab === 'chat' && <EleveChatWorkspace user={freshUser} />}
-            {tab === 'francais' && <MistakesBook user={freshUser} />}
+            {tab === 'training' && <ExamTrainingHub user={freshUser} />}
             {tab === 'jeux' && (
               <GamesGrid
                 user={freshUser}

@@ -303,11 +303,24 @@ router.post('/message', async (req, res) => {
         if (!answer || answer === '[]' || answer === 'ERROR_KEY') {
             return res.status(503).json({ error: "L'IA locale est momentanement indisponible." });
         }
-        return res.json({ ok: true, answer, provider: 'ollama' });
+        return res.json({ ok: true, answer, provider: String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim() || 'gemini' });
     } catch (error) {
         console.error('Student chat error:', error.message);
         return res.status(error.status || 500).json({ error: "L'IA locale est momentanement indisponible." });
     }
+});
+
+router.get('/status', (_req, res) => {
+    const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim() || 'gemini';
+    const isGemini = provider === 'gemini';
+    res.json({
+        ok: true,
+        provider,
+        label: isGemini ? 'Gemini' : 'Ollama',
+        model: isGemini
+            ? String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim()
+            : String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '').trim()
+    });
 });
 
 router.post('/message/stream', async (req, res) => {
@@ -335,24 +348,47 @@ router.post('/message/stream', async (req, res) => {
         const startedAt = Date.now();
         openNdjsonStream(res);
         writeNdjson(res, {
-            status: "Connexion au modele local...",
+            status: String(process.env.AI_PROVIDER || '').toLowerCase().trim() === 'gemini'
+                ? "Connexion a Gemini..."
+                : "Connexion au modele local...",
             elapsedMs: Date.now() - startedAt
         });
 
         if (streamPreamble) res.write(`${JSON.stringify({ text: streamPreamble })}\n`);
 
-        const answer = await AIEngine.askOllamaServerStream(prompt, system, (text) => {
-            res.write(`${JSON.stringify({ text })}\n`);
-        }, {
-            ...aiOptions,
-            onStatus: (status) => writeNdjson(res, {
-                status: status.message || 'Connexion au modele local...',
-                model: status.model,
-                previousModel: status.previousModel,
-                phase: status.phase,
+        const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+        let answer = '';
+        if (provider === 'gemini') {
+            const model = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+            writeNdjson(res, {
+                status: `Connexion a Gemini (${model})...`,
+                model,
+                provider: 'gemini',
                 elapsedMs: Date.now() - startedAt
-            })
-        });
+            });
+            answer = String(await AIEngine.ask(prompt, system, {
+                route: '/api/eleve/chat/message/stream',
+                feature: 'student-chat',
+                maxOutputTokens: Math.max(300, Number(aiOptions?.numPredict || 700)),
+                temperature: Number(aiOptions?.temperature ?? 0.2)
+            }) || '').trim();
+            if (answer && answer !== '[]' && answer !== 'ERROR_KEY') {
+                res.write(`${JSON.stringify({ text: answer, provider: 'gemini', model })}\n`);
+            }
+        } else {
+            answer = await AIEngine.askOllamaServerStream(prompt, system, (text) => {
+                res.write(`${JSON.stringify({ text })}\n`);
+            }, {
+                ...aiOptions,
+                onStatus: (status) => writeNdjson(res, {
+                    status: status.message || 'Connexion au modele local...',
+                    model: status.model,
+                    previousModel: status.previousModel,
+                    phase: status.phase,
+                    elapsedMs: Date.now() - startedAt
+                })
+            });
+        }
         if (!answer && !streamPreamble) throw new Error('EMPTY_AI_RESPONSE');
         res.end(`${JSON.stringify({ done: true })}\n`);
     } catch (error) {

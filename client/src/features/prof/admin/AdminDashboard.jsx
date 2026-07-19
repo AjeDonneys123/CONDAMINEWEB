@@ -40,6 +40,8 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [finderSuggestions, setFinderSuggestions] = useState([]);
     const [selectedConnectAs, setSelectedConnectAs] = useState(null);
     const [connectBusy, setConnectBusy] = useState(false);
+    const [aiDiag, setAiDiag] = useState(null);
+    const [aiDiagLoading, setAiDiagLoading] = useState(false);
     
     const fileInputRef = useRef(null);
 
@@ -150,6 +152,33 @@ export default function AdminDashboard({ user, onRefresh }) {
             alert(`Connect as échoué: ${e.message}`);
         }
         setConnectBusy(false);
+    };
+
+    const runAiDiagnostic = async () => {
+        setAiDiagLoading(true);
+        setAiDiag(null);
+        try {
+            const res = await fetch('/api/system/ai-diagnostic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: 'admin-dashboard' })
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data) throw new Error(data?.error || `HTTP ${res.status}`);
+            setAiDiag(data);
+        } catch (e) {
+            setAiDiag({
+                ok: false,
+                totalMs: 0,
+                steps: [{
+                    label: 'Appel diagnostic',
+                    ok: false,
+                    ms: 0,
+                    error: e?.message || 'Diagnostic impossible'
+                }]
+            });
+        }
+        setAiDiagLoading(false);
     };
 
     useEffect(() => {
@@ -427,6 +456,73 @@ export default function AdminDashboard({ user, onRefresh }) {
                                             <span>{p.firstName} {p.lastName}</span>
                                             <span className="connect-as-badge">{p.type === 'teacher' ? 'PROF' : (p.className || 'ELEVE')}</span>
                                         </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {isDeveloperBugMode && (
+                        <div className="bg-slate-950 text-white rounded-[28px] p-5 border border-slate-800 shadow-xl">
+                            <div className="flex items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <div className="text-[10px] font-black uppercase text-cyan-300 tracking-widest">Diagnostic IA</div>
+                                    <div className="text-sm font-black uppercase">Ollama + Gemini + JSON correction</div>
+                                    <div className="text-[11px] text-slate-400 font-bold mt-1">Teste séparément les moteurs, sans afficher les clés secrètes.</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={runAiDiagnostic}
+                                    disabled={aiDiagLoading}
+                                    className="px-5 py-3 rounded-2xl bg-cyan-400 text-slate-950 font-black text-[11px] uppercase shadow-lg disabled:opacity-50"
+                                >
+                                    {aiDiagLoading ? 'TEST...' : 'TESTER IA'}
+                                </button>
+                            </div>
+                            {aiDiag && (
+                                <div className="space-y-3">
+                                    <div className={`rounded-2xl px-4 py-3 text-[12px] font-black uppercase ${aiDiag.ok ? 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/30' : 'bg-red-500/15 text-red-200 border border-red-400/30'}`}>
+                                        Résultat global : {aiDiag.ok ? 'OK' : 'À vérifier'} • {aiDiag.totalMs || 0} ms
+                                    </div>
+                                    {(aiDiag.steps || []).map((step, idx) => (
+                                        <div key={`${step.label}-${idx}`} className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                                            <div className="flex items-center justify-between gap-3 mb-2">
+                                                <div className="font-black text-sm">{step.ok ? '✅' : '❌'} {step.label}</div>
+                                                <div className="text-[10px] font-black text-slate-400">{step.ms || 0} ms</div>
+                                            </div>
+                                            {step.error && (
+                                                <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed bg-red-950/50 border border-red-500/20 text-red-100 rounded-xl p-3">{step.error}</pre>
+                                            )}
+                                            {step.provider && (
+                                                <div className="grid md:grid-cols-3 gap-2 text-[11px] text-slate-200">
+                                                    <div className="bg-slate-900 rounded-xl p-3"><b>Actif</b><br />{step.provider}</div>
+                                                    <div className="bg-slate-900 rounded-xl p-3"><b>Ollama</b><br />{step.ollama?.url || '—'}<br />clé: {step.ollama?.key?.present ? `présente (${step.ollama.key.length})` : 'absente'}<br />modèle: {step.ollama?.model || '—'}</div>
+                                                    <div className="bg-slate-900 rounded-xl p-3"><b>Gemini</b><br />clé: {step.gemini?.key?.present ? `présente (${step.gemini.key.length})` : 'absente'}<br />modèle: {step.gemini?.model || '—'}</div>
+                                                </div>
+                                            )}
+                                            {step.body && (
+                                                <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed bg-slate-900 text-slate-200 rounded-xl p-3">{JSON.stringify(step.body, null, 2)}</pre>
+                                            )}
+                                            {'parsedOk' in step && (
+                                                <div className="space-y-2">
+                                                    <div className={`inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase ${step.parsedOk ? 'bg-emerald-400/20 text-emerald-200' : 'bg-orange-400/20 text-orange-200'}`}>
+                                                        JSON correction : {step.parsedOk ? 'lisible' : 'non parsé'}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 font-bold">
+                                                        {step.finishReason ? `Fin IA: ${step.finishReason}` : ''}
+                                                        {step.rawLength ? `${step.finishReason ? ' • ' : ''}${step.rawLength} caractères reçus` : ''}
+                                                    </div>
+                                                    {step.parsed && (
+                                                        <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed bg-slate-900 text-slate-200 rounded-xl p-3 max-h-72 overflow-auto custom-scrollbar">{JSON.stringify(step.parsed, null, 2)}</pre>
+                                                    )}
+                                                    {step.rawPreview && (
+                                                        <details className="text-[11px] text-slate-300">
+                                                            <summary className="cursor-pointer font-black uppercase text-slate-400">Voir brut IA</summary>
+                                                            <pre className="mt-2 whitespace-pre-wrap break-words bg-slate-900 rounded-xl p-3">{step.rawPreview}</pre>
+                                                        </details>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     ))}
                                 </div>
                             )}

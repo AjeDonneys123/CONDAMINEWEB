@@ -6,6 +6,7 @@ import DriveViewer from './DriveViewer';
 export default function ProfHeader({ user, onLogout }) {
   const [showDB, setShowDB] = useState(false);
   const [showDrive, setShowDrive] = useState(false);
+  const billingUrl = 'https://console.cloud.google.com/billing/01D3D4-5D92C6-3C6900/payment?project=condamine-483523';
   const [drive, setDrive] = useState({ loading: true, ok: false, email: '' });
   const [aiUsage, setAiUsage] = useState({
     loading: true,
@@ -111,6 +112,23 @@ export default function ProfHeader({ user, onLogout }) {
     }
   };
 
+  const openBillingPopup = () => {
+    const width = 1180;
+    const height = 820;
+    const left = Math.max(0, Math.round((window.screen?.width || width) / 2 - width / 2));
+    const top = Math.max(0, Math.round((window.screen?.height || height) / 2 - height / 2));
+    const popup = window.open(
+      billingUrl,
+      'condamine-google-billing',
+      `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    );
+    if (!popup) {
+      window.open(billingUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    popup.focus();
+  };
+
   return (
     <>
         {/* --- VERSION BUREAU (Classe 'desktop-only-header' gérée par CSS strict) --- */}
@@ -133,6 +151,7 @@ export default function ProfHeader({ user, onLogout }) {
                 <button title={aiTitle} className={`${aiToneClass} text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg`}>
                   {aiLabel}
                 </button>
+                <button onClick={openBillingPopup} className="bg-violet-700 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform">💸 COÛTS</button>
                 <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform">☁️ DRIVE</button>
                 <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase hover:scale-105 transition-transform">📊 BDD</button>
               </>
@@ -161,6 +180,7 @@ export default function ProfHeader({ user, onLogout }) {
                     <button title={aiTitle} className={`${aiToneClass} text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase`}>
                       {aiLabel}
                     </button>
+                    <button onClick={openBillingPopup} className="bg-violet-700 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">💸 COÛTS</button>
                     <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">☁️ DRIVE</button>
                     <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">📊 BDD</button>
                   </>

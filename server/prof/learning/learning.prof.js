@@ -5,6 +5,33 @@ const fetch = require('node-fetch');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
 
+const gptInboxMessages = [];
+const GPT_INBOX_LIMIT = 60;
+
+const sanitizeGptInboxImages = (images = []) => {
+    if (!Array.isArray(images)) return [];
+    return images.slice(0, 8).map((img, idx) => {
+        if (typeof img === 'string') {
+            const raw = img.trim();
+            return raw ? { url: raw.slice(0, 250000), name: `image_${idx + 1}` } : null;
+        }
+        if (!img || typeof img !== 'object') return null;
+        const url = String(img.url || img.dataUrl || img.src || '').trim();
+        const caption = String(img.caption || img.description || '').trim().slice(0, 500);
+        const name = String(img.name || img.filename || `image_${idx + 1}`).trim().slice(0, 120);
+        if (!url) return null;
+        return { url: url.slice(0, 250000), caption, name };
+    }).filter(Boolean);
+};
+
+const checkGptInboxToken = (req) => {
+    const expected = String(process.env.GPT_INBOX_TOKEN || '').trim();
+    if (!expected) return true;
+    const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const bodyToken = String(req.body?.token || req.query?.token || '').trim();
+    return auth === expected || bodyToken === expected;
+};
+
 const normalizeVideoUrl = (url = '') => {
     const raw = String(url || '').trim();
     if (!raw) return '';
@@ -232,9 +259,13 @@ const sanitizeSteps = (steps = []) => {
                     ? step.questionAnswerPairs
                         .map((pair) => ({
                             question: String(pair?.question || '').trim().slice(0, 500),
-                            answer: String(pair?.answer || '').trim().slice(0, 500)
+                            answer: String(pair?.answer || pair?.expectedAnswer || '').trim().slice(0, 500),
+                            generatedByAi: pair?.generatedByAi === true,
+                            expectedKeywords: Array.isArray(pair?.expectedKeywords)
+                                ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
+                                : []
                         }))
-                        .filter((pair) => pair.question || pair.answer)
+                        .filter((pair) => pair.question || pair.answer || (pair.expectedKeywords || []).length > 0)
                         .slice(0, 20)
                     : [],
                 questionSectionQuestions: (() => {
@@ -251,6 +282,7 @@ const sanitizeSteps = (steps = []) => {
                                 q: String(q?.q || q?.question || '').trim().slice(0, 500),
                                 question: String(q?.question || q?.q || '').trim().slice(0, 500),
                                 expectedAnswer: String(q?.expectedAnswer || '').trim().slice(0, 500),
+                                generatedByAi: q?.generatedByAi === true,
                                 expectedKeywords: Array.isArray(q?.expectedKeywords)
                                     ? q.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 30)
                                     : []
@@ -751,10 +783,11 @@ router.get('/video-segments', async (req, res) => {
         const teacherId = String(req.query.teacherId || '').trim();
         const url = String(req.query.url || '').trim();
         const stepId = String(req.query.stepId || '').trim();
+        const strictStepId = String(req.query.strictStepId || '').trim().toLowerCase() === 'true';
         const normalizedUrl = normalizeVideoUrl(url);
         if (!teacherId || !normalizedUrl) return res.json([]);
         const query = { teacherId, normalizedUrl };
-        if (stepId) query.stepId = stepId;
+        if (strictStepId && stepId) query.stepId = stepId;
         const list = await VideoSegment.find(query).lean();
         list.sort(timelineSegmentCompare);
         res.json(list);
@@ -1057,6 +1090,19 @@ router.patch('/:id/step-data', async (req, res) => {
             const startSec = Math.max(0, Number(target.startSec || 0));
             target.endSec = endSecRaw > 0 && endSecRaw <= startSec ? 0 : endSecRaw;
         }
+        if (Array.isArray(patch.questionAnswerPairs)) {
+            target.questionAnswerPairs = patch.questionAnswerPairs
+                .slice(0, 20)
+                .map((pair) => ({
+                    question: String(pair?.question || pair?.q || '').trim().slice(0, 500),
+                    answer: String(pair?.answer || pair?.expectedAnswer || '').trim().slice(0, 500),
+                    generatedByAi: pair?.generatedByAi === true,
+                    expectedKeywords: Array.isArray(pair?.expectedKeywords)
+                        ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
+                        : []
+                }))
+                .filter((pair) => pair.question || pair.answer || (pair.expectedKeywords || []).length > 0);
+        }
         if (patch.questionSectionQuestions && typeof patch.questionSectionQuestions === 'object') {
             const cleanMap = {};
             Object.keys(patch.questionSectionQuestions).forEach((k) => {
@@ -1065,6 +1111,7 @@ router.patch('/:id/step-data', async (req, res) => {
                     q: String(q?.q || q?.question || '').trim().slice(0, 500),
                     question: String(q?.question || q?.q || '').trim().slice(0, 500),
                     expectedAnswer: String(q?.expectedAnswer || '').trim().slice(0, 500),
+                    generatedByAi: q?.generatedByAi === true,
                     expectedKeywords: Array.isArray(q?.expectedKeywords)
                         ? q.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
                         : []
