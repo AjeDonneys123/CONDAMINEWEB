@@ -614,6 +614,25 @@ const Models = {
         occurredAt: { type: Date, default: Date.now, index: true }
     }),
 
+    GptInboxMessage: getModel('GptInboxMessage', {
+        teacherId: { type: String, default: '', index: true },
+        teacherName: { type: String, default: 'JP Vuillet', index: true },
+        teacherEmail: { type: String, default: '', lowercase: true, trim: true, index: true },
+        moduleId: { type: String, default: '', index: true },
+        stepId: { type: String, default: '' },
+        studentName: { type: String, default: '', index: true },
+        studentClass: { type: String, default: '', index: true },
+        type: { type: String, default: 'feedback', index: true },
+        questionNumber: { type: Number, default: null },
+        message: { type: String, default: '' },
+        feedback: { type: String, default: '' },
+        summary: { type: String, default: '' },
+        images: { type: [Object], default: [] },
+        source: { type: String, default: 'chatgpt' },
+        raw: { type: String, default: '' },
+        receivedAt: { type: Date, default: Date.now, index: true }
+    }),
+
     GameProgress: getModel('GameProgress', {
         studentId: mongoose.Schema.Types.ObjectId, gameId: mongoose.Schema.Types.ObjectId,
         levelReached: { type: Number, default: 0 }, lastScore: { type: Number, default: 0 }
