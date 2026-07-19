@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
@@ -336,6 +336,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [globalSlidesWarmup, setGlobalSlidesWarmup] = useState({ active: false, percent: 0, loaded: 0, total: 0, ready: false, error: '' });
     const [savedVideoSources, setSavedVideoSources] = useState([]);
     const [savingVideoSource, setSavingVideoSource] = useState(false);
+    const [gptInboxEntries, setGptInboxEntries] = useState([]);
+    const [gptInboxLoading, setGptInboxLoading] = useState(false);
+    const [gptInboxNotice, setGptInboxNotice] = useState('');
     const [slidesPanelMode, setSlidesPanelMode] = useState('slide');
     const [slidesManifest, setSlidesManifest] = useState([]);
     const [slidesManifestLoading, setSlidesManifestLoading] = useState(false);
@@ -366,6 +369,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const resizingSegmentRef = useRef(null);
     const hydratedQuestionDraftsRef = useRef(new Set());
     const teacherId = String(user?._id || user?.id || '').trim();
+    const teacherEmail = String(user?.email || user?.mail || 'vuillet.jean@condamine.edu.ec').trim().toLowerCase();
+    const teacherName = String(user?.name || user?.displayName || 'JP Vuillet').trim();
+    const gptInboxApiUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/api/learning/gpt-inbox`
+        : '/api/learning/gpt-inbox';
     const step = formData.steps[activeStep] || null;
     const questionDraftKey = useMemo(() => {
         if (!step || step.type !== 'question' || !step.id) return '';
@@ -387,6 +395,83 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         };
         init();
     }, [propStudents, propClasses]);
+
+    const loadGptInbox = useCallback(async ({ silent = true } = {}) => {
+        try {
+            if (!silent) setGptInboxLoading(true);
+            const params = new URLSearchParams();
+            if (teacherId) params.set('teacherId', teacherId);
+            if (teacherEmail) params.set('teacherEmail', teacherEmail);
+            params.set('limit', '20');
+            const res = await fetch(`/api/learning/gpt-inbox?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+            setGptInboxEntries(Array.isArray(data.entries) ? data.entries : []);
+            if (!silent) setGptInboxNotice('Boîte GPT actualisée.');
+        } catch (e) {
+            if (!silent) setGptInboxNotice(`Erreur réception GPT : ${e.message}`);
+        } finally {
+            if (!silent) setGptInboxLoading(false);
+        }
+    }, [teacherId, teacherEmail]);
+
+    useEffect(() => {
+        loadGptInbox({ silent: true });
+        const timer = setInterval(() => loadGptInbox({ silent: true }), 4000);
+        return () => clearInterval(timer);
+    }, [loadGptInbox]);
+
+    const copyGptInboxInstructions = async () => {
+        const text = `Quand l'élève répond correctement, envoie un POST JSON vers ${gptInboxApiUrl}.
+
+Corps JSON minimal :
+{
+  "teacherName": "${teacherName || 'JP Vuillet'}",
+  "teacherEmail": "${teacherEmail || 'vuillet.jean@condamine.edu.ec'}",
+  "studentName": "NOM ELEVE",
+  "studentClass": "3E B",
+  "type": "question_validated",
+  "questionNumber": 1,
+  "message": "Question 1 validée",
+  "feedback": "Réponse correcte : explique brièvement ce qui est réussi."
+}
+
+Si l'élève répond mal, envoie plutôt :
+{
+  "teacherName": "${teacherName || 'JP Vuillet'}",
+  "teacherEmail": "${teacherEmail || 'vuillet.jean@condamine.edu.ec'}",
+  "studentName": "NOM ELEVE",
+  "studentClass": "3E B",
+  "type": "question_feedback",
+  "questionNumber": 1,
+  "message": "Question 1 à reprendre",
+  "feedback": "Explique ce qui manque et donne un conseil court."
+}`;
+        try {
+            await navigator.clipboard.writeText(text);
+            setGptInboxNotice('Instructions GPT copiées.');
+        } catch (_) {
+            setGptInboxNotice('Impossible de copier automatiquement : sélectionne le texte affiché.');
+        }
+    };
+
+    const clearGptInbox = async () => {
+        try {
+            setGptInboxLoading(true);
+            const params = new URLSearchParams();
+            if (teacherId) params.set('teacherId', teacherId);
+            if (teacherEmail) params.set('teacherEmail', teacherEmail);
+            const res = await fetch(`/api/learning/gpt-inbox?${params.toString()}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+            setGptInboxEntries([]);
+            setGptInboxNotice('Boîte GPT vidée.');
+        } catch (e) {
+            setGptInboxNotice(`Erreur suppression GPT : ${e.message}`);
+        } finally {
+            setGptInboxLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!initialData?.targetClassrooms) return;
@@ -3992,6 +4077,90 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     <button className="v84-res-btn upload" onClick={loadDefaultsFromGame}>Charger Fiche/Vidéo du Jeu</button>
                 </div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
+            </div>
+
+            <div className="mx-6 mt-4 mb-3 rounded-[28px] border-4 border-amber-300 bg-amber-50 p-5 shadow-lg">
+                <div className="flex flex-wrap items-start gap-4">
+                    <div className="min-w-0 flex-1">
+                        <div className="text-[28px] font-black text-amber-700">📥 Réception GPT — JP Vuillet</div>
+                        <div className="mt-1 text-[15px] font-bold text-slate-700">
+                            Les messages envoyés par ton GPT apparaissent ici automatiquement. Test attendu : “Question X validée”.
+                        </div>
+                        <div className="mt-3 rounded-2xl border border-amber-200 bg-white/80 p-3 text-[13px] font-mono text-slate-700 break-all">
+                            POST {gptInboxApiUrl}
+                        </div>
+                        {gptInboxNotice && (
+                            <div className="mt-2 text-[13px] font-black text-amber-700">{gptInboxNotice}</div>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            className="rounded-2xl bg-slate-900 px-4 py-3 text-[13px] font-black uppercase text-white"
+                            onClick={copyGptInboxInstructions}
+                        >
+                            Copier consigne GPT
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded-2xl bg-white px-4 py-3 text-[13px] font-black uppercase text-slate-700 border border-slate-200"
+                            onClick={() => loadGptInbox({ silent: false })}
+                            disabled={gptInboxLoading}
+                        >
+                            Actualiser
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded-2xl bg-red-50 px-4 py-3 text-[13px] font-black uppercase text-red-600 border border-red-100"
+                            onClick={clearGptInbox}
+                            disabled={gptInboxLoading}
+                        >
+                            Vider
+                        </button>
+                    </div>
+                </div>
+                <div className="mt-4 grid gap-3">
+                    {gptInboxEntries.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-amber-300 bg-white/60 p-4 text-[15px] font-black text-slate-500">
+                            Aucun message GPT reçu pour l’instant.
+                        </div>
+                    ) : gptInboxEntries.map((entry) => (
+                        <div key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
+                            <div className="flex flex-wrap items-center gap-2 text-[13px] font-black uppercase text-slate-500">
+                                <span>{new Date(entry.createdAt).toLocaleString('fr-FR')}</span>
+                                {entry.studentName && <span>• {entry.studentName}</span>}
+                                {entry.studentClass && <span>• {entry.studentClass}</span>}
+                                {entry.questionNumber && <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">Question {entry.questionNumber}</span>}
+                                {entry.type && <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-700">{entry.type}</span>}
+                            </div>
+                            <div className="mt-2 text-[20px] font-black text-slate-900">
+                                {entry.message || (entry.questionNumber ? `Question ${entry.questionNumber} validée` : 'Message GPT')}
+                            </div>
+                            {entry.feedback && (
+                                <div className="mt-2 whitespace-pre-wrap rounded-2xl bg-slate-50 p-3 text-[15px] font-bold text-slate-700">
+                                    {entry.feedback}
+                                </div>
+                            )}
+                            {entry.summary && (
+                                <div className="mt-2 whitespace-pre-wrap text-[14px] font-bold text-slate-600">{entry.summary}</div>
+                            )}
+                            {Array.isArray(entry.images) && entry.images.length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-3">
+                                    {entry.images.map((img, idx) => (
+                                        <div key={`${entry.id}_img_${idx}`} className="max-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                                            {String(img.url || '').startsWith('data:image') || /^https?:\/\//i.test(String(img.url || '')) ? (
+                                                <img src={img.url} alt={img.name || `image ${idx + 1}`} className="max-h-[180px] w-full rounded-xl object-contain" />
+                                            ) : (
+                                                <div className="break-all text-[12px] font-bold text-slate-500">{img.name || img.url}</div>
+                                            )}
+                                            {img.caption && <div className="mt-1 text-[12px] font-bold text-slate-600">{img.caption}</div>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
             </div>
 
             {sourcePickerKind && (

@@ -1009,6 +1009,99 @@ router.delete('/video-segments-by-url', async (req, res) => {
     }
 });
 
+router.get('/gpt-inbox', (req, res) => {
+    try {
+        const teacherId = String(req.query.teacherId || '').trim();
+        const teacherEmail = String(req.query.teacherEmail || '').trim().toLowerCase();
+        const teacherName = String(req.query.teacherName || '').trim().toLowerCase();
+        const moduleId = String(req.query.moduleId || '').trim();
+        const limit = Math.min(60, Math.max(1, Number(req.query.limit || 20)));
+        let entries = [...gptInboxMessages];
+        if (teacherId || teacherEmail || teacherName) {
+            entries = entries.filter((x) => {
+                const idOk = teacherId && String(x.teacherId || '') === teacherId;
+                const emailOk = teacherEmail && String(x.teacherEmail || '').toLowerCase() === teacherEmail;
+                const nameOk = teacherName && String(x.teacherName || '').toLowerCase().includes(teacherName);
+                return idOk || emailOk || nameOk;
+            });
+        }
+        if (moduleId) entries = entries.filter((x) => String(x.moduleId || '') === moduleId);
+        return res.json({ ok: true, entries: entries.slice(0, limit) });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/gpt-inbox', (req, res) => {
+    try {
+        if (!checkGptInboxToken(req)) {
+            return res.status(401).json({ ok: false, error: 'Token GPT invalide' });
+        }
+        const body = req.body || {};
+        const questionNumberRaw = body.questionNumber ?? body.question ?? body.numeroQuestion ?? body.numero;
+        const questionNumber = Number.isFinite(Number(questionNumberRaw)) ? Number(questionNumberRaw) : null;
+        const fallbackMessage = questionNumber ? `Question ${questionNumber} validée` : 'Message GPT reçu';
+        const message = String(body.message || body.status || body.result || fallbackMessage).trim().slice(0, 2500);
+        const feedback = String(body.feedback || body.commentaire || body.correction || '').trim().slice(0, 5000);
+        const summary = String(body.summary || body.resume || '').trim().slice(0, 2500);
+        if (!message && !feedback && !summary && !sanitizeGptInboxImages(body.images).length) {
+            return res.status(400).json({ ok: false, error: 'message, feedback, summary ou images requis' });
+        }
+        const entry = {
+            id: `gpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            createdAt: new Date().toISOString(),
+            teacherId: String(body.teacherId || '').trim().slice(0, 120),
+            teacherName: String(body.teacherName || 'JP Vuillet').trim().slice(0, 160),
+            teacherEmail: String(body.teacherEmail || '').trim().toLowerCase().slice(0, 220),
+            moduleId: String(body.moduleId || body.learningId || '').trim().slice(0, 120),
+            stepId: String(body.stepId || '').trim().slice(0, 120),
+            studentName: String(body.studentName || body.eleve || '').trim().slice(0, 160),
+            studentClass: String(body.studentClass || body.classe || '').trim().slice(0, 80),
+            type: String(body.type || 'feedback').trim().slice(0, 80),
+            questionNumber,
+            message,
+            feedback,
+            summary,
+            images: sanitizeGptInboxImages(body.images || body.imageUrls || []),
+            source: String(body.source || 'chatgpt').trim().slice(0, 80),
+            raw: body.raw ? (typeof body.raw === 'string' ? body.raw : JSON.stringify(body.raw)).slice(0, 5000) : ''
+        };
+        gptInboxMessages.unshift(entry);
+        if (gptInboxMessages.length > GPT_INBOX_LIMIT) {
+            gptInboxMessages.splice(GPT_INBOX_LIMIT);
+        }
+        return res.json({ ok: true, entry });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.delete('/gpt-inbox', (req, res) => {
+    try {
+        if (!checkGptInboxToken(req)) {
+            return res.status(401).json({ ok: false, error: 'Token GPT invalide' });
+        }
+        const teacherId = String(req.query.teacherId || req.body?.teacherId || '').trim();
+        const teacherEmail = String(req.query.teacherEmail || req.body?.teacherEmail || '').trim().toLowerCase();
+        const moduleId = String(req.query.moduleId || req.body?.moduleId || '').trim();
+        const before = gptInboxMessages.length;
+        for (let i = gptInboxMessages.length - 1; i >= 0; i -= 1) {
+            const entry = gptInboxMessages[i];
+            const keepTeacherId = teacherId && String(entry.teacherId || '') !== teacherId;
+            const keepTeacherEmail = teacherEmail && String(entry.teacherEmail || '').toLowerCase() !== teacherEmail;
+            const keepModule = moduleId && String(entry.moduleId || '') !== moduleId;
+            if (!teacherId && !teacherEmail && !moduleId) {
+                gptInboxMessages.splice(i, 1);
+            } else if (!keepTeacherId && !keepTeacherEmail && !keepModule) {
+                gptInboxMessages.splice(i, 1);
+            }
+        }
+        return res.json({ ok: true, deleted: before - gptInboxMessages.length });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.get('/:id', async (req, res) => {
     try {
         const row = await LearningModule.findById(req.params.id).lean();
