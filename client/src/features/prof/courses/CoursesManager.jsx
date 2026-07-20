@@ -231,6 +231,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         }
     };
 
+    const askPublishedSlideFromMarker = () => {
+        if (!playingCourse) return;
+        const currentValue = Math.max(0, Number(playingCourse.publishedUntilSlide || 0));
+        const raw = window.prompt('Dernière slide visible côté élève ?', String(currentValue || 1));
+        if (raw === null) return;
+        updatePublishedUntilSlide(playingCourse, raw);
+    };
+
     return (
         <section className="courses-manager">
             <header className="courses-heading">
@@ -415,6 +423,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                         <div className="live-class-points">
                             🏆 Score Classe : {classPoints} pts
                         </div>
+
+                        <button
+                            type="button"
+                            className="course-student-progress-marker"
+                            onDoubleClick={askPublishedSlideFromMarker}
+                            title="Double-clique pour changer la dernière slide visible côté élève"
+                        >
+                            Élèves jusqu&apos;à la slide {Math.max(0, Number(playingCourse.publishedUntilSlide || 0)) || 'aucune'}
+                        </button>
 
                         {/* NOM DE L'ELEVE EN ROUGE DANS UN COIN (BAS GAUCHE) */}
                         {isHighlightActive && (

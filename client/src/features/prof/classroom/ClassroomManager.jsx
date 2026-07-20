@@ -26,6 +26,9 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
     const [classPoints, setClassPoints] = useState(0);
+    const [scoreFlash, setScoreFlash] = useState(null);
+    const [hourWarnings, setHourWarnings] = useState([]);
+    const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
     const fileInputRef = useRef(null);
@@ -209,6 +212,52 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
+    const getStudentScore = (stu) => {
+        const stats = getMyStats(stu);
+        return (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0);
+    };
+    const formatScore = (value) => {
+        const n = Number(value || 0);
+        if (n > 0) return `+${Number.isInteger(n) ? n : n.toFixed(1)}`;
+        if (Number.isInteger(n)) return String(n);
+        return n.toFixed(1);
+    };
+    const showScoreEvolution = (student, delta) => {
+        const nextScore = getStudentScore(student) + Number(delta || 0);
+        setScoreFlash({
+            id: `${student?._id || ''}_${Date.now()}`,
+            name: `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim(),
+            delta,
+            score: nextScore
+        });
+    };
+    const trackPenaltyWarning = (studentId, student) => {
+        const now = Date.now();
+        const hourMs = 60 * 60 * 1000;
+        const rows = (penaltyLogRef.current[studentId] || []).filter((ts) => now - ts <= hourMs);
+        rows.push(now);
+        penaltyLogRef.current[studentId] = rows;
+        if (rows.length < 2) return;
+        setHourWarnings((current) => {
+            const expiry = now + hourMs;
+            const warning = {
+                studentId,
+                name: `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim(),
+                expiresAt: expiry
+            };
+            return [warning, ...current.filter((row) => String(row.studentId) !== String(studentId) && Number(row.expiresAt || 0) > now)].slice(0, 6);
+        });
+    };
+    const addClassScorePoint = async () => {
+        const visibleStudents = students.filter((s) => s?._id);
+        visibleStudents.forEach((student) => showScoreEvolution(student, 1));
+        for (const student of visibleStudents) {
+            await addBehavior(student._id, 'BONUS', null, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
+            await addBehavior(student._id, 'BONUS', null, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
+        }
+        await updateClassPoints(1);
+        await loadData();
+    };
     const getCrossCountdownLabel = (stu) => {
         const stats = getMyStats(stu);
         const crosses = Math.max(0, Number(stats?.crosses || 0));
@@ -391,12 +440,34 @@ export default function ClassroomManager({ globalClassId, user }) {
         return () => clearTimeout(t);
     }, [actionFlash]);
 
+    useEffect(() => {
+        if (!scoreFlash) return undefined;
+        const t = setTimeout(() => setScoreFlash(null), 1800);
+        return () => clearTimeout(t);
+    }, [scoreFlash]);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const now = Date.now();
+            setHourWarnings((current) => current.filter((row) => Number(row.expiresAt || 0) > now));
+        }, 30000);
+        return () => clearInterval(timer);
+    }, []);
+
     useEffect(() => () => stopBehaviorRepeat(false), []);
     
     // --- GESTION DES ACTIONS ---
     const addBehavior = async (sid, type, extra = null, options = {}) => { 
         if (!myId) return alert("Erreur: ID Professeur introuvable.");
         const keepDrawerOpen = Boolean(options.keepDrawerOpen);
+        const skipFlash = Boolean(options.skipFlash);
+        const silentReload = Boolean(options.silentReload);
+        const targetStudent = students.find((s) => String(s._id) === String(sid));
+        if (!skipFlash && targetStudent && ['CROSS', 'BONUS', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type)) {
+            const deltaByType = { CROSS: -1, BONUS: 0.5, REMOVE_CROSS: 1, REMOVE_BONUS: -0.5 };
+            showScoreEvolution(targetStudent, deltaByType[type] || 0);
+            if (type === 'CROSS') trackPenaltyWarning(sid, targetStudent);
+        }
 
         // Optimistic UI Update
         setStudents(prev => prev.map(s => {
@@ -439,7 +510,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             });
 
             if (res.ok) {
-                await loadData();
+                if (!silentReload) await loadData();
                 const shouldCloseDrawer = ['SAVE_NOTE', 'REMOVE_PUNISHMENT', 'CROSS', 'BONUS', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type) && !keepDrawerOpen;
                 if (shouldCloseDrawer) setSelectedStudent(null);
             }
@@ -500,7 +571,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     {getMyStats(student).crosses > 0 && <div className="sc-badge sc-badge-inline">⏳ {getCrossCountdownLabel(student)}</div>}
                                 </div>
                                 <div className="sc-name">{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
-                                <div className="sc-counters"><span style={{color:'#ef4444'}}>❌{getMyStats(student).crosses}</span><span style={{color:'#10b981'}}>⭐{getMyStats(student).bonuses}</span></div>
+                                <div className={`sc-score ${getStudentScore(student) >= 0 ? 'positive' : 'negative'}`}>{formatScore(getStudentScore(student))}</div>
                             </div>
                         ) : ( <div className={`grid-cell-empty ${isOver ? 'drag-over' : ''}`}>+</div> )}
                     </div>
@@ -590,10 +661,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                         </div>
                                         <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                         <div className="sc-name">{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
-                                        <div className="sc-counters">
-                                            <span style={{ color: '#ef4444' }}>❌{stats.crosses}</span>
-                                            <span style={{ color: '#10b981' }}>⭐{stats.bonuses}</span>
-                                        </div>
+                                        <div className={`sc-score ${getStudentScore(student) >= 0 ? 'positive' : 'negative'}`}>{formatScore(getStudentScore(student))}</div>
                                     </div>
                                 </div>
                             );
@@ -621,7 +689,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                             <div className="plan-match-info" onClick={() => handleOpenStudent(s)}>
                                 <span className="plan-match-name">{s.lastName} {getDisplayName(s)}</span>
                                 <span className="plan-match-stats">
-                                    ❌ {stats.crosses} | ⭐ {stats.bonuses}
+                                    Note {formatScore(getStudentScore(s))}
                                     {' | '}
                                     {isPlaced ? `placé ${Number(s.seatX) + 1}-${Number(s.seatY) + 1}` : 'non placé'}
                                     <span className="plan-match-real">
@@ -639,8 +707,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 >
                                     {isPlacementActive ? 'OK' : 'Placer'}
                                 </button>
-                                <button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button>
-                                <button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button>
+                                <button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>-1</button>
+                                <button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>+0.5</button>
                                 <button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button>
                             </div>
                         </div>
@@ -654,6 +722,21 @@ export default function ClassroomManager({ globalClassId, user }) {
         <div className="classroom-wrapper" style={{ '--grid-cols': gridSize.cols }}>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
+            {scoreFlash && (
+                <div className={`score-flash-board ${Number(scoreFlash.delta || 0) > 0 ? 'up' : 'down'}`}>
+                    <strong>{scoreFlash.name}</strong>
+                    <span>{Number(scoreFlash.delta || 0) > 0 ? '+' : ''}{scoreFlash.delta}</span>
+                    <small>Note {formatScore(scoreFlash.score)} {Number(scoreFlash.delta || 0) > 0 ? 'Bravo' : ''}</small>
+                </div>
+            )}
+            {hourWarnings.length > 0 && (
+                <div className="hour-warning-panel">
+                    <div className="hour-warning-title">Avertis cette heure</div>
+                    {hourWarnings.map((row) => (
+                        <div key={row.studentId} className="hour-warning-name">{row.name}</div>
+                    ))}
+                </div>
+            )}
             
             <div className="cm-header">
                 <h2 className="cm-title md:block hidden">{viewMode === 'PLAN' ? 'MODE PLAN' : 'MODE LISTE'}</h2>
@@ -676,6 +759,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <button className="pts-btn" onClick={() => updateClassPoints(-1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>-</button>
                     <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#1e3a8a', minWidth: '45px', textAlign: 'center' }}>🏆 {classPoints} pts</span>
                     <button className="pts-btn" onClick={() => updateClassPoints(1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                    <button className="class-score-btn" onClick={addClassScorePoint}>+1 classe</button>
                 </div>
 
                 <button
@@ -782,7 +866,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onPointerCancel={() => stopBehaviorRepeat(true)}
                                 onClick={(e) => e.preventDefault()}
                             >
-                                ❌ AJOUTER CROIX
+                                -1
                             </button>
                             <button
                                 className="act-btn btn-bonus"
@@ -792,7 +876,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onPointerCancel={() => stopBehaviorRepeat(true)}
                                 onClick={(e) => e.preventDefault()}
                             >
-                                ⭐ AJOUTER BONUS
+                                +0.5
                             </button>
                             <button
                                 className="act-btn btn-rem-cross"
@@ -802,7 +886,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onPointerCancel={() => stopBehaviorRepeat(true)}
                                 onClick={(e) => e.preventDefault()}
                             >
-                                RETIRER CROIX
+                                ANNULER -1
                             </button>
                             <button
                                 className="act-btn btn-rem-bonus"
@@ -812,7 +896,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onPointerCancel={() => stopBehaviorRepeat(true)}
                                 onClick={(e) => e.preventDefault()}
                             >
-                                RETIRER BONUS
+                                ANNULER +0.5
                             </button>
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
                             

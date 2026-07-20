@@ -3229,6 +3229,25 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
         updateZoneQuestion(zoneIdx, rowIdx, patch);
     };
+    const keepQuestionTextareaSpace = (event, value = '', onValueChange = () => {}) => {
+        if (event.key !== ' ') {
+            event.stopPropagation();
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const target = event.currentTarget;
+        const start = Number.isFinite(target.selectionStart) ? target.selectionStart : String(value || '').length;
+        const end = Number.isFinite(target.selectionEnd) ? target.selectionEnd : start;
+        const nextValue = `${String(value || '').slice(0, start)} ${String(value || '').slice(end)}`;
+        onValueChange(nextValue);
+        window.requestAnimationFrame(() => {
+            try {
+                target.selectionStart = start + 1;
+                target.selectionEnd = start + 1;
+            } catch (_) {}
+        });
+    };
     const removeActiveZoneKeyword = (rowIdx, keywordIdx) => {
         const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
         removeZoneKeyword(zoneIdx, rowIdx, keywordIdx);
@@ -3250,6 +3269,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             && Number(recordingQuestionCell.zoneIdx) === Number(sectionIdx)
             && Number(recordingQuestionCell.rowIdx) === Number(i)
             && recordingQuestionCell.field === 'question';
+        const questionValue = String(q?.question || q?.q || '');
         return (
             <div key={`db_q_${sectionIdx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -3270,9 +3290,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     <textarea
                         rows={2}
                         className="v84-q-input !text-[13px] !leading-snug"
-                        value={String(q?.question || q?.q || '')}
+                        value={questionValue}
                         onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
-                        onKeyDown={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }))}
                         placeholder={`Question ${i + 1}`}
                     />
                     <button
@@ -4632,7 +4652,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                     {getQuestionPairRowsForEditorOrPlaceholders().map((pair, i) => {
                                                         const isQuestionRecording = recordingQuestionCell
                                                             && Number(recordingQuestionCell.rowIdx) === Number(i)
+                                                            && recordingQuestionCell.zoneIdx === null
                                                             && recordingQuestionCell.field === 'question';
+                                                        const questionValue = pair?.question || '';
                                                         return (
                                                             <div
                                                                 key={`qa_row_${i}`}
@@ -4666,9 +4688,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                                         <textarea
                                                                             rows={3}
                                                                             className="v84-q-input !text-[13px] !leading-snug"
-                                                                            value={pair?.question || ''}
+                                                                            value={questionValue}
                                                                             onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
-                                                                            onKeyDown={(e) => e.stopPropagation()}
+                                                                            onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateQuestionPairRow(i, { question: nextValue }))}
                                                                             placeholder={pair?.placeholderLabel || `Question ${i + 1}`}
                                                                         />
                                                                         <button

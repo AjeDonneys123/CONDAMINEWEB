@@ -461,6 +461,36 @@
     background: #000;
 }
 
+.course-student-progress-marker {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    z-index: 5;
+    transform: translateX(-50%);
+    border: 2px solid rgba(37, 99, 235, 0.85);
+    border-radius: 999px;
+    background: rgba(239, 246, 255, 0.96);
+    color: #1d4ed8;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 950;
+    text-transform: uppercase;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+    cursor: pointer;
+}
+
+.course-student-progress-marker::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    border-radius: 999px;
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+    vertical-align: -1px;
+}
+
 .course-player-mode-switch {
     display: flex;
     align-items: center;
