@@ -149,8 +149,20 @@ async function findStudentForGpt({ studentId = '', studentName = '', studentClas
             $or: [{ firstName: rx }, { lastName: rx }, { nickname: rx }]
         }))
     };
-    if (cls) query.currentClass = new RegExp(`^${escapeRegex(cls)}$`, 'i');
-    return Student.findOne(query).lean();
+    if (!cls) return Student.findOne(query).lean();
+
+    const exact = await Student.findOne({
+        ...query,
+        currentClass: new RegExp(`^${escapeRegex(cls)}$`, 'i')
+    }).lean();
+    if (exact) return exact;
+
+    const requestedClassKey = normalizeClassKey(cls);
+    const nameMatches = await Student.find(query).limit(5).lean();
+    const normalizedClassMatch = nameMatches.find((candidate) => normalizeClassKey(candidate?.currentClass) === requestedClassKey);
+    if (normalizedClassMatch) return normalizedClassMatch;
+
+    return nameMatches.length === 1 ? nameMatches[0] : null;
 }
 
 function checkStudentGptToken(req) {
