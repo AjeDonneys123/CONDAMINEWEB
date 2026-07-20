@@ -424,6 +424,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [chatGminiQuestion, setChatGminiQuestion] = useState('');
     const [chatGminiCopyMessage, setChatGminiCopyMessage] = useState('');
     const [studentGptStatus, setStudentGptStatus] = useState('');
+    const [studentGptValidated, setStudentGptValidated] = useState(Boolean(module?.completion?.completedAt));
     const [studyChatOpen, setStudyChatOpen] = useState(false);
     const [studyMicRecording, setStudyMicRecording] = useState(false);
     const [studyMicEnabled, setStudyMicEnabled] = useState(false);
@@ -598,11 +599,15 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         const origin = window.location.origin;
         const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
         const stepTitle = String(currentStep?.title || generatedQuestion || 'étape active').trim();
-        const activeQuestion = String(generatedQuestion || '').trim();
-        const expectedAnswer = String(activeQuestionItem?.expectedAnswer || '').trim();
-        const expectedKeywords = Array.isArray(activeQuestionItem?.expectedKeywords)
-            ? activeQuestionItem.expectedKeywords.join(', ')
-            : '';
+        const optionalQuestions = questionItems
+            .map((item, idx) => {
+                const q = String(item?.question || '').trim();
+                const a = String(item?.expectedAnswer || '').trim();
+                if (!q && !a) return '';
+                return `${idx + 1}. ${q || 'Question'}${a ? `\n   Reponse attendue: ${a}` : ''}`;
+            })
+            .filter(Boolean)
+            .join('\n');
         const sheetSummary = String(sheetText || '').replace(/\s+/g, ' ').trim().slice(0, 1800);
         return `Tu es CondaTuteur, tuteur de revision associe a CondaWeb pour le professeur JP Vuillet.
 
@@ -614,13 +619,12 @@ Contexte utilisateur :
 - studentClass: ${studentClassForGpt || 'inconnue'}
 - module: ${moduleTitle}
 - etape active: ${stepTitle}
-- question active: ${activeQuestion || 'non precisee'}
-- reponse attendue si disponible: ${expectedAnswer || 'non precisee'}
-- mots-cles si disponibles: ${expectedKeywords || 'non precises'}
+- questions professeur facultatives:
+${optionalQuestions || 'Aucune question professeur. Cree tes propres questions a partir de la fiche.'}
 - extrait de fiche si disponible: ${sheetSummary || 'a recuperer via action si disponible'}
 
 Au debut, appelle getStudentContextFromCondaWeb avec studentId="${studentIdForGpt}", studentName="${studentFullNameForGpt}", studentClass="${studentClassForGpt}".
-Si l'action renvoie recentLearning, utilise en priorite recentLearning.activeStep et la fiche associee.
+Si l'action renvoie recentLearning, utilise en priorite recentLearning.activeStep, ses questions si elles existent, et la fiche associee pour corriger.
 
 Ensuite, accueille l'utilisateur ainsi :
 "Bonjour ${studentFullNameForGpt}. Je suis le tuteur CondaWeb. J'ai retrouve ta lecon : ${moduleTitle}. Es-tu pret a travailler ?"
@@ -634,8 +638,9 @@ Entraine l'utilisateur comme un vrai tuteur :
 
 Quand l'utilisateur maitrise bien la lecon, dis :
 "Bravo ${studentFullNameForGpt}, l'apprentissage est valide."
-Puis appelle sendStudentGptFeedbackToCondaWeb avec :
-- studentId: "${studentIdForGpt}"
+Puis appelle sendLearningFeedbackToTeacherInbox avec :
+- teacherName: "JP Vuillet"
+- teacherEmail: "vuillet.jean@condamine.edu.ec"
 - studentName: "${studentFullNameForGpt}"
 - studentClass: "${studentClassForGpt}"
 - moduleId: "${module?._id || module?.id || ''}"
@@ -648,7 +653,7 @@ Puis appelle sendStudentGptFeedbackToCondaWeb avec :
 - mastered: true
 - score: estimation sur 100
 
-Endpoint CondaWeb : ${origin}/api/eleve/chat/gpt-feedback
+Endpoint CondaWeb : ${origin}/api/learning/gpt-inbox
 
 Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et centre sur l'apprentissage.`;
     };
@@ -663,6 +668,44 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         }
         window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
     };
+
+    useEffect(() => {
+        if (currentStep?.type !== 'question' || studentGptValidated) return;
+        const moduleId = String(module?._id || module?.id || '').trim();
+        const stepId = String(currentStep?.id || '').trim();
+        const studentId = String(user?._id || user?.id || '').trim();
+        if (!studentId) return;
+        let stopped = false;
+        const checkFeedback = async () => {
+            try {
+                const params = new URLSearchParams();
+                params.set('studentId', studentId);
+                const res = await fetch(`/api/eleve/chat/gpt-feedback?${params.toString()}`);
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || stopped) return;
+                const entries = Array.isArray(data?.entries) ? data.entries : [];
+                const validatedEntry = entries.find((entry) => {
+                    const isValidated = String(entry?.type || '').toLowerCase() === 'learning_validated' || entry?.mastered === true;
+                    if (!isValidated) return false;
+                    const rawModuleId = String(entry?.moduleId || '').trim();
+                    const rawStepId = String(entry?.stepId || '').trim();
+                    if (rawModuleId && moduleId && rawModuleId !== moduleId) return false;
+                    if (rawStepId && stepId && rawStepId !== stepId) return false;
+                    return true;
+                });
+                if (validatedEntry) {
+                    setStudentGptValidated(true);
+                    setStudentGptStatus('Fiche apprise. Validation reçue par CondaWeb.');
+                }
+            } catch (_) {}
+        };
+        checkFeedback();
+        const timer = window.setInterval(checkFeedback, 4000);
+        return () => {
+            stopped = true;
+            window.clearInterval(timer);
+        };
+    }, [currentStep?.id, currentStep?.type, module?._id, module?.id, studentGptValidated, user?._id, user?.id]);
 
     useEffect(() => {
         const syncGeminiExtension = () => {
@@ -739,6 +782,8 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         setStudyMicRecording(false);
         setStudyMicEnabled(false);
         setStudyMicError('');
+        setStudentGptValidated(Boolean(module?.completion?.completedAt));
+        setStudentGptStatus('');
         setSheetSlidesManifest([]);
         setSheetSlidesLoading(false);
         setSheetSlidesError('');
@@ -746,7 +791,7 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         seenOralSeqRef.current = new Set();
         sequenceNodeRefs.current = {};
         if (speechRef.current) speechRef.current.cancel?.();
-    }, [stepIndex]);
+    }, [stepIndex, module?.completion?.completedAt]);
 
     useEffect(() => {
         return () => {
@@ -898,11 +943,10 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         }
         if (currentStep.type === 'video') return videoUnlocked;
         if (currentStep.type === 'question') {
-            const check = evaluateQuestionAnswer(currentStep, activeQuestionItem, answerText);
-            return check.ok;
+            return studentGptValidated;
         }
         return false;
-    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, answerText, activeQuestionItem]);
+    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, studentGptValidated]);
 
     useEffect(() => {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
@@ -1534,37 +1578,7 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
             } else if (currentStep.type === 'video') {
                 setGateHint("Termine la vidéo (ou clique le bouton 'J'ai fini de regarder' si c'est un embed).");
             } else {
-                const activeItemNow = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
-                const check = evaluateQuestionAnswer(currentStep, activeItemNow, answerText);
-                setQuestionFeedback(check);
-                if (!check.ok && check.missing.length > 0) {
-                    stopRecording();
-                    const missingWords = check.missing
-                        .map((w) => String(w || '').trim())
-                        .filter(Boolean);
-                    const spokenList = missingWords
-                        .map((w) => w)
-                        .join(', ');
-                    const expected = String(check.expectedAnswer || '').trim();
-                    const aiMessage = expected
-                        ? `Non. La réponse attendue était: ${expected}. Il te manque les mots clés suivants: ${spokenList}.`
-                        : `Non. Il te manque les mots clés suivants: ${spokenList}.`;
-                    setAiErrorPanel({
-                        question: String(activeItemNow?.question || generatedQuestion || '').trim(),
-                        message: aiMessage,
-                        expected,
-                        missingWords
-                    });
-                    speakAiText(aiMessage);
-                    const prevIdx = Math.max(0, stepIndex - 1);
-                    const prevStep = steps[prevIdx];
-                    if (prevStep && prevStep.type === 'sheet') {
-                        setPendingSheetReturn({ stepIndex: prevIdx, minMs: FORCED_SHEET_REVIEW_MS });
-                        setGateHint("Réponse incorrecte. Clique sur « Revenir à la fiche ».");
-                        return;
-                    }
-                }
-                setGateHint("Réponse insuffisante: ajoute les mots-clés attendus.");
+                setGateHint("Ouvre le tuteur GPT et attends sa validation. Cette étape se valide automatiquement quand CondaWeb reçoit le retour GPT.");
             }
             return;
         }
@@ -1572,9 +1586,6 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
             setForcedSheetReview(null);
         }
         if (currentStep.type === 'question') {
-            const activeItemNow = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
-            const check = evaluateQuestionAnswer(currentStep, activeItemNow, answerText);
-            setQuestionFeedback(check);
             setAiErrorPanel(null);
             await advanceAfterAcceptedQuestion();
             return;
@@ -1700,68 +1711,6 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         }
         return out;
     };
-
-    if (isCorrectionLock && aiErrorPanel) {
-        return (
-            <div className="learning-wrap">
-                <div className="learning-card" style={{ borderColor: '#ef4444', background: '#fff5f5', minHeight: 'calc(100vh - 220px)' }}>
-                    <div className="learning-progress" style={{ marginBottom: 14 }}>
-                        <div className="learning-progress-bar" style={{ width: `${progressPct}%` }} />
-                    </div>
-                    <div className="learning-step-title" style={{ color: '#b91c1c' }}>Réponse incorrecte</div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-                        <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900, marginBottom: 0 }}>
-                            Question:
-                        </div>
-                        <div style={{ color: '#1e293b', fontSize: 22, fontWeight: 800, lineHeight: 1.25 }}>
-                            {String(aiErrorPanel?.question || generatedQuestion || '').trim()}
-                        </div>
-                    </div>
-                    <div className="learning-error" style={{ marginBottom: 12, borderColor: '#fecaca', color: '#b91c1c', fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
-                        Ta réponse: {String(answerText || '').trim() || '—'}
-                    </div>
-                    {aiErrorPanel.expected ? (
-                        <div className="learning-hint" style={{ color: '#7f1d1d', marginBottom: 10, fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
-                            Réponse attendue: {aiErrorPanel.expected}
-                        </div>
-                    ) : null}
-                    {Array.isArray(aiErrorPanel.missingWords) && aiErrorPanel.missingWords.length > 0 ? (
-                        <div>
-                            <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900, fontSize: 27, lineHeight: 1.25 }}>Mots-clés manquants</div>
-                            <div className="learning-actions" style={{ marginBottom: 0 }}>
-                                {aiErrorPanel.missingWords.map((w, i) => (
-                                    <span
-                                        key={`lock_missing_kw_${i}_${w}`}
-                                        style={{
-                                            display: 'inline-block',
-                                            padding: '9px 14px',
-                                            borderRadius: 999,
-                                            background: '#fee2e2',
-                                            border: '1px solid #ef4444',
-                                            color: '#991b1b',
-                                            fontWeight: 900,
-                                            fontSize: 22
-                                        }}
-                                    >
-                                        {w}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    ) : null}
-                    <div className="learning-actions" style={{ marginTop: 12, marginBottom: 0 }}>
-                        <button className="learning-btn ghost" disabled={synonymChecking || saving} onClick={handleSynonymValidation}>
-                            {synonymChecking ? 'Vérification...' : "J'ai utilisé un synonyme"}
-                        </button>
-                        <button className="learning-btn" disabled={saving} onClick={handleValidate}>
-                            {saving ? 'Validation...' : 'Revenir à la fiche'}
-                        </button>
-                    </div>
-                    {synonymError && <div className="learning-error" style={{ marginTop: 8 }}>{synonymError}</div>}
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="learning-wrap">
@@ -1979,7 +1928,7 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
 
                 {currentStep.type === 'question' && (
                     <>
-                        {questionSuccessFlash && (
+                        {studentGptValidated && (
                             <div
                                 style={{
                                     marginBottom: 10,
@@ -1992,94 +1941,36 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
                                     fontSize: 14
                                 }}
                             >
-                                ✅ Bravo
+                                Fiche apprise. Validation reçue par CondaWeb.
                             </div>
                         )}
-                        {!isCorrectionLock && questionItems.length > 1 && (
+                        {questionItems.length > 0 && (
                             <div className="learning-meta">
-                                <span>Question {Math.min(questionCursor + 1, questionItems.length)}/{questionItems.length}</span>
-                                <span>Étape composée</span>
+                                <span>{questionItems.length} question{questionItems.length > 1 ? 's' : ''} professeur disponible{questionItems.length > 1 ? 's' : ''}</span>
+                                <span>Correction par GPT</span>
                             </div>
                         )}
-                        {!isCorrectionLock && <div className="learning-question">{generatedQuestion}</div>}
-                        {!isCorrectionLock && (
-                            <>
-                                <div className="learning-actions">
-                                    <button className="learning-btn ghost" onClick={speakQuestion}>🔊 Lire la question</button>
-                                    <button
-                                        type="button"
-                                        className="learning-btn gpt"
-                                        onClick={openLearningGptTutor}
-                                    >
-                                        🤖 Ouvrir GPT
-                                    </button>
-                                    <button
-                                        className={`learning-btn ${recording ? 'danger' : ''}`}
-                                        onClick={toggleRecording}
-                                        disabled={transcribingAudio}
-                                    >
-                                        {transcribingAudio
-                                            ? '⏳ Transcription...'
-                                            : (recording ? '⏹️ Arrêter' : '🎙️ Enregistrer')}
-                                    </button>
-                                    {pendingAudio?.blob && (
-                                        <button
-                                            className="learning-btn"
-                                            onClick={applyPendingBrowserTranscript}
-                                            disabled={recording || transcribingAudio}
-                                        >
-                                            📝 Transcrire
-                                        </button>
-                                    )}
-                                </div>
-                                {studentGptStatus && (
-                                    <div className="learning-gpt-status">{studentGptStatus}</div>
-                                )}
-                                {pendingAudio?.url && (
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 12,
-                                        flexWrap: 'wrap',
-                                        margin: '10px 0 8px'
-                                    }}>
-                                        <audio ref={audioPreviewRef} src={pendingAudio.url} preload="metadata" />
-                                        <button
-                                            type="button"
-                                            className="learning-btn ghost"
-                                            onClick={playPendingAudio}
-                                            disabled={recording || transcribingAudio}
-                                            style={{ padding: '10px 14px' }}
-                                        >
-                                            ▶️ Play
-                                        </button>
-                                        <span style={{ color: '#64748b', fontWeight: 800 }}>
-                                            {Math.round(Number(pendingAudio.durationMs || 0) / 1000)}s · {Math.round(Number(pendingAudio.bytes || 0) / 1024)} Ko · {String(pendingAudio.type || '').split(';')[0] || 'audio'}
-                                            {pendingTranscript ? ' · texte capté' : ' · pas de texte capté'}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            className="learning-btn ghost"
-                                            onClick={clearPendingAudio}
-                                            disabled={recording || transcribingAudio}
-                                            style={{ padding: '10px 14px' }}
-                                        >
-                                            🗑️ Refaire
-                                        </button>
-                                    </div>
-                                )}
-                                {recordError && <div className="learning-error">{recordError}</div>}
-                                <textarea
-                                    value={answerText}
-                                    onChange={(e) => {
-                                        setAnswerText(e.target.value);
-                                        setQuestionFeedback(null);
-                                        setAiErrorPanel(null);
-                                    }}
-                                    className="learning-answer"
-                                    placeholder="Transcription / réponse élève..."
-                                />
-                            </>
+                        <div className="learning-question">
+                            Ouvre le tuteur GPT pour réviser cette fiche. Quand GPT valide la maîtrise, CondaWeb affiche automatiquement la fiche comme apprise.
+                        </div>
+                        <div className="learning-actions">
+                            <button
+                                type="button"
+                                className="learning-btn gpt"
+                                onClick={openLearningGptTutor}
+                            >
+                                Ouvrir GPT
+                            </button>
+                            <button
+                                type="button"
+                                className="learning-btn ghost"
+                                onClick={() => setStudentGptStatus('Vérification en cours. La validation apparaît ici dès que GPT envoie son retour à CondaWeb.')}
+                            >
+                                Vérifier la validation
+                            </button>
+                        </div>
+                        {studentGptStatus && (
+                            <div className="learning-gpt-status">{studentGptStatus}</div>
                         )}
                         {isCorrectionLock && (
                             <div className="learning-hint" style={{ color: '#b91c1c', fontWeight: 800 }}>
@@ -2108,7 +1999,11 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
                         ? 'Validation...'
                         : (currentStep?.type === 'question' && pendingSheetReturn
                             ? 'Revenir à la fiche'
-                            : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))}
+                            : (currentStep?.type === 'question' && !studentGptValidated
+                                ? 'En attente de GPT'
+                                : (currentStep?.type === 'question' && studentGptValidated
+                                    ? 'Continuer'
+                                    : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))))}
                 </button>
             </div>
             {gateHint && <div className="learning-error">{gateHint}</div>}

@@ -3283,7 +3283,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
     const importQuestionsForZone = (zoneIdx = 0) => {
         const parsed = parseManualQuestionBlocks(bulkQuestionImport);
         if (!parsed.length) {
-            alert("Aucun bloc valide. Utilise par exemple : Question:, Réponse:, Mots-clés:");
+            alert("Aucun bloc valide. Utilise par exemple : Question:, Réponse:");
             return;
         }
         const map = getCurrentSectionQuestionsMap();
@@ -3369,20 +3369,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                 placeholder="Réponse attendue"
             />
             {renderStructuredAnswerPreview(q?.expectedAnswer || '')}
-            <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Mots-clés attendus</div>
-            <input
-                className="v84-ans-input !text-[12px]"
-                value={Array.isArray(q?.expectedKeywords) ? q.expectedKeywords.join(', ') : ''}
-                onChange={(e) => updateZoneQuestion(sectionIdx, i, {
-                    expectedKeywords: e.target.value
-                        .split(',')
-                        .map((x) => x.trim())
-                        .filter(Boolean)
-                        .slice(0, 30)
-                })}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="marne, verdun, armistice"
-            />
         </div>
     );
     const saveCurrentStepDataNow = async () => {
@@ -4805,11 +4791,10 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                     ) : (
                                         <>
                                             <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                                                <div className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.75fr)_44px] gap-0 bg-slate-50 border-b border-slate-200">
+                                                <div className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.9fr)_44px] gap-0 bg-slate-50 border-b border-slate-200">
                                                     <div className="px-2 py-2 text-[11px] font-black uppercase text-slate-400 text-center">↕</div>
                                                     <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Questions</div>
                                                     <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Réponses</div>
-                                                    <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Mots-clés</div>
                                                     <div className="px-2 py-2 text-[11px] font-black uppercase text-slate-400 text-center">✕</div>
                                                 </div>
                                                 <div className="max-h-[430px] overflow-auto">
@@ -4823,7 +4808,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                         return (
                                                             <div
                                                                 key={`qa_row_${i}`}
-                                                                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.75fr)_44px] gap-0 border-b border-slate-100 last:border-b-0"
+                                                                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.9fr)_44px] gap-0 border-b border-slate-100 last:border-b-0"
                                                                 onDragOver={(e) => {
                                                                     e.preventDefault();
                                                                     e.dataTransfer.dropEffect = 'move';
@@ -4889,22 +4874,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                                     </div>
                                                                     {renderStructuredAnswerPreview(pair?.answer || '')}
                                                                 </div>
-                                                                <div className="p-2 border-l border-slate-100">
-                                                                    <textarea
-                                                                        rows={3}
-                                                                        className="v84-q-input !text-[13px] !leading-snug"
-                                                                        value={Array.isArray(pair?.expectedKeywords) ? pair.expectedKeywords.join(', ') : ''}
-                                                                        onKeyDown={(e) => e.stopPropagation()}
-                                                                        onChange={(e) => updateQuestionPairRow(i, {
-                                                                            expectedKeywords: e.target.value
-                                                                                .split(',')
-                                                                                .map((x) => x.trim().toLowerCase())
-                                                                                .filter(Boolean)
-                                                                                .slice(0, 20)
-                                                                        })}
-                                                                        placeholder="marne, verdun, armistice"
-                                                                    />
-                                                                </div>
                                                                 <div className="flex items-center justify-center border-l border-slate-100">
                                                                     <button
                                                                         type="button"
@@ -4939,7 +4908,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                     className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700"
                                                     onClick={generateQuestionAnswerPairsFromSource}
                                                     disabled={aiTesting || !(selectedQuestionSource?.url || forcedQuestionSource?.value)}
-                                                    title="Génère les questions, réponses attendues et mots-clés depuis la fiche ou vidéo précédente."
+                                                    title="Génère les questions et réponses attendues depuis la fiche ou vidéo précédente."
                                                 >
                                                     {aiTesting ? 'Génération...' : '✨ Générer depuis fiche précédente'}
                                                 </button>
@@ -4964,19 +4933,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                             </div>
                                         </>
                                     )}
-                                    <div className="hw-section-title mt-4">Mots-clés attendus</div>
-                                    <input
-                                        className="v84-ans-input"
-                                        value={Array.isArray(step.keywords) ? step.keywords.join(', ') : String(step.keywords || '')}
-                                        onChange={(e) => updateStep(activeStep, {
-                                            keywords: e.target.value
-                                                .split(',')
-                                                .map((x) => x.trim().toLowerCase())
-                                                .filter(Boolean)
-                                                .slice(0, 30)
-                                        })}
-                                        placeholder="ex: pib, idh, inégalités"
-                                    />
                                 </>
                             )}
                         </div>
@@ -5771,7 +5727,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                             className="v84-q-input"
                                             value={bulkQuestionImport}
                                             onChange={(e) => setBulkQuestionImport(e.target.value)}
-                                            placeholder={`Question: Quelle est la capitale de la France ?\nRéponse: Paris\nMots-clés: paris, capitale, france\n\nQuestion: Cite un continent.\nRéponse: Afrique\nMots-clés: afrique, continent`}
+                                            placeholder={`Question: Quelle est la capitale de la France ?\nRéponse: Paris\n\nQuestion: Cite un continent.\nRéponse: Afrique`}
                                         />
                                         <div className="mt-2 flex items-center gap-2">
                                             <button
@@ -5851,74 +5807,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                     placeholder="Réponse attendue"
                                                 />
                                                 {renderStructuredAnswerPreview(q.expectedAnswer || '')}
-                                                <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Mots-clés attendus</div>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {(Array.isArray(q.expectedKeywords) ? q.expectedKeywords : []).map((kw, kwIdx) => (
-                                                        <span
-                                                            key={`${i}_${kwIdx}`}
-                                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border cursor-pointer ${selectedZoneKeyword
-                                                                && Number(selectedZoneKeyword.zoneIdx) === Number(sectionIdx)
-                                                                && Number(selectedZoneKeyword.rowIdx) === Number(i)
-                                                                && Number(selectedZoneKeyword.keywordIdx) === Number(kwIdx)
-                                                                ? 'bg-fuchsia-300 text-fuchsia-900 border-fuchsia-500'
-                                                                : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'}`}
-                                                            onClick={() => {
-                                                                setSelectedZoneKeyword({ zoneIdx: sectionIdx, rowIdx: i, keywordIdx: kwIdx });
-                                                                setSynonymDraft('');
-                                                            }}
-                                                            title="Cliquer pour sélectionner ce mot-clé"
-                                                        >
-                                                            {kw}
-                                                            <button
-                                                                type="button"
-                                                                className="text-fuchsia-700"
-                                                                onClick={(e) => { e.stopPropagation(); removeZoneKeyword(sectionIdx, i, kwIdx); }}
-                                                                title="Supprimer mot-clé"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                                {selectedZoneKeyword
-                                                    && Number(selectedZoneKeyword.zoneIdx) === Number(sectionIdx)
-                                                    && Number(selectedZoneKeyword.rowIdx) === Number(i)
-                                                    && Number.isFinite(Number(selectedZoneKeyword.keywordIdx)) && (
-                                                        <div className="mt-2 flex items-center gap-2">
-                                                            <input
-                                                                className="v84-ans-input"
-                                                                value={synonymDraft}
-                                                                onChange={(e) => setSynonymDraft(e.target.value)}
-                                                                placeholder="Nouveau synonyme"
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                className="v84-res-btn upload"
-                                                                onClick={() => addSynonymToZoneKeyword(sectionIdx, i, Number(selectedZoneKeyword.keywordIdx), synonymDraft)}
-                                                            >
-                                                                Ajouter synonyme
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                <div className="mt-2 flex items-center gap-2">
-                                                    <input
-                                                        className="v84-ans-input"
-                                                        value={zoneKeywordDrafts[`${sectionIdx}_${i}`] || ''}
-                                                        onChange={(e) => {
-                                                            const k = `${sectionIdx}_${i}`;
-                                                            const v = e.target.value;
-                                                            setZoneKeywordDrafts((prev) => ({ ...prev, [k]: v }));
-                                                        }}
-                                                        placeholder="Ajouter mot-clé"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        className="v84-res-btn upload"
-                                                        onClick={() => addZoneKeyword(sectionIdx, i)}
-                                                    >
-                                                        +
-                                                    </button>
-                                                </div>
                                                     </div>
                                                 ))}
                                             </div>

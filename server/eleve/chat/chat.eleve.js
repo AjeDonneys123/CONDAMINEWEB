@@ -533,6 +533,8 @@ router.get('/gpt-feedback', async (req, res) => {
             entries: entries.map((entry) => ({
                 id: String(entry._id),
                 type: entry.type,
+                moduleId: entry.moduleId || '',
+                stepId: entry.stepId || '',
                 questionNumber: entry.questionNumber,
                 message: entry.message,
                 feedback: entry.feedback,

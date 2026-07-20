@@ -1,6 +1,7 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
-const { LearningModule, VideoSegment, VideoSource, GptInboxMessage } = require('../models/prof.models');
+const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage } = require('../models/prof.models');
 const fetch = require('node-fetch');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
@@ -43,6 +44,83 @@ const sanitizeGptErrors = (value = [], max = 20) => {
         .filter((item) => item && (item.question || item.expected || item.studentAnswer))
         .slice(0, max);
 };
+
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeClassKey = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+async function findGptInboxStudent(body = {}) {
+    const studentId = String(body.studentId || '').trim();
+    if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+        const byId = await Student.findById(studentId).lean();
+        if (byId) return byId;
+    }
+    const name = String(body.studentName || body.eleve || body.name || '').trim();
+    if (!name) return null;
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (!parts.length) return null;
+    const query = {
+        $and: parts.map((part) => {
+            const rx = new RegExp(escapeRegex(part), 'i');
+            return { $or: [{ firstName: rx }, { lastName: rx }, { nickname: rx }] };
+        })
+    };
+    const cls = String(body.studentClass || body.classe || body.className || '').trim();
+    const matches = await Student.find(query).limit(5).lean();
+    if (!matches.length) return null;
+    const classKey = normalizeClassKey(cls);
+    if (classKey) {
+        const classMatch = matches.find((student) => normalizeClassKey(student?.currentClass) === classKey);
+        if (classMatch) return classMatch;
+    }
+    return matches.length === 1 ? matches[0] : null;
+}
+
+async function markLearningValidatedFromGpt({ moduleId = '', student = null }) {
+    if (!student) return false;
+    let module = null;
+    if (moduleId && mongoose.Types.ObjectId.isValid(moduleId)) {
+        module = await LearningModule.findById(moduleId);
+    }
+    if (!module) {
+        const classKey = normalizeClassKey(student.currentClass);
+        const candidates = await LearningModule.find({
+            isEnabled: { $ne: false },
+            $or: [{ assignedStudents: student._id }, { isAllClass: true }]
+        }).sort({ date: -1, createdAt: -1 }).limit(20);
+        module = candidates.find((candidate) => {
+            const assigned = (candidate.assignedStudents || []).some((id) => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!candidate.isAllClass) return false;
+            if (!classKey) return true;
+            return (candidate.targetClassrooms || []).some((target) => normalizeClassKey(target) === classKey);
+        }) || null;
+    }
+    if (!module) return false;
+    const now = new Date();
+    const sid = String(student._id);
+    const completions = Array.isArray(module.completions) ? module.completions : [];
+    const idx = completions.findIndex((entry) => String(entry?.studentId || '') === sid);
+    if (idx >= 0) {
+        module.completions[idx].completedAt = module.completions[idx].completedAt || now;
+        module.completions[idx].currentStep = Array.isArray(module.steps) ? module.steps.length : Number(module.completions[idx].currentStep || 0);
+        module.completions[idx].lastUpdateAt = now;
+    } else {
+        module.completions.push({
+            studentId: student._id,
+            completedAt: now,
+            currentStep: Array.isArray(module.steps) ? module.steps.length : 0,
+            lastUpdateAt: now
+        });
+    }
+    await module.save();
+    return true;
+}
 
 const checkGptInboxToken = (req) => {
     const expected = String(process.env.GPT_INBOX_TOKEN || '').trim();
@@ -1066,6 +1144,7 @@ router.post('/gpt-inbox', async (req, res) => {
         const summary = String(body.summary || body.resume || '').trim().slice(0, 2500);
         const mastered = body.mastered === true || body.mastered === 'true' || body.type === 'learning_validated';
         const score = Number.isFinite(Number(body.score)) ? Number(body.score) : null;
+        const student = await findGptInboxStudent(body);
         if (!message && !feedback && !summary && !sanitizeGptInboxImages(body.images).length) {
             return res.status(400).json({ ok: false, error: 'message, feedback, summary ou images requis' });
         }
@@ -1076,8 +1155,11 @@ router.post('/gpt-inbox', async (req, res) => {
             teacherEmail: String(body.teacherEmail || '').trim().toLowerCase().slice(0, 220),
             moduleId: String(body.moduleId || body.learningId || '').trim().slice(0, 120),
             stepId: String(body.stepId || '').trim().slice(0, 120),
-            studentName: String(body.studentName || body.eleve || '').trim().slice(0, 160),
-            studentClass: String(body.studentClass || body.classe || '').trim().slice(0, 80),
+            studentId: student ? String(student._id) : String(body.studentId || '').trim().slice(0, 120),
+            studentName: student
+                ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
+                : String(body.studentName || body.eleve || '').trim().slice(0, 160),
+            studentClass: String(student?.currentClass || body.studentClass || body.classe || '').trim().slice(0, 80),
             type: String(body.type || 'feedback').trim().slice(0, 80),
             questionNumber,
             message,
@@ -1092,7 +1174,10 @@ router.post('/gpt-inbox', async (req, res) => {
             raw: body.raw ? (typeof body.raw === 'string' ? body.raw : JSON.stringify(body.raw)).slice(0, 5000) : ''
         };
         const entry = await GptInboxMessage.create(entryPayload);
-        return res.json({ ok: true, entry });
+        const learningMarked = mastered
+            ? await markLearningValidatedFromGpt({ moduleId: entryPayload.moduleId, student })
+            : false;
+        return res.json({ ok: true, entry, learningMarked });
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }
