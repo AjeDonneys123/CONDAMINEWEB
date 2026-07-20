@@ -3389,6 +3389,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             updateStep(activeStep, { sheetUrl: text, sheetText: '', sheetSlideTextMap: {} });
         }
     };
+    const clearSheetStep = () => {
+        if (!step || step.type !== 'sheet') return;
+        updateStep(activeStep, {
+            sheetUrl: '',
+            sheetText: '',
+            extractedSheetText: '',
+            sheetSlideTextMap: {},
+            sheetZoneRanges: [],
+            sheetZoneMarkers: [],
+            sheetPinkRanges: [],
+            redHighlights: [],
+            keywords: []
+        });
+    };
     const generateQuestionsForActiveZone = async (zoneIdxOverride = null, countOverride = null) => {
         if (!step) return;
         let source = String(keywordMaterialText || step.materialText || '');
@@ -4234,7 +4248,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
                             {step.type === 'sheet' && (
                                 <>
-                                    <div className="hw-section-title mt-4">Source fiche (menu)</div>
+                                    <div className="mt-4 flex items-center justify-between gap-3">
+                                        <div className="hw-section-title !mt-0">Source fiche (menu)</div>
+                                        {String(step.sheetUrl || '').trim() && (
+                                            <button
+                                                type="button"
+                                                className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 text-[14px] font-black text-red-600 shadow-sm hover:bg-red-600 hover:text-white"
+                                                onClick={clearSheetStep}
+                                                title="Supprimer la fiche de cette étape"
+                                                aria-label="Supprimer la fiche"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
+                                    </div>
                                     <select
                                         className="v84-ans-input"
                                         value={(() => {
