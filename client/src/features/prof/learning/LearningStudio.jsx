@@ -3388,13 +3388,23 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             updateStep(activeStep, { sheetUrl: text, sheetText: '', sheetSlideTextMap: {} });
         }
     };
-    const generateQuestionsForActiveZone = async () => {
+    const generateQuestionsForActiveZone = async (zoneIdxOverride = null, countOverride = null) => {
         if (!step) return;
-        const source = String(keywordMaterialText || '').trim();
+        let source = String(keywordMaterialText || step.materialText || '');
+        if (!source.trim() && step.type === 'question') {
+            source = String(await loadQuestionSourceText({ openKeyword: false }) || '');
+        }
         if (!source) return alert("Aucun texte source.");
         const textLen = source.length;
-        const markers = normalizeMarkers(getCurrentZoneMarkers(), textLen);
-        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        const rawMarkers = step.type === 'question'
+            ? (Array.isArray(step.questionZoneMarkers)
+                ? step.questionZoneMarkers
+                : (Array.isArray(step.questionZoneRanges) ? step.questionZoneRanges.map((r) => r?.end) : []))
+            : getCurrentZoneMarkers();
+        const markers = normalizeMarkers(rawMarkers, textLen);
+        const zoneIdx = Number.isFinite(Number(zoneIdxOverride))
+            ? Number(zoneIdxOverride)
+            : (Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0);
         const zone = getZoneBounds(zoneIdx, markers, textLen);
         const sectionText = source.slice(zone.start, zone.end).trim();
         if (!sectionText) return alert("Section vide.");
@@ -3402,7 +3412,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             .filter((r) => r.end > zone.start && r.start < zone.end)
             .map((r) => ({ start: Math.max(zone.start, r.start), end: Math.min(zone.end, r.end) }));
         const answers = rangesToSnippets(source, pinkRanges);
-        const count = Math.max(1, Math.min(20, Number(zoneQuestionCount || 3)));
+        const count = Math.max(1, Math.min(20, Number(countOverride || zoneQuestionCount || step.questionCount || 3)));
         const selectedOnly = answers.length > 0;
         const promptText = selectedOnly ? answers.join('\n') : sectionText;
         const topic = [
@@ -3430,10 +3440,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 return { ...row, expectedKeywords: merged, generatedByAi: true };
             });
             const map = getCurrentSectionQuestionsMap();
-            const manualRows = Array.isArray(map[String(zoneIdx)])
-                ? map[String(zoneIdx)].filter((row) => row?.generatedByAi !== true)
-                : [];
-            const next = { ...map, [String(zoneIdx)]: [...manualRows, ...withForced] };
+            const existingRows = Array.isArray(map[String(zoneIdx)]) ? map[String(zoneIdx)] : [];
+            const next = { ...map, [String(zoneIdx)]: [...existingRows, ...withForced] };
             updateCurrentSectionQuestionsMap(next);
         } catch (e) {
             alert(String(e?.message || "Erreur génération questions."));
@@ -4636,6 +4644,32 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                     </div>
                                                     <div className="space-y-2">
                                                         {section.rows.map((q, i) => renderSectionQuestionEditor(section.idx, q, i))}
+                                                    </div>
+                                                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                                                        <label className="text-[10px] font-black uppercase text-slate-500">Nombre</label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            max="20"
+                                                            className="v84-ans-input !w-[80px] !py-2 !text-[12px]"
+                                                            value={Number(step.questionCount || 3)}
+                                                            onChange={(e) => updateStep(activeStep, { questionCount: Math.max(1, Math.min(20, Number(e.target.value || 3))) })}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="v84-res-btn upload !px-3 !py-2 !text-[11px]"
+                                                            onClick={() => addZoneQuestion(section.idx)}
+                                                        >
+                                                            + Question
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700 !px-3 !py-2 !text-[11px]"
+                                                            onClick={() => generateQuestionsForActiveZone(section.idx, Number(step.questionCount || 3))}
+                                                            disabled={aiTesting}
+                                                        >
+                                                            {aiTesting ? 'Génération...' : '+ Questions IA'}
+                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
