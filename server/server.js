@@ -9,6 +9,7 @@ const AIEngine = require('./core/ai.engine');
 
 dotenv.config();
 const app = express();
+app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
 const host = process.env.HOST || '0.0.0.0';
 const SERVER_BOOT_ID = Date.now();
