@@ -44,6 +44,45 @@ try {
 
 // 2. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
+app.get(['/privacy-gpt', '/privacy'], (_req, res) => {
+    res.type('html').send(`<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Politique de confidentialité - CondaWeb GPT</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; max-width: 820px; margin: 0 auto; padding: 32px 18px; color: #172033; }
+    h1 { font-size: 28px; }
+    h2 { margin-top: 28px; font-size: 18px; }
+    p, li { font-size: 15px; }
+    code { background: #eef2ff; padding: 2px 5px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Politique de confidentialité - CondaWeb GPT</h1>
+  <p>Dernière mise à jour : 20 juillet 2026.</p>
+
+  <h2>Données utilisées</h2>
+  <p>Le GPT CondaWeb utilise un numéro CondaWeb fourni par l'utilisateur pour récupérer depuis CondaWeb le contexte nécessaire à une révision : identité scolaire minimale, classe, fiche récente, questions éventuelles et statut de validation.</p>
+
+  <h2>Finalité</h2>
+  <p>Ces données servent uniquement à permettre au tuteur GPT d'aider l'utilisateur à réviser une fiche et à renvoyer une validation d'apprentissage à CondaWeb lorsque la fiche est maîtrisée.</p>
+
+  <h2>Données envoyées à CondaWeb</h2>
+  <p>Lors d'une validation, le GPT peut envoyer à CondaWeb : numéro CondaWeb, nom si connu, classe, type de validation, message court, résumé du travail, points à renforcer, erreurs observées et score indicatif.</p>
+
+  <h2>Conservation</h2>
+  <p>Les validations et retours GPT sont enregistrés dans CondaWeb afin que le professeur puisse suivre les apprentissages. Les conversations tenues dans ChatGPT restent gérées par les conditions et paramètres de confidentialité de ChatGPT/OpenAI.</p>
+
+  <h2>Partage</h2>
+  <p>CondaWeb ne vend pas ces données. Elles sont utilisées dans le cadre pédagogique CondaWeb et accessibles au professeur concerné.</p>
+
+  <h2>Contact</h2>
+  <p>Pour toute demande concernant ces données, contacter JP Vuillet à l'adresse utilisée dans CondaWeb : <code>vuillet.jean@condamine.edu.ec</code>.</p>
+</body>
+</html>`);
+});
 app.get('/api/system/apply-status', async (req, res) => {
     try {
         const ai = await getAiGuardStatus({});

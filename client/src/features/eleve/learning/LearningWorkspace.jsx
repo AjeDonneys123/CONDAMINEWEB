@@ -425,6 +425,8 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [chatGminiCopyMessage, setChatGminiCopyMessage] = useState('');
     const [studentGptStatus, setStudentGptStatus] = useState('');
     const [studentGptValidated, setStudentGptValidated] = useState(Boolean(module?.completion?.completedAt));
+    const [realtimeStatus, setRealtimeStatus] = useState('');
+    const [realtimeActive, setRealtimeActive] = useState(false);
     const [studyChatOpen, setStudyChatOpen] = useState(false);
     const [studyMicRecording, setStudyMicRecording] = useState(false);
     const [studyMicEnabled, setStudyMicEnabled] = useState(false);
@@ -454,10 +456,19 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const recordingMonitorRef = useRef(0);
     const recordingMaxTimerRef = useRef(0);
     const studyRecognitionRef = useRef(null);
+    const realtimePeerRef = useRef(null);
+    const realtimeStreamRef = useRef(null);
+    const realtimeAudioRef = useRef(null);
+    const realtimeChannelRef = useRef(null);
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
     const studentIdForGpt = String(user?._id || user?.id || '').trim();
+    const studentCodeForGpt = (() => {
+        const raw = studentIdForGpt.replace(/[^a-f0-9]/gi, '').slice(-8);
+        if (!raw) return '';
+        return String((parseInt(raw, 16) % 900000) + 100000);
+    })();
     const studentFullNameForGpt = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || user?.nickname || 'utilisateur';
     const studentClassForGpt = String(user?.currentClass || user?.className || user?.classe || '').trim();
     const studentGptUrl = import.meta.env?.VITE_STUDENT_GPT_URL || 'https://chatgpt.com/';
@@ -614,6 +625,7 @@ Objectif : aider l'utilisateur a reviser la fiche/lecon recemment consultee dans
 
 Contexte utilisateur :
 - studentId: ${studentIdForGpt || 'inconnu'}
+- studentCode: ${studentCodeForGpt || 'inconnu'}
 - studentName: ${studentFullNameForGpt}
 - studentClass: ${studentClassForGpt || 'inconnue'}
 - module: ${moduleTitle}
@@ -622,7 +634,7 @@ Contexte utilisateur :
 ${optionalQuestions || 'Aucune question professeur. Cree tes propres questions a partir de la fiche.'}
 - extrait de fiche si disponible: ${sheetSummary || 'a recuperer via action si disponible'}
 
-Au debut, appelle getStudentContextFromCondaWeb avec studentId="${studentIdForGpt}", studentName="${studentFullNameForGpt}", studentClass="${studentClassForGpt}".
+Au debut, appelle getStudentContextFromCondaWeb avec studentCode="${studentCodeForGpt}".
 Si l'action renvoie recentLearning, utilise en priorite recentLearning.activeStep, ses questions si elles existent, et la fiche associee pour corriger.
 
 Ensuite, accueille l'utilisateur ainsi :
@@ -666,6 +678,108 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
             setStudentGptStatus('Ouvre le GPT puis colle la consigne depuis le bouton si besoin.');
         }
         window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
+    };
+
+    const stopRealtimeTutor = () => {
+        try { realtimeChannelRef.current?.close?.(); } catch (_) {}
+        try { realtimePeerRef.current?.close?.(); } catch (_) {}
+        try {
+            realtimeStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+        } catch (_) {}
+        realtimeChannelRef.current = null;
+        realtimePeerRef.current = null;
+        realtimeStreamRef.current = null;
+        setRealtimeActive(false);
+        setRealtimeStatus('');
+    };
+
+    const markRealtimeTutorValidated = async () => {
+        if (studentGptValidated) return;
+        setStudentGptValidated(true);
+        setStudentGptStatus('Fiche apprise. Validation reçue par le tuteur vocal.');
+        try {
+            await saveProgress({ currentStep: steps.length, completed: true });
+        } catch (_) {
+            setGateHint("Fiche apprise localement, mais la sauvegarde serveur a échoué.");
+        }
+    };
+
+    const handleRealtimeEvent = (event) => {
+        let payload = null;
+        try { payload = JSON.parse(event.data); } catch (_) { return; }
+        const type = String(payload?.type || '');
+        const collectText = (value) => {
+            if (typeof value === 'string') return value;
+            if (Array.isArray(value)) return value.map(collectText).join(' ');
+            if (!value || typeof value !== 'object') return '';
+            return Object.keys(value)
+                .filter((key) => /text|transcript|delta|content|output/i.test(key))
+                .map((key) => collectText(value[key]))
+                .join(' ');
+        };
+        const text = collectText(payload);
+        if (/CONDA_LEARNING_VALIDATED|Fiche apprise/i.test(text)) {
+            markRealtimeTutorValidated();
+        }
+        if (type === 'input_audio_buffer.speech_started') setRealtimeStatus('Je t’écoute...');
+        if (type === 'input_audio_buffer.speech_stopped') setRealtimeStatus('Je réfléchis...');
+        if (type === 'response.done') setRealtimeStatus('À toi.');
+    };
+
+    const startRealtimeTutor = async () => {
+        if (realtimeActive) {
+            stopRealtimeTutor();
+            return;
+        }
+        const moduleId = String(module?._id || module?.id || '').trim();
+        const studentId = String(user?._id || user?.id || '').trim();
+        if (!moduleId || !studentId || !currentStep?.id) {
+            setRealtimeStatus('Apprentissage ou utilisateur introuvable.');
+            return;
+        }
+        setRealtimeStatus('Ouverture du micro...');
+        try {
+            const pc = new RTCPeerConnection();
+            realtimePeerRef.current = pc;
+            const audio = document.createElement('audio');
+            audio.autoplay = true;
+            realtimeAudioRef.current = audio;
+            pc.ontrack = (event) => {
+                audio.srcObject = event.streams[0];
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            realtimeStreamRef.current = stream;
+            stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+            const channel = pc.createDataChannel('oai-events');
+            realtimeChannelRef.current = channel;
+            channel.onopen = () => setRealtimeStatus('Tuteur vocal connecté. Tu peux parler.');
+            channel.onmessage = handleRealtimeEvent;
+            channel.onerror = () => setRealtimeStatus('Erreur canal vocal.');
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const params = new URLSearchParams();
+            params.set('moduleId', moduleId);
+            params.set('studentId', studentId);
+            params.set('stepId', String(currentStep.id || ''));
+            params.set('stepIndex', String(stepIndex));
+            const res = await fetch(`/api/eleve/learning/realtime-session?${params.toString()}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/sdp' },
+                body: offer.sdp
+            });
+            const answerSdp = await res.text();
+            if (!res.ok) throw new Error(answerSdp || `HTTP ${res.status}`);
+            await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+            setRealtimeActive(true);
+            setRealtimeStatus('Tuteur vocal connecté. Tu peux parler.');
+        } catch (e) {
+            stopRealtimeTutor();
+            setRealtimeStatus(String(e?.message || 'Conversation vocale impossible.'));
+        }
     };
 
     useEffect(() => {
@@ -783,6 +897,7 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         setStudyMicError('');
         setStudentGptValidated(Boolean(module?.completion?.completedAt));
         setStudentGptStatus('');
+        stopRealtimeTutor();
         setSheetSlidesManifest([]);
         setSheetSlidesLoading(false);
         setSheetSlidesError('');
@@ -1546,6 +1661,7 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         return () => {
             try { stopRecording({ transcribe: false }); } catch (_) {}
             try { studyRecognitionRef.current?.stop?.(); } catch (_) {}
+            try { stopRealtimeTutor(); } catch (_) {}
         };
     }, []);
 
@@ -1946,19 +2062,26 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
                         {questionItems.length > 0 && (
                             <div className="learning-meta">
                                 <span>{questionItems.length} question{questionItems.length > 1 ? 's' : ''} professeur disponible{questionItems.length > 1 ? 's' : ''}</span>
-                                <span>Correction par GPT</span>
+                                <span>Code {studentCodeForGpt}</span>
                             </div>
                         )}
                         <div className="learning-question">
-                            Ouvre le tuteur GPT pour réviser cette fiche. Quand GPT valide la maîtrise, CondaWeb affiche automatiquement la fiche comme apprise.
+                            Lance le tuteur vocal pour réviser cette fiche. Quand la maîtrise est validée, CondaWeb affiche automatiquement la fiche comme apprise.
                         </div>
                         <div className="learning-actions">
                             <button
                                 type="button"
-                                className="learning-btn gpt"
+                                className={`learning-btn gpt ${realtimeActive ? 'danger' : ''}`}
+                                onClick={startRealtimeTutor}
+                            >
+                                {realtimeActive ? 'Arrêter vocal' : 'Conversation vocale native'}
+                            </button>
+                            <button
+                                type="button"
+                                className="learning-btn ghost"
                                 onClick={openLearningGptTutor}
                             >
-                                Ouvrir GPT
+                                Ouvrir GPT externe
                             </button>
                             <button
                                 type="button"
@@ -1970,6 +2093,9 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
                         </div>
                         {studentGptStatus && (
                             <div className="learning-gpt-status">{studentGptStatus}</div>
+                        )}
+                        {realtimeStatus && (
+                            <div className="learning-gpt-status">{realtimeStatus}</div>
                         )}
                         {isCorrectionLock && (
                             <div className="learning-hint" style={{ color: '#b91c1c', fontWeight: 800 }}>

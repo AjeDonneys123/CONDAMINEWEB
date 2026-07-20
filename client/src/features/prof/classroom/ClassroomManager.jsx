@@ -253,6 +253,11 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const getDisplayName = (stu) => String(stu?.nickname || '').trim() || String(stu?.firstName || '');
+    const getStudentGptCode = (stu) => {
+        const raw = String(stu?._id || stu?.id || '').replace(/[^a-f0-9]/gi, '').slice(-8);
+        if (!raw) return '';
+        return String((parseInt(raw, 16) % 900000) + 100000);
+    };
     const getActivityStats = (stu) => {
         const raw = stu?.activityStats || {};
         const homework = Number(raw.homework || 0);
@@ -763,6 +768,10 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <button className="act-btn btn-pen" onClick={() => setIsEditingNickname(true)} title="Modifier surnom">✏️</button>
                                 <button className="drawer-close" onClick={() => setSelectedStudent(null)}>✕</button>
                             </div>
+                        </div>
+                        <div className="gpt-code-banner">
+                            <span>Code CondaTuteur</span>
+                            <strong>{getStudentGptCode(selectedStudent)}</strong>
                         </div>
                         <div className="drawer-grid-complex">
                             <button

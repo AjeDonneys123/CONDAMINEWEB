@@ -54,11 +54,24 @@ const normalizeClassKey = (value = '') => String(value || '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 
+const getStudentGptCode = (student = {}) => {
+    const raw = String(student?._id || student?.id || '').replace(/[^a-f0-9]/gi, '').slice(-8);
+    if (!raw) return '';
+    return String((parseInt(raw, 16) % 900000) + 100000);
+};
+
 async function findGptInboxStudent(body = {}) {
     const studentId = String(body.studentId || '').trim();
     if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
         const byId = await Student.findById(studentId).lean();
         if (byId) return byId;
+    }
+    const studentCode = String(body.studentCode || body.code || body.numero || body.num || '').replace(/\D/g, '').trim();
+    if (studentCode) {
+        const candidates = await Student.find({}, 'firstName lastName nickname currentClass').lean();
+        const matches = candidates.filter((student) => getStudentGptCode(student) === studentCode);
+        if (matches.length === 1) return matches[0];
+        return null;
     }
     const name = String(body.studentName || body.eleve || body.name || '').trim();
     if (!name) return null;

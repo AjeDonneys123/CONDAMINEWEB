@@ -38,6 +38,69 @@ function matchesClassTargets(itemTargets, targetKeys) {
     return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
 }
 
+const compactRealtimeStepText = (step = {}) => {
+    const parts = [
+        step.sheetText,
+        step.materialText,
+        step.videoTranscript,
+        step.lessonText,
+        step.sourceText,
+        step.text,
+        step.content
+    ];
+    ['sheetSlideTextMap', 'questionSlideTextMap'].forEach((key) => {
+        if (!step[key] || typeof step[key] !== 'object') return;
+        Object.keys(step[key])
+            .sort((a, b) => String(a).localeCompare(String(b), 'fr', { numeric: true }))
+            .slice(0, 12)
+            .forEach((slideKey) => parts.push(step[key][slideKey]));
+    });
+    return parts
+        .map((part) => String(part || '').trim())
+        .filter(Boolean)
+        .join('\n\n')
+        .slice(0, 7000);
+};
+
+const extractRealtimeQuestions = (step = {}) => {
+    const rows = [];
+    if (Array.isArray(step.questionAnswerPairs)) rows.push(...step.questionAnswerPairs);
+    if (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object') {
+        Object.keys(step.questionSectionQuestions)
+            .sort((a, b) => Number(a) - Number(b))
+            .forEach((key) => {
+                if (Array.isArray(step.questionSectionQuestions[key])) rows.push(...step.questionSectionQuestions[key]);
+            });
+    }
+    return rows
+        .map((row, idx) => ({
+            index: idx + 1,
+            question: String(row?.question || row?.q || row?.prompt || '').trim().slice(0, 500)
+        }))
+        .filter((row) => row.question)
+        .slice(0, 12);
+};
+
+const findSourceTextForQuestionStep = (steps = [], currentIndex = 0, questionStep = {}) => {
+    const ownText = compactRealtimeStepText(questionStep);
+    if (ownText) return ownText;
+    const sourceSheetRef = String(questionStep?.sourceSheetUrl || '').trim();
+    const sourceVideoRef = String(questionStep?.sourceVideoRef || '').trim();
+    const refId = (sourceSheetRef || sourceVideoRef).split(':')[1] || '';
+    if (refId) {
+        const refStep = steps.find((candidate) => String(candidate?.id || '') === refId);
+        const refText = compactRealtimeStepText(refStep);
+        if (refText) return refText;
+    }
+    for (let i = Number(currentIndex || 0) - 1; i >= 0; i -= 1) {
+        const candidate = steps[i];
+        if (!candidate || !['sheet', 'video', 'question'].includes(String(candidate.type || ''))) continue;
+        const text = compactRealtimeStepText(candidate);
+        if (text) return text;
+    }
+    return '';
+};
+
 async function buildStudentClassTargets(student) {
     const Classroom = mongoose.model('Classroom');
     const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
@@ -300,6 +363,93 @@ router.post('/progress', async (req, res) => {
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/realtime-session', express.text({ type: ['application/sdp', 'text/plain'], limit: '1mb' }), async (req, res) => {
+    try {
+        const apiKey = String(process.env.OPENAI_API_KEY || '').trim();
+        if (!apiKey) return res.status(503).send('OPENAI_API_KEY manquant côté serveur.');
+
+        const sdp = String(req.body || '').trim();
+        if (!sdp) return res.status(400).send('SDP WebRTC manquant.');
+
+        const LearningModule = mongoose.model('LearningModule');
+        const Student = mongoose.model('Student');
+        const moduleId = String(req.query.moduleId || '').trim();
+        const studentId = String(req.query.studentId || '').trim();
+        const stepId = String(req.query.stepId || '').trim();
+        const stepIndex = Math.max(0, Number(req.query.stepIndex || 0));
+
+        if (!mongoose.Types.ObjectId.isValid(moduleId) || !mongoose.Types.ObjectId.isValid(studentId)) {
+            return res.status(400).send('moduleId/studentId invalides.');
+        }
+
+        const [moduleDoc, student] = await Promise.all([
+            LearningModule.findById(moduleId).lean(),
+            Student.findById(studentId).lean()
+        ]);
+        if (!moduleDoc || !student) return res.status(404).send('Apprentissage ou utilisateur introuvable.');
+
+        const steps = Array.isArray(moduleDoc.steps) ? moduleDoc.steps : [];
+        const currentStep = steps.find((candidate) => String(candidate?.id || '') === stepId) || steps[stepIndex] || {};
+        const questions = extractRealtimeQuestions(currentStep);
+        const lessonText = findSourceTextForQuestionStep(steps, stepIndex, currentStep);
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'utilisateur';
+        const moduleTitle = String(moduleDoc.title || 'apprentissage').trim();
+        const questionList = questions.length
+            ? questions.map((q) => `${q.index}. ${q.question}`).join('\n')
+            : 'Aucune question professeur. Crée tes propres questions à partir de la fiche.';
+
+        const instructions = [
+            `Tu es CondaTuteur, un tuteur vocal de révision intégré à CondaWeb pour JP Vuillet.`,
+            `Tu travailles avec ${fullName}, classe ${student.currentClass || 'inconnue'}.`,
+            `Leçon: ${moduleTitle}.`,
+            `Règles: pose une seule question à la fois, attends la réponse, corrige brièvement, puis continue.`,
+            `Utilise exclusivement la fiche ci-dessous pour vérifier les réponses. Si les questions professeur existent, utilise-les en priorité.`,
+            `Ne valide pas après une seule bonne réponse si plusieurs connaissances sont nécessaires.`,
+            `Quand la fiche est réellement maîtrisée, dis exactement: "Fiche apprise." puis ajoute sur une nouvelle ligne le marqueur CONDA_LEARNING_VALIDATED.`,
+            ``,
+            `Questions professeur facultatives:`,
+            questionList,
+            ``,
+            `Fiche de révision:`,
+            lessonText || 'Aucune fiche textuelle disponible. Pose quelques questions simples sur le titre de la leçon.'
+        ].join('\n');
+
+        const fd = new FormData();
+        fd.append('sdp', sdp);
+        fd.append('session', JSON.stringify({
+            type: 'realtime',
+            model: String(process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2.1').trim(),
+            instructions,
+            audio: {
+                input: {
+                    turn_detection: { type: 'server_vad' }
+                },
+                output: {
+                    voice: String(process.env.OPENAI_REALTIME_VOICE || 'marin').trim()
+                }
+            }
+        }));
+
+        const response = await fetch('https://api.openai.com/v1/realtime/calls', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'OpenAI-Safety-Identifier': String(student._id),
+                ...fd.getHeaders()
+            },
+            body: fd
+        });
+
+        const answerSdp = await response.text();
+        if (!response.ok) return res.status(response.status).send(answerSdp || `Realtime OpenAI HTTP ${response.status}`);
+        res.setHeader('Content-Type', 'application/sdp');
+        return res.send(answerSdp);
+    } catch (e) {
+        console.error('[learning realtime-session]', e);
+        return res.status(500).send(e.message || 'Session vocale impossible.');
     }
 });
 

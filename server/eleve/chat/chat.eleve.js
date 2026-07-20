@@ -31,6 +31,13 @@ const normalizeClassKey = (value = '') => String(value || '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 
+const getStudentGptCode = (student = {}) => {
+    const raw = String(student?._id || student?.id || '').replace(/[^a-f0-9]/gi, '').slice(-8);
+    if (!raw) return '';
+    const num = (parseInt(raw, 16) % 900000) + 100000;
+    return String(num);
+};
+
 const cleanStringList = (value = [], max = 30) => (Array.isArray(value) ? value : String(value || '').split(','))
     .map((item) => String(item || '').trim())
     .filter(Boolean)
@@ -131,10 +138,18 @@ const summarizeLearningModuleForGpt = (module = {}, studentId = '') => {
     };
 };
 
-async function findStudentForGpt({ studentId = '', studentName = '', studentClass = '' }) {
+async function findStudentForGpt({ studentId = '', studentCode = '', studentName = '', studentClass = '' }) {
     if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
         const byId = await Student.findById(studentId).lean();
         if (byId) return byId;
+    }
+
+    const code = String(studentCode || '').replace(/\D/g, '').trim();
+    if (code) {
+        const candidates = await Student.find({}, 'firstName lastName nickname currentClass').lean();
+        const matches = candidates.filter((student) => getStudentGptCode(student) === code);
+        if (matches.length === 1) return matches[0];
+        return null;
     }
 
     const name = String(studentName || '').trim();
@@ -433,10 +448,11 @@ router.get('/gpt-context', async (req, res) => {
         }
 
         const studentId = String(req.query.studentId || '').trim();
+        const studentCode = String(req.query.studentCode || req.query.code || req.query.numero || req.query.num || '').trim();
         const studentName = String(req.query.studentName || req.query.name || '').trim();
         const studentClass = String(req.query.studentClass || req.query.className || req.query.classe || '').trim();
-        const student = await findStudentForGpt({ studentId, studentName, studentClass });
-        if (!student) return res.status(404).json({ ok: false, error: 'Élève introuvable.' });
+        const student = await findStudentForGpt({ studentId, studentCode, studentName, studentClass });
+        if (!student) return res.status(404).json({ ok: false, error: 'Utilisateur introuvable.' });
 
         const classKey = normalizeClassKey(student.currentClass);
         const rawModules = await LearningModule.find({
@@ -469,7 +485,8 @@ router.get('/gpt-context', async (req, res) => {
                 firstName: student.firstName || '',
                 lastName: student.lastName || '',
                 nickname: student.nickname || '',
-                currentClass: student.currentClass || ''
+                currentClass: student.currentClass || '',
+                code: getStudentGptCode(student)
             },
             mission: {
                 kind: 'lesson_revision',
@@ -518,9 +535,10 @@ router.get('/gpt-context', async (req, res) => {
 router.get('/gpt-feedback', async (req, res) => {
     try {
         const studentId = String(req.query.studentId || '').trim();
+        const studentCode = String(req.query.studentCode || req.query.code || req.query.numero || req.query.num || '').trim();
         const studentName = String(req.query.studentName || req.query.name || '').trim();
         const studentClass = String(req.query.studentClass || req.query.className || req.query.classe || '').trim();
-        const student = await findStudentForGpt({ studentId, studentName, studentClass });
+        const student = await findStudentForGpt({ studentId, studentCode, studentName, studentClass });
         if (!student) return res.json({ ok: true, entries: [] });
         const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
         const filters = [{ studentId: String(student._id) }];
@@ -556,9 +574,10 @@ router.post('/gpt-feedback', async (req, res) => {
             return res.status(401).json({ ok: false, error: 'Token GPT invalide.' });
         }
         const studentId = String(req.body?.studentId || '').trim();
+        const studentCode = String(req.body?.studentCode || req.body?.code || req.body?.numero || req.body?.num || '').trim();
         const studentName = String(req.body?.studentName || req.body?.name || '').trim();
         const studentClass = String(req.body?.studentClass || req.body?.className || req.body?.classe || '').trim();
-        const student = await findStudentForGpt({ studentId, studentName, studentClass });
+        const student = await findStudentForGpt({ studentId, studentCode, studentName, studentClass });
         const fullName = student
             ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
             : studentName;
