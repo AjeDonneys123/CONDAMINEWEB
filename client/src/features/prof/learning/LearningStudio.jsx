@@ -1707,6 +1707,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const selectedSegment = knownSegments.find((s) => String(s._id || s.id || '') === selectedSegmentId) || null;
     const getQuestionSectionMapFromAnyStep = (sourceStep = null) => {
         if (!sourceStep) return {};
+        const keepEmptyRows = step && String(sourceStep?.id || '') === String(step?.id || '');
         const objectCandidates = [
             sourceStep.questionSectionQuestions,
             sourceStep.sheetSectionQuestions,
@@ -1732,7 +1733,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 .filter(Boolean),
                         generatedByAi: row?.generatedByAi === true
                     }))
-                    .filter((row) => String(row.question || '').trim() || row.expectedAnswer || row.expectedKeywords.length > 0);
+                    .filter((row) => keepEmptyRows || String(row.question || '').trim() || row.expectedAnswer || row.expectedKeywords.length > 0);
                 if (usable.length > 0) clean[String(key)] = usable;
             });
             if (Object.keys(clean).length > 0) return clean;
@@ -4662,13 +4663,6 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                         <div className="text-[11px] font-black uppercase text-indigo-700">
                                                             Section {section.idx + 1} · questions IA modifiables
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            className="v84-res-btn upload !px-2 !py-1 !text-[10px]"
-                                                            onClick={() => addZoneQuestion(section.idx)}
-                                                        >
-                                                            + Question
-                                                        </button>
                                                     </div>
                                                     <div className="space-y-2">
                                                         {section.rows.map((q, i) => renderSectionQuestionEditor(section.idx, q, i))}
