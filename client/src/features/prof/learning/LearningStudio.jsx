@@ -325,7 +325,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [synonymDraft, setSynonymDraft] = useState('');
     const [savingStepData, setSavingStepData] = useState(false);
     const [importingSheet, setImportingSheet] = useState(false);
-    const [recordingQuestionCell, setRecordingQuestionCell] = useState(null); // { rowIdx, field }
+    const [recordingQuestionCell, setRecordingQuestionCell] = useState(null); // { rowIdx, field, zoneIdx? }
     const [sourcePickerKind, setSourcePickerKind] = useState(''); // '' | 'video' | 'sheet'
     const [sourcePickerExistingUrl, setSourcePickerExistingUrl] = useState('');
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
@@ -938,7 +938,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             </div>
         );
     };
-    const startQuestionCellDictation = (rowIdx = 0, field = 'question') => {
+    const startQuestionCellDictation = (rowIdx = 0, field = 'question', zoneIdx = null) => {
         if (typeof window === 'undefined') return;
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -950,7 +950,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         rec.lang = 'fr-FR';
         rec.interimResults = false;
         rec.continuous = false;
-        setRecordingQuestionCell({ rowIdx, field: targetField });
+        setRecordingQuestionCell({ rowIdx, field: targetField, zoneIdx });
         rec.onresult = (event) => {
             const transcript = Array.from(event.results || [])
                 .map((result) => String(result?.[0]?.transcript || '').trim())
@@ -958,12 +958,27 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 .join(' ')
                 .trim();
             if (!transcript) return;
+            if (zoneIdx !== null && Number.isFinite(Number(zoneIdx))) {
+                const map = getCurrentSectionQuestionsMap();
+                const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+                const current = rows[rowIdx] || { q: '', question: '', expectedAnswer: '', expectedKeywords: [] };
+                const previous = String(current[targetField] || current.q || '');
+                const separator = previous && !/\s$/.test(previous) ? ' ' : '';
+                rows[rowIdx] = {
+                    ...current,
+                    [targetField]: `${previous}${separator}${transcript}`,
+                    q: targetField === 'question' ? `${previous}${separator}${transcript}` : current.q
+                };
+                updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+                return;
+            }
             const rows = [...(Array.isArray(step?.questionAnswerPairs) ? step.questionAnswerPairs : [])];
             const current = rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] };
-            const previous = String(current[targetField] || '').trim();
+            const previous = String(current[targetField] || '');
+            const separator = previous && !/\s$/.test(previous) ? ' ' : '';
             rows[rowIdx] = {
                 ...current,
-                [targetField]: previous ? `${previous} ${transcript}` : transcript
+                [targetField]: `${previous}${separator}${transcript}`
             };
             updateQuestionPairsDraft(rows);
         };
@@ -3230,32 +3245,48 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
         removeZoneQuestion(zoneIdx, rowIdx);
     };
-    const renderSectionQuestionEditor = (sectionIdx, q, i) => (
-        <div key={`db_q_${sectionIdx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
-            <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="text-[11px] font-black uppercase text-indigo-700">
-                    Question {i + 1}
+    const renderSectionQuestionEditor = (sectionIdx, q, i) => {
+        const isQuestionRecording = recordingQuestionCell
+            && Number(recordingQuestionCell.zoneIdx) === Number(sectionIdx)
+            && Number(recordingQuestionCell.rowIdx) === Number(i)
+            && recordingQuestionCell.field === 'question';
+        return (
+            <div key={`db_q_${sectionIdx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-[11px] font-black uppercase text-indigo-700">
+                        Question {i + 1}
+                    </div>
+                    <button
+                        type="button"
+                        className="v84-del-btn"
+                        onClick={() => removeZoneQuestion(sectionIdx, i)}
+                        title="Supprimer question"
+                    >
+                        ✕
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    className="v84-del-btn"
-                    onClick={() => removeZoneQuestion(sectionIdx, i)}
-                    title="Supprimer question"
-                >
-                    ✕
-                </button>
+                <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Question</div>
+                <div className="flex gap-1">
+                    <textarea
+                        rows={2}
+                        className="v84-q-input !text-[13px] !leading-snug"
+                        value={String(q?.question || q?.q || '')}
+                        onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        placeholder={`Question ${i + 1}`}
+                    />
+                    <button
+                        type="button"
+                        className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isQuestionRecording ? 'bg-red-500 text-white' : ''}`}
+                        onClick={() => startQuestionCellDictation(i, 'question', sectionIdx)}
+                        title="Dicter la question"
+                    >
+                        🎙️
+                    </button>
+                </div>
             </div>
-            <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Question</div>
-            <textarea
-                rows={2}
-                className="v84-q-input !text-[13px] !leading-snug"
-                value={String(q?.question || q?.q || '')}
-                onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder={`Question ${i + 1}`}
-            />
-        </div>
-    );
+        );
+    };
     const saveCurrentStepDataNow = async () => {
         if (!step) return;
         if (!formData?._id) {
