@@ -351,13 +351,21 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const done = submittedHomeworkIds.has(String(hw._id));
             entry.homework.total += 1;
             entry.activities.total += 1;
-            if (done) entry.homework.done += 1;
-            else {
+            if (done) {
+                entry.homework.done += 1;
+            } else {
                 entry.homework.todo += 1;
                 entry.homework.todoTitles.push(hw.title || 'Devoir');
             }
-            if (done) entry.activities.done += 1;
-            else {
+            if (done) {
+                entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(hw._id),
+                    type: 'homework',
+                    title: hw.title || 'Devoir',
+                    label: `📚 Refaire ${hw.title || 'Devoir'}`
+                });
+            } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`📚 ${hw.title || 'Devoir'}`);
                 entry.activities.todoItems.push({
@@ -390,9 +398,21 @@ router.get('/status-summary/:studentId', async (req, res) => {
             } else if (levelReached >= 1) {
                 entry.games.done += 1;
                 entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(game._id),
+                    type: 'game',
+                    title: game.title || 'Jeu',
+                    label: `🎮 Refaire ${game.title || 'Jeu'}`
+                });
             } else {
                 entry.games.started += 1;
                 entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(game._id),
+                    type: 'game',
+                    title: game.title || 'Jeu',
+                    label: `🎮 Reprendre ${game.title || 'Jeu'}`
+                });
             }
         }
 
@@ -403,8 +423,15 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const completion = (m.completions || []).find((c) => String(c.studentId) === String(student._id));
             const done = Boolean(completion?.completedAt);
             entry.activities.total += 1;
-            if (done) entry.activities.done += 1;
-            else {
+            if (done) {
+                entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(m._id),
+                    type: 'learning',
+                    title: m.title || 'Apprentissage',
+                    label: `🧠 Refaire ${m.title || 'Apprentissage'}`
+                });
+            } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`🧠 ${m.title || 'Apprentissage'}`);
                 entry.activities.todoItems.push({
@@ -423,8 +450,15 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const submission = (ex.presentations || []).find((p) => String(p.studentId) === String(student._id));
             const done = Boolean(submission?.updatedAt);
             entry.activities.total += 1;
-            if (done) entry.activities.done += 1;
-            else {
+            if (done) {
+                entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(ex._id),
+                    type: 'expose',
+                    title: ex.title || 'Exposé',
+                    label: `🗣️ Refaire ${ex.title || 'Exposé'}`
+                });
+            } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`🗣️ ${ex.title || 'Exposé'}`);
                 entry.activities.todoItems.push({
@@ -443,8 +477,15 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const submission = (lec.submissions || []).find((p) => String(p.studentId) === String(student._id));
             const done = Boolean(submission?.completedAt);
             entry.activities.total += 1;
-            if (done) entry.activities.done += 1;
-            else {
+            if (done) {
+                entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(lec._id),
+                    type: 'lecture',
+                    title: lec.title || 'Lecture',
+                    label: `📖 Refaire ${lec.title || 'Lecture'}`
+                });
+            } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`📖 ${lec.title || 'Lecture'}`);
                 entry.activities.todoItems.push({
@@ -463,8 +504,15 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const submission = (com.submissions || []).find((p) => String(p.studentId) === String(student._id));
             const done = Boolean(submission?.completedAt);
             entry.activities.total += 1;
-            if (done) entry.activities.done += 1;
-            else {
+            if (done) {
+                entry.activities.done += 1;
+                entry.activities.savedItems.push({
+                    id: String(com._id),
+                    type: 'comment',
+                    title: com.title || 'Commentaire',
+                    label: `🧾 Refaire ${com.title || 'Commentaire'}`
+                });
+            } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`🧾 ${com.title || 'Commentaire'}`);
                 entry.activities.todoItems.push({
@@ -490,7 +538,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     id: String(prod._id),
                     type: 'production',
                     title: prod.title || 'Production',
-                    label: `${icon} ${prod.title || 'Production'}`
+                    label: `${icon} Refaire ${prod.title || 'Production'}`
                 });
             } else {
                 entry.activities.todo += 1;
