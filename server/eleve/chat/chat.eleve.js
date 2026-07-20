@@ -31,36 +31,87 @@ const normalizeClassKey = (value = '') => String(value || '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 
-const compactStepForGpt = (step = {}, index = 0) => {
-    const questionRows = Array.isArray(step.questionRows) ? step.questionRows : [];
-    const lessonText = String(
-        step.lessonText
-        || step.ficheText
-        || step.sourceText
-        || step.transcript
-        || step.text
-        || step.content
-        || step.description
-        || ''
-    ).trim();
-    const questions = questionRows
-        .map((row, idx) => ({
-            index: idx + 1,
-            question: String(row?.question || row?.prompt || row?.consigne || '').trim().slice(0, 500),
-            expectedAnswer: String(row?.answer || row?.expectedAnswer || row?.expected || row?.reponse || row?.response || '').trim().slice(0, 500),
-            keywords: String(row?.keywords || row?.motsCles || row?.mots_cles || '').trim().slice(0, 300)
-        }))
+const cleanStringList = (value = [], max = 30) => (Array.isArray(value) ? value : String(value || '').split(','))
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, max);
+
+const compactQuestionForGpt = (row = {}, idx = 0) => ({
+    index: idx + 1,
+    question: String(row?.question || row?.q || row?.prompt || row?.consigne || '').trim().slice(0, 500),
+    expectedAnswer: String(row?.answer || row?.expectedAnswer || row?.expected || row?.reponse || row?.response || '').trim().slice(0, 500),
+    keywords: cleanStringList([
+        ...cleanStringList(row?.expectedKeywords, 20),
+        ...cleanStringList(row?.keywords || row?.motsCles || row?.mots_cles, 20)
+    ], 20).join(', ')
+});
+
+const extractQuestionRowsForGpt = (step = {}) => {
+    const rows = [];
+    if (Array.isArray(step.questionRows)) rows.push(...step.questionRows);
+    if (Array.isArray(step.questionAnswerPairs)) rows.push(...step.questionAnswerPairs);
+    if (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object') {
+        Object.keys(step.questionSectionQuestions)
+            .sort((a, b) => Number(a) - Number(b))
+            .forEach((key) => {
+                if (Array.isArray(step.questionSectionQuestions[key])) rows.push(...step.questionSectionQuestions[key]);
+            });
+    }
+    return rows
+        .map(compactQuestionForGpt)
         .filter((row) => row.question || row.expectedAnswer || row.keywords)
-        .slice(0, 8);
+        .slice(0, 12);
+};
+
+const collectStepTextForGpt = (step = {}) => {
+    const parts = [
+        step.lessonText,
+        step.ficheText,
+        step.sourceText,
+        step.sheetText,
+        step.materialText,
+        step.videoTranscript,
+        step.transcript,
+        step.text,
+        step.content,
+        step.description
+    ];
+    ['sheetSlideTextMap', 'questionSlideTextMap'].forEach((key) => {
+        if (!step[key] || typeof step[key] !== 'object') return;
+        Object.keys(step[key])
+            .sort((a, b) => String(a).localeCompare(String(b), 'fr', { numeric: true }))
+            .slice(0, 12)
+            .forEach((slideKey) => parts.push(step[key][slideKey]));
+    });
+    return parts
+        .map((part) => String(part || '').trim())
+        .filter(Boolean)
+        .join('\n\n')
+        .slice(0, 4000);
+};
+
+const compactStepForGpt = (step = {}, index = 0) => {
+    const lessonText = collectStepTextForGpt(step);
+    const questions = extractQuestionRowsForGpt(step);
+    const keywords = cleanStringList([
+        ...(Array.isArray(step.keywords) ? step.keywords : cleanStringList(step.keywords)),
+        ...(Array.isArray(step.sheetKeywords) ? step.sheetKeywords : []),
+        ...(Array.isArray(step.videoKeywords) ? step.videoKeywords : []),
+        ...(Array.isArray(step.orangeHighlights) ? step.orangeHighlights : []),
+        ...(Array.isArray(step.redHighlights) ? step.redHighlights : []),
+        ...(Array.isArray(step.zoneHighlights) ? step.zoneHighlights : []),
+        ...(Array.isArray(step.pinkHighlights) ? step.pinkHighlights : [])
+    ], 40);
     return {
         id: String(step._id || step.id || '').trim(),
         index: index + 1,
         title: String(step.title || step.name || `Étape ${index + 1}`).trim().slice(0, 160),
         type: String(step.type || step.kind || '').trim().slice(0, 80),
-        question: String(step.question || step.prompt || '').trim().slice(0, 500),
+        question: String(step.question || step.customQuestion || step.prompt || '').trim().slice(0, 500),
         expectedAnswer: String(step.expectedAnswer || step.answer || '').trim().slice(0, 500),
-        keywords: String(step.keywords || step.motsCles || '').trim().slice(0, 300),
-        lessonText: lessonText.slice(0, 4000),
+        keywords: keywords.join(', ').slice(0, 800),
+        sourceKind: String(step.sourceKind || '').trim().slice(0, 80),
+        lessonText,
         questions
     };
 };
@@ -427,11 +478,12 @@ router.get('/gpt-context', async (req, res) => {
                 receivedAt: entry.receivedAt
             })),
             postBack: {
-                url: `${req.protocol}://${req.get('host')}/api/eleve/chat/gpt-feedback`,
+                url: `${req.protocol}://${req.get('host')}/api/learning/gpt-inbox`,
                 method: 'POST',
-                required: ['studentId', 'type', 'message'],
+                required: ['teacherEmail', 'teacherName', 'studentName', 'studentClass', 'type', 'message'],
                 example: {
-                    studentId: String(student._id),
+                    teacherName: 'JP Vuillet',
+                    teacherEmail: 'vuillet.jean@condamine.edu.ec',
                     studentName: fullName,
                     studentClass: student.currentClass || '',
                     moduleId: recentLearning?.id || '',

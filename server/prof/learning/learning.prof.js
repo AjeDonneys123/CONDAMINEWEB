@@ -21,6 +21,29 @@ const sanitizeGptInboxImages = (images = []) => {
     }).filter(Boolean);
 };
 
+const sanitizeGptStringList = (value = [], max = 12) => {
+    const source = Array.isArray(value) ? value : String(value || '').split(',');
+    return source
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .slice(0, max);
+};
+
+const sanitizeGptErrors = (value = [], max = 20) => {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => {
+            if (!item || typeof item !== 'object') return null;
+            return {
+                question: String(item.question || item.prompt || '').trim().slice(0, 500),
+                expected: String(item.expected || item.expectedAnswer || '').trim().slice(0, 500),
+                studentAnswer: String(item.studentAnswer || item.answer || item.response || '').trim().slice(0, 500)
+            };
+        })
+        .filter((item) => item && (item.question || item.expected || item.studentAnswer))
+        .slice(0, max);
+};
+
 const checkGptInboxToken = (req) => {
     const expected = String(process.env.GPT_INBOX_TOKEN || '').trim();
     if (!expected) return true;
@@ -1041,6 +1064,8 @@ router.post('/gpt-inbox', async (req, res) => {
         const message = String(body.message || body.status || body.result || fallbackMessage).trim().slice(0, 2500);
         const feedback = String(body.feedback || body.commentaire || body.correction || '').trim().slice(0, 5000);
         const summary = String(body.summary || body.resume || '').trim().slice(0, 2500);
+        const mastered = body.mastered === true || body.mastered === 'true' || body.type === 'learning_validated';
+        const score = Number.isFinite(Number(body.score)) ? Number(body.score) : null;
         if (!message && !feedback && !summary && !sanitizeGptInboxImages(body.images).length) {
             return res.status(400).json({ ok: false, error: 'message, feedback, summary ou images requis' });
         }
@@ -1058,6 +1083,10 @@ router.post('/gpt-inbox', async (req, res) => {
             message,
             feedback,
             summary,
+            weakPoints: sanitizeGptStringList(body.weakPoints || body.pointsFaibles || body.notionsARevoir),
+            errors: sanitizeGptErrors(body.errors || body.erreurs),
+            mastered,
+            score,
             images: sanitizeGptInboxImages(body.images || body.imageUrls || []),
             source: String(body.source || 'chatgpt').trim().slice(0, 80),
             raw: body.raw ? (typeof body.raw === 'string' ? body.raw : JSON.stringify(body.raw)).slice(0, 5000) : ''
