@@ -240,8 +240,25 @@
     color: #1e293b;
 }
 
+.learning-btn.gpt {
+    background: linear-gradient(135deg, #7c3aed, #2563eb);
+    box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+}
+
 .learning-btn.danger {
     background: #ef4444;
+}
+
+.learning-gpt-status {
+    width: 100%;
+    border: 1px solid #c7d2fe;
+    border-radius: 12px;
+    background: #eef2ff;
+    color: #4338ca;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 900;
+    margin: 0 0 10px;
 }
 
 .learning-input {

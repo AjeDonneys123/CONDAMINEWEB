@@ -423,6 +423,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [chatGminiOpen, setChatGminiOpen] = useState(false);
     const [chatGminiQuestion, setChatGminiQuestion] = useState('');
     const [chatGminiCopyMessage, setChatGminiCopyMessage] = useState('');
+    const [studentGptStatus, setStudentGptStatus] = useState('');
     const [studyChatOpen, setStudyChatOpen] = useState(false);
     const [studyMicRecording, setStudyMicRecording] = useState(false);
     const [studyMicEnabled, setStudyMicEnabled] = useState(false);
@@ -455,6 +456,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
+    const studentIdForGpt = String(user?._id || user?.id || '').trim();
+    const studentFullNameForGpt = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || user?.nickname || 'utilisateur';
+    const studentClassForGpt = String(user?.currentClass || user?.className || user?.classe || '').trim();
+    const studentGptUrl = import.meta.env?.VITE_STUDENT_GPT_URL || 'https://chatgpt.com/';
 
     const clearPendingAudio = () => {
         const previous = pendingAudioRef.current;
@@ -571,6 +576,92 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const openGeminiCourseHelper = () => {
         setChatGminiOpen(true);
+    };
+
+    const copyTextForLearning = async (text) => {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', 'true');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        document.body.removeChild(area);
+    };
+
+    const buildLearningGptPrompt = () => {
+        const origin = window.location.origin;
+        const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
+        const stepTitle = String(currentStep?.title || generatedQuestion || 'étape active').trim();
+        const activeQuestion = String(generatedQuestion || '').trim();
+        const expectedAnswer = String(activeQuestionItem?.expectedAnswer || '').trim();
+        const expectedKeywords = Array.isArray(activeQuestionItem?.expectedKeywords)
+            ? activeQuestionItem.expectedKeywords.join(', ')
+            : '';
+        const sheetSummary = String(sheetText || '').replace(/\s+/g, ' ').trim().slice(0, 1800);
+        return `Tu es CondaTuteur, tuteur de revision associe a CondaWeb pour le professeur JP Vuillet.
+
+Objectif : aider l'utilisateur a reviser la fiche/lecon recemment consultee dans CondaWeb, puis valider l'apprentissage quand la lecon est reellement maitrisee.
+
+Contexte utilisateur :
+- studentId: ${studentIdForGpt || 'inconnu'}
+- studentName: ${studentFullNameForGpt}
+- studentClass: ${studentClassForGpt || 'inconnue'}
+- module: ${moduleTitle}
+- etape active: ${stepTitle}
+- question active: ${activeQuestion || 'non precisee'}
+- reponse attendue si disponible: ${expectedAnswer || 'non precisee'}
+- mots-cles si disponibles: ${expectedKeywords || 'non precises'}
+- extrait de fiche si disponible: ${sheetSummary || 'a recuperer via action si disponible'}
+
+Au debut, appelle getStudentContextFromCondaWeb avec studentId="${studentIdForGpt}", studentName="${studentFullNameForGpt}", studentClass="${studentClassForGpt}".
+Si l'action renvoie recentLearning, utilise en priorite recentLearning.activeStep et la fiche associee.
+
+Ensuite, accueille l'utilisateur ainsi :
+"Bonjour ${studentFullNameForGpt}. Je suis le tuteur CondaWeb. J'ai retrouve ta lecon : ${moduleTitle}. Es-tu pret a travailler ?"
+
+Entraine l'utilisateur comme un vrai tuteur :
+- pose une question a la fois ;
+- ne donne pas la reponse avant une tentative ;
+- corrige gentiment les erreurs ;
+- repose plus tard les notions ratees ;
+- garde la liste des questions ou notions qui posent probleme.
+
+Quand l'utilisateur maitrise bien la lecon, dis :
+"Bravo ${studentFullNameForGpt}, l'apprentissage est valide."
+Puis appelle sendStudentGptFeedbackToCondaWeb avec :
+- studentId: "${studentIdForGpt}"
+- studentName: "${studentFullNameForGpt}"
+- studentClass: "${studentClassForGpt}"
+- moduleId: "${module?._id || module?.id || ''}"
+- stepId: "${currentStep?.id || ''}"
+- type: "learning_validated"
+- message: "Apprentissage valide"
+- feedback: resume clair du travail et des reussites
+- weakPoints: notions/questions a renforcer
+- errors: questions ou l'utilisateur a fait le plus d'erreurs
+- mastered: true
+- score: estimation sur 100
+
+Endpoint CondaWeb : ${origin}/api/eleve/chat/gpt-feedback
+
+Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et centre sur l'apprentissage.`;
+    };
+
+    const openLearningGptTutor = async () => {
+        const prompt = buildLearningGptPrompt();
+        try {
+            await copyTextForLearning(prompt);
+            setStudentGptStatus('Consigne GPT copiée. Ouvre le GPT, puis colle-la si elle ne part pas automatiquement.');
+        } catch (_) {
+            setStudentGptStatus('Ouvre le GPT puis colle la consigne depuis le bouton si besoin.');
+        }
+        window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
     };
 
     useEffect(() => {
@@ -1916,6 +2007,13 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                                 <div className="learning-actions">
                                     <button className="learning-btn ghost" onClick={speakQuestion}>🔊 Lire la question</button>
                                     <button
+                                        type="button"
+                                        className="learning-btn gpt"
+                                        onClick={openLearningGptTutor}
+                                    >
+                                        🤖 Ouvrir GPT
+                                    </button>
+                                    <button
                                         className={`learning-btn ${recording ? 'danger' : ''}`}
                                         onClick={toggleRecording}
                                         disabled={transcribingAudio}
@@ -1934,6 +2032,9 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                                         </button>
                                     )}
                                 </div>
+                                {studentGptStatus && (
+                                    <div className="learning-gpt-status">{studentGptStatus}</div>
+                                )}
                                 {pendingAudio?.url && (
                                     <div style={{
                                         display: 'flex',
