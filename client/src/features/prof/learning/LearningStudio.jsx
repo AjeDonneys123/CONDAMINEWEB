@@ -1117,7 +1117,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
         if (!step || step.type !== 'question') return;
         const orange = Array.isArray(step.orangeHighlights) ? step.orangeHighlights : [];
         const red = Array.isArray(step.redHighlights) ? step.redHighlights : [];
-        const topic = `Génère des questions sur: ${orange.join(', ')}. Réponses attendues: ${red.join(', ')}.`;
+        const topic = `Génère des questions sur: ${orange.join(', ')}. Repères fiche: ${red.join(', ')}.`;
         setAiTesting(true);
         try {
             const fd = new FormData();
@@ -3283,7 +3283,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
     const importQuestionsForZone = (zoneIdx = 0) => {
         const parsed = parseManualQuestionBlocks(bulkQuestionImport);
         if (!parsed.length) {
-            alert("Aucun bloc valide. Utilise par exemple : Question:, Réponse:");
+            alert("Aucun bloc valide. Utilise par exemple : Question:");
             return;
         }
         const map = getCurrentSectionQuestionsMap();
@@ -3359,16 +3359,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                 onKeyDown={(e) => e.stopPropagation()}
                 placeholder={`Question ${i + 1}`}
             />
-            <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Réponse attendue</div>
-            <textarea
-                rows={2}
-                className="v84-q-input !text-[13px] !leading-snug"
-                value={String(q?.expectedAnswer || '')}
-                onChange={(e) => updateZoneQuestion(sectionIdx, i, { expectedAnswer: e.target.value })}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="Réponse attendue"
-            />
-            {renderStructuredAnswerPreview(q?.expectedAnswer || '')}
         </div>
     );
     const saveCurrentStepDataNow = async () => {
@@ -4765,7 +4755,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                             </div>
                                         )}
                                     </div>
-                                    <div className="hw-section-title mt-4">Questions / Réponses attendues</div>
+                                    <div className="hw-section-title mt-4">Questions facultatives pour GPT</div>
                                     {questionSectionsFromDb.length > 0 ? (
                                         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3 max-h-[440px] overflow-auto">
                                             {questionSectionsFromDb.map((section) => (
@@ -4791,10 +4781,9 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                     ) : (
                                         <>
                                             <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                                                <div className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.9fr)_44px] gap-0 bg-slate-50 border-b border-slate-200">
+                                                <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] gap-0 bg-slate-50 border-b border-slate-200">
                                                     <div className="px-2 py-2 text-[11px] font-black uppercase text-slate-400 text-center">↕</div>
                                                     <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Questions</div>
-                                                    <div className="px-3 py-2 text-[11px] font-black uppercase text-slate-500">Réponses</div>
                                                     <div className="px-2 py-2 text-[11px] font-black uppercase text-slate-400 text-center">✕</div>
                                                 </div>
                                                 <div className="max-h-[430px] overflow-auto">
@@ -4802,13 +4791,10 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                         const isQuestionRecording = recordingQuestionCell
                                                             && Number(recordingQuestionCell.rowIdx) === Number(i)
                                                             && recordingQuestionCell.field === 'question';
-                                                        const isAnswerRecording = recordingQuestionCell
-                                                            && Number(recordingQuestionCell.rowIdx) === Number(i)
-                                                            && recordingQuestionCell.field === 'answer';
                                                         return (
                                                             <div
                                                                 key={`qa_row_${i}`}
-                                                                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,0.9fr)_44px] gap-0 border-b border-slate-100 last:border-b-0"
+                                                                className="grid grid-cols-[44px_minmax(0,1fr)_44px] gap-0 border-b border-slate-100 last:border-b-0"
                                                                 onDragOver={(e) => {
                                                                     e.preventDefault();
                                                                     e.dataTransfer.dropEffect = 'move';
@@ -4853,27 +4839,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                                         </button>
                                                                     </div>
                                                                 </div>
-                                                                <div className="p-2 border-l border-slate-100">
-                                                                    <div className="flex gap-1">
-                                                                        <textarea
-                                                                            rows={3}
-                                                                            className="v84-q-input !text-[13px] !leading-snug"
-                                                                            value={pair?.answer || ''}
-                                                                            onChange={(e) => updateQuestionPairRow(i, { answer: e.target.value })}
-                                                                            onKeyDown={(e) => e.stopPropagation()}
-                                                                            placeholder={`Réponse attendue ${i + 1}`}
-                                                                        />
-                                                                        <button
-                                                                            type="button"
-                                                                            className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isAnswerRecording ? 'bg-red-500 text-white' : ''}`}
-                                                                            onClick={() => startQuestionCellDictation(i, 'answer')}
-                                                                            title="Dicter la réponse attendue"
-                                                                        >
-                                                                            🎙️
-                                                                        </button>
-                                                                    </div>
-                                                                    {renderStructuredAnswerPreview(pair?.answer || '')}
-                                                                </div>
                                                                 <div className="flex items-center justify-center border-l border-slate-100">
                                                                     <button
                                                                         type="button"
@@ -4908,7 +4873,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                     className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700"
                                                     onClick={generateQuestionAnswerPairsFromSource}
                                                     disabled={aiTesting || !(selectedQuestionSource?.url || forcedQuestionSource?.value)}
-                                                    title="Génère les questions et réponses attendues depuis la fiche ou vidéo précédente."
+                                                    title="Génère des questions depuis la fiche ou vidéo précédente."
                                                 >
                                                     {aiTesting ? 'Génération...' : '✨ Générer depuis fiche précédente'}
                                                 </button>
@@ -5583,7 +5548,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                         </div>
                                     </div>
                                 )}
-                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Sélectionne puis clique “Réponses”. Clique “Cut” pour insérer une barre, “Next” pour naviguer entre sections.</div>
+                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Sélectionne puis clique “Repères”. Clique “Cut” pour insérer une barre, “Next” pour naviguer entre sections.</div>
                                 <div
                                     ref={keywordSelectionRef}
                                     onMouseUp={captureKeywordSelection}
@@ -5614,7 +5579,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                             applyCurrentSelectionForMode('response', false);
                                         }}
                                     >
-                                        Réponses
+                                        Repères
                                     </button>
                                     <button
                                         type="button"
@@ -5727,7 +5692,7 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                             className="v84-q-input"
                                             value={bulkQuestionImport}
                                             onChange={(e) => setBulkQuestionImport(e.target.value)}
-                                            placeholder={`Question: Quelle est la capitale de la France ?\nRéponse: Paris\n\nQuestion: Cite un continent.\nRéponse: Afrique`}
+                                            placeholder={`Question: Quelle est la capitale de la France ?\n\nQuestion: Cite un continent.`}
                                         />
                                         <div className="mt-2 flex items-center gap-2">
                                             <button
@@ -5797,16 +5762,6 @@ Si l'utilisateur n'est pas encore prêt, envoie plutôt :
                                                     onKeyDown={(e) => e.stopPropagation()}
                                                     placeholder={`Question ${i + 1}`}
                                                 />
-                                                <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Réponse attendue</div>
-                                                <textarea
-                                                    rows={2}
-                                                    className="v84-q-input"
-                                                    value={String(q.expectedAnswer || '')}
-                                                    onChange={(e) => updateZoneQuestion(sectionIdx, i, { expectedAnswer: e.target.value })}
-                                                    onKeyDown={(e) => e.stopPropagation()}
-                                                    placeholder="Réponse attendue"
-                                                />
-                                                {renderStructuredAnswerPreview(q.expectedAnswer || '')}
                                                     </div>
                                                 ))}
                                             </div>

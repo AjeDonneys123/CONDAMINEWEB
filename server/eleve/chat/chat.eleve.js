@@ -39,7 +39,6 @@ const cleanStringList = (value = [], max = 30) => (Array.isArray(value) ? value 
 const compactQuestionForGpt = (row = {}, idx = 0) => ({
     index: idx + 1,
     question: String(row?.question || row?.q || row?.prompt || row?.consigne || '').trim().slice(0, 500),
-    expectedAnswer: String(row?.answer || row?.expectedAnswer || row?.expected || row?.reponse || row?.response || '').trim().slice(0, 500),
     keywords: cleanStringList([
         ...cleanStringList(row?.expectedKeywords, 20),
         ...cleanStringList(row?.keywords || row?.motsCles || row?.mots_cles, 20)
@@ -59,7 +58,7 @@ const extractQuestionRowsForGpt = (step = {}) => {
     }
     return rows
         .map(compactQuestionForGpt)
-        .filter((row) => row.question || row.expectedAnswer || row.keywords)
+        .filter((row) => row.question || row.keywords)
         .slice(0, 12);
 };
 
@@ -108,7 +107,6 @@ const compactStepForGpt = (step = {}, index = 0) => {
         title: String(step.title || step.name || `Étape ${index + 1}`).trim().slice(0, 160),
         type: String(step.type || step.kind || '').trim().slice(0, 80),
         question: String(step.question || step.customQuestion || step.prompt || '').trim().slice(0, 500),
-        expectedAnswer: String(step.expectedAnswer || step.answer || '').trim().slice(0, 500),
         keywords: keywords.join(', ').slice(0, 800),
         sourceKind: String(step.sourceKind || '').trim().slice(0, 80),
         lessonText,

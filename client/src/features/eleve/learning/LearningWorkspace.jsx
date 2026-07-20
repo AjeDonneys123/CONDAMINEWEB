@@ -602,9 +602,8 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         const optionalQuestions = questionItems
             .map((item, idx) => {
                 const q = String(item?.question || '').trim();
-                const a = String(item?.expectedAnswer || '').trim();
-                if (!q && !a) return '';
-                return `${idx + 1}. ${q || 'Question'}${a ? `\n   Reponse attendue: ${a}` : ''}`;
+                if (!q) return '';
+                return `${idx + 1}. ${q}`;
             })
             .filter(Boolean)
             .join('\n');
