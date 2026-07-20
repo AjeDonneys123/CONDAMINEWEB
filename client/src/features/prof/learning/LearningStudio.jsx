@@ -3271,19 +3271,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             && recordingQuestionCell.field === 'question';
         const questionValue = String(q?.question || q?.q || '');
         return (
-            <div key={`db_q_${sectionIdx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
+            <div key={`db_q_${sectionIdx}_${i}`} className="relative rounded-lg border border-slate-200 bg-white p-2 pr-10">
+                <button
+                    type="button"
+                    className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 text-[15px] font-black text-red-600 shadow-sm hover:bg-red-600 hover:text-white"
+                    onClick={() => removeZoneQuestion(sectionIdx, i)}
+                    title="Supprimer cette question"
+                    aria-label={`Supprimer question ${i + 1}`}
+                >
+                    ✕
+                </button>
                 <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="text-[11px] font-black uppercase text-indigo-700">
                         Question {i + 1}
                     </div>
-                    <button
-                        type="button"
-                        className="v84-del-btn"
-                        onClick={() => removeZoneQuestion(sectionIdx, i)}
-                        title="Supprimer question"
-                    >
-                        ✕
-                    </button>
                 </div>
                 <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Question</div>
                 <div className="flex gap-1">
