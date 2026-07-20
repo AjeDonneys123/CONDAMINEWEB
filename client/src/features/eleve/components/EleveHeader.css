@@ -11,6 +11,7 @@
 
 /* CLASSE PRINCIPALE (ROSE) */
 .v80-user-class { font-weight: 950; color: #db2777; font-size: 0.7rem; background: #fdf2f8; padding: 2px 8px; border-radius: 6px; border: 1px solid #fbcfe8; white-space: nowrap; }
+.v80-user-code { font-weight: 950; color: #3730a3; font-size: 0.7rem; background: #eef2ff; padding: 2px 8px; border-radius: 6px; border: 1px solid #c7d2fe; white-space: nowrap; letter-spacing: 0.04em; }
 
 /* OPTIONS (ORANGE) - NOUVEAU V374 */
 .v80-user-option { font-weight: 950; color: #ea580c; font-size: 0.6rem; background: #ffedd5; padding: 2px 6px; border-radius: 6px; border: 1px solid #fed7aa; white-space: nowrap; text-transform: uppercase; }
@@ -156,6 +157,7 @@
     }
 
     .v80-user-class,
+    .v80-user-code,
     .v80-user-option {
         font-size: 0.58rem;
     }

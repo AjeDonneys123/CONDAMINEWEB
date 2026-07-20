@@ -10,6 +10,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toUpperCase();
+  const condaTutorCode = useMemo(() => {
+    const raw = String(user?._id || user?.id || '').replace(/[^a-f0-9]/gi, '').slice(-8);
+    if (!raw) return '';
+    return String((parseInt(raw, 16) % 900000) + 100000);
+  }, [user?._id, user?.id]);
   const trainingTabLabel = /^3/.test(classKey)
     ? '🎓 DNB'
     : /^(2|2DE|SECONDE)/.test(classKey)
@@ -149,6 +154,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
                 <span className="v80-user-name">{user.firstName} {user.lastName}</span>
                 <div className="v80-badges-row">
                     <span className="v80-user-class">{user.currentClass || 'CLASSE ?'}</span>
+                    {condaTutorCode && <span className="v80-user-code">CODE {condaTutorCode}</span>}
                     {groups.map((grp, i) => (
                         <span key={i} className="v80-user-option">
                             {typeof grp === 'object' ? grp.name : 'OPTION'}
