@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './LearningWorkspace.css';
 import { resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
 
@@ -425,6 +425,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [chatGminiCopyMessage, setChatGminiCopyMessage] = useState('');
     const [studentGptStatus, setStudentGptStatus] = useState('');
     const [studentGptValidated, setStudentGptValidated] = useState(Boolean(module?.completion?.completedAt));
+    const [studentGptChecking, setStudentGptChecking] = useState(false);
     const [realtimeStatus, setRealtimeStatus] = useState('');
     const [realtimeActive, setRealtimeActive] = useState(false);
     const [studyChatOpen, setStudyChatOpen] = useState(false);
@@ -782,35 +783,68 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
         }
     };
 
-    useEffect(() => {
-        if (currentStep?.type !== 'question' || studentGptValidated) return;
+    const checkStudentGptValidation = useCallback(async ({ manual = false } = {}) => {
+        if (currentStep?.type !== 'question') return false;
         const moduleId = String(module?._id || module?.id || '').trim();
         const stepId = String(currentStep?.id || '').trim();
         const studentId = String(user?._id || user?.id || '').trim();
-        if (!studentId) return;
+        if (!studentId && !studentCodeForGpt) {
+            if (manual) setStudentGptStatus('Code CondaWeb introuvable pour vérifier la validation.');
+            return false;
+        }
+        if (manual) {
+            setStudentGptChecking(true);
+            setStudentGptStatus('Vérification en cours...');
+        }
+        try {
+            const params = new URLSearchParams();
+            if (studentId) params.set('studentId', studentId);
+            if (studentCodeForGpt) params.set('studentCode', studentCodeForGpt);
+            const res = await fetch(`/api/eleve/chat/gpt-feedback?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || 'Retours GPT indisponibles.');
+            const entries = Array.isArray(data?.entries) ? data.entries : [];
+            const validatedEntry = entries.find((entry) => {
+                const isValidated = String(entry?.type || '').toLowerCase() === 'learning_validated' || entry?.mastered === true;
+                if (!isValidated) return false;
+                const rawModuleId = String(entry?.moduleId || '').trim();
+                const rawStepId = String(entry?.stepId || '').trim();
+                if (rawModuleId && moduleId && rawModuleId !== moduleId) return false;
+                if (rawStepId && stepId && rawStepId !== stepId) return false;
+                return true;
+            });
+            if (validatedEntry) {
+                setStudentGptValidated(true);
+                setGateHint('');
+                setStudentGptStatus('Fiche apprise. Validation reçue par CondaWeb.');
+                return true;
+            }
+            if (manual) {
+                setStudentGptStatus("Aucune validation GPT reçue pour cette fiche pour l'instant.");
+            }
+            return false;
+        } catch (e) {
+            if (manual) setStudentGptStatus(String(e?.message || 'Impossible de vérifier la validation GPT.'));
+            return false;
+        } finally {
+            if (manual) setStudentGptChecking(false);
+        }
+    }, [
+        currentStep?.id,
+        currentStep?.type,
+        module?._id,
+        module?.id,
+        studentCodeForGpt,
+        user?._id,
+        user?.id
+    ]);
+
+    useEffect(() => {
+        if (currentStep?.type !== 'question' || studentGptValidated) return;
         let stopped = false;
         const checkFeedback = async () => {
-            try {
-                const params = new URLSearchParams();
-                params.set('studentId', studentId);
-                const res = await fetch(`/api/eleve/chat/gpt-feedback?${params.toString()}`);
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || stopped) return;
-                const entries = Array.isArray(data?.entries) ? data.entries : [];
-                const validatedEntry = entries.find((entry) => {
-                    const isValidated = String(entry?.type || '').toLowerCase() === 'learning_validated' || entry?.mastered === true;
-                    if (!isValidated) return false;
-                    const rawModuleId = String(entry?.moduleId || '').trim();
-                    const rawStepId = String(entry?.stepId || '').trim();
-                    if (rawModuleId && moduleId && rawModuleId !== moduleId) return false;
-                    if (rawStepId && stepId && rawStepId !== stepId) return false;
-                    return true;
-                });
-                if (validatedEntry) {
-                    setStudentGptValidated(true);
-                    setStudentGptStatus('Fiche apprise. Validation reçue par CondaWeb.');
-                }
-            } catch (_) {}
+            if (stopped) return;
+            await checkStudentGptValidation();
         };
         checkFeedback();
         const timer = window.setInterval(checkFeedback, 4000);
@@ -818,7 +852,7 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
             stopped = true;
             window.clearInterval(timer);
         };
-    }, [currentStep?.id, currentStep?.type, module?._id, module?.id, studentGptValidated, user?._id, user?.id]);
+    }, [checkStudentGptValidation, currentStep?.type, studentGptValidated]);
 
     useEffect(() => {
         const syncGeminiExtension = () => {
@@ -2086,9 +2120,10 @@ Important : parle d'utilisateur, pas d'enfant. Reste sobre, encourageant, et cen
                             <button
                                 type="button"
                                 className="learning-btn ghost"
-                                onClick={() => setStudentGptStatus('Vérification en cours. La validation apparaît ici dès que GPT envoie son retour à CondaWeb.')}
+                                disabled={studentGptChecking}
+                                onClick={() => checkStudentGptValidation({ manual: true })}
                             >
-                                Vérifier la validation
+                                {studentGptChecking ? 'Vérification...' : 'Vérifier la validation'}
                             </button>
                         </div>
                         {studentGptStatus && (
