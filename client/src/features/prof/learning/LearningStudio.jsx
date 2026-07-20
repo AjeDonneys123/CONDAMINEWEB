@@ -1721,8 +1721,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 const rows = Array.isArray(candidate[key]) ? candidate[key] : [];
                 const usable = rows
                     .map((row) => ({
-                        q: String(row?.q || row?.question || '').trim(),
-                        question: String(row?.question || row?.q || '').trim(),
+                        q: String(row?.q || row?.question || ''),
+                        question: String(row?.question || row?.q || ''),
                         expectedAnswer: String(row?.expectedAnswer || row?.answer || '').trim(),
                         expectedKeywords: Array.isArray(row?.expectedKeywords)
                             ? row.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
@@ -1732,7 +1732,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 .filter(Boolean),
                         generatedByAi: row?.generatedByAi === true
                     }))
-                    .filter((row) => row.question || row.expectedAnswer || row.expectedKeywords.length > 0);
+                    .filter((row) => String(row.question || '').trim() || row.expectedAnswer || row.expectedKeywords.length > 0);
                 if (usable.length > 0) clean[String(key)] = usable;
             });
             if (Object.keys(clean).length > 0) return clean;
@@ -1740,8 +1740,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const pairs = Array.isArray(sourceStep.questionAnswerPairs) ? sourceStep.questionAnswerPairs : [];
         const pairRows = pairs
             .map((pair) => ({
-                q: String(pair?.question || pair?.q || '').trim(),
-                question: String(pair?.question || pair?.q || '').trim(),
+                q: String(pair?.question || pair?.q || ''),
+                question: String(pair?.question || pair?.q || ''),
                 expectedAnswer: String(pair?.expectedAnswer || pair?.answer || '').trim(),
                 expectedKeywords: Array.isArray(pair?.expectedKeywords)
                     ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
@@ -1751,7 +1751,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         .filter(Boolean),
                 generatedByAi: pair?.generatedByAi === true
             }))
-            .filter((row) => row.question || row.expectedAnswer || row.expectedKeywords.length > 0);
+            .filter((row) => String(row.question || '').trim() || row.expectedAnswer || row.expectedKeywords.length > 0);
         if (pairRows.length > 0) return { 0: pairRows };
         const fallbackQuestion = String(sourceStep.customQuestion || '').trim();
         const fallbackAnswer = Array.isArray(sourceStep.redHighlights)
