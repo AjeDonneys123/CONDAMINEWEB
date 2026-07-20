@@ -113,6 +113,135 @@
   font-weight: 700;
 }
 
+.eleve-chat-gpt-card,
+.eleve-chat-gpt-feedback {
+  border: 2px solid #fde68a;
+  background: linear-gradient(180deg, #fffbeb 0%, #fffdf7 100%);
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: 0 12px 26px rgba(245, 158, 11, 0.12);
+}
+
+.eleve-chat-gpt-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.eleve-chat-gpt-title {
+  color: #92400e;
+  font-size: 16px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.eleve-chat-gpt-subtitle,
+.eleve-chat-gpt-status {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.eleve-chat-gpt-status {
+  color: #b45309;
+}
+
+.eleve-chat-gpt-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.eleve-chat-gpt-btn,
+.eleve-chat-gpt-refresh {
+  border: none;
+  border-radius: 15px;
+  padding: 12px 16px;
+  color: white;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.eleve-chat-gpt-btn {
+  background: #7c3aed;
+  box-shadow: 0 10px 22px rgba(124, 58, 237, 0.24);
+}
+
+.eleve-chat-gpt-refresh {
+  background: #0f172a;
+}
+
+.eleve-chat-gpt-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eleve-chat-gpt-feedback-head,
+.eleve-chat-gpt-entry-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eleve-chat-gpt-empty {
+  border: 1px dashed #fbbf24;
+  background: rgba(255, 255, 255, 0.72);
+  color: #64748b;
+  border-radius: 16px;
+  padding: 14px;
+  font-weight: 850;
+}
+
+.eleve-chat-gpt-entry {
+  border: 1px solid #fed7aa;
+  border-left: 8px solid #f97316;
+  background: white;
+  border-radius: 18px;
+  padding: 14px;
+  color: #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eleve-chat-gpt-entry.mastered {
+  border-color: #bbf7d0;
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.eleve-chat-gpt-entry-top {
+  font-weight: 950;
+}
+
+.eleve-chat-gpt-entry-top span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.eleve-chat-gpt-entry-text {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.eleve-chat-gpt-entry-small {
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .eleve-chat-diagnostic {
   border: 2px solid #cbd5e1;
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);

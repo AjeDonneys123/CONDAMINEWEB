@@ -435,30 +435,37 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     }, [loadGptInbox]);
 
     const copyGptInboxInstructions = async () => {
-        const text = `Quand l'élève répond correctement, envoie un POST JSON vers ${gptInboxApiUrl}.
+        const text = `Quand l'utilisateur maîtrise la fiche ou la leçon travaillée, envoie un POST JSON vers ${gptInboxApiUrl}.
 
 Corps JSON minimal :
 {
   "teacherName": "${teacherName || 'JP Vuillet'}",
   "teacherEmail": "${teacherEmail || 'vuillet.jean@condamine.edu.ec'}",
-  "studentName": "NOM ELEVE",
+  "studentName": "NOM UTILISATEUR",
   "studentClass": "3E B",
-  "type": "question_validated",
-  "questionNumber": 1,
-  "message": "Question 1 validée",
-  "feedback": "Réponse correcte : explique brièvement ce qui est réussi."
+  "type": "learning_validated",
+  "message": "Apprentissage validé",
+  "feedback": "Résumé clair : ce qui est réussi, ce qui a été repris, et les points à consolider.",
+  "weakPoints": ["notion à renforcer 1", "notion à renforcer 2"],
+  "errors": [
+    { "question": "question posée", "expected": "réponse attendue", "studentAnswer": "réponse initiale" }
+  ],
+  "mastered": true,
+  "score": 90
 }
 
-Si l'élève répond mal, envoie plutôt :
+Si l'utilisateur n'est pas encore prêt, envoie plutôt :
 {
   "teacherName": "${teacherName || 'JP Vuillet'}",
   "teacherEmail": "${teacherEmail || 'vuillet.jean@condamine.edu.ec'}",
-  "studentName": "NOM ELEVE",
+  "studentName": "NOM UTILISATEUR",
   "studentClass": "3E B",
-  "type": "question_feedback",
-  "questionNumber": 1,
-  "message": "Question 1 à reprendre",
-  "feedback": "Explique ce qui manque et donne un conseil court."
+  "type": "learning_feedback",
+  "message": "Apprentissage à reprendre",
+  "feedback": "Explique ce qui manque et donne un conseil court.",
+  "weakPoints": ["notion à revoir"],
+  "mastered": false,
+  "score": 45
 }`;
         try {
             await navigator.clipboard.writeText(text);
@@ -4097,7 +4104,7 @@ Si l'élève répond mal, envoie plutôt :
                     <div className="min-w-0 flex-1">
                         <div className="text-[28px] font-black text-amber-700">📥 Réception GPT — JP Vuillet</div>
                         <div className="mt-1 text-[15px] font-bold text-slate-700">
-                            Les messages envoyés par ton GPT apparaissent ici automatiquement. Test attendu : “Question X validée”.
+                            Les validations et retours envoyés par ton GPT apparaissent ici automatiquement.
                         </div>
                         <div className="mt-3 rounded-2xl border border-amber-200 bg-white/80 p-3 text-[13px] font-mono text-slate-700 break-all">
                             POST {gptInboxApiUrl}

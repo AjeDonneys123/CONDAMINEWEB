@@ -14,7 +14,14 @@ export default function EleveChatWorkspace({ user }) {
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const [chatMetrics, setChatMetrics] = useState(null);
   const [aiStatus, setAiStatus] = useState({ label: 'IA', model: '' });
+  const [gptFeedback, setGptFeedback] = useState([]);
+  const [gptFeedbackStatus, setGptFeedbackStatus] = useState('');
+  const [gptLaunchStatus, setGptLaunchStatus] = useState('');
   const threadRef = useRef(null);
+  const studentId = String(user?._id || user?.id || '').trim();
+  const studentFullName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || user?.nickname || 'Élève';
+  const studentClass = String(user?.currentClass || user?.className || user?.classe || '').trim();
+  const studentGptUrl = import.meta.env?.VITE_STUDENT_GPT_URL || 'https://chatgpt.com/gpts';
 
   useEffect(() => {
     fetch('/api/eleve/chat/status')
@@ -29,10 +36,106 @@ export default function EleveChatWorkspace({ user }) {
       .catch(() => {});
   }, []);
 
+  const loadGptFeedback = async ({ silent = true } = {}) => {
+    if (!studentId) return;
+    if (!silent) setGptFeedbackStatus('Actualisation des retours GPT...');
+    try {
+      const params = new URLSearchParams({ studentId });
+      const response = await fetch(`/api/eleve/chat/gpt-feedback?${params.toString()}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Retours GPT indisponibles.');
+      setGptFeedback(Array.isArray(data.entries) ? data.entries : []);
+      if (!silent) setGptFeedbackStatus('Retours GPT actualisés.');
+    } catch (feedbackError) {
+      if (!silent) setGptFeedbackStatus(feedbackError.message || 'Retours GPT indisponibles.');
+    }
+  };
+
+  useEffect(() => {
+    if (!studentId) return undefined;
+    loadGptFeedback({ silent: true });
+    const timer = window.setInterval(() => loadGptFeedback({ silent: true }), 5000);
+    return () => window.clearInterval(timer);
+  }, [studentId]);
+
   useEffect(() => {
     if (!threadRef.current) return;
     threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [messages, pending]);
+  }, [messages, pending, gptFeedback.length]);
+
+  const buildStudentGptPrompt = () => {
+    const origin = window.location.origin;
+    return `Tu es CondaTuteur, assistant privé de révision de CondaWeb pour JP Vuillet.
+
+Objectif : aider l'utilisateur à réviser la fiche/leçon récemment consultée dans CondaWeb, puis renvoyer une validation quand la leçon est réellement maîtrisée.
+
+Utilisateur :
+- studentId: ${studentId || 'inconnu'}
+- studentName: ${studentFullName}
+- studentClass: ${studentClass || 'inconnue'}
+
+Étape 1 — Avant de commencer :
+Appelle l'action getStudentContextFromCondaWeb avec studentId="${studentId}", studentName="${studentFullName}", studentClass="${studentClass}".
+Lis en priorité recentLearning.activeStep. Si cette étape contient une fiche, une question, une réponse attendue, des mots-clés ou des questions internes, utilise-les comme base de révision.
+Ensuite, accueille l'utilisateur ainsi :
+"Bonjour ${studentFullName}. Je suis le tuteur CondaWeb. J'ai retrouvé ta leçon : [titre de l'apprentissage] / [fiche ou étape active]. Voici tes infos utiles : [résumé court]. Es-tu prêt à travailler ?"
+
+Étape 2 — Entraînement :
+Interroge l'utilisateur comme un tuteur : une question à la fois.
+Ne donne pas la réponse avant que l'utilisateur ait essayé.
+Si l'utilisateur se trompe, corrige gentiment, explique simplement, puis repose plus tard les points ratés.
+Fais reformuler les éléments importants de la leçon.
+Garde en mémoire les questions, notions ou passages qui ont posé problème.
+
+Étape 3 — Validation :
+Quand tu estimes que l'utilisateur connaît bien la leçon, dis-lui :
+"Bravo ${studentFullName}, l'apprentissage est validé."
+Puis appelle l'action sendStudentGptFeedbackToCondaWeb.
+Envoie notamment :
+- studentId: "${studentId}"
+- studentName: "${studentFullName}"
+- studentClass: "${studentClass}"
+- moduleId: l'id de recentLearning si disponible
+- stepId: l'id de recentLearning.activeStep si disponible
+- type: "learning_validated"
+- message: "Apprentissage validé"
+- feedback: résumé clair du travail et des réussites
+- weakPoints: liste des notions/questions à renforcer
+- errors: liste d'objets avec question, expected, studentAnswer si possible
+- mastered: true si validé, false sinon
+- score: estimation sur 100
+
+Endpoint CondaWeb actuel pour vérifier : ${origin}/api/eleve/chat/gpt-feedback
+
+Important : utilise le mot "utilisateur" dans tes consignes internes. Ne présente pas ce GPT comme un service public pour enfants.`;
+  };
+
+  const copyText = async (text) => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', 'true');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand('copy');
+    document.body.removeChild(area);
+  };
+
+  const openStudentGpt = async () => {
+    const prompt = buildStudentGptPrompt();
+    try {
+      await copyText(prompt);
+      setGptLaunchStatus('Consigne copiée. Colle-la dans le GPT ouvert.');
+    } catch {
+      setGptLaunchStatus('Impossible de copier automatiquement : ouvre le GPT puis copie la consigne depuis le prof.');
+    }
+    window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const sendMessage = async () => {
     const text = String(input || '').trim();
@@ -298,6 +401,51 @@ export default function EleveChatWorkspace({ user }) {
         <div className="eleve-chat-subtitle">
           Pose une question sur tes cours. Conda peut t&apos;expliquer et te guider sans faire le travail a ta place.
         </div>
+
+        <div className="eleve-chat-gpt-card">
+          <div>
+            <div className="eleve-chat-gpt-title">🤖 GPT tuteur de leçon</div>
+            <div className="eleve-chat-gpt-subtitle">
+              Ouvre le GPT de révision. Il récupère ta fiche récente, te fait travailler, puis renvoie la validation ici.
+            </div>
+            {gptLaunchStatus && <div className="eleve-chat-gpt-status">{gptLaunchStatus}</div>}
+          </div>
+          <div className="eleve-chat-gpt-actions">
+            <button type="button" className="eleve-chat-gpt-btn" onClick={openStudentGpt}>
+              Ouvrir GPT
+            </button>
+            <button type="button" className="eleve-chat-gpt-refresh" onClick={() => loadGptFeedback({ silent: false })}>
+              Actualiser
+            </button>
+          </div>
+        </div>
+
+        {(gptFeedback.length > 0 || gptFeedbackStatus) && (
+          <div className="eleve-chat-gpt-feedback">
+            <div className="eleve-chat-gpt-feedback-head">
+              <div className="eleve-chat-gpt-title">📥 Retours GPT</div>
+              {gptFeedbackStatus && <div className="eleve-chat-gpt-status">{gptFeedbackStatus}</div>}
+            </div>
+            {gptFeedback.length === 0 ? (
+              <div className="eleve-chat-gpt-empty">Aucun retour GPT reçu pour l&apos;instant.</div>
+            ) : (
+              gptFeedback.slice(0, 4).map((entry) => (
+                <div key={entry.id || `${entry.receivedAt}-${entry.message}`} className={`eleve-chat-gpt-entry ${entry.mastered ? 'mastered' : ''}`}>
+                  <div className="eleve-chat-gpt-entry-top">
+                    <strong>{entry.message || entry.type || 'Retour GPT'}</strong>
+                    {entry.score !== null && entry.score !== undefined && <span>{entry.score}/100</span>}
+                  </div>
+                  {entry.feedback && <div className="eleve-chat-gpt-entry-text">{entry.feedback}</div>}
+                  {Array.isArray(entry.weakPoints) && entry.weakPoints.length > 0 && (
+                    <div className="eleve-chat-gpt-entry-small">
+                      À renforcer : {entry.weakPoints.join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         <div className={`eleve-chat-diagnostic ${diagnostic?.status || ''}`}>
           <div className="eleve-chat-diagnostic-head">

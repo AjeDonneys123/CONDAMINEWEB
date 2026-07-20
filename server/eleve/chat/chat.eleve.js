@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const AIEngine = require('../../core/ai.engine');
+const { Student, LearningModule, GptInboxMessage } = require('../../prof/models/prof.models');
 
 const router = express.Router();
 
@@ -20,6 +21,94 @@ const cleanHistory = (history) => (Array.isArray(history) ? history : [])
         text: String(item?.text || '').trim().slice(0, 2000)
     }))
     .filter((item) => item.text);
+
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeClassKey = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+const compactStepForGpt = (step = {}, index = 0) => {
+    const questionRows = Array.isArray(step.questionRows) ? step.questionRows : [];
+    const lessonText = String(
+        step.lessonText
+        || step.ficheText
+        || step.sourceText
+        || step.transcript
+        || step.text
+        || step.content
+        || step.description
+        || ''
+    ).trim();
+    const questions = questionRows
+        .map((row, idx) => ({
+            index: idx + 1,
+            question: String(row?.question || row?.prompt || row?.consigne || '').trim().slice(0, 500),
+            expectedAnswer: String(row?.answer || row?.expectedAnswer || row?.expected || row?.reponse || row?.response || '').trim().slice(0, 500),
+            keywords: String(row?.keywords || row?.motsCles || row?.mots_cles || '').trim().slice(0, 300)
+        }))
+        .filter((row) => row.question || row.expectedAnswer || row.keywords)
+        .slice(0, 8);
+    return {
+        id: String(step._id || step.id || '').trim(),
+        index: index + 1,
+        title: String(step.title || step.name || `Étape ${index + 1}`).trim().slice(0, 160),
+        type: String(step.type || step.kind || '').trim().slice(0, 80),
+        question: String(step.question || step.prompt || '').trim().slice(0, 500),
+        expectedAnswer: String(step.expectedAnswer || step.answer || '').trim().slice(0, 500),
+        keywords: String(step.keywords || step.motsCles || '').trim().slice(0, 300),
+        lessonText: lessonText.slice(0, 4000),
+        questions
+    };
+};
+
+const summarizeLearningModuleForGpt = (module = {}, studentId = '') => {
+    const completion = (module.completions || []).find((item) => String(item?.studentId || '') === String(studentId));
+    const steps = (module.steps || []).slice(0, 10).map(compactStepForGpt);
+    const currentStep = Number(completion?.currentStep || 0);
+    const activeStepIndex = Math.max(0, Math.min(steps.length - 1, Number.isFinite(currentStep) ? currentStep : 0));
+    return {
+        id: String(module._id || ''),
+        title: String(module.title || 'Apprentissage').trim().slice(0, 180),
+        subject: String(module.subject || '').trim().slice(0, 80),
+        currentStep,
+        completedAt: completion?.completedAt || null,
+        stepsCount: Array.isArray(module.steps) ? module.steps.length : 0,
+        activeStep: steps[activeStepIndex] || null,
+        steps
+    };
+};
+
+async function findStudentForGpt({ studentId = '', studentName = '', studentClass = '' }) {
+    if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+        const byId = await Student.findById(studentId).lean();
+        if (byId) return byId;
+    }
+
+    const name = String(studentName || '').trim();
+    const cls = String(studentClass || '').trim();
+    if (!name) return null;
+    const parts = name.split(/\s+/).filter(Boolean);
+    const regexes = parts.map((part) => new RegExp(escapeRegex(part), 'i'));
+    const query = {
+        $and: regexes.map((rx) => ({
+            $or: [{ firstName: rx }, { lastName: rx }, { nickname: rx }]
+        }))
+    };
+    if (cls) query.currentClass = new RegExp(`^${escapeRegex(cls)}$`, 'i');
+    return Student.findOne(query).lean();
+}
+
+function checkStudentGptToken(req) {
+    const expected = String(process.env.GPT_STUDENT_TOKEN || process.env.GPT_INBOX_TOKEN || '').trim();
+    if (!expected) return true;
+    const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const provided = String(req.body?.token || req.query?.token || '').trim();
+    return auth === expected || provided === expected;
+}
 
 const normalize = (value = '') => String(value)
     .normalize('NFD')
@@ -273,6 +362,169 @@ router.post('/diagnostic/ollama-stream', async (_req, res) => {
             done: true,
             elapsedMs: Date.now() - startedAt
         })}\n`);
+    }
+});
+
+router.get('/gpt-context', async (req, res) => {
+    try {
+        if (!checkStudentGptToken(req)) {
+            return res.status(401).json({ ok: false, error: 'Token GPT invalide.' });
+        }
+
+        const studentId = String(req.query.studentId || '').trim();
+        const studentName = String(req.query.studentName || req.query.name || '').trim();
+        const studentClass = String(req.query.studentClass || req.query.className || req.query.classe || '').trim();
+        const student = await findStudentForGpt({ studentId, studentName, studentClass });
+        if (!student) return res.status(404).json({ ok: false, error: 'Élève introuvable.' });
+
+        const classKey = normalizeClassKey(student.currentClass);
+        const rawModules = await LearningModule.find({
+            isEnabled: { $ne: false },
+            $or: [{ assignedStudents: student._id }, { isAllClass: true }]
+        }).sort({ date: -1, createdAt: -1 }).limit(40).lean();
+
+        const modules = rawModules
+            .filter((module) => {
+                const assigned = (module.assignedStudents || []).some((id) => String(id) === String(student._id));
+                if (assigned) return true;
+                if (!module.isAllClass) return false;
+                if (!classKey) return true;
+                return (module.targetClassrooms || []).some((target) => normalizeClassKey(target) === classKey);
+            })
+            .slice(0, 8)
+            .map((module) => summarizeLearningModuleForGpt(module, String(student._id)));
+
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+        const nameFilters = fullName ? [{ studentName: { $regex: `^${escapeRegex(fullName)}$`, $options: 'i' } }] : [];
+        const recentFeedback = await GptInboxMessage.find({
+            $or: [{ studentId: String(student._id) }, ...nameFilters]
+        }).sort({ receivedAt: -1 }).limit(8).lean();
+
+        const recentLearning = modules[0] || null;
+        return res.json({
+            ok: true,
+            student: {
+                id: String(student._id),
+                firstName: student.firstName || '',
+                lastName: student.lastName || '',
+                nickname: student.nickname || '',
+                currentClass: student.currentClass || ''
+            },
+            mission: {
+                kind: 'lesson_revision',
+                instruction: "Tu es un tuteur de révision CondaWeb. Utilise en priorité recentLearning.activeStep, c'est la fiche ou l'étape récemment proposée dans l'apprentissage. Interroge l'utilisateur progressivement, sans donner les réponses d'abord. Quand la leçon est réellement maîtrisée, valide l'apprentissage par POST."
+            },
+            recentLearning,
+            learningModules: modules,
+            recentGptFeedback: recentFeedback.map((entry) => ({
+                type: entry.type,
+                message: entry.message,
+                feedback: entry.feedback,
+                weakPoints: entry.weakPoints || [],
+                errors: entry.errors || [],
+                mastered: !!entry.mastered,
+                score: entry.score,
+                receivedAt: entry.receivedAt
+            })),
+            postBack: {
+                url: `${req.protocol}://${req.get('host')}/api/eleve/chat/gpt-feedback`,
+                method: 'POST',
+                required: ['studentId', 'type', 'message'],
+                example: {
+                    studentId: String(student._id),
+                    studentName: fullName,
+                    studentClass: student.currentClass || '',
+                    moduleId: recentLearning?.id || '',
+                    stepId: recentLearning?.activeStep?.id || '',
+                    type: 'learning_validated',
+                    questionNumber: null,
+                    message: 'Apprentissage validé',
+                    feedback: "L'utilisateur connaît bien la fiche. À renforcer : les points qui ont demandé plusieurs essais.",
+                    weakPoints: ['point à revoir 1', 'point à revoir 2'],
+                    errors: [{ question: 'question posée', expected: 'réponse attendue', studentAnswer: 'réponse initiale' }],
+                    mastered: true,
+                    score: 90
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Student GPT context error:', error);
+        return res.status(500).json({ ok: false, error: 'Contexte GPT indisponible.' });
+    }
+});
+
+router.get('/gpt-feedback', async (req, res) => {
+    try {
+        const studentId = String(req.query.studentId || '').trim();
+        const studentName = String(req.query.studentName || req.query.name || '').trim();
+        const studentClass = String(req.query.studentClass || req.query.className || req.query.classe || '').trim();
+        const student = await findStudentForGpt({ studentId, studentName, studentClass });
+        if (!student) return res.json({ ok: true, entries: [] });
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+        const filters = [{ studentId: String(student._id) }];
+        if (fullName) filters.push({ studentName: { $regex: `^${escapeRegex(fullName)}$`, $options: 'i' } });
+        const entries = await GptInboxMessage.find({ $or: filters }).sort({ receivedAt: -1 }).limit(12).lean();
+        return res.json({
+            ok: true,
+            entries: entries.map((entry) => ({
+                id: String(entry._id),
+                type: entry.type,
+                questionNumber: entry.questionNumber,
+                message: entry.message,
+                feedback: entry.feedback,
+                summary: entry.summary,
+                weakPoints: entry.weakPoints || [],
+                errors: entry.errors || [],
+                mastered: !!entry.mastered,
+                score: entry.score,
+                receivedAt: entry.receivedAt
+            }))
+        });
+    } catch (error) {
+        console.error('Student GPT feedback list error:', error);
+        return res.status(500).json({ ok: false, error: 'Retours GPT indisponibles.' });
+    }
+});
+
+router.post('/gpt-feedback', async (req, res) => {
+    try {
+        if (!checkStudentGptToken(req)) {
+            return res.status(401).json({ ok: false, error: 'Token GPT invalide.' });
+        }
+        const studentId = String(req.body?.studentId || '').trim();
+        const studentName = String(req.body?.studentName || req.body?.name || '').trim();
+        const studentClass = String(req.body?.studentClass || req.body?.className || req.body?.classe || '').trim();
+        const student = await findStudentForGpt({ studentId, studentName, studentClass });
+        const fullName = student
+            ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
+            : studentName;
+
+        const entry = await GptInboxMessage.create({
+            teacherName: 'JP Vuillet',
+            teacherEmail: 'vuillet.jean@condamine.edu.ec',
+            studentId: student ? String(student._id) : studentId,
+            studentName: fullName || 'Élève',
+            studentClass: student?.currentClass || studentClass || '',
+            moduleId: String(req.body?.moduleId || '').trim().slice(0, 120),
+            stepId: String(req.body?.stepId || '').trim().slice(0, 120),
+            type: String(req.body?.type || 'feedback').trim().slice(0, 80),
+            questionNumber: Number.isFinite(Number(req.body?.questionNumber)) ? Number(req.body.questionNumber) : null,
+            message: String(req.body?.message || '').trim().slice(0, 1000),
+            feedback: String(req.body?.feedback || '').trim().slice(0, 3000),
+            summary: String(req.body?.summary || '').trim().slice(0, 2000),
+            weakPoints: Array.isArray(req.body?.weakPoints)
+                ? req.body.weakPoints.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 12)
+                : [],
+            errors: Array.isArray(req.body?.errors) ? req.body.errors.slice(0, 20) : [],
+            mastered: !!req.body?.mastered,
+            score: Number.isFinite(Number(req.body?.score)) ? Number(req.body.score) : null,
+            source: 'student-custom-gpt',
+            raw: JSON.stringify(req.body || {}).slice(0, 8000)
+        });
+        return res.json({ ok: true, entry: { id: String(entry._id), receivedAt: entry.receivedAt } });
+    } catch (error) {
+        console.error('Student GPT feedback post error:', error);
+        return res.status(500).json({ ok: false, error: 'Enregistrement GPT impossible.' });
     }
 });
 
