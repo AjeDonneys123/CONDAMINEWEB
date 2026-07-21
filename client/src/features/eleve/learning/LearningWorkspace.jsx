@@ -609,20 +609,13 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const buildLearningGptPrompt = (session = {}) => {
         const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
-        const sourceUrl = `${window.location.origin}/api/eleve/learning/tutor-code/${encodeURIComponent(studentCodeForGpt)}/context`;
+        const sourceText = String(session?.preview || '').trim();
         return `Tu es CondaTuteur, tuteur de revision associe a CondaWeb pour le professeur JP Vuillet.
 
 Objectif : aider l'utilisateur a reviser la fiche CondaWeb "${moduleTitle}", puis valider quand la lecon est reellement maitrisee.
 
-Code CondaWeb de l'utilisateur : ${studentCodeForGpt || 'inconnu'}
-
-Tu dois d'abord lire cette source CondaWeb fixe :
-${sourceUrl || 'SOURCE MANQUANTE'}
-
-Si tu disposes d'une action, appelle getCondaWebTutorSessionSourceByCode avec code="${studentCodeForGpt}".
-
-Si tu n'as pas d'action mais que tu peux naviguer, ouvre l'URL source ci-dessus.
-Si tu ne peux pas ouvrir l'URL, demande a l'utilisateur de coller le contenu de la source CondaWeb.
+Tu n'as pas besoin d'ouvrir un lien externe. La source CondaWeb complete est collee ci-dessous.
+Lis-la integralement et suis strictement ses instructions.
 
 Apres lecture de la source :
 - cite le titre exact de la lecon ;
@@ -646,7 +639,11 @@ Important :
 - Ne donne jamais le lien de validation avant une vraie maitrise.
 - Ne valide pas apres une seule bonne reponse si la fiche contient plusieurs connaissances.
 - Parle d'utilisateur ou d'apprenant, pas d'enfant.
-- Reste sobre, encourageant, et centre sur l'apprentissage.`;
+- Reste sobre, encourageant, et centre sur l'apprentissage.
+
+SOURCE CONDAWEB COMPLETE A UTILISER :
+
+${sourceText || 'SOURCE CONDAWEB MANQUANTE. Demande a l utilisateur de relancer le bouton CondaWeb.'}`;
     };
 
     const prepareTutorSession = async () => {
@@ -682,9 +679,9 @@ Important :
         const prompt = buildLearningGptPrompt(session);
         try {
             await copyTextForLearning(prompt);
-            setStudentGptStatus(`Source CondaWeb active pour le code ${studentCodeForGpt}. Consigne GPT copiee.`);
+            setStudentGptStatus('Source CondaWeb complete copiee. Colle-la dans GPT si besoin.');
         } catch (_) {
-            setStudentGptStatus(`Source CondaWeb active pour le code ${studentCodeForGpt}. Ouvre le GPT puis donne ton code.`);
+            setStudentGptStatus('Source CondaWeb preparee. Copie-colle la fiche depuis CondaWeb si besoin.');
         }
         window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
     };
@@ -697,24 +694,12 @@ Important :
             setStudentGptStatus(String(e?.message || 'Impossible de preparer le document Gemini.'));
             return;
         }
-        const docUrl = String(session?.instructionDocUrl || '').trim();
-        const prompt = [
-            'Tu es CondaTuteur.',
-            '',
-            'Lis ce Google Doc CondaWeb, puis suis exactement les instructions qu il contient :',
-            docUrl || String(session?.sourceUrl || ''),
-            '',
-            'Tu dois prouver que tu as lu la fiche en citant son titre exact et une notion precise.',
-            'Pose ensuite les questions une par une.',
-            'Ne donne le lien de validation qu a la fin, quand la fiche est reellement maitrisee.'
-        ].join('\n');
+        const prompt = buildLearningGptPrompt(session);
         try {
             await copyTextForLearning(prompt);
-            setStudentGptStatus(docUrl
-                ? 'Document Gemini mis a jour. Prompt copie.'
-                : 'Source CondaWeb preparee, mais document Drive indisponible. Prompt copie avec source web.');
+            setStudentGptStatus('Source CondaWeb complete copiee. Colle-la dans Gemini.');
         } catch (_) {
-            setStudentGptStatus('Document Gemini prepare. Ouvre Gemini et donne le lien du document.');
+            setStudentGptStatus('Source CondaWeb preparee. Copie-colle la fiche depuis CondaWeb si besoin.');
         }
         window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
     };
