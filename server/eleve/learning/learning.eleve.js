@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
@@ -13,6 +14,40 @@ const learningAudioUpload = multer({
     dest: path.join(process.cwd(), 'public', 'uploads', 'temp'),
     limits: { fileSize: 10 * 1024 * 1024 }
 });
+
+const getTutorSessionSecret = () => String(
+    process.env.TUTOR_SESSION_SECRET
+    || process.env.GPT_INBOX_TOKEN
+    || process.env.JWT_SECRET
+    || process.env.SESSION_SECRET
+    || 'condaweb-local-tutor-session-secret'
+).trim();
+
+const base64UrlJson = (value) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+
+const signTutorPayload = (payload) => {
+    const encoded = base64UrlJson(payload);
+    const sig = crypto.createHmac('sha256', getTutorSessionSecret()).update(encoded).digest('base64url');
+    return `${encoded}.${sig}`;
+};
+
+const verifyTutorToken = (token = '') => {
+    const raw = String(token || '').trim();
+    const [encoded, sig] = raw.split('.');
+    if (!encoded || !sig) throw new Error('Token session invalide');
+    const expected = crypto.createHmac('sha256', getTutorSessionSecret()).update(encoded).digest('base64url');
+    if (Buffer.byteLength(sig) !== Buffer.byteLength(expected)) throw new Error('Signature session invalide');
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) throw new Error('Signature session invalide');
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    if (Number(payload?.exp || 0) < Date.now()) throw new Error('Session expiree');
+    return payload;
+};
+
+const buildPublicBaseUrl = (req) => {
+    const envBase = String(process.env.PUBLIC_APP_URL || process.env.CLIENT_URL || '').trim().replace(/\/+$/, '');
+    if (envBase) return envBase;
+    return `${req.protocol}://${req.get('host')}`;
+};
 
 function addClassTarget(set, value) {
     const normalized = String(value || '')
@@ -265,6 +300,206 @@ const collectSheetSourceText = (step = {}) => {
     }
     return '';
 };
+
+const getStudentGptCode = (student = {}) => {
+    const raw = String(student?._id || student?.id || '').replace(/[^a-f0-9]/gi, '').slice(-8);
+    if (!raw) return '';
+    return String((parseInt(raw, 16) % 900000) + 100000);
+};
+
+const ensureLearningAccess = async ({ studentId = '', moduleId = '' }) => {
+    const LearningModule = mongoose.model('LearningModule');
+    const Student = mongoose.model('Student');
+    if (!mongoose.Types.ObjectId.isValid(studentId) || !mongoose.Types.ObjectId.isValid(moduleId)) {
+        const err = new Error('studentId/moduleId invalides');
+        err.status = 400;
+        throw err;
+    }
+    const [student, moduleDoc] = await Promise.all([
+        Student.findById(studentId).lean(),
+        LearningModule.findById(moduleId).lean()
+    ]);
+    if (!student || !moduleDoc || moduleDoc.isEnabled === false) {
+        const err = new Error('Session CondaWeb introuvable');
+        err.status = 404;
+        throw err;
+    }
+    const classTargets = await buildStudentClassTargets(student);
+    const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
+    const assigned = (moduleDoc.assignedStudents || []).some((id) => String(id) === String(student._id));
+    const allowed = assigned || (moduleDoc.isAllClass && matchesClassTargets(moduleDoc.targetClassrooms || [], classTargetKeys));
+    if (!allowed) {
+        const err = new Error('Acces refuse a cet apprentissage');
+        err.status = 403;
+        throw err;
+    }
+    return { student, moduleDoc };
+};
+
+const findTutorStep = (moduleDoc = {}, stepId = '', stepIndex = 0) => {
+    const steps = Array.isArray(moduleDoc.steps) ? moduleDoc.steps : [];
+    return steps.find((step) => String(step?.id || '') === String(stepId || '')) || steps[Math.max(0, Number(stepIndex || 0))] || {};
+};
+
+const collectTutorLessonText = (steps = [], currentStep = {}, stepIndex = 0) => {
+    return findSourceTextForQuestionStep(steps, Number(stepIndex || 0), currentStep)
+        || collectSheetSourceText(currentStep)
+        || steps.map(collectSheetSourceText).filter(Boolean).join('\n\n');
+};
+
+const buildTutorSessionContextText = ({ req, token, student, moduleDoc, stepId = '', stepIndex = 0 }) => {
+    const steps = Array.isArray(moduleDoc.steps) ? moduleDoc.steps : [];
+    const currentStep = findTutorStep(moduleDoc, stepId, stepIndex);
+    const questions = extractRealtimeQuestions(currentStep);
+    const lessonText = collectTutorLessonText(steps, currentStep, stepIndex);
+    const baseUrl = buildPublicBaseUrl(req);
+    const validationUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/validate`;
+    const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.nickname || 'utilisateur';
+    const moduleTitle = String(moduleDoc.title || moduleDoc.chapterTitle || 'Apprentissage').trim();
+    const questionList = questions.length
+        ? questions.map((q) => `${q.index}. ${q.question}`).join('\n')
+        : 'Aucune question professeur. Cree tes propres questions a partir de la fiche, une par une.';
+    return [
+        'SOURCE CONDAWEB POUR CONDATUTEUR',
+        '',
+        'IMPORTANT',
+        '- Cette source remplace toute identification par nom/classe.',
+        '- Tu dois utiliser exclusivement les informations ci-dessous.',
+        '- Au debut, prouve que tu as lu cette source en citant le titre exact de la lecon et une notion precise de la fiche.',
+        '- Ne donne le lien de validation qu apres une vraie maitrise.',
+        '',
+        'SESSION',
+        `studentName: ${fullName}`,
+        `studentClass: ${student.currentClass || ''}`,
+        `studentCode: ${getStudentGptCode(student)}`,
+        `moduleId: ${moduleDoc._id}`,
+        `stepId: ${String(currentStep?.id || stepId || '')}`,
+        `lessonTitle: ${moduleTitle}`,
+        '',
+        'URL DE VALIDATION FINALE',
+        validationUrl,
+        '',
+        'CONSIGNE DE VALIDATION',
+        'Quand la fiche est reellement maitrisee, dis: "Bravo, apprentissage valide."',
+        'Puis donne le lien de validation finale ci-dessus et demande a l utilisateur de cliquer dessus pour confirmer dans CondaWeb.',
+        'Ne donne pas ce lien avant la fin de l entrainement.',
+        '',
+        'QUESTIONS PROFESSEUR FACULTATIVES',
+        questionList,
+        '',
+        'FICHE DE REVISION / SOURCE DE CORRECTION',
+        String(lessonText || 'Aucune fiche textuelle disponible. Interroge seulement sur le titre et demande au professeur de verifier la fiche.').trim().slice(0, 25000)
+    ].join('\n');
+};
+
+const markLearningCompletedByTutorToken = async ({ studentId = '', moduleId = '' }) => {
+    const LearningModule = mongoose.model('LearningModule');
+    const moduleDoc = await LearningModule.findById(moduleId);
+    if (!moduleDoc) return false;
+    const now = new Date();
+    const sid = String(studentId);
+    const stepsLength = Array.isArray(moduleDoc.steps) ? moduleDoc.steps.length : 0;
+    const completions = Array.isArray(moduleDoc.completions) ? [...moduleDoc.completions] : [];
+    const idx = completions.findIndex((entry) => String(entry?.studentId || '') === sid);
+    if (idx >= 0) {
+        const base = typeof completions[idx]?.toObject === 'function' ? completions[idx].toObject() : completions[idx];
+        completions[idx] = { ...base, currentStep: stepsLength, completedAt: base?.completedAt || now, lastUpdateAt: now };
+    } else {
+        completions.push({ studentId, currentStep: stepsLength, completedAt: now, lastUpdateAt: now });
+    }
+    moduleDoc.completions = completions;
+    await moduleDoc.save();
+    return true;
+};
+
+router.post('/tutor-session', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const moduleId = String(req.body?.moduleId || '').trim();
+        const stepId = String(req.body?.stepId || '').trim();
+        const stepIndex = Math.max(0, Number(req.body?.stepIndex || 0));
+        const { student, moduleDoc } = await ensureLearningAccess({ studentId, moduleId });
+        const exp = Date.now() + (24 * 60 * 60 * 1000);
+        const token = signTutorPayload({ studentId, moduleId, stepId, stepIndex, exp, kind: 'learning_tutor' });
+        const baseUrl = buildPublicBaseUrl(req);
+        const sourceUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/context`;
+        const validationUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/validate`;
+        const preview = buildTutorSessionContextText({ req, token, student, moduleDoc, stepId, stepIndex });
+        return res.json({ ok: true, token, sourceUrl, validationUrl, expiresAt: new Date(exp).toISOString(), preview });
+    } catch (e) {
+        return res.status(e.status || 500).json({ ok: false, error: String(e?.message || 'Session tuteur impossible') });
+    }
+});
+
+router.get('/tutor-session/:token/context', async (req, res) => {
+    try {
+        const token = String(req.params.token || '').trim();
+        const payload = verifyTutorToken(token);
+        if (payload.kind !== 'learning_tutor') throw new Error('Type de session invalide');
+        const { student, moduleDoc } = await ensureLearningAccess({ studentId: payload.studentId, moduleId: payload.moduleId });
+        const text = buildTutorSessionContextText({ req, token, student, moduleDoc, stepId: payload.stepId, stepIndex: payload.stepIndex });
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(text);
+    } catch (e) {
+        return res.status(e.status || 400).type('text/plain').send(`Session CondaWeb indisponible: ${String(e?.message || e)}`);
+    }
+});
+
+router.get('/tutor-session/:token/validate', async (req, res) => {
+    try {
+        const GptInboxMessage = mongoose.model('GptInboxMessage');
+        const token = String(req.params.token || '').trim();
+        const payload = verifyTutorToken(token);
+        if (payload.kind !== 'learning_tutor') throw new Error('Type de session invalide');
+        const { student, moduleDoc } = await ensureLearningAccess({ studentId: payload.studentId, moduleId: payload.moduleId });
+        await markLearningCompletedByTutorToken({ studentId: payload.studentId, moduleId: payload.moduleId });
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.nickname || 'utilisateur';
+        await GptInboxMessage.create({
+            receivedAt: new Date(),
+            teacherName: 'JP Vuillet',
+            teacherEmail: 'vuillet.jean@condamine.edu.ec',
+            moduleId: String(moduleDoc._id),
+            stepId: String(payload.stepId || ''),
+            studentId: String(student._id),
+            studentName: fullName,
+            studentClass: String(student.currentClass || ''),
+            type: 'learning_validated',
+            message: 'Apprentissage valide',
+            feedback: 'Validation confirmee par lien CondaTuteur.',
+            mastered: true,
+            source: 'tutor_validation_link',
+            raw: JSON.stringify({ tokenKind: payload.kind, stepIndex: payload.stepIndex }).slice(0, 5000)
+        });
+        const title = String(moduleDoc.title || 'Apprentissage').trim();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(`<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CondaWeb - fiche apprise</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fdf2f8;font-family:Arial,sans-serif;color:#111827}
+    main{width:min(720px,calc(100vw - 32px));background:#fff;border:3px solid #bbf7d0;border-radius:24px;padding:32px;box-shadow:0 22px 60px rgba(15,23,42,.16)}
+    h1{margin:0 0 12px;font-size:34px;color:#166534}
+    p{font-size:18px;font-weight:800;line-height:1.5}
+    .muted{color:#64748b;font-size:14px}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fiche apprise</h1>
+    <p>${fullName} - ${title}</p>
+    <p>Validation recue par CondaWeb.</p>
+    <p class="muted">Tu peux revenir sur ton onglet CondaWeb et cliquer sur "Verifier la validation" si la page d'apprentissage est encore ouverte.</p>
+  </main>
+</body>
+</html>`);
+    } catch (e) {
+        return res.status(e.status || 400).type('text/plain').send(`Validation impossible: ${String(e?.message || e)}`);
+    }
+});
 
 router.get('/list/:studentId', async (req, res) => {
     try {
