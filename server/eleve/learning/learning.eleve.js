@@ -307,6 +307,15 @@ const getStudentGptCode = (student = {}) => {
     return String((parseInt(raw, 16) % 900000) + 100000);
 };
 
+const findStudentByTutorCode = async (code = '') => {
+    const Student = mongoose.model('Student');
+    const clean = String(code || '').replace(/\D/g, '').trim();
+    if (!clean) return null;
+    const candidates = await Student.find({}, 'firstName lastName nickname currentClass activeTutorSession').lean();
+    const matches = candidates.filter((student) => getStudentGptCode(student) === clean);
+    return matches.length === 1 ? matches[0] : null;
+};
+
 const ensureLearningAccess = async ({ studentId = '', moduleId = '' }) => {
     const LearningModule = mongoose.model('LearningModule');
     const Student = mongoose.model('Student');
@@ -425,9 +434,56 @@ router.post('/tutor-session', async (req, res) => {
         const sourceUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/context`;
         const validationUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/validate`;
         const preview = buildTutorSessionContextText({ req, token, student, moduleDoc, stepId, stepIndex });
+        const Student = mongoose.model('Student');
+        await Student.updateOne(
+            { _id: studentId },
+            {
+                $set: {
+                    activeTutorSession: {
+                        moduleId,
+                        stepId,
+                        stepIndex,
+                        token,
+                        sourceUrl,
+                        validationUrl,
+                        expiresAt: new Date(exp),
+                        updatedAt: new Date()
+                    }
+                }
+            }
+        );
         return res.json({ ok: true, token, sourceUrl, validationUrl, expiresAt: new Date(exp).toISOString(), preview });
     } catch (e) {
         return res.status(e.status || 500).json({ ok: false, error: String(e?.message || 'Session tuteur impossible') });
+    }
+});
+
+router.get('/tutor-code/:code/context', async (req, res) => {
+    try {
+        const student = await findStudentByTutorCode(req.params.code);
+        if (!student) return res.status(404).type('text/plain').send('Code CondaWeb introuvable.');
+        const active = student.activeTutorSession || {};
+        const token = String(active.token || '').trim();
+        if (!token) {
+            return res.status(404).type('text/plain').send("Aucune session CondaWeb active. Ouvre d'abord l'apprentissage sur CondaWeb puis clique sur Ouvrir GPT externe.");
+        }
+        const payload = verifyTutorToken(token);
+        if (payload.kind !== 'learning_tutor') throw new Error('Type de session invalide');
+        if (String(payload.studentId) !== String(student._id)) throw new Error('Session non associee a ce code');
+        const access = await ensureLearningAccess({ studentId: payload.studentId, moduleId: payload.moduleId });
+        const text = buildTutorSessionContextText({
+            req,
+            token,
+            student: access.student,
+            moduleDoc: access.moduleDoc,
+            stepId: payload.stepId,
+            stepIndex: payload.stepIndex
+        });
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(text);
+    } catch (e) {
+        return res.status(e.status || 400).type('text/plain').send(`Session CondaWeb indisponible: ${String(e?.message || e)}`);
     }
 });
 

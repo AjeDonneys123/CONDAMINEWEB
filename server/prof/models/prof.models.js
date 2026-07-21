@@ -93,6 +93,16 @@ const StudentSchema = new mongoose.Schema({
     punishmentLateMailError: { type: String, default: "" },
     indicators: Array,
     spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }],
+    activeTutorSession: {
+        moduleId: { type: String, default: '' },
+        stepId: { type: String, default: '' },
+        stepIndex: { type: Number, default: 0 },
+        token: { type: String, default: '' },
+        sourceUrl: { type: String, default: '' },
+        validationUrl: { type: String, default: '' },
+        expiresAt: { type: Date, default: null },
+        updatedAt: { type: Date, default: null }
+    },
     isTestAccount: { type: Boolean, default: false }
 }, { timestamps: true });
 

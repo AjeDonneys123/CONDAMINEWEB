@@ -52,6 +52,16 @@ const StudentSchema = new mongoose.Schema({
     totalPunishments: { type: Number, default: 0 }, // Historique compteur
 
     // Système
+    activeTutorSession: {
+        moduleId: { type: String, default: '' },
+        stepId: { type: String, default: '' },
+        stepIndex: { type: Number, default: 0 },
+        token: { type: String, default: '' },
+        sourceUrl: { type: String, default: '' },
+        validationUrl: { type: String, default: '' },
+        expiresAt: { type: Date, default: null },
+        updatedAt: { type: Date, default: null }
+    },
     isTestAccount: { type: Boolean, default: false },
     lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });

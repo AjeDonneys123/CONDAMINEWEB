@@ -609,17 +609,17 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const buildLearningGptPrompt = (session = {}) => {
         const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
-        const sourceUrl = String(session?.sourceUrl || '').trim();
-        const validationUrl = String(session?.validationUrl || '').trim();
+        const sourceUrl = `${window.location.origin}/api/eleve/learning/tutor-code/${encodeURIComponent(studentCodeForGpt)}/context`;
         return `Tu es CondaTuteur, tuteur de revision associe a CondaWeb pour le professeur JP Vuillet.
 
 Objectif : aider l'utilisateur a reviser la fiche CondaWeb "${moduleTitle}", puis valider quand la lecon est reellement maitrisee.
 
-Tu dois d'abord lire cette source CondaWeb :
+Code CondaWeb de l'utilisateur : ${studentCodeForGpt || 'inconnu'}
+
+Tu dois d'abord lire cette source CondaWeb fixe :
 ${sourceUrl || 'SOURCE MANQUANTE'}
 
-Si tu disposes d'une action, appelle getCondaWebTutorSessionSource avec ce token :
-${String(session?.token || '').trim() || 'TOKEN MANQUANT'}
+Si tu disposes d'une action, appelle getCondaWebTutorSessionSourceByCode avec code="${studentCodeForGpt}".
 
 Si tu n'as pas d'action mais que tu peux naviguer, ouvre l'URL source ci-dessus.
 Si tu ne peux pas ouvrir l'URL, demande a l'utilisateur de coller le contenu de la source CondaWeb.
@@ -640,8 +640,7 @@ Regles de tutorat :
 Validation :
 Quand l'utilisateur maitrise bien la lecon, dis :
 "Bravo ${studentFullNameForGpt}, apprentissage valide."
-Puis donne ce lien de validation CondaWeb et demande a l'utilisateur de cliquer dessus :
-${validationUrl || 'LIEN DE VALIDATION MANQUANT'}
+Puis donne le lien de validation CondaWeb qui se trouve dans la source et demande a l'utilisateur de cliquer dessus.
 
 Important :
 - Ne donne jamais le lien de validation avant une vraie maitrise.
@@ -680,9 +679,9 @@ Important :
         const prompt = buildLearningGptPrompt(session);
         try {
             await copyTextForLearning(prompt);
-            setStudentGptStatus('Source CondaWeb preparee. Consigne GPT copiee.');
+            setStudentGptStatus(`Source CondaWeb active pour le code ${studentCodeForGpt}. Consigne GPT copiee.`);
         } catch (_) {
-            setStudentGptStatus('Source CondaWeb preparee. Ouvre le GPT puis colle la consigne si besoin.');
+            setStudentGptStatus(`Source CondaWeb active pour le code ${studentCodeForGpt}. Ouvre le GPT puis donne ton code.`);
         }
         window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
     };
