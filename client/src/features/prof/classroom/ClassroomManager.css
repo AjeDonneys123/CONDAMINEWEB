@@ -361,34 +361,6 @@
     cursor: pointer;
     white-space: nowrap;
 }
-.hour-warning-panel {
-    position: fixed;
-    top: 84px;
-    right: 18px;
-    z-index: 1500;
-    width: min(220px, calc(100vw - 36px));
-    border-radius: 16px;
-    border: 2px solid #fca5a5;
-    background: #fff1f2;
-    padding: 10px;
-    box-shadow: 0 16px 30px rgba(127, 29, 29, 0.18);
-}
-.hour-warning-title {
-    font-size: 0.62rem;
-    font-weight: 950;
-    color: #991b1b;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-}
-.hour-warning-name {
-    padding: 6px 8px;
-    border-radius: 10px;
-    background: #fff;
-    color: #7f1d1d;
-    font-size: 0.78rem;
-    font-weight: 900;
-    margin-top: 4px;
-}
 @keyframes pulse-pink { 0% { box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(244, 114, 182, 0); } 100% { box-shadow: 0 0 0 0 rgba(244, 114, 182, 0); } }
 @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
 
@@ -479,7 +451,6 @@
     .sc-counters { display: flex !important; font-size: 0.55rem; gap: 2px; margin-top: 1px; }
     .sc-score { min-width: 28px; padding: 2px 4px; font-size: 0.5rem; margin-top: 1px; }
     .class-score-btn { padding: 6px 7px; font-size: 0.58rem; }
-    .hour-warning-panel { top: 62px; right: 8px; }
     .sc-realizations { gap: 1px; left: 2px; top: 4px; transform: none; }
     .sc-realizations-inline { width: calc(100% - 4px); gap: 2px; }
     .sc-real-badge { min-width: 22px; height: 11px; font-size: 0.38rem; padding: 0 2px; }

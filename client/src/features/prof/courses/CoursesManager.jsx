@@ -80,6 +80,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         return (Date.now() - bonusTime) < 6000;
     }, [liveClassroom]);
 
+    const activeHourWarnings = useMemo(() => {
+        const now = Date.now();
+        return Array.isArray(liveClassroom?.activeHourWarnings)
+            ? liveClassroom.activeHourWarnings
+                .filter((row) => Number(row?.expiresAt || 0) > now && String(row?.name || '').trim())
+                .slice(0, 8)
+            : [];
+    }, [liveClassroom]);
+
     const classPoints = liveClassroom?.classPoints ?? 0;
 
     const loadCourses = async () => {
@@ -437,6 +446,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                         {isHighlightActive && (
                             <div className="live-student-highlight">
                                 {liveClassroom.activeStudentHighlight}
+                            </div>
+                        )}
+
+                        {activeHourWarnings.length > 0 && (
+                            <div className="live-hour-warning-panel">
+                                <div className="live-hour-warning-title">Avertis cette heure</div>
+                                {activeHourWarnings.map((row) => (
+                                    <div key={row.studentId || row.name} className="live-hour-warning-name">
+                                        {row.name}
+                                    </div>
+                                ))}
                             </div>
                         )}
 

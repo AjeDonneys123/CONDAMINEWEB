@@ -143,7 +143,8 @@ const Models = {
         activeStudentHighlight: { type: String, default: null },
         activeStudentHighlightTime: { type: Date, default: null },
         activeStudentBonusAlert: { type: String, default: null },
-        activeStudentBonusAlertTime: { type: Date, default: null }
+        activeStudentBonusAlertTime: { type: Date, default: null },
+        activeHourWarnings: { type: Array, default: [] }
     }),
 
     Student: getModel('Student', StudentSchema),

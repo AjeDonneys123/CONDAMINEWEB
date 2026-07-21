@@ -407,7 +407,7 @@ router.post('/behavior', async (req, res) => {
 router.post('/:classId/live-action', async (req, res) => {
     try {
         const { classId } = req.params;
-        const { action, studentName, message } = req.body;
+        const { action, studentName, message, warnings } = req.body;
         const cls = await Classroom.findById(classId);
         if (!cls) return res.status(404).json({ error: "Classe introuvable" });
 
@@ -423,6 +423,18 @@ router.post('/:classId/live-action', async (req, res) => {
         } else if (action === 'class-bonus') {
             cls.activeStudentBonusAlert = message || 'Bravo +1';
             cls.activeStudentBonusAlertTime = new Date();
+        } else if (action === 'hour-warnings') {
+            const now = Date.now();
+            cls.activeHourWarnings = Array.isArray(warnings)
+                ? warnings
+                    .map((row) => ({
+                        studentId: String(row?.studentId || ''),
+                        name: String(row?.name || '').trim(),
+                        expiresAt: Number(row?.expiresAt || 0)
+                    }))
+                    .filter((row) => row.studentId && row.name && row.expiresAt > now)
+                    .slice(0, 8)
+                : [];
         } else if (action === 'add-point') {
             cls.classPoints = (cls.classPoints || 0) + 1;
         } else if (action === 'remove-point') {

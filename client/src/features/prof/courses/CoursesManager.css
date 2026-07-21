@@ -615,6 +615,38 @@
     pointer-events: none;
 }
 
+.live-hour-warning-panel {
+    position: absolute;
+    right: 22px;
+    bottom: 92px;
+    z-index: 102;
+    width: min(260px, calc(100% - 44px));
+    border: 3px solid #ef4444;
+    border-radius: 18px;
+    background: rgba(255, 241, 242, 0.97);
+    padding: 12px;
+    box-shadow: 0 18px 36px rgba(127, 29, 29, 0.28);
+    pointer-events: none;
+}
+
+.live-hour-warning-title {
+    color: #991b1b;
+    font-size: 0.78rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.live-hour-warning-name {
+    background: #fff;
+    color: #7f1d1d;
+    border-radius: 12px;
+    padding: 9px 11px;
+    font-size: 1rem;
+    font-weight: 950;
+    margin-top: 6px;
+}
+
 .live-bonus-alert {
     position: absolute;
     top: 50%;

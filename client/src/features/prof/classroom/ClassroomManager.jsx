@@ -26,7 +26,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
     const [classPoints, setClassPoints] = useState(0);
-    const [hourWarnings, setHourWarnings] = useState([]);
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
@@ -243,22 +242,43 @@ export default function ClassroomManager({ globalClassId, user }) {
             console.error(e);
         }
     };
-    const trackPenaltyWarning = (studentId, student) => {
+    const trackPenaltyWarning = async (studentId, student) => {
         const now = Date.now();
         const hourMs = 60 * 60 * 1000;
         const rows = (penaltyLogRef.current[studentId] || []).filter((ts) => now - ts <= hourMs);
         rows.push(now);
         penaltyLogRef.current[studentId] = rows;
         if (rows.length < 2) return;
-        setHourWarnings((current) => {
-            const expiry = now + hourMs;
-            const warning = {
-                studentId,
-                name: `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim(),
-                expiresAt: expiry
-            };
-            return [warning, ...current.filter((row) => String(row.studentId) !== String(studentId) && Number(row.expiresAt || 0) > now)].slice(0, 6);
-        });
+        const warning = {
+            studentId,
+            name: `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim(),
+            expiresAt: now + hourMs
+        };
+        const currentWarnings = Object.entries(penaltyLogRef.current)
+            .map(([id, timestamps]) => {
+                const recent = (timestamps || []).filter((ts) => now - ts <= hourMs);
+                if (recent.length < 2) return null;
+                const matchedStudent = students.find((s) => String(s._id) === String(id));
+                return {
+                    studentId: id,
+                    name: matchedStudent
+                        ? `${getDisplayName(matchedStudent)} ${String(matchedStudent?.lastName || '').slice(0, 1)}.`.trim()
+                        : warning.name,
+                    expiresAt: Math.min(...recent.slice(-2)) + hourMs
+                };
+            })
+            .filter(Boolean)
+            .filter((row) => Number(row.expiresAt || 0) > now && String(row.studentId) !== String(studentId));
+        const nextWarnings = [warning, ...currentWarnings].slice(0, 8);
+        try {
+            await fetch(`/api/classroom/${globalClassId}/live-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'hour-warnings', warnings: nextWarnings })
+            });
+        } catch (e) {
+            console.error(e);
+        }
     };
     const addClassScorePoint = async () => {
         const visibleStudents = students.filter((s) => s?._id);
@@ -459,14 +479,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         const t = setTimeout(() => setActionFlash(''), 1000);
         return () => clearTimeout(t);
     }, [actionFlash]);
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            const now = Date.now();
-            setHourWarnings((current) => current.filter((row) => Number(row.expiresAt || 0) > now));
-        }, 30000);
-        return () => clearInterval(timer);
-    }, []);
 
     useEffect(() => () => stopBehaviorRepeat(false), []);
     
@@ -736,14 +748,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         <div className="classroom-wrapper" style={{ '--grid-cols': gridSize.cols }}>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
-            {hourWarnings.length > 0 && (
-                <div className="hour-warning-panel">
-                    <div className="hour-warning-title">Avertis cette heure</div>
-                    {hourWarnings.map((row) => (
-                        <div key={row.studentId} className="hour-warning-name">{row.name}</div>
-                    ))}
-                </div>
-            )}
             
             <div className="cm-header">
                 <h2 className="cm-title md:block hidden">{viewMode === 'PLAN' ? 'MODE PLAN' : 'MODE LISTE'}</h2>
