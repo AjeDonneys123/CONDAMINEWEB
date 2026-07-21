@@ -436,7 +436,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                         {/* NOM DE L'ELEVE EN ROUGE DANS UN COIN (BAS GAUCHE) */}
                         {isHighlightActive && (
                             <div className="live-student-highlight">
-                                📣 Attention : {liveClassroom.activeStudentHighlight}
+                                {liveClassroom.activeStudentHighlight}
                             </div>
                         )}
 

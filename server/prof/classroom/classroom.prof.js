@@ -357,8 +357,9 @@ router.post('/behavior', async (req, res) => {
         if (type === 'BONUS') {
             r.bonuses++;
             try {
+                const suppressLiveAlert = Boolean(extraData && typeof extraData === 'object' && extraData.suppressLiveAlert);
                 const clsId = s.classId || s.assignedGroups?.[0];
-                if (clsId) {
+                if (clsId && !suppressLiveAlert) {
                     const displayName = String(s.nickname || '').trim() || String(s.firstName || '');
                     await Classroom.findByIdAndUpdate(clsId, {
                         $set: {
@@ -406,15 +407,21 @@ router.post('/behavior', async (req, res) => {
 router.post('/:classId/live-action', async (req, res) => {
     try {
         const { classId } = req.params;
-        const { action, studentName } = req.body;
+        const { action, studentName, message } = req.body;
         const cls = await Classroom.findById(classId);
         if (!cls) return res.status(404).json({ error: "Classe introuvable" });
 
         if (action === 'highlight') {
-            cls.activeStudentHighlight = studentName;
+            cls.activeStudentHighlight = message || studentName;
             cls.activeStudentHighlightTime = new Date();
         } else if (action === 'bonus') {
             cls.activeStudentBonusAlert = `Félicitations à ${studentName} !`;
+            cls.activeStudentBonusAlertTime = new Date();
+        } else if (action === 'bonus-message') {
+            cls.activeStudentBonusAlert = message || studentName;
+            cls.activeStudentBonusAlertTime = new Date();
+        } else if (action === 'class-bonus') {
+            cls.activeStudentBonusAlert = message || 'Bravo +1';
             cls.activeStudentBonusAlertTime = new Date();
         } else if (action === 'add-point') {
             cls.classPoints = (cls.classPoints || 0) + 1;

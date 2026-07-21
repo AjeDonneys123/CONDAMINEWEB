@@ -26,7 +26,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
     const [classPoints, setClassPoints] = useState(0);
-    const [scoreFlash, setScoreFlash] = useState(null);
     const [hourWarnings, setHourWarnings] = useState([]);
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
@@ -222,14 +221,27 @@ export default function ClassroomManager({ globalClassId, user }) {
         if (Number.isInteger(n)) return String(n);
         return n.toFixed(1);
     };
-    const showScoreEvolution = (student, delta) => {
+    const showScoreEvolutionOnBoard = async (student, delta) => {
+        if (!globalClassId || !student?._id) return;
         const nextScore = getStudentScore(student) + Number(delta || 0);
-        setScoreFlash({
-            id: `${student?._id || ''}_${Date.now()}`,
-            name: `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim(),
-            delta,
-            score: nextScore
-        });
+        const shortName = `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim();
+        const isUp = Number(delta || 0) > 0;
+        const message = isUp
+            ? `Bravo ${shortName} ! Nouvelle note : ${formatScore(nextScore)}`
+            : `${shortName} - Nouvelle note : ${formatScore(nextScore)}`;
+        try {
+            await fetch(`/api/classroom/${globalClassId}/live-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: isUp ? 'bonus-message' : 'highlight',
+                    studentName: message,
+                    message
+                })
+            });
+        } catch (e) {
+            console.error(e);
+        }
     };
     const trackPenaltyWarning = (studentId, student) => {
         const now = Date.now();
@@ -250,12 +262,20 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
     const addClassScorePoint = async () => {
         const visibleStudents = students.filter((s) => s?._id);
-        visibleStudents.forEach((student) => showScoreEvolution(student, 1));
         for (const student of visibleStudents) {
-            await addBehavior(student._id, 'BONUS', null, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
-            await addBehavior(student._id, 'BONUS', null, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
+            await addBehavior(student._id, 'BONUS', { suppressLiveAlert: true }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
+            await addBehavior(student._id, 'BONUS', { suppressLiveAlert: true }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
         }
         await updateClassPoints(1);
+        try {
+            await fetch(`/api/classroom/${globalClassId}/live-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'class-bonus', message: 'Bravo +1' })
+            });
+        } catch (e) {
+            console.error(e);
+        }
         await loadData();
     };
     const getCrossCountdownLabel = (stu) => {
@@ -441,12 +461,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     }, [actionFlash]);
 
     useEffect(() => {
-        if (!scoreFlash) return undefined;
-        const t = setTimeout(() => setScoreFlash(null), 1800);
-        return () => clearTimeout(t);
-    }, [scoreFlash]);
-
-    useEffect(() => {
         const timer = setInterval(() => {
             const now = Date.now();
             setHourWarnings((current) => current.filter((row) => Number(row.expiresAt || 0) > now));
@@ -465,7 +479,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         const targetStudent = students.find((s) => String(s._id) === String(sid));
         if (!skipFlash && targetStudent && ['CROSS', 'BONUS', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type)) {
             const deltaByType = { CROSS: -1, BONUS: 0.5, REMOVE_CROSS: 1, REMOVE_BONUS: -0.5 };
-            showScoreEvolution(targetStudent, deltaByType[type] || 0);
+            showScoreEvolutionOnBoard(targetStudent, deltaByType[type] || 0);
             if (type === 'CROSS') trackPenaltyWarning(sid, targetStudent);
         }
 
@@ -722,13 +736,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         <div className="classroom-wrapper" style={{ '--grid-cols': gridSize.cols }}>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
-            {scoreFlash && (
-                <div className={`score-flash-board ${Number(scoreFlash.delta || 0) > 0 ? 'up' : 'down'}`}>
-                    <strong>{scoreFlash.name}</strong>
-                    <span>{Number(scoreFlash.delta || 0) > 0 ? '+' : ''}{scoreFlash.delta}</span>
-                    <small>Note {formatScore(scoreFlash.score)} {Number(scoreFlash.delta || 0) > 0 ? 'Bravo' : ''}</small>
-                </div>
-            )}
             {hourWarnings.length > 0 && (
                 <div className="hour-warning-panel">
                     <div className="hour-warning-title">Avertis cette heure</div>
