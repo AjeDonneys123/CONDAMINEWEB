@@ -649,29 +649,32 @@ Important :
 - Reste sobre, encourageant, et centre sur l'apprentissage.`;
     };
 
-    const openLearningGptTutor = async () => {
+    const prepareTutorSession = async () => {
         const moduleId = String(module?._id || module?.id || '').trim();
         const studentId = String(user?._id || user?.id || '').trim();
         if (!moduleId || !studentId) {
-            setStudentGptStatus('Session CondaWeb impossible : apprentissage ou utilisateur introuvable.');
-            return;
+            throw new Error('Session CondaWeb impossible : apprentissage ou utilisateur introuvable.');
         }
-        let session = null;
         setStudentGptStatus('Preparation de la source CondaWeb...');
+        const res = await fetch('/api/eleve/learning/tutor-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                moduleId,
+                studentId,
+                stepId: String(currentStep?.id || ''),
+                stepIndex
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.sourceUrl) throw new Error(data?.error || 'Source CondaWeb indisponible');
+        return data;
+    };
+
+    const openLearningGptTutor = async () => {
+        let session = null;
         try {
-            const res = await fetch('/api/eleve/learning/tutor-session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    moduleId,
-                    studentId,
-                    stepId: String(currentStep?.id || ''),
-                    stepIndex
-                })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data?.sourceUrl) throw new Error(data?.error || 'Source CondaWeb indisponible');
-            session = data;
+            session = await prepareTutorSession();
         } catch (e) {
             setStudentGptStatus(String(e?.message || 'Impossible de preparer la source CondaWeb.'));
             return;
@@ -684,6 +687,36 @@ Important :
             setStudentGptStatus(`Source CondaWeb active pour le code ${studentCodeForGpt}. Ouvre le GPT puis donne ton code.`);
         }
         window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
+    };
+
+    const openLearningGeminiTutor = async () => {
+        let session = null;
+        try {
+            session = await prepareTutorSession();
+        } catch (e) {
+            setStudentGptStatus(String(e?.message || 'Impossible de preparer le document Gemini.'));
+            return;
+        }
+        const docUrl = String(session?.instructionDocUrl || '').trim();
+        const prompt = [
+            'Tu es CondaTuteur.',
+            '',
+            'Lis ce Google Doc CondaWeb, puis suis exactement les instructions qu il contient :',
+            docUrl || String(session?.sourceUrl || ''),
+            '',
+            'Tu dois prouver que tu as lu la fiche en citant son titre exact et une notion precise.',
+            'Pose ensuite les questions une par une.',
+            'Ne donne le lien de validation qu a la fin, quand la fiche est reellement maitrisee.'
+        ].join('\n');
+        try {
+            await copyTextForLearning(prompt);
+            setStudentGptStatus(docUrl
+                ? 'Document Gemini mis a jour. Prompt copie.'
+                : 'Source CondaWeb preparee, mais document Drive indisponible. Prompt copie avec source web.');
+        } catch (_) {
+            setStudentGptStatus('Document Gemini prepare. Ouvre Gemini et donne le lien du document.');
+        }
+        window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
     };
 
     const stopRealtimeTutor = () => {
@@ -2121,6 +2154,13 @@ Important :
                                 onClick={openLearningGptTutor}
                             >
                                 Ouvrir GPT externe
+                            </button>
+                            <button
+                                type="button"
+                                className="learning-btn ghost"
+                                onClick={openLearningGeminiTutor}
+                            >
+                                Ouvrir Gemini
                             </button>
                             <button
                                 type="button"

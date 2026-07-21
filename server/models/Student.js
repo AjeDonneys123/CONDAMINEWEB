@@ -59,6 +59,8 @@ const StudentSchema = new mongoose.Schema({
         token: { type: String, default: '' },
         sourceUrl: { type: String, default: '' },
         validationUrl: { type: String, default: '' },
+        instructionDocId: { type: String, default: '' },
+        instructionDocUrl: { type: String, default: '' },
         expiresAt: { type: Date, default: null },
         updatedAt: { type: Date, default: null }
     },

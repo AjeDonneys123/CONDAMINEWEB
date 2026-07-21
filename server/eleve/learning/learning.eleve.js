@@ -401,6 +401,25 @@ const buildTutorSessionContextText = ({ req, token, student, moduleDoc, stepId =
     ].join('\n');
 };
 
+const buildTutorInstructionDocTitle = (student = {}) => {
+    const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.nickname || 'utilisateur';
+    return `CondaTuteur - ${fullName} - ${getStudentGptCode(student)}`.slice(0, 170);
+};
+
+const updateTutorInstructionDoc = async ({ student, text }) => {
+    const previous = student?.activeTutorSession || {};
+    let instructionDocId = String(previous.instructionDocId || '').trim();
+    let instructionDocUrl = String(previous.instructionDocUrl || '').trim();
+    if (!instructionDocId) {
+        const folderId = await ProfDrive.getOrCreateFolder('CONDA_TUTEUR_INSTRUCTIONS');
+        const doc = await ProfDrive.createGoogleDoc(buildTutorInstructionDocTitle(student), folderId);
+        instructionDocId = String(doc?.docId || '');
+        instructionDocUrl = String(doc?.editUrl || '');
+    }
+    await ProfDrive.replaceGoogleDocContent(instructionDocId, String(text || ''));
+    return { instructionDocId, instructionDocUrl };
+};
+
 const markLearningCompletedByTutorToken = async ({ studentId = '', moduleId = '' }) => {
     const LearningModule = mongoose.model('LearningModule');
     const moduleDoc = await LearningModule.findById(moduleId);
@@ -434,6 +453,15 @@ router.post('/tutor-session', async (req, res) => {
         const sourceUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/context`;
         const validationUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/validate`;
         const preview = buildTutorSessionContextText({ req, token, student, moduleDoc, stepId, stepIndex });
+        let docInfo = {
+            instructionDocId: String(student?.activeTutorSession?.instructionDocId || ''),
+            instructionDocUrl: String(student?.activeTutorSession?.instructionDocUrl || '')
+        };
+        try {
+            docInfo = await updateTutorInstructionDoc({ student, text: preview });
+        } catch (docError) {
+            console.error('[tutor-session][instruction-doc]', docError?.message || docError);
+        }
         const Student = mongoose.model('Student');
         await Student.updateOne(
             { _id: studentId },
@@ -446,13 +474,23 @@ router.post('/tutor-session', async (req, res) => {
                         token,
                         sourceUrl,
                         validationUrl,
+                        instructionDocId: docInfo.instructionDocId,
+                        instructionDocUrl: docInfo.instructionDocUrl,
                         expiresAt: new Date(exp),
                         updatedAt: new Date()
                     }
                 }
             }
         );
-        return res.json({ ok: true, token, sourceUrl, validationUrl, expiresAt: new Date(exp).toISOString(), preview });
+        return res.json({
+            ok: true,
+            token,
+            sourceUrl,
+            validationUrl,
+            instructionDocUrl: docInfo.instructionDocUrl,
+            expiresAt: new Date(exp).toISOString(),
+            preview
+        });
     } catch (e) {
         return res.status(e.status || 500).json({ ok: false, error: String(e?.message || 'Session tuteur impossible') });
     }
