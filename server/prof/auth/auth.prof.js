@@ -326,6 +326,46 @@ router.post('/google-login', async (req, res) => {
             });
         }
 
+        if (email === TEST_ACCOUNT_EMAIL) {
+            let targetStudent = null;
+            const cleanTargetUserId = String(targetUserId || '').trim();
+            const hasExplicitStudentTarget = Boolean(
+                cleanTargetUserId
+                || String(targetFirstName || '').trim()
+                || String(targetLastName || '').trim()
+                || String(targetClassName || '').trim()
+            );
+            if (hasExplicitStudentTarget) {
+                if (cleanTargetUserId) {
+                    targetStudent = await Student.findById(cleanTargetUserId).populate('assignedGroups', 'name type level');
+                }
+
+                if (!targetStudent) {
+                    const cleanFirst = String(targetFirstName || '').trim();
+                    const cleanLast = String(targetLastName || '').trim();
+                    const firstRx = new RegExp(`^${cleanFirst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                    const lastRx = new RegExp(`^${cleanLast.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                    const studentQuery = { isTestAccount: true };
+                    if (cleanFirst) studentQuery.firstName = firstRx;
+                    if (cleanLast) studentQuery.lastName = lastRx;
+                    const cleanClass = String(targetClassName || '').trim();
+                    if (cleanClass) {
+                        studentQuery.currentClass = new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                    }
+                    targetStudent = await Student.findOne(studentQuery).populate('assignedGroups', 'name type level');
+                }
+
+                if (!targetStudent) {
+                    return res.status(401).json({ ok: false, message: "Sélectionne d'abord un élève test valide." });
+                }
+                if (targetStudent.isTestAccount !== true) {
+                    return res.status(401).json({ ok: false, message: "Ce compte n'est pas un compte test Google." });
+                }
+                const plain = targetStudent.toObject();
+                return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+            }
+        }
+
         const profOrAdmin = await findTeacherOrAdminByGoogleEmail(email);
         if (profOrAdmin?.user) {
             const obj = profOrAdmin.user.toObject();
@@ -340,43 +380,6 @@ router.post('/google-login', async (req, res) => {
                     hasPersonalGeminiKey: Boolean(String(obj.geminiApiKeyEncrypted || '').trim())
                 }
             });
-        }
-
-        if (email === TEST_ACCOUNT_EMAIL) {
-            let targetStudent = null;
-            const cleanTargetUserId = String(targetUserId || '').trim();
-            if (cleanTargetUserId) {
-                targetStudent = await Student.findById(cleanTargetUserId).populate('assignedGroups', 'name type level');
-            }
-
-            if (!targetStudent) {
-                const cleanFirst = String(targetFirstName || '').trim();
-                const cleanLast = String(targetLastName || '').trim();
-                const firstRx = new RegExp(`^${cleanFirst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-                const lastRx = new RegExp(`^${cleanLast.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-                const studentQuery = { isTestAccount: true };
-                if (cleanFirst) studentQuery.firstName = firstRx;
-                if (cleanLast) studentQuery.lastName = lastRx;
-                const cleanClass = String(targetClassName || '').trim();
-                if (cleanClass) {
-                    studentQuery.currentClass = new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-                }
-                targetStudent = await Student.findOne(studentQuery).populate('assignedGroups', 'name type level');
-            }
-
-            if (!targetStudent) {
-                targetStudent = await Student.findOne({ email: TEST_ACCOUNT_EMAIL, isTestAccount: true })
-                    .populate('assignedGroups', 'name type level');
-            }
-
-            if (!targetStudent) {
-                return res.status(401).json({ ok: false, message: "Sélectionne d'abord un élève test valide." });
-            }
-            if (targetStudent.isTestAccount !== true) {
-                return res.status(401).json({ ok: false, message: "Ce compte n'est pas un compte test Google." });
-            }
-            const plain = targetStudent.toObject();
-            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
         }
 
         let user = await Student.findOne({ email }).populate('assignedGroups', 'name type level');
