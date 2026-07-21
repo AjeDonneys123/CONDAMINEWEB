@@ -417,7 +417,10 @@ const updateTutorInstructionDoc = async ({ student, text }) => {
         instructionDocUrl = String(doc?.editUrl || '');
     }
     await ProfDrive.replaceGoogleDocContent(instructionDocId, String(text || ''));
-    return { instructionDocId, instructionDocUrl };
+    const instructionDocTextUrl = instructionDocId
+        ? `https://docs.google.com/document/d/${encodeURIComponent(instructionDocId)}/export?format=txt`
+        : '';
+    return { instructionDocId, instructionDocUrl, instructionDocTextUrl };
 };
 
 const markLearningCompletedByTutorToken = async ({ studentId = '', moduleId = '' }) => {
@@ -455,8 +458,12 @@ router.post('/tutor-session', async (req, res) => {
         const preview = buildTutorSessionContextText({ req, token, student, moduleDoc, stepId, stepIndex });
         let docInfo = {
             instructionDocId: String(student?.activeTutorSession?.instructionDocId || ''),
-            instructionDocUrl: String(student?.activeTutorSession?.instructionDocUrl || '')
+            instructionDocUrl: String(student?.activeTutorSession?.instructionDocUrl || ''),
+            instructionDocTextUrl: ''
         };
+        if (docInfo.instructionDocId) {
+            docInfo.instructionDocTextUrl = `https://docs.google.com/document/d/${encodeURIComponent(docInfo.instructionDocId)}/export?format=txt`;
+        }
         try {
             docInfo = await updateTutorInstructionDoc({ student, text: preview });
         } catch (docError) {
@@ -488,6 +495,7 @@ router.post('/tutor-session', async (req, res) => {
             sourceUrl,
             validationUrl,
             instructionDocUrl: docInfo.instructionDocUrl,
+            instructionDocTextUrl: docInfo.instructionDocTextUrl,
             expiresAt: new Date(exp).toISOString(),
             preview
         });

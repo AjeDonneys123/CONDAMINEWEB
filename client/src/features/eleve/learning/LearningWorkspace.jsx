@@ -647,12 +647,16 @@ ${sourceText || 'SOURCE CONDAWEB MANQUANTE. Demande a l utilisateur de relancer 
     };
 
     const buildLearningGeminiLinkPrompt = (session = {}) => {
-        const sourceUrl = String(session?.sourceUrl || '').trim();
+        const sourceUrl = String(session?.instructionDocTextUrl || session?.instructionDocUrl || session?.sourceUrl || '').trim();
+        const backupUrl = String(session?.instructionDocUrl || session?.sourceUrl || '').trim();
         const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
         return `Tu es CondaTuteur.
 
-Lis cette source CondaWeb externe, puis suis exactement les instructions qu elle contient :
+Lis cette source publique CondaWeb/Google Doc en texte brut, puis suis exactement les instructions qu elle contient :
 ${sourceUrl || 'SOURCE CONDAWEB MANQUANTE'}
+
+Lien de secours si le premier ne marche pas :
+${backupUrl || 'AUCUN'}
 
 Cette source correspond a la fiche active de l'utilisateur dans CondaWeb : ${moduleTitle}.
 
