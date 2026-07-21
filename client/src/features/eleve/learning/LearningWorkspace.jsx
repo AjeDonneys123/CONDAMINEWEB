@@ -646,6 +646,30 @@ SOURCE CONDAWEB COMPLETE A UTILISER :
 ${sourceText || 'SOURCE CONDAWEB MANQUANTE. Demande a l utilisateur de relancer le bouton CondaWeb.'}`;
     };
 
+    const buildLearningGeminiLinkPrompt = (session = {}) => {
+        const sourceUrl = String(session?.sourceUrl || '').trim();
+        const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
+        return `Tu es CondaTuteur.
+
+Lis cette source CondaWeb externe, puis suis exactement les instructions qu elle contient :
+${sourceUrl || 'SOURCE CONDAWEB MANQUANTE'}
+
+Cette source correspond a la fiche active de l'utilisateur dans CondaWeb : ${moduleTitle}.
+
+Tu dois prouver que tu as lu la fiche :
+- cite le titre exact de la lecon ;
+- cite une notion precise presente dans la fiche.
+
+Ensuite :
+- pose les questions une par une ;
+- attends chaque reponse ;
+- corrige brievement ;
+- ne donne pas la reponse avant une tentative ;
+- ne donne le lien de validation qu a la fin, quand la fiche est reellement maitrisee.
+
+Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acceder a la source et demande a l'utilisateur de relancer CondaWeb avec le bouton GPT qui colle la source complete.`;
+    };
+
     const prepareTutorSession = async () => {
         const moduleId = String(module?._id || module?.id || '').trim();
         const studentId = String(user?._id || user?.id || '').trim();
@@ -694,12 +718,12 @@ ${sourceText || 'SOURCE CONDAWEB MANQUANTE. Demande a l utilisateur de relancer 
             setStudentGptStatus(String(e?.message || 'Impossible de preparer le document Gemini.'));
             return;
         }
-        const prompt = buildLearningGptPrompt(session);
+        const prompt = buildLearningGeminiLinkPrompt(session);
         try {
             await copyTextForLearning(prompt);
-            setStudentGptStatus('Source CondaWeb complete copiee. Colle-la dans Gemini.');
+            setStudentGptStatus('Lien externe CondaWeb copie pour Gemini.');
         } catch (_) {
-            setStudentGptStatus('Source CondaWeb preparee. Copie-colle la fiche depuis CondaWeb si besoin.');
+            setStudentGptStatus('Lien CondaWeb prepare. Copie-colle le lien de la fiche dans Gemini si besoin.');
         }
         window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
     };
