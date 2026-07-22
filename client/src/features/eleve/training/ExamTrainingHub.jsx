@@ -141,6 +141,8 @@ const DNB_GEO_WHITE_MASKS = [
 
 const DNB_GEO_METROPOLES_MAP_URL = '/dnb-metropoles-france.png';
 const DNB_GEO_TERRITORY_MAP_URL = '/dnb-territoire-france.png';
+const DNB_GEO_TERRITORY_DRAFT_URL = '/dnb-territoire-draft.json';
+const DNB_GEO_TERRITORY_DRAFT_KEY = 'condaweb-dnb-territory-model-v2';
 
 const normalizeAnswer = (value = '') => String(value || '')
   .normalize('NFD')
@@ -1050,6 +1052,38 @@ function DnbGeoTerritoryDrawingGame() {
   const [paths, setPaths] = useState([]);
   const [currentPath, setCurrentPath] = useState(null);
   const [labels, setLabels] = useState([]);
+  const [draggingLabelId, setDraggingLabelId] = useState('');
+  const [editModel, setEditModel] = useState(false);
+  const [answers, setAnswers] = useState({});
+  const [checked, setChecked] = useState(false);
+  const [activeLabelId, setActiveLabelId] = useState('');
+  const draftLoadedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(DNB_GEO_TERRITORY_DRAFT_URL)
+      .then((response) => response.ok ? response.json() : null)
+      .then((draft) => {
+        if (cancelled) return;
+        if (draft && Array.isArray(draft.paths)) {
+          setPaths(draft.paths);
+          setLabels(Array.isArray(draft.labels) ? draft.labels : []);
+        }
+        draftLoadedRef.current = true;
+      })
+      .catch(() => {
+        draftLoadedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!draftLoadedRef.current || !editModel) return;
+    window.localStorage.setItem(DNB_GEO_TERRITORY_DRAFT_KEY, JSON.stringify({ paths, labels }));
+  }, [editModel, paths, labels]);
 
   const pointerToPercent = (event) => {
     const rect = drawingRef.current?.getBoundingClientRect();
@@ -1061,7 +1095,6 @@ function DnbGeoTerritoryDrawingGame() {
   };
 
   const startDraw = (event) => {
-    if (tool === 'label') return;
     const point = pointerToPercent(event);
     if (!point) return;
     setCurrentPath({ id: `path-${Date.now()}`, tool, points: [point] });
@@ -1080,14 +1113,11 @@ function DnbGeoTerritoryDrawingGame() {
     setCurrentPath(null);
   };
 
-  const addLabel = (event) => {
-    if (tool !== 'label') return;
-    const point = pointerToPercent(event);
-    if (!point) return;
-    const text = window.prompt('Nom de la mer ou de l’océan ?', '');
+  const addLabel = (kind) => {
+    const text = window.prompt(kind === 'mountainName' ? 'Nom du massif ?' : kind === 'riverName' ? 'Nom du fleuve ?' : 'Nom de la mer ou de l’océan ?', '');
     const cleanText = String(text || '').trim();
     if (!cleanText) return;
-    setLabels((prev) => [...prev, { id: `label-${Date.now()}`, text: cleanText, x: point.x, y: point.y }]);
+    setLabels((prev) => [...prev, { id: `label-${Date.now()}`, text: cleanText, kind, x: 50, y: 50 }]);
   };
 
   const moveLabel = (labelId, clientX, clientY) => {
@@ -1098,86 +1128,137 @@ function DnbGeoTerritoryDrawingGame() {
     setLabels((prev) => prev.map((label) => label.id === labelId ? { ...label, x, y } : label));
   };
 
-  const addNamedFeature = () => {
-    const text = window.prompt('Nom du massif ou du fleuve ?', '');
-    const cleanText = String(text || '').trim();
-    if (!cleanText) return;
-    setLabels((prev) => [...prev, { id: `label-${Date.now()}`, text: cleanText, x: 50, y: 50 }]);
+  const labelTone = (kind) => {
+    if (kind === 'mountainName') return 'border-amber-600 text-amber-800 placeholder:text-amber-700';
+    if (kind === 'riverName') return 'border-blue-600 text-blue-800 placeholder:text-blue-700';
+    return 'border-sky-400 text-sky-800 placeholder:text-sky-700';
+  };
+
+  const labelPlaceholder = (kind) => {
+    return '...';
+  };
+
+  const selectNearestLabel = (kind, points = []) => {
+    if (editModel || points.length === 0) return;
+    const center = points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+    center.x /= points.length;
+    center.y /= points.length;
+    const candidates = labels.filter((label) => label.kind === kind);
+    const nearest = candidates
+      .map((label) => ({ label, distance: Math.hypot(label.x - center.x, label.y - center.y) }))
+      .sort((a, b) => a.distance - b.distance)[0]?.label;
+    if (nearest) setActiveLabelId(nearest.id);
+  };
+
+  const copyDraft = async () => {
+    const payload = JSON.stringify({ paths, labels }, null, 2);
+    try {
+      await navigator.clipboard.writeText(payload);
+      window.alert('Dessin copié.');
+    } catch {
+      window.alert(payload);
+    }
   };
 
   const pathToD = (points) => points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
   const allPaths = currentPath ? [...paths, currentPath] : paths;
+  const goodAnswers = labels.filter((label) => normalizeAnswer(answers[label.id]) === normalizeAnswer(label.text)).length;
 
   return (
     <section className="rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[11px] font-black uppercase text-emerald-500">Partie 2 · Géo</div>
-          <div className="text-2xl font-black text-slate-900">Dessine les repères du territoire</div>
+          <div className="text-2xl font-black text-slate-900">Complète les repères du territoire</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {[
-            { key: 'mountain', label: 'Crayon montagnes' },
-            { key: 'river', label: 'Trait fleuves' },
-            { key: 'label', label: 'Bulle mers/océans' }
-          ].map((item) => (
+          {!editModel && (
             <button
-              key={item.key}
               type="button"
-              onClick={() => setTool(item.key)}
-              className={`rounded-2xl px-4 py-3 text-xs font-black ${tool === item.key ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+              onClick={() => setChecked(true)}
+              className="rounded-2xl bg-emerald-500 px-4 py-3 text-xs font-black text-white"
             >
-              {item.label}
+              Valider
             </button>
-          ))}
+          )}
           <button
             type="button"
-            onClick={addNamedFeature}
-            className="rounded-2xl bg-white px-4 py-3 text-xs font-black text-slate-700"
+            onClick={() => setEditModel((value) => !value)}
+            className="rounded-2xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700"
           >
-            + Nom massif/fleuve
+            {editModel ? 'Tester élève' : 'Modifier le modèle'}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPaths((prev) => prev.slice(0, -1));
-              setLabels((prev) => prev.length && paths.length === 0 ? prev.slice(0, -1) : prev);
-            }}
-            className="rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white"
-          >
-            Annuler
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPaths([]);
-              setLabels([]);
-              setCurrentPath(null);
-            }}
-            className="rounded-2xl bg-red-50 px-4 py-3 text-xs font-black text-red-600"
-          >
-            Effacer
-          </button>
+          {editModel && (
+            <>
+              {[
+                { key: 'mountain', label: 'Crayon montagnes' },
+                { key: 'river', label: 'Trait fleuves' }
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setTool(item.key)}
+                  className={`rounded-2xl px-4 py-3 text-xs font-black ${tool === item.key ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <button type="button" onClick={() => addLabel('riverName')} className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black text-white">+ Nom fleuve</button>
+              <button type="button" onClick={() => addLabel('mountainName')} className="rounded-2xl bg-amber-700 px-4 py-3 text-xs font-black text-white">+ Nom massif</button>
+              <button type="button" onClick={() => addLabel('seaName')} className="rounded-2xl bg-sky-300 px-4 py-3 text-xs font-black text-sky-950">+ Nom mer/océan</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (labels.length > 0 && paths.length === 0) setLabels((prev) => prev.slice(0, -1));
+                  else setPaths((prev) => prev.slice(0, -1));
+                  setCurrentPath(null);
+                }}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white"
+              >
+                Effacer dernière action
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm('Tout effacer sur cette carte ?')) return;
+                  setPaths([]);
+                  setLabels([]);
+                  setCurrentPath(null);
+                  if (typeof window !== 'undefined') window.localStorage.removeItem(DNB_GEO_TERRITORY_DRAFT_KEY);
+                }}
+                className="rounded-2xl bg-red-50 px-4 py-3 text-xs font-black text-red-600"
+              >
+                Tout effacer
+              </button>
+              <button type="button" onClick={copyDraft} className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black text-emerald-700">Copier sauvegarde</button>
+            </>
+          )}
         </div>
       </div>
       <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
-        Montagnes : dessine une zone au crayon. Fleuves : trace une ligne. Mers et océans : clique pour poser une bulle.
+        {editModel
+          ? 'Mode modèle : ajuste les tracés et les bulles, puis copie la sauvegarde.'
+          : `Écris les noms dans les bulles placées sur la carte. ${checked ? `${goodAnswers}/${labels.length} bonnes réponses.` : ''}`}
       </div>
       <div className="mt-5">
         <div
           ref={drawingRef}
           className="relative mx-auto max-w-[760px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white"
           onPointerDown={(event) => {
-            if (tool === 'label') addLabel(event);
-            else startDraw(event);
+            if (editModel && !draggingLabelId) startDraw(event);
+            if (!editModel) setActiveLabelId('');
           }}
-          onPointerMove={moveDraw}
-          onPointerUp={endDraw}
-          onPointerLeave={endDraw}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            const labelId = event.dataTransfer.getData('text/plain');
-            if (labelId) moveLabel(labelId, event.clientX, event.clientY);
+          onPointerMove={(event) => {
+            if (draggingLabelId) moveLabel(draggingLabelId, event.clientX, event.clientY);
+            else if (editModel) moveDraw(event);
+          }}
+          onPointerUp={() => {
+            setDraggingLabelId('');
+            endDraw();
+          }}
+          onPointerLeave={() => {
+            setDraggingLabelId('');
+            endDraw();
           }}
         >
           <img
@@ -1199,33 +1280,95 @@ function DnbGeoTerritoryDrawingGame() {
                 d={pathToD(path.points)}
                 fill="none"
                 stroke={path.tool === 'river' ? '#2563eb' : '#92400e'}
-                strokeWidth={path.tool === 'river' ? 0.45 : 0.9}
+                strokeWidth={path.tool === 'river' ? 0.65 : 1.1}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 opacity={path.tool === 'river' ? 0.9 : 0.55}
+                className={editModel ? '' : 'cursor-pointer'}
+                style={{ pointerEvents: editModel ? 'none' : 'stroke' }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  selectNearestLabel(path.tool === 'river' ? 'riverName' : 'mountainName', path.points);
+                }}
               />
             ))}
           </svg>
-          {labels.map((label) => (
-            <button
-              key={label.id}
-              type="button"
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', label.id);
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (event.altKey) setLabels((prev) => prev.filter((item) => item.id !== label.id));
-              }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-200 bg-white/95 px-3 py-2 text-xs font-black text-blue-700 shadow"
-              style={{ left: `${label.x}%`, top: `${label.y}%` }}
-              title="Glisser pour déplacer. Alt+clic pour supprimer."
-            >
-              {label.text}
-            </button>
-          ))}
+          {labels.map((label) => {
+            const answer = answers[label.id] || '';
+            const isGood = normalizeAnswer(answer) === normalizeAnswer(label.text);
+            if (!editModel) {
+              const isActive = activeLabelId === label.id;
+              return (
+                <div
+                  key={label.id}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-4 bg-white/95 shadow ${checked ? (isGood ? 'border-emerald-500 text-emerald-700 placeholder:text-emerald-700' : 'border-red-500 text-red-600 placeholder:text-red-500') : labelTone(label.kind)} ${isActive ? 'z-20 px-3 py-2' : 'z-10 px-2 py-1'}`}
+                  style={{ left: `${label.x}%`, top: `${label.y}%` }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveLabelId(label.id);
+                  }}
+                >
+                  {isActive ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={answer}
+                        onChange={(event) => {
+                          setAnswers((prev) => ({ ...prev, [label.id]: event.target.value }));
+                          setChecked(false);
+                        }}
+                        className={`w-32 bg-transparent text-center text-xs font-black outline-none ${labelTone(label.kind)}`}
+                        placeholder={labelPlaceholder(label.kind)}
+                      />
+                      {checked && !isGood && (
+                        <div className="mt-1 text-center text-[10px] font-black text-red-600">{label.text}</div>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`min-w-20 bg-transparent text-center text-[10px] font-black uppercase outline-none ${labelTone(label.kind)}`}
+                    >
+                      {answers[label.id] || labelPlaceholder(label.kind)}
+                    </button>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <button
+                key={label.id}
+                type="button"
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                  setDraggingLabelId(label.id);
+                  moveLabel(label.id, event.clientX, event.clientY);
+                }}
+                onPointerMove={(event) => {
+                  if (draggingLabelId === label.id) {
+                    event.stopPropagation();
+                    moveLabel(label.id, event.clientX, event.clientY);
+                  }
+                }}
+                onPointerUp={(event) => {
+                  event.stopPropagation();
+                  event.currentTarget.releasePointerCapture?.(event.pointerId);
+                  setDraggingLabelId('');
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (event.altKey) setLabels((prev) => prev.filter((item) => item.id !== label.id));
+                }}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move rounded-full border-4 bg-white/95 px-3 py-2 text-xs font-black shadow ${labelTone(label.kind)}`}
+                style={{ left: `${label.x}%`, top: `${label.y}%` }}
+                title="Glisser pour déplacer. Alt+clic pour supprimer."
+              >
+                {label.text}
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
