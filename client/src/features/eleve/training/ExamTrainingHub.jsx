@@ -215,6 +215,9 @@ const DNB_GEO_UE_DRAFT_KEY = 'condaweb-dnb-ue-markers-v1';
 const DNB_GEO_REGIONS_MAP_URL = '/dnb-regions-france.png';
 const DNB_GEO_REGIONS_DRAFT_URL = '/dnb-regions-draft.json';
 const DNB_GEO_REGIONS_DRAFT_KEY = 'condaweb-dnb-regions-markers-v3';
+const DNB_GEO_ORG_UE_MAP_URL = '/dnb-orgue-france.png';
+const DNB_GEO_ORG_UE_DRAFT_URL = '/dnb-orgue-draft.json';
+const DNB_GEO_ORG_UE_DRAFT_KEY = 'condaweb-dnb-orgue-drawing-v7';
 const DNB_REGIONS_POSITIONS = [
   ['Hauts-de-France',54.2,15.5],['Normandie',40.7,24.5],['Grand Est',75.9,26.1],
   ['Bretagne',17.6,31.8],['Pays de la Loire',31.6,40.8],['Centre-Val de Loire',49.7,39.6],
@@ -823,13 +826,14 @@ function DnbGeoReperesWorkspace({ onBack }) {
   const isDromCom = geoGame === 'dromCom';
   const isUe = geoGame === 'ue';
   const isRegions = geoGame === 'regions';
+  const isOrgUe = geoGame === 'orgUe';
 
   return (
     <div className="mx-4 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-white p-4">
         <div>
           <div className="text-[11px] font-black uppercase text-emerald-500">Repères DNB · Géographie</div>
-          <div className="text-2xl font-black text-slate-900">{isMetropoles ? 'Métropoles françaises' : isTerritoire ? 'Territoire français' : isRepartition ? 'Répartition de la population française' : isEspacesProductifs ? 'Espaces productifs français' : isDromCom ? 'DROM-COM' : isUe ? 'Union européenne' : isRegions ? 'Régions françaises' : 'Aire urbaine'}</div>
+          <div className="text-2xl font-black text-slate-900">{isMetropoles ? 'Métropoles françaises' : isTerritoire ? 'Territoire français' : isRepartition ? 'Répartition de la population française' : isEspacesProductifs ? 'Espaces productifs français' : isDromCom ? 'DROM-COM' : isUe ? 'Union européenne' : isRegions ? 'Régions françaises' : isOrgUe ? 'Organisation du territoire de l’UE' : 'Aire urbaine'}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -884,6 +888,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
           </button>
           <button type="button" onClick={() => { setGeoGame('ue'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Union européenne</button>
           <button type="button" onClick={() => { setGeoGame('regions'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isRegions ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Régions</button>
+          <button type="button" onClick={() => { setGeoGame('orgUe'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isOrgUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Organisation UE</button>
           <button
             type="button"
             onClick={() => {
@@ -949,6 +954,29 @@ function DnbGeoReperesWorkspace({ onBack }) {
             ? <DnbUeNumberGame />
           : geoGame === 'regions'
             ? <DnbRegionsPointGame />
+          : geoGame === 'orgUe'
+            ? <DnbGeoRepartitionColoringGame
+                key="organisation-ue-v1"
+                mapUrl={DNB_GEO_ORG_UE_MAP_URL}
+                draftUrl={DNB_GEO_ORG_UE_DRAFT_URL}
+                draftKey={DNB_GEO_ORG_UE_DRAFT_KEY}
+                heading="Construis la carte de l’organisation du territoire de l’Union européenne"
+                mapAlt="Carte muette de l’organisation du territoire de l’Union européenne"
+                showCentralLabel={false}
+                showDensityInputs={false}
+                pencils={DNB_ORG_UE_PENCILS}
+                compactStrokeWidths
+                uniformColors
+                allowPoints
+                allowSquares
+                allowBackgroundFill
+                allowStars
+                allowDashedLines
+                forceRedPoints
+                hideEraser
+                smallRoundPoints
+                allowStraightAxes
+              />
           : <DnbUrbanAreaSchemaGame />}
     </div>
   );
@@ -1277,6 +1305,17 @@ const DNB_ESPACESP_PENCILS = [
   { key: 'black', label: 'Noir', color: '#111827' }
 ];
 
+const DNB_ORG_UE_PENCILS = [
+  { key: 'center-pink', label: 'Rose', color: '#ef5b78', opacity: 0.8 },
+  { key: 'dynamic-orange', label: 'Orange', color: '#f2a866', opacity: 0.78 },
+  { key: 'integration-yellow', label: 'Jaune', color: '#f5d75a', opacity: 0.78 },
+  { key: 'land-red', label: 'Rouge', color: '#dc2626', opacity: 0.92 },
+  { key: 'sea-blue', label: 'Bleu', color: '#1677b8', opacity: 0.92 },
+  { key: 'institution-yellow', label: 'Jaune clair', color: '#f8ef45', opacity: 0.92 },
+  { key: 'white', label: 'Blanc', color: '#ffffff', opacity: 1 },
+  { key: 'black', label: 'Noir', color: '#111827' }
+];
+
 const DNB_ESPACESP_MAP_SECTIONS = [
   { key: 'industrial', label: 'Carte industrielle', minX: 0, maxX: 33.33, pencilKeys: ['industrial-pink', 'industrial-blue', 'technology-yellow', 'black'] },
   { key: 'agricultural', label: 'Carte agricole', minX: 33.33, maxX: 66.66, pencilKeys: ['cereal-orange', 'farming-green', 'specialized-red', 'mixed-light-green', 'black'] },
@@ -1299,7 +1338,13 @@ function DnbGeoRepartitionColoringGame({
   mapSections = [],
   allowPoints = false,
   allowSquares = false,
-  allowBackgroundFill = false
+  allowBackgroundFill = false,
+  allowStars = false,
+  allowDashedLines = false,
+  forceRedPoints = false,
+  hideEraser = false,
+  smallRoundPoints = false,
+  allowStraightAxes = false
 }) {
   const drawingRef = useRef(null);
   const mapImageRef = useRef(null);
@@ -1332,6 +1377,7 @@ function DnbGeoRepartitionColoringGame({
   const [currentMapRectangle, setCurrentMapRectangle] = useState(null);
   const [draftReady, setDraftReady] = useState(savedDrawing.hasLocalDraft);
   const [currentPath, setCurrentPath] = useState(null);
+  const [erasedSnapshot, setErasedSnapshot] = useState(null);
 
   useEffect(() => {
     if (!resetWhenDraftMissing || typeof window === 'undefined') return;
@@ -1442,6 +1488,8 @@ function DnbGeoRepartitionColoringGame({
     });
     paths.forEach((path) => {
       if (path?.type === 'arrow') addAutomaticItem('arrow', path?.color, path?.groupKey);
+      if (path?.type === 'dashed') addAutomaticItem('dashed', path?.color, path?.groupKey);
+      if (path?.type === 'axis') addAutomaticItem('line', path?.color, path?.groupKey);
     });
     setLegendItems((previous) => {
       const existingKeys = new Set(previous.map((item) => `${item?.pattern}:${String(item?.color || '').toLowerCase()}`));
@@ -1472,6 +1520,7 @@ function DnbGeoRepartitionColoringGame({
   const startColoring = (event) => {
     event.preventDefault();
     const pointerPoint = pointerToPercent(event);
+    if (drawMode !== 'eraser' && erasedSnapshot) setErasedSnapshot(null);
     if (drawMode === 'define-map') {
       if (!pointerPoint || mapRectangles.length >= mapSections.length) return;
       event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -1488,17 +1537,31 @@ function DnbGeoRepartitionColoringGame({
       return;
     }
     if (drawMode === 'eraser') {
+      setErasedSnapshot({ paths, fills });
       eraseAt(event, true);
       return;
     }
     if (drawMode === 'point') {
       if (!pointerPoint) return;
+      const pointPencil = forceRedPoints ? (pencils.find((item) => item.key === 'land-red') || pencil) : pencil;
       setFills((previous) => [...previous, {
         id: `repartition-fill-${Date.now()}`,
-        color: pencil.color,
+        color: pointPencil.color,
         pattern: 'point',
         ...(activeMapSection ? { groupKey: activeMapSection } : {}),
         svgCircles: [{ x: pointerPoint.x, y: pointerPoint.y, r: 1.35 }]
+      }]);
+      return;
+    }
+    if (drawMode === 'star') {
+      if (!pointerPoint) return;
+      const starPencil = pencils.find((item) => item.key === 'institution-yellow') || pencil;
+      setFills((previous) => [...previous, {
+        id: `repartition-fill-${Date.now()}`,
+        color: starPencil.color,
+        pattern: 'star',
+        ...(activeMapSection ? { groupKey: activeMapSection } : {}),
+        svgStars: [{ x: pointerPoint.x, y: pointerPoint.y, r: 1.8 }]
       }]);
       return;
     }
@@ -1549,7 +1612,7 @@ function DnbGeoRepartitionColoringGame({
     if (!point) return;
     setCurrentPath((previous) => {
       if (!previous) return previous;
-      if (previous.type === 'arrow') return { ...previous, points: [previous.points[0], point] };
+      if (previous.type === 'arrow' || previous.type === 'axis') return { ...previous, points: [previous.points[0], point] };
       return { ...previous, points: [...previous.points, point] };
     });
   };
@@ -1612,7 +1675,8 @@ function DnbGeoRepartitionColoringGame({
         && point.x <= rectangle.x + rectangle.width
         && point.y >= rectangle.y
         && point.y <= rectangle.y + rectangle.height);
-      return hitsCircle || hitsRectangle;
+      const hitsStar = (fill?.svgStars || []).some((star) => Math.hypot(point.x - star.x, point.y - star.y) <= Number(star.r || 1.8));
+      return hitsCircle || hitsRectangle || hitsStar;
     });
     if (vectorFill) {
       setFills((previous) => previous.filter((fill) => fill.id !== vectorFill.id));
@@ -1817,6 +1881,12 @@ function DnbGeoRepartitionColoringGame({
     }
   };
   const undoLastRepartitionAction = () => {
+    if (erasedSnapshot) {
+      setPaths(erasedSnapshot.paths);
+      setFills(erasedSnapshot.fills);
+      setErasedSnapshot(null);
+      return;
+    }
     const lastPath = paths[paths.length - 1];
     const lastFill = fills[fills.length - 1];
     const actionTime = (item) => {
@@ -1830,7 +1900,7 @@ function DnbGeoRepartitionColoringGame({
     if (lastFill) setFills((previous) => previous.slice(0, -1));
   };
   const addRepartitionLegendItem = () => {
-    const patternByMode = { hatch: 'hatch', arrow: 'arrow', line: 'line' };
+    const patternByMode = { hatch: 'hatch', arrow: 'arrow', line: 'line', dashed: 'dashed', point: 'point', star: 'star' };
     setLegendItems((previous) => [...previous, {
       id: `repartition-legend-${Date.now()}`,
       color: pencil.color,
@@ -1924,6 +1994,11 @@ function DnbGeoRepartitionColoringGame({
         >
           ✎ Trait
         </button>
+        {allowStraightAxes && <button
+          type="button"
+          onClick={() => setDrawMode('axis')}
+          className={`rounded-xl px-3 py-2 text-xs font-black ${drawMode === 'axis' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`}
+        >━ Axe droit</button>}
         <button
           type="button"
           onClick={() => setDrawMode('arrow')}
@@ -1931,6 +2006,15 @@ function DnbGeoRepartitionColoringGame({
         >
           ➜ Flèche
         </button>
+        {allowDashedLines && <button
+          type="button"
+          onClick={() => {
+            setDrawMode('dashed');
+            const blackPencil = pencils.find((item) => item.key === 'black');
+            if (blackPencil) setPencil(blackPencil);
+          }}
+          className={`rounded-xl px-3 py-2 text-xs font-black ${drawMode === 'dashed' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`}
+        >┄ Ligne pointillée</button>}
         <button
           type="button"
           onClick={() => setDrawMode('fill')}
@@ -1957,12 +2041,27 @@ function DnbGeoRepartitionColoringGame({
         {allowPoints && (!selectedMapSection || selectedMapSection.key === 'services') && (
           <button
             type="button"
-            onClick={() => setDrawMode('point')}
+            onClick={() => {
+              setDrawMode('point');
+              if (forceRedPoints) {
+                const redPencil = pencils.find((item) => item.key === 'land-red');
+                if (redPencil) setPencil(redPencil);
+              }
+            }}
             className={`rounded-xl px-3 py-2 text-xs font-black ${drawMode === 'point' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`}
           >
-            ● Pôle tertiaire
+            {forceRedPoints ? '● Point rouge' : '● Pôle tertiaire'}
           </button>
         )}
+        {allowStars && <button
+          type="button"
+          onClick={() => {
+            setDrawMode('star');
+            const starPencil = pencils.find((item) => item.key === 'institution-yellow');
+            if (starPencil) setPencil(starPencil);
+          }}
+          className={`rounded-xl px-3 py-2 text-xs font-black ${drawMode === 'star' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`}
+        >★ Institution UE</button>}
         {allowSquares && selectedMapSection?.key === 'industrial' && (
           <button
             type="button"
@@ -1992,7 +2091,7 @@ function DnbGeoRepartitionColoringGame({
             {item.label}
           </button>
         ))}
-        <button
+        {!hideEraser && <button
           type="button"
           onClick={() => setDrawMode('eraser')}
           className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2 text-xs font-black ${drawMode === 'eraser' ? 'border-slate-900 bg-slate-700 text-white shadow' : 'border-transparent bg-white/70 text-slate-600'}`}
@@ -2000,9 +2099,10 @@ function DnbGeoRepartitionColoringGame({
         >
           <span className="text-base">⬜</span>
           Gomme
-        </button>
+        </button>}
         <span className="ml-2 text-xs font-black uppercase text-slate-500">Épaisseur</span>
         {(compactStrokeWidths ? [
+          { value: 0.25, label: 'Ultra-fin' },
           { value: 0.65, label: 'Très fin' }
         ] : [
           { value: 0.65, label: 'Très très fin' },
@@ -2134,13 +2234,27 @@ function DnbGeoRepartitionColoringGame({
                 strokeWidth={fill.strokeWidth || 0}
               />
             ))}
+            {visiblePaths.map((path) => (
+              <path
+                key={path.id}
+                d={pathToD(path.points)}
+                fill="none"
+                stroke={path.color}
+                strokeWidth={path.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={path.type === 'dashed' ? '1.2 1' : undefined}
+                opacity={uniformColors ? 1 : (path.opacity || (path.pencilKey === 'red' || path.color === '#ef2020' ? 0.82 : 0.52))}
+                markerEnd={path.type === 'arrow' ? `url(#dnb-repartition-arrow-${path.pencilKey || 'red'})` : undefined}
+              />
+            ))}
             {fills.filter((fill) => !fill?.expectedOnly).flatMap((fill) => (fill?.svgCircles || []).map((circle, index) => (
               <ellipse
                 key={`circle-${fill.id}-${index}`}
                 cx={circle.x}
                 cy={circle.y}
-                rx={circle.rx ?? Number(circle.r || 1) * 0.4}
-                ry={circle.ry ?? circle.r}
+                rx={smallRoundPoints && fill.pattern === 'point' ? 0.64 : (circle.rx ?? Number(circle.r || 1) * 0.4)}
+                ry={smallRoundPoints && fill.pattern === 'point' ? 0.9 : (circle.ry ?? circle.r)}
                 fill={fill.color}
                 fillOpacity={fill.opacity ?? 0.9}
                 stroke={circle.stroke || '#ffffff'}
@@ -2159,19 +2273,17 @@ function DnbGeoRepartitionColoringGame({
                 strokeWidth="0.2"
               />
             )))}
-            {visiblePaths.map((path) => (
-              <path
-                key={path.id}
-                d={pathToD(path.points)}
-                fill="none"
-                stroke={path.color}
-                strokeWidth={path.width}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={uniformColors ? 1 : (path.opacity || (path.pencilKey === 'red' || path.color === '#ef2020' ? 0.82 : 0.52))}
-                markerEnd={path.type === 'arrow' ? `url(#dnb-repartition-arrow-${path.pencilKey || 'red'})` : undefined}
-              />
-            ))}
+            {fills.filter((fill) => !fill?.expectedOnly).flatMap((fill) => (fill?.svgStars || []).map((star, index) => {
+              const outerY = Number(star.r || 1.8);
+              const outerX = outerY * 0.55;
+              const points = Array.from({ length: 10 }, (_, pointIndex) => {
+                const radiusX = pointIndex % 2 === 0 ? outerX : outerX * 0.42;
+                const radiusY = pointIndex % 2 === 0 ? outerY : outerY * 0.42;
+                const angle = -Math.PI / 2 + pointIndex * Math.PI / 5;
+                return `${star.x + Math.cos(angle) * radiusX},${star.y + Math.sin(angle) * radiusY}`;
+              }).join(' ');
+              return <polygon key={`symbol-star-${fill.id}-${index}`} points={points} fill={fill.color} stroke="#111827" strokeWidth="0.25" />;
+            }))}
           </svg>
           {mapSections.length > 0 && effectiveMapSections.map((section) => (
             <input
@@ -2232,6 +2344,10 @@ function DnbGeoRepartitionColoringGame({
                   <span className="w-10 text-center text-3xl font-black leading-none" style={{ color: item.color }}>➜</span>
                 ) : item.pattern === 'point' ? (
                   <span className="mx-3 h-5 w-5 shrink-0 rounded-full border border-white shadow" style={{ backgroundColor: item.color }} />
+                ) : item.pattern === 'star' ? (
+                  <span className="w-10 text-center text-3xl font-black leading-none text-yellow-300" style={{ WebkitTextStroke: '1px #111827' }}>★</span>
+                ) : item.pattern === 'dashed' ? (
+                  <span className="w-10 border-t-4 border-dashed" style={{ borderColor: item.color }} />
                 ) : item.pattern === 'line' ? (
                   <span className="h-1 w-10 rounded-full" style={{ backgroundColor: item.color }} />
                 ) : (
