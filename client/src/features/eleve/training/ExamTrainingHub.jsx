@@ -217,7 +217,22 @@ const DNB_GEO_REGIONS_DRAFT_URL = '/dnb-regions-draft.json';
 const DNB_GEO_REGIONS_DRAFT_KEY = 'condaweb-dnb-regions-markers-v3';
 const DNB_GEO_ORG_UE_MAP_URL = '/dnb-orgue-france.png';
 const DNB_GEO_ORG_UE_DRAFT_URL = '/dnb-orgue-draft.json';
-const DNB_GEO_ORG_UE_DRAFT_KEY = 'condaweb-dnb-orgue-drawing-v7';
+const DNB_GEO_ORG_UE_DRAFT_KEY = 'condaweb-dnb-orgue-drawing-v12';
+const DNB_ORG_UE_CITY_POSITIONS = [
+  ['Dublin',20.47,21.43],['Londres',29.79,29.19],['Paris',31.88,40.27],['Madrid',17.9,66.68],
+  ['Barcelone',27.36,63.2],['Rome',46.75,63.29],['Berlin',49.39,30.32],['Varsovie',60.71,29.88]
+].map(([name,x,y]) => ({ name,x,y }));
+const inferOrgUeCity = (x, y) => DNB_ORG_UE_CITY_POSITIONS.reduce((best, city) => {
+  const distance = Math.hypot(city.x - x, city.y - y);
+  return !best || distance < best.distance ? { ...city, distance } : best;
+}, null)?.name || '';
+const DNB_ORG_UE_INSTITUTION_POSITIONS = [
+  ['Bruxelles',36.24,34.27],['Luxembourg',38.06,38.22],['Francfort',40.24,37.01],['Strasbourg',39.32,42.06]
+].map(([name,x,y]) => ({ name,x,y }));
+const inferOrgUeInstitution = (x, y) => DNB_ORG_UE_INSTITUTION_POSITIONS.reduce((best, city) => {
+  const distance = Math.hypot(city.x - x, city.y - y);
+  return !best || distance < best.distance ? { ...city, distance } : best;
+}, null)?.name || '';
 const DNB_REGIONS_POSITIONS = [
   ['Hauts-de-France',54.2,15.5],['Normandie',40.7,24.5],['Grand Est',75.9,26.1],
   ['Bretagne',17.6,31.8],['Pays de la Loire',31.6,40.8],['Centre-Val de Loire',49.7,39.6],
@@ -976,6 +991,8 @@ function DnbGeoReperesWorkspace({ onBack }) {
                 hideEraser
                 smallRoundPoints
                 allowStraightAxes
+                allowPointLabels
+                stagedWorkflow
               />
           : <DnbUrbanAreaSchemaGame />}
     </div>
@@ -1344,7 +1361,9 @@ function DnbGeoRepartitionColoringGame({
   forceRedPoints = false,
   hideEraser = false,
   smallRoundPoints = false,
-  allowStraightAxes = false
+  allowStraightAxes = false,
+  allowPointLabels = false,
+  stagedWorkflow = false
 }) {
   const drawingRef = useRef(null);
   const mapImageRef = useRef(null);
@@ -1378,6 +1397,32 @@ function DnbGeoRepartitionColoringGame({
   const [draftReady, setDraftReady] = useState(savedDrawing.hasLocalDraft);
   const [currentPath, setCurrentPath] = useState(null);
   const [erasedSnapshot, setErasedSnapshot] = useState(null);
+  const [editPointLabels, setEditPointLabels] = useState(false);
+  const [checkedPointLabels, setCheckedPointLabels] = useState(false);
+  const [draggingPointLabel, setDraggingPointLabel] = useState(null);
+  const [activePointLabelId, setActivePointLabelId] = useState('');
+  const [workflowStage, setWorkflowStage] = useState('color');
+  const [workflowValidated, setWorkflowValidated] = useState(false);
+
+  useEffect(() => {
+    if (!allowPointLabels || !draftReady) return;
+    setFills((previous) => previous.map((fill) => {
+      const isPoint = fill?.pattern === 'point' && fill?.svgCircles?.[0];
+      const isStar = fill?.pattern === 'star' && fill?.svgStars?.[0];
+      if (!isPoint && !isStar) return fill;
+      const symbol = isPoint ? fill.svgCircles[0] : fill.svgStars[0];
+      if (fill.expectedName && Number.isFinite(fill.labelX) && Number.isFinite(fill.labelY)) return fill;
+      return {
+        ...fill,
+        expectedName: fill.expectedName || (isPoint ? inferOrgUeCity(symbol.x, symbol.y) : inferOrgUeInstitution(symbol.x, symbol.y)),
+        answer: fill.answer || '',
+        labelX: Number.isFinite(fill.labelX) ? fill.labelX : Math.min(88, symbol.x + 1.2),
+        labelY: Number.isFinite(fill.labelY) ? fill.labelY : Math.max(0, symbol.y - 2),
+        labelWidth: Number(fill.labelWidth || (isStar ? 9 : 10)),
+        labelHeight: Number(fill.labelHeight || (isStar ? 2.6 : 4))
+      };
+    }));
+  }, [allowPointLabels, draftReady]);
 
   useEffect(() => {
     if (!resetWhenDraftMissing || typeof window === 'undefined') return;
@@ -1517,8 +1562,53 @@ function DnbGeoRepartitionColoringGame({
       }))
     : mapSections;
 
+  const startPointLabelDrag = (event, fill, mode = 'move') => {
+    if (!editPointLabels) return;
+    const rect = drawingRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const pointerX = ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerY = ((event.clientY - rect.top) / rect.height) * 100;
+    setDraggingPointLabel(mode === 'resize' ? {
+      id: fill.id,
+      mode,
+      right: Number(fill.labelX || 0) + Number(fill.labelWidth || 10),
+      bottom: Number(fill.labelY || 0) + Number(fill.labelHeight || 4)
+    } : {
+      id: fill.id,
+      mode,
+      offsetX: pointerX - Number(fill.labelX || 0),
+      offsetY: pointerY - Number(fill.labelY || 0)
+    });
+  };
+
+  const movePointLabel = (event) => {
+    if (!draggingPointLabel || !editPointLabels) return false;
+    const rect = drawingRef.current?.getBoundingClientRect();
+    if (!rect) return true;
+    const pointerX = ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerY = ((event.clientY - rect.top) / rect.height) * 100;
+    setFills((previous) => previous.map((fill) => {
+      if (fill.id !== draggingPointLabel.id) return fill;
+      if (draggingPointLabel.mode === 'resize') {
+        const nextX = Math.max(0, Math.min(draggingPointLabel.right - 5, pointerX));
+        const nextY = Math.max(0, Math.min(draggingPointLabel.bottom - 2.5, pointerY));
+        return { ...fill, labelX: +nextX.toFixed(2), labelY: +nextY.toFixed(2), labelWidth: +(draggingPointLabel.right - nextX).toFixed(2), labelHeight: +(draggingPointLabel.bottom - nextY).toFixed(2) };
+      }
+      return {
+        ...fill,
+        labelX: +Math.max(0, Math.min(100 - Number(fill.labelWidth || 10), pointerX - draggingPointLabel.offsetX)).toFixed(2),
+        labelY: +Math.max(0, Math.min(100 - Number(fill.labelHeight || 4), pointerY - draggingPointLabel.offsetY)).toFixed(2)
+      };
+    }));
+    return true;
+  };
+
   const startColoring = (event) => {
     event.preventDefault();
+    if (stagedWorkflow && workflowStage !== 'color') return;
     const pointerPoint = pointerToPercent(event);
     if (drawMode !== 'eraser' && erasedSnapshot) setErasedSnapshot(null);
     if (drawMode === 'define-map') {
@@ -1548,6 +1638,14 @@ function DnbGeoRepartitionColoringGame({
         id: `repartition-fill-${Date.now()}`,
         color: pointPencil.color,
         pattern: 'point',
+        ...(allowPointLabels ? {
+          expectedName: inferOrgUeCity(pointerPoint.x, pointerPoint.y),
+          answer: '',
+          labelX: Math.min(88, pointerPoint.x + 1.2),
+          labelY: Math.max(0, pointerPoint.y - 2),
+          labelWidth: 10,
+          labelHeight: 4
+        } : {}),
         ...(activeMapSection ? { groupKey: activeMapSection } : {}),
         svgCircles: [{ x: pointerPoint.x, y: pointerPoint.y, r: 1.35 }]
       }]);
@@ -1560,6 +1658,14 @@ function DnbGeoRepartitionColoringGame({
         id: `repartition-fill-${Date.now()}`,
         color: starPencil.color,
         pattern: 'star',
+        ...(allowPointLabels ? {
+          expectedName: inferOrgUeInstitution(pointerPoint.x, pointerPoint.y),
+          answer: '',
+          labelX: Math.min(88, pointerPoint.x + 1.2),
+          labelY: Math.max(0, pointerPoint.y - 2),
+          labelWidth: 9,
+          labelHeight: 2.6
+        } : {}),
         ...(activeMapSection ? { groupKey: activeMapSection } : {}),
         svgStars: [{ x: pointerPoint.x, y: pointerPoint.y, r: 1.8 }]
       }]);
@@ -1598,6 +1704,7 @@ function DnbGeoRepartitionColoringGame({
   };
 
   const continueColoring = (event) => {
+    if (movePointLabel(event)) return;
     if (drawMode === 'define-map' && currentMapRectangle) {
       const point = pointerToPercent(event);
       if (point) setCurrentMapRectangle((previous) => previous ? { ...previous, endX: point.x, endY: point.y } : previous);
@@ -1618,6 +1725,10 @@ function DnbGeoRepartitionColoringGame({
   };
 
   const endColoring = (event) => {
+    if (draggingPointLabel) {
+      setDraggingPointLabel(null);
+      return;
+    }
     event?.currentTarget?.releasePointerCapture?.(event.pointerId);
     if (drawMode === 'define-map') {
       setCurrentMapRectangle((rectangle) => {
@@ -1872,7 +1983,8 @@ function DnbGeoRepartitionColoringGame({
     }]);
   };
   const copyRepartitionDraft = async () => {
-    const payload = JSON.stringify({ paths, fills, title: mapTitle, mapTitles, centralLabel, legendItems, legendGroupTitles, mapRectangles }, null, 2);
+    const savedFills = allowPointLabels ? fills.map((fill) => fill?.pattern === 'point' || fill?.pattern === 'star' ? { ...fill, answer: '' } : fill) : fills;
+    const payload = JSON.stringify({ paths, fills: savedFills, title: mapTitle, mapTitles, centralLabel, legendItems, legendGroupTitles, mapRectangles }, null, 2);
     try {
       await navigator.clipboard.writeText(payload);
       window.alert('Sauvegarde du coloriage copiée.');
@@ -1960,11 +2072,25 @@ function DnbGeoRepartitionColoringGame({
         </div>
       </div>
 
+      {stagedWorkflow && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        {[
+          ['color', '🎨 Colorier'],
+          ['names', '✍ Noms'],
+          ['legend', '▤ Légende']
+        ].map(([stage, label]) => <button key={stage} type="button" onClick={() => {
+          setWorkflowStage(stage);
+          setWorkflowValidated(false);
+          if (stage !== 'names') setEditPointLabels(false);
+        }} className={`rounded-xl px-5 py-3 text-sm font-black ${workflowStage === stage ? 'bg-violet-600 text-white shadow' : 'bg-slate-100 text-slate-700'}`}>{label}</button>)}
+        <button type="button" onClick={() => { setEditPointLabels(false); setCheckedPointLabels(true); setWorkflowValidated(true); }} className="ml-auto rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white">✓ Valider</button>
+        {workflowValidated && <span className="text-xs font-black text-emerald-700">Carte envoyée à la validation.</span>}
+      </div>}
+
       <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
-        Choisis un crayon et colorie directement les espaces de la carte. Le dessin est sauvegardé automatiquement sur cet appareil.
+        {stagedWorkflow && workflowStage === 'names' ? 'Complète les noms des métropoles et des institutions.' : stagedWorkflow && workflowStage === 'legend' ? 'Complète le titre et les éléments de la légende.' : 'Choisis un crayon et colorie directement les espaces de la carte. Le dessin est sauvegardé automatiquement sur cet appareil.'}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      {(!stagedWorkflow || workflowStage === 'color') && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
         {selectedMapSection && (
           <span className="mr-2 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700">
             {selectedMapSection.label}
@@ -2062,6 +2188,16 @@ function DnbGeoRepartitionColoringGame({
           }}
           className={`rounded-xl px-3 py-2 text-xs font-black ${drawMode === 'star' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`}
         >★ Institution UE</button>}
+        {allowPointLabels && !stagedWorkflow && <button
+          type="button"
+          onClick={() => { setEditPointLabels((previous) => !previous); setCheckedPointLabels(false); }}
+          className={`rounded-xl px-3 py-2 text-xs font-black ${editPointLabels ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'}`}
+        >▭ Calibrer les noms</button>}
+        {allowPointLabels && !stagedWorkflow && !editPointLabels && <button
+          type="button"
+          onClick={() => setCheckedPointLabels(true)}
+          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white"
+        >✓ Vérifier les noms</button>}
         {allowSquares && selectedMapSection?.key === 'industrial' && (
           <button
             type="button"
@@ -2119,10 +2255,14 @@ function DnbGeoRepartitionColoringGame({
             {item.label}
           </button>
         ))}
-      </div>
+      </div>}
+      {stagedWorkflow && workflowStage === 'names' && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+        <button type="button" onClick={() => { setEditPointLabels((previous) => !previous); setCheckedPointLabels(false); }} className={`rounded-xl px-4 py-3 text-xs font-black ${editPointLabels ? 'bg-amber-500 text-white' : 'bg-white text-amber-800'}`}>▭ Calibrer les noms</button>
+        {!editPointLabels && <button type="button" onClick={() => setCheckedPointLabels(true)} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">✓ Vérifier les noms</button>}
+      </div>}
 
       <div className="mt-5">
-        {mapSections.length === 0 && <label className="mx-auto mb-3 block max-w-[820px]">
+        {mapSections.length === 0 && (!stagedWorkflow || workflowStage === 'legend') && <label className="mx-auto mb-3 block max-w-[820px]">
           <span className="mb-1 block text-xs font-black uppercase text-slate-500">Titre de la carte</span>
           <input
             value={mapTitle}
@@ -2133,7 +2273,7 @@ function DnbGeoRepartitionColoringGame({
         </label>}
         <div
           ref={drawingRef}
-          className={`relative mx-auto max-w-[820px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white ${drawMode === 'fill' || drawMode === 'hatch' ? 'cursor-cell' : drawMode === 'eraser' ? 'cursor-not-allowed' : 'cursor-crosshair'}`}
+          className={`relative mx-auto max-w-[820px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white ${stagedWorkflow && workflowStage !== 'color' ? 'cursor-default' : drawMode === 'fill' || drawMode === 'hatch' ? 'cursor-cell' : drawMode === 'eraser' ? 'cursor-not-allowed' : 'cursor-crosshair'}`}
           onPointerDown={startColoring}
           onPointerMove={continueColoring}
           onPointerUp={endColoring}
@@ -2285,6 +2425,42 @@ function DnbGeoRepartitionColoringGame({
               return <polygon key={`symbol-star-${fill.id}-${index}`} points={points} fill={fill.color} stroke="#111827" strokeWidth="0.25" />;
             }))}
           </svg>
+          {allowPointLabels && (!stagedWorkflow || workflowStage === 'names') && fills.filter((fill) => !fill?.expectedOnly && (fill?.pattern === 'point' || fill?.pattern === 'star')).flatMap((fill) => {
+            const symbols = fill.pattern === 'star' ? (fill.svgStars || []) : (fill.svgCircles || []);
+            return symbols.map((symbol, index) => {
+            const answer = fill.answer || '';
+            const isCorrect = checkedPointLabels && normalizeAnswer(answer) === normalizeAnswer(fill.expectedName || '');
+            const isWrong = checkedPointLabels && !isCorrect;
+            const isActive = activePointLabelId === fill.id;
+            const isCompleted = !editPointLabels && !checkedPointLabels && answer.trim() && !isActive;
+            return <div
+              key={`point-label-${fill.id}-${index}`}
+              className={`absolute z-40 flex items-center rounded-md border-2 transition-colors ${editPointLabels ? `cursor-move bg-white/95 shadow ${fill.pattern === 'star' ? 'border-blue-500' : 'border-amber-400'}` : isCompleted ? 'border-transparent bg-transparent shadow-none' : `bg-white/95 shadow ${isCorrect ? 'border-emerald-500' : isWrong ? 'border-red-500' : fill.pattern === 'star' ? 'border-blue-300' : 'border-amber-300'}`}`}
+              style={{ left: `${fill.labelX ?? symbol.x + 1.1}%`, top: `${fill.labelY ?? symbol.y - 2}%`, width: `${fill.labelWidth || 10}%`, height: `${fill.labelHeight || 4}%` }}
+              onPointerDown={(event) => editPointLabels ? startPointLabelDrag(event, fill, 'move') : event.stopPropagation()}
+              onPointerMove={(event) => { if (editPointLabels) movePointLabel(event); }}
+              onPointerUp={(event) => { if (draggingPointLabel) { event.stopPropagation(); setDraggingPointLabel(null); } }}
+              onPointerCancel={() => setDraggingPointLabel(null)}
+            >
+              {editPointLabels ? <>
+                <button type="button" data-resize-handle onPointerDown={(event) => startPointLabelDrag(event, fill, 'resize')} className={`absolute left-0 top-0 z-10 flex h-3.5 w-3.5 -translate-x-1/3 -translate-y-1/3 cursor-nw-resize items-center justify-center rounded-full border bg-white text-[7px] font-black shadow ${fill.pattern === 'star' ? 'border-blue-500 text-blue-700' : 'border-amber-500 text-amber-700'}`} title="Tirer pour redimensionner">↖</button>
+                <span className={`min-w-0 flex-1 truncate text-center font-black ${fill.pattern === 'star' ? 'px-1 text-[8px] leading-none text-blue-700' : 'px-2 text-[10px] text-amber-800'}`} title={fill.expectedName}>{fill.expectedName}</span>
+              </> : <input
+                value={answer}
+                onChange={(event) => {
+                  setCheckedPointLabels(false);
+                  setFills((previous) => previous.map((item) => item.id === fill.id ? { ...item, answer: event.target.value } : item));
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onFocus={() => setActivePointLabelId(fill.id)}
+                onBlur={() => setActivePointLabelId('')}
+                onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                placeholder={fill.pattern === 'star' ? 'Institution' : 'Nom de la ville'}
+                className={`h-full w-full rounded-md px-1.5 text-center text-[clamp(8px,1vw,11px)] font-black text-slate-800 outline-none transition-colors ${isCompleted ? 'bg-transparent' : 'bg-white/95'}`}
+              />}
+              {isWrong && <div className="mt-0.5 rounded bg-white/95 px-1 py-0.5 text-[9px] font-black text-red-600">{fill.expectedName}</div>}
+            </div>;
+          });})}
           {mapSections.length > 0 && effectiveMapSections.map((section) => (
             <input
               key={`map-title-${section.key}`}
@@ -2314,7 +2490,7 @@ function DnbGeoRepartitionColoringGame({
             className="absolute left-[49%] top-[55%] z-20 w-[25%] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-amber-500/70 bg-white/85 px-2 py-2 text-center text-[clamp(9px,1.5vw,14px)] font-black text-slate-800 shadow-sm outline-none focus:border-violet-500"
           />}
         </div>
-        {mapSections.length === 0 ? <div className="mx-auto mt-4 max-w-[820px] rounded-2xl border-2 border-slate-300 bg-white p-4">
+        {(!stagedWorkflow || workflowStage === 'legend') && (mapSections.length === 0 ? <div className="mx-auto mt-4 max-w-[820px] rounded-2xl border-2 border-slate-300 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-black uppercase text-slate-700">Légende</div>
             <button
@@ -2435,7 +2611,7 @@ function DnbGeoRepartitionColoringGame({
               );
             })}
           </div>
-        )}
+        ))}
       </div>
     </section>
   );
