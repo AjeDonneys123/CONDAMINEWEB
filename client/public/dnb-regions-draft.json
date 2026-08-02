@@ -1,0 +1,17 @@
+{
+  "markers": [
+    { "id": "region-marker-1785687165755", "number": 1, "x": 57.98, "y": 14.59, "expectedName": "Hauts-de-France", "answer": "" },
+    { "id": "region-marker-1785687167470", "number": 2, "x": 37.82, "y": 23.45, "expectedName": "Normandie", "answer": "" },
+    { "id": "region-marker-1785687169254", "number": 3, "x": 75.5, "y": 25.67, "expectedName": "Grand Est", "answer": "" },
+    { "id": "region-marker-1785687171704", "number": 4, "x": 55.04, "y": 26.2, "expectedName": "Île-de-France", "answer": "" },
+    { "id": "region-marker-1785687174688", "number": 5, "x": 48.94, "y": 39.11, "expectedName": "Centre-Val de Loire", "answer": "" },
+    { "id": "region-marker-1785687177338", "number": 6, "x": 28.39, "y": 40.38, "expectedName": "Pays de la Loire", "answer": "" },
+    { "id": "region-marker-1785687179454", "number": 7, "x": 16.5, "y": 29.88, "expectedName": "Bretagne", "answer": "" },
+    { "id": "region-marker-1785687182005", "number": 8, "x": 73.06, "y": 39.51, "expectedName": "Bourgogne-Franche-Comté", "answer": "" },
+    { "id": "region-marker-1785687184754", "number": 9, "x": 69.72, "y": 55.15, "expectedName": "Auvergne-Rhône-Alpes", "answer": "" },
+    { "id": "region-marker-1785687186104", "number": 10, "x": 40.72, "y": 54.45, "expectedName": "Nouvelle-Aquitaine", "answer": "" },
+    { "id": "region-marker-1785687187254", "number": 11, "x": 52.39, "y": 71.6, "expectedName": "Occitanie", "answer": "" },
+    { "id": "region-marker-1785687188587", "number": 12, "x": 80.54, "y": 70.22, "expectedName": "Provence-Alpes-Côte d’Azur", "answer": "" },
+    { "id": "region-marker-1785687191187", "number": 13, "x": 88.45, "y": 87.89, "expectedName": "Corse", "answer": "" }
+  ]
+}

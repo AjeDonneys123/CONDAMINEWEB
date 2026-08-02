@@ -212,6 +212,20 @@ const DNB_GEO_DROMCOM_DRAFT_KEY = 'condaweb-dnb-dromcom-labels-v1';
 const DNB_GEO_UE_MAP_URL = '/dnb-ue-france.png';
 const DNB_GEO_UE_DRAFT_URL = '/dnb-ue-draft.json';
 const DNB_GEO_UE_DRAFT_KEY = 'condaweb-dnb-ue-markers-v1';
+const DNB_GEO_REGIONS_MAP_URL = '/dnb-regions-france.png';
+const DNB_GEO_REGIONS_DRAFT_URL = '/dnb-regions-draft.json';
+const DNB_GEO_REGIONS_DRAFT_KEY = 'condaweb-dnb-regions-markers-v3';
+const DNB_REGIONS_POSITIONS = [
+  ['Hauts-de-France',54.2,15.5],['Normandie',40.7,24.5],['Grand Est',75.9,26.1],
+  ['Bretagne',17.6,31.8],['Pays de la Loire',31.6,40.8],['Centre-Val de Loire',49.7,39.6],
+  ['Île-de-France',54.2,26.1],['Bourgogne-Franche-Comté',71.4,40.8],
+  ['Auvergne-Rhône-Alpes',68.7,57.1],['Nouvelle-Aquitaine',40.7,58.7],
+  ['Occitanie',51.5,73.4],['Provence-Alpes-Côte d’Azur',79.6,69.3],['Corse',87.7,84.8]
+].map(([name,x,y]) => ({ name,x,y }));
+const inferRegionName = (x, y) => DNB_REGIONS_POSITIONS.reduce((best, region) => {
+  const distance = Math.hypot(region.x - x, region.y - y);
+  return !best || distance < best.distance ? { ...region, distance } : best;
+}, null)?.name || '';
 const DNB_UE_COUNTRY_POSITIONS = [
   ['France',29,47],['Allemagne',48.5,37],['Espagne',13,71],['Italie',44,74],['Belgique',34.8,40],['Pays-Bas',36.5,35],['Luxembourg',37.2,45],['Pologne',61,40],['Roumanie',70,67],['Grèce',68,87],['Irlande',19,26],['Portugal',2.5,71]
 ].map(([name,x,y]) => ({ name,x,y }));
@@ -808,13 +822,14 @@ function DnbGeoReperesWorkspace({ onBack }) {
   const isEspacesProductifs = geoGame === 'espacesProductifs';
   const isDromCom = geoGame === 'dromCom';
   const isUe = geoGame === 'ue';
+  const isRegions = geoGame === 'regions';
 
   return (
     <div className="mx-4 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-white p-4">
         <div>
           <div className="text-[11px] font-black uppercase text-emerald-500">Repères DNB · Géographie</div>
-          <div className="text-2xl font-black text-slate-900">{isMetropoles ? 'Métropoles françaises' : isTerritoire ? 'Territoire français' : isRepartition ? 'Répartition de la population française' : isEspacesProductifs ? 'Espaces productifs français' : isDromCom ? 'DROM-COM' : isUe ? 'Union européenne' : 'Aire urbaine'}</div>
+          <div className="text-2xl font-black text-slate-900">{isMetropoles ? 'Métropoles françaises' : isTerritoire ? 'Territoire français' : isRepartition ? 'Répartition de la population française' : isEspacesProductifs ? 'Espaces productifs français' : isDromCom ? 'DROM-COM' : isUe ? 'Union européenne' : isRegions ? 'Régions françaises' : 'Aire urbaine'}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -868,6 +883,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
             DROM-COM
           </button>
           <button type="button" onClick={() => { setGeoGame('ue'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Union européenne</button>
+          <button type="button" onClick={() => { setGeoGame('regions'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isRegions ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Régions</button>
           <button
             type="button"
             onClick={() => {
@@ -931,6 +947,8 @@ function DnbGeoReperesWorkspace({ onBack }) {
             ? <DnbDromComLabelGame />
           : geoGame === 'ue'
             ? <DnbUeNumberGame />
+          : geoGame === 'regions'
+            ? <DnbRegionsPointGame />
           : <DnbUrbanAreaSchemaGame />}
     </div>
   );
@@ -2305,6 +2323,98 @@ function DnbGeoRepartitionColoringGame({
       </div>
     </section>
   );
+}
+
+function DnbRegionsPointGame() {
+  const boardRef = useRef(null);
+  const [markers, setMarkers] = useState([]);
+  const [defining, setDefining] = useState(false);
+  const [dragId, setDragId] = useState('');
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let local = null;
+    try { local = JSON.parse(window.localStorage.getItem(DNB_GEO_REGIONS_DRAFT_KEY) || 'null'); } catch (_) {}
+    if (Array.isArray(local?.markers)) { setMarkers(local.markers); return undefined; }
+    fetch(DNB_GEO_REGIONS_DRAFT_URL)
+      .then((response) => response.ok ? response.json() : { markers: [] })
+      .then((draft) => { if (!cancelled) setMarkers(Array.isArray(draft?.markers) ? draft.markers : []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(DNB_GEO_REGIONS_DRAFT_KEY, JSON.stringify({ markers })); } catch (_) {}
+  }, [markers]);
+
+  const point = (event) => {
+    const rect = boardRef.current?.getBoundingClientRect();
+    return rect ? {
+      x: Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100)),
+      y: Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100))
+    } : null;
+  };
+  const place = (event) => {
+    if (!defining || event.target.closest('[data-region-marker]')) return;
+    const p = point(event); if (!p) return;
+    setMarkers((previous) => [...previous, {
+      id: `region-marker-${Date.now()}`,
+      number: previous.length + 1,
+      x: +p.x.toFixed(2),
+      y: +p.y.toFixed(2),
+      expectedName: inferRegionName(p.x, p.y),
+      answer: ''
+    }]);
+  };
+  const move = (event) => {
+    if (!dragId) return;
+    const p = point(event); if (!p) return;
+    setMarkers((previous) => previous.map((marker) => marker.id === dragId ? {
+      ...marker,
+      x: +p.x.toFixed(2),
+      y: +p.y.toFixed(2),
+      expectedName: inferRegionName(p.x, p.y)
+    } : marker));
+  };
+  const copy = async () => {
+    const payload = JSON.stringify({ markers }, null, 2);
+    try { await navigator.clipboard.writeText(payload); window.alert('Sauvegarde des régions copiée.'); }
+    catch (_) { window.prompt('Copie la sauvegarde :', payload); }
+  };
+
+  return <section className="rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-[11px] font-black uppercase text-emerald-600">Repères DNB · France</div><div className="text-2xl font-black">Les régions françaises</div></div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => { setDefining(true); setChecked(false); }} className={`rounded-xl px-4 py-3 text-xs font-black ${defining ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'}`}>Placer les champs</button>
+        <button type="button" onClick={() => setDefining(false)} className="rounded-xl bg-blue-100 px-4 py-3 text-xs font-black text-blue-700">Terminer</button>
+        <button type="button" onClick={() => setMarkers((previous) => previous.slice(0, -1))} className="rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white">↶ Annuler</button>
+        <button type="button" onClick={copy} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">Copier sauvegarde</button>
+        {!defining && markers.length > 0 && <button type="button" onClick={() => setChecked(true)} className="rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">Vérifier</button>}
+      </div>
+    </div>
+    <div ref={boardRef} onClick={place} onPointerMove={move} onPointerUp={() => setDragId('')} onPointerCancel={() => setDragId('')} className={`relative mx-auto mt-4 max-w-[900px] overflow-hidden rounded-2xl border-2 border-slate-300 ${defining ? 'cursor-crosshair' : ''}`}>
+      <img src={DNB_GEO_REGIONS_MAP_URL} alt="Carte muette des régions françaises" draggable={false} className="block w-full select-none" />
+      {markers.map((marker) => {
+        const answer = marker.answer || '';
+        const isCorrect = checked && normalizeAnswer(answer) === normalizeAnswer(marker.expectedName);
+        const isWrong = checked && !isCorrect;
+        return <div key={marker.id} data-region-marker onPointerDown={(event) => {
+        if (!defining) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        setDragId(marker.id);
+      }} className={`absolute z-10 w-[145px] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 bg-white p-0.5 shadow-md ${defining ? 'cursor-move border-amber-500' : isCorrect ? 'border-emerald-500' : isWrong ? 'border-red-500' : 'border-slate-300'}`} style={{ left: `${marker.x}%`, top: `${marker.y}%` }} title={defining ? 'Glisser pour déplacer' : undefined}>
+          {defining ? <div className="px-1.5 py-1.5 text-center text-[10px] font-black leading-tight text-amber-800">{marker.expectedName}</div> : <input value={answer} onChange={(event) => {
+            setChecked(false);
+            setMarkers((previous) => previous.map((item) => item.id === marker.id ? { ...item, answer: event.target.value } : item));
+          }} onPointerDown={(event) => event.stopPropagation()} placeholder="Nom de la région" className="w-full rounded-md border-0 bg-white px-1.5 py-1.5 text-center text-[11px] font-bold leading-tight text-slate-800 outline-none" />}
+          {isWrong && <div className="px-1 pb-1 text-center text-[10px] font-black text-red-600">Réponse : {marker.expectedName}</div>}
+        </div>;
+      })}
+    </div>
+  </section>;
 }
 
 function DnbUeNumberGame() {
