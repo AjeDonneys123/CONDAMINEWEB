@@ -4,6 +4,63 @@ import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
 
 const uid = () => `st_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+const renderFillBlankDetectionPreview = (value = '', placeholder = '') => {
+    const source = String(value || '');
+    const matcher = /[\"“«]([^\"”»]+)[\"”»]/g;
+    const nodes = [];
+    let cursor = 0;
+    let match;
+    let detected = 0;
+    if (!source) return { nodes: <span className="text-slate-400">{placeholder}</span>, detected: 0 };
+    while ((match = matcher.exec(source)) !== null) {
+        nodes.push(source.slice(cursor, match.index));
+        const content = String(match[1] || '');
+        const before = source.slice(0, match.index);
+        const after = source.slice(match.index + match[0].length);
+        const isList = content.includes('+')
+            || /[\"”»]\+$/.test(before)
+            || /^\+[\"“«]/.test(after);
+        nodes.push(
+            <span key={`blank_preview_${detected}_${match.index}`} className={`font-black ${isList ? 'text-blue-600' : 'text-red-600'}`}>
+                {match[0]}
+            </span>
+        );
+        detected += 1;
+        cursor = match.index + match[0].length;
+    }
+    nodes.push(source.slice(cursor));
+    return { nodes, detected };
+};
+
+const FillBlankSyntaxTextarea = ({ value, onChange, onKeyDown, placeholder, rows = 3 }) => {
+    const previewRef = useRef(null);
+    const preview = renderFillBlankDetectionPreview(value, placeholder);
+    return (
+        <div className="relative min-w-0 flex-1">
+            <div
+                ref={previewRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-[2px] overflow-hidden whitespace-pre-wrap break-words rounded-[18px] p-5 text-[13px] font-bold leading-snug text-slate-800"
+            >
+                {preview.nodes}
+            </div>
+            <textarea
+                rows={rows}
+                className="v84-q-input relative z-[1] !bg-transparent !text-[13px] !leading-snug !text-transparent caret-slate-800 selection:bg-blue-200/70"
+                value={value}
+                onChange={onChange}
+                onKeyDown={onKeyDown}
+                placeholder=""
+                spellCheck
+                onScroll={(event) => {
+                    if (!previewRef.current) return;
+                    previewRef.current.scrollTop = event.currentTarget.scrollTop;
+                    previewRef.current.scrollLeft = event.currentTarget.scrollLeft;
+                }}
+            />
+        </div>
+    );
+};
 const isProbablyDirectVideo = (url = '') => {
     const u = String(url || '').toLowerCase();
     if (!u) return false;
@@ -182,7 +239,7 @@ const emptyStep = (type = 'sheet') => {
     if (type === 'question') return {
         id: uid(),
         type: 'question',
-        title: 'Questions IA',
+        title: 'Questions contrôlées',
         difficulty: 'easy',
         customQuestion: '',
         sourceKind: 'sheet',
@@ -793,7 +850,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 const expectedKeywords = Array.isArray(r?.expectedKeywords)
                     ? r.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
                     : [];
-                return { question, answer, expectedKeywords, generatedByAi: r?.generatedByAi === true };
+                return {
+                    question,
+                    answer,
+                    expectedKeywords,
+                    generatedByAi: r?.generatedByAi === true,
+                    validationType: r?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'
+                };
             })
             .filter((r) => r.question || r.answer || r.expectedKeywords.length)
             .slice(0, 20);
@@ -860,14 +923,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 const answer = String(row?.answer || row?.expectedAnswer || '').trim()
                     || String(legacyAnswers[idx] || '').trim();
                 const expectedKeywords = Array.isArray(row?.expectedKeywords) && row.expectedKeywords.length > 0
-                    ? row.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
+                    ? row.expectedKeywords.map((x) => String(x ?? ''))
                     : legacyKeywords;
                 return {
                     ...row,
                     question,
                     answer,
                     expectedKeywords,
-                    generatedByAi: row?.generatedByAi === true
+                    generatedByAi: row?.generatedByAi === true,
+                    validationType: row?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'
                 };
             });
         }
@@ -892,6 +956,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             answer: '',
             expectedKeywords: [],
             generatedByAi: false,
+            validationType: 'open',
             placeholder: true,
             placeholderLabel: `Question ${idx + 1}`
         }));
@@ -899,7 +964,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const updateQuestionPairRow = (rowIdx = 0, patch = {}) => {
         if (!step || step.type !== 'question') return;
         const rows = [...getQuestionPairRowsForEditor()];
-        rows[rowIdx] = { ...(rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] }), ...patch };
+        rows[rowIdx] = { ...(rows[rowIdx] || { question: '', answer: '', expectedKeywords: [], validationType: 'open' }), ...patch };
         updateQuestionPairsDraft(rows);
     };
     const moveQuestionPairRow = (fromIdx = 0, toIdx = 0) => {
@@ -945,7 +1010,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             alert("Micro non disponible dans ce navigateur. Essaie Chrome.");
             return;
         }
-        const targetField = field === 'answer' ? 'answer' : 'question';
+        const keywordMatch = String(field || '').match(/^expectedKeyword:(\d+)$/);
+        const keywordIdx = keywordMatch ? Number(keywordMatch[1]) : null;
+        const targetField = keywordMatch ? 'expectedKeyword' : (field === 'answer' ? 'answer' : 'question');
         const rec = new SpeechRecognition();
         rec.lang = 'fr-FR';
         rec.interimResults = false;
@@ -962,6 +1029,16 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 const map = getCurrentSectionQuestionsMap();
                 const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
                 const current = rows[rowIdx] || { q: '', question: '', expectedAnswer: '', expectedKeywords: [] };
+                if (targetField === 'expectedKeyword') {
+                    const kws = Array.isArray(current.expectedKeywords) ? [...current.expectedKeywords] : [];
+                    const idx = Number.isFinite(keywordIdx) ? keywordIdx : kws.length;
+                    const previousKeyword = String(kws[idx] || '');
+                    const separator = previousKeyword && !/\s$/.test(previousKeyword) ? ' ' : '';
+                    kws[idx] = `${previousKeyword}${separator}${transcript}`;
+                    rows[rowIdx] = { ...current, expectedKeywords: kws };
+                    updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+                    return;
+                }
                 const previous = String(current[targetField] || current.q || '');
                 const separator = previous && !/\s$/.test(previous) ? ' ' : '';
                 rows[rowIdx] = {
@@ -974,6 +1051,16 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             }
             const rows = [...(Array.isArray(step?.questionAnswerPairs) ? step.questionAnswerPairs : [])];
             const current = rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] };
+            if (targetField === 'expectedKeyword') {
+                const kws = Array.isArray(current.expectedKeywords) ? [...current.expectedKeywords] : [];
+                const idx = Number.isFinite(keywordIdx) ? keywordIdx : kws.length;
+                const previousKeyword = String(kws[idx] || '');
+                const separator = previousKeyword && !/\s$/.test(previousKeyword) ? ' ' : '';
+                kws[idx] = `${previousKeyword}${separator}${transcript}`;
+                rows[rowIdx] = { ...current, expectedKeywords: kws };
+                updateQuestionPairsDraft(rows);
+                return;
+            }
             const previous = String(current[targetField] || '');
             const separator = previous && !/\s$/.test(previous) ? ' ' : '';
             rows[rowIdx] = {
@@ -1708,6 +1795,14 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const getQuestionSectionMapFromAnyStep = (sourceStep = null) => {
         if (!sourceStep) return {};
         const keepEmptyRows = step && String(sourceStep?.id || '') === String(step?.id || '');
+        const normalizeExpectedKeywordDrafts = (value) => {
+            const raw = Array.isArray(value)
+                ? value.map((x) => String(x ?? ''))
+                : String(value || '').split(',').map((x) => String(x ?? ''));
+            return keepEmptyRows
+                ? raw
+                : raw.map((x) => x.trim()).filter(Boolean);
+        };
         const objectCandidates = [
             sourceStep.questionSectionQuestions,
             sourceStep.sheetSectionQuestions,
@@ -1725,13 +1820,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         q: String(row?.q || row?.question || ''),
                         question: String(row?.question || row?.q || ''),
                         expectedAnswer: String(row?.expectedAnswer || row?.answer || '').trim(),
-                        expectedKeywords: Array.isArray(row?.expectedKeywords)
-                            ? row.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
-                            : String(row?.expectedKeywords || '')
-                                .split(',')
-                                .map((x) => x.trim())
-                                .filter(Boolean),
-                        generatedByAi: row?.generatedByAi === true
+                        expectedKeywords: normalizeExpectedKeywordDrafts(row?.expectedKeywords),
+                        generatedByAi: row?.generatedByAi === true,
+                        validationType: row?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'
                     }))
                     .filter((row) => keepEmptyRows || String(row.question || '').trim() || row.expectedAnswer || row.expectedKeywords.length > 0);
                 if (usable.length > 0) clean[String(key)] = usable;
@@ -1744,13 +1835,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 q: String(pair?.question || pair?.q || ''),
                 question: String(pair?.question || pair?.q || ''),
                 expectedAnswer: String(pair?.expectedAnswer || pair?.answer || '').trim(),
-                expectedKeywords: Array.isArray(pair?.expectedKeywords)
-                    ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean)
-                    : String(pair?.expectedKeywords || '')
-                        .split(',')
-                        .map((x) => x.trim())
-                        .filter(Boolean),
-                generatedByAi: pair?.generatedByAi === true
+                expectedKeywords: normalizeExpectedKeywordDrafts(pair?.expectedKeywords),
+                generatedByAi: pair?.generatedByAi === true,
+                validationType: pair?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'
             }))
             .filter((row) => String(row.question || '').trim() || row.expectedAnswer || row.expectedKeywords.length > 0);
         if (pairRows.length > 0) return { 0: pairRows };
@@ -3249,9 +3336,44 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             } catch (_) {}
         });
     };
+    const keepQuestionInputSpace = keepQuestionTextareaSpace;
     const removeActiveZoneKeyword = (rowIdx, keywordIdx) => {
         const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
         removeZoneKeyword(zoneIdx, rowIdx, keywordIdx);
+    };
+    const updateZoneExpectedKeyword = (zoneIdx = 0, rowIdx = 0, keywordIdx = 0, value = '') => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        const kws = Array.isArray(rows[rowIdx].expectedKeywords) ? [...rows[rowIdx].expectedKeywords] : [];
+        kws[keywordIdx] = value;
+        rows[rowIdx] = { ...rows[rowIdx], expectedKeywords: kws };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+    };
+    const addZoneExpectedKeywordField = (zoneIdx = 0, rowIdx = 0) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        const kws = Array.isArray(rows[rowIdx].expectedKeywords) ? [...rows[rowIdx].expectedKeywords] : [];
+        kws.push('');
+        rows[rowIdx] = { ...rows[rowIdx], expectedKeywords: kws };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+    };
+    const updatePairExpectedKeyword = (rowIdx = 0, keywordIdx = 0, value = '') => {
+        const rows = [...getQuestionPairRowsForEditor()];
+        const current = rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] };
+        const kws = Array.isArray(current.expectedKeywords) ? [...current.expectedKeywords] : [];
+        kws[keywordIdx] = value;
+        rows[rowIdx] = { ...current, expectedKeywords: kws };
+        updateQuestionPairsDraft(rows);
+    };
+    const addPairExpectedKeywordField = (rowIdx = 0) => {
+        const rows = [...getQuestionPairRowsForEditor()];
+        const current = rows[rowIdx] || { question: '', answer: '', expectedKeywords: [] };
+        const kws = Array.isArray(current.expectedKeywords) ? [...current.expectedKeywords] : [];
+        kws.push('');
+        rows[rowIdx] = { ...current, expectedKeywords: kws };
+        updateQuestionPairsDraft(rows);
     };
     const addActiveZoneKeyword = (rowIdx) => {
         const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
@@ -3271,6 +3393,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             && Number(recordingQuestionCell.rowIdx) === Number(i)
             && recordingQuestionCell.field === 'question';
         const questionValue = String(q?.question || q?.q || '');
+        const expectedAnswers = Array.isArray(q?.expectedKeywords) && q.expectedKeywords.length > 0
+            ? q.expectedKeywords
+            : [''];
         return (
             <div key={`db_q_${sectionIdx}_${i}`} className="relative rounded-lg border border-slate-200 bg-white p-2 pr-10">
                 <button
@@ -3286,17 +3411,37 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     <div className="text-[11px] font-black uppercase text-indigo-700">
                         Question {i + 1}
                     </div>
+                    <select
+                        className="v84-ans-input !w-auto !py-1 !text-[11px] !font-black"
+                        value={q?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'}
+                        onChange={(e) => updateZoneQuestion(sectionIdx, i, { validationType: e.target.value })}
+                    >
+                        <option value="open">Question ciblée</option>
+                        <option value="fill_blanks">Texte à trous</option>
+                    </select>
                 </div>
-                <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Question</div>
+                <div className="text-[11px] font-black uppercase text-slate-400 mb-1">
+                    {q?.validationType === 'fill_blanks' ? 'Texte — réponses entre guillemets' : 'Question'}
+                </div>
                 <div className="flex gap-1">
-                    <textarea
-                        rows={2}
-                        className="v84-q-input !text-[13px] !leading-snug"
-                        value={questionValue}
-                        onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
-                        onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }))}
-                        placeholder={`Question ${i + 1}`}
-                    />
+                    {q?.validationType === 'fill_blanks' ? (
+                        <FillBlankSyntaxTextarea
+                            rows={2}
+                            value={questionValue}
+                            onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
+                            onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }))}
+                            placeholder={'Les soldats vivent dans des "tranchées".'}
+                        />
+                    ) : (
+                        <textarea
+                            rows={2}
+                            className="v84-q-input !text-[13px] !leading-snug"
+                            value={questionValue}
+                            onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
+                            onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }))}
+                            placeholder={`Question ${i + 1}`}
+                        />
+                    )}
                     <button
                         type="button"
                         className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isQuestionRecording ? 'bg-red-500 text-white' : ''}`}
@@ -3306,6 +3451,51 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         🎙️
                     </button>
                 </div>
+                {q?.validationType !== 'fill_blanks' && <div className="mt-3">
+                    <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Réponses attendues</div>
+                    <div className="space-y-2">
+                        {expectedAnswers.map((answerValue, answerIdx) => {
+                            const isAnswerRecording = recordingQuestionCell
+                                && Number(recordingQuestionCell.zoneIdx) === Number(sectionIdx)
+                                && Number(recordingQuestionCell.rowIdx) === Number(i)
+                                && recordingQuestionCell.field === 'expectedKeyword';
+                            return (
+                                <div key={`expected_${sectionIdx}_${i}_${answerIdx}`} className="flex gap-1">
+                                    <input
+                                        className={`v84-ans-input !text-[13px] !py-2 ${String(answerValue || '').includes('+') ? '!font-black !text-blue-600' : ''}`}
+                                        value={String(answerValue || '')}
+                                        onChange={(e) => updateZoneExpectedKeyword(sectionIdx, i, answerIdx, e.target.value)}
+                                        onKeyDown={(e) => keepQuestionInputSpace(e, String(answerValue || ''), (nextValue) => updateZoneExpectedKeyword(sectionIdx, i, answerIdx, nextValue))}
+                                        placeholder={`Expression attendue ${answerIdx + 1}`}
+                                    />
+                                    <button
+                                        type="button"
+                                        className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isAnswerRecording ? 'bg-red-500 text-white' : ''}`}
+                                        onClick={() => startQuestionCellDictation(i, `expectedKeyword:${answerIdx}`, sectionIdx)}
+                                        title="Dicter cette réponse attendue"
+                                    >
+                                        🎙️
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="v84-del-btn !h-auto !w-8"
+                                        onClick={() => removeZoneKeyword(sectionIdx, i, answerIdx)}
+                                        title="Supprimer cette réponse attendue"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <button
+                        type="button"
+                        className="v84-res-btn upload !mt-2 !px-3 !py-2 !text-[11px]"
+                        onClick={() => addZoneExpectedKeywordField(sectionIdx, i)}
+                    >
+                        + Réponse attendue
+                    </button>
+                </div>}
             </div>
         );
     };
@@ -4654,7 +4844,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             </div>
                                         )}
                                     </div>
-                                    <div className="hw-section-title mt-4">Questions facultatives pour GPT</div>
+                                    <div className="hw-section-title mt-4">Questions contrôlées CondaWeb</div>
                                     {questionSectionsFromDb.length > 0 ? (
                                         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3 max-h-[440px] overflow-auto">
                                             {questionSectionsFromDb.map((section) => (
@@ -4684,14 +4874,6 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                         >
                                                             + Question
                                                         </button>
-                                                        <button
-                                                            type="button"
-                                                            className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700 !px-3 !py-2 !text-[11px]"
-                                                            onClick={() => generateQuestionsForActiveZone(section.idx, Number(step.questionCount || 3))}
-                                                            disabled={aiTesting}
-                                                        >
-                                                            {aiTesting ? 'Génération...' : '+ Questions IA'}
-                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -4711,6 +4893,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                             && recordingQuestionCell.zoneIdx === null
                                                             && recordingQuestionCell.field === 'question';
                                                         const questionValue = pair?.question || '';
+                                                        const expectedAnswers = Array.isArray(pair?.expectedKeywords) && pair.expectedKeywords.length > 0
+                                                            ? pair.expectedKeywords
+                                                            : [''];
                                                         return (
                                                             <div
                                                                 key={`qa_row_${i}`}
@@ -4740,15 +4925,40 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                                     </span>
                                                                 </div>
                                                                 <div className="p-2 border-l border-slate-100">
+                                                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                                                        <select
+                                                                            className="v84-ans-input !w-auto !py-2 !text-[11px] !font-black"
+                                                                            value={pair?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'}
+                                                                            onChange={(e) => updateQuestionPairRow(i, { validationType: e.target.value })}
+                                                                        >
+                                                                            <option value="open">Question ciblée</option>
+                                                                            <option value="fill_blanks">Texte à trous</option>
+                                                                        </select>
+                                                                        {pair?.validationType === 'fill_blanks' && (
+                                                                            <span className="text-[11px] font-bold text-indigo-600">
+                                                                                Rouge : "réponse". Bleu : "mot1"+"mot2"+"mot3" (liste souple) ou "mot1+mot2+mot3" (liste complète).
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                     <div className="flex gap-1">
-                                                                        <textarea
-                                                                            rows={3}
-                                                                            className="v84-q-input !text-[13px] !leading-snug"
-                                                                            value={questionValue}
-                                                                            onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
-                                                                            onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateQuestionPairRow(i, { question: nextValue }))}
-                                                                            placeholder={pair?.placeholderLabel || `Question ${i + 1}`}
-                                                                        />
+                                                                        {pair?.validationType === 'fill_blanks' ? (
+                                                                            <FillBlankSyntaxTextarea
+                                                                                rows={3}
+                                                                                value={questionValue}
+                                                                                onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
+                                                                                onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateQuestionPairRow(i, { question: nextValue }))}
+                                                                                placeholder={'La guerre commence en "1914" et se termine en "1918".'}
+                                                                            />
+                                                                        ) : (
+                                                                            <textarea
+                                                                                rows={3}
+                                                                                className="v84-q-input !text-[13px] !leading-snug"
+                                                                                value={questionValue}
+                                                                                onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
+                                                                                onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateQuestionPairRow(i, { question: nextValue }))}
+                                                                                placeholder={pair?.placeholderLabel || `Question ${i + 1}`}
+                                                                            />
+                                                                        )}
                                                                         <button
                                                                             type="button"
                                                                             className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isQuestionRecording ? 'bg-red-500 text-white' : ''}`}
@@ -4758,6 +4968,58 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                                             🎙️
                                                                         </button>
                                                                     </div>
+                                                                    {pair?.validationType !== 'fill_blanks' && <div className="mt-3">
+                                                                        <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Réponses attendues</div>
+                                                                        <div className="space-y-2">
+                                                                            {expectedAnswers.map((answerValue, answerIdx) => {
+                                                                                const isAnswerRecording = recordingQuestionCell
+                                                                                    && Number(recordingQuestionCell.rowIdx) === Number(i)
+                                                                                    && recordingQuestionCell.zoneIdx === null
+                                                                                    && recordingQuestionCell.field === 'expectedKeyword';
+                                                                                return (
+                                                                                    <div key={`pair_expected_${i}_${answerIdx}`} className="flex gap-1">
+                                                                                        <input
+                                                                                            className={`v84-ans-input !text-[13px] !py-2 ${String(answerValue || '').includes('+') ? '!font-black !text-blue-600' : ''}`}
+                                                                                            value={String(answerValue || '')}
+                                                                                            onChange={(e) => updatePairExpectedKeyword(i, answerIdx, e.target.value)}
+                                                                                            onKeyDown={(e) => keepQuestionInputSpace(e, String(answerValue || ''), (nextValue) => updatePairExpectedKeyword(i, answerIdx, nextValue))}
+                                                                                            placeholder={`Expression attendue ${answerIdx + 1}`}
+                                                                                        />
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className={`v84-res-btn upload !px-2 !py-1 !min-w-0 ${isAnswerRecording ? 'bg-red-500 text-white' : ''}`}
+                                                                                            onClick={() => startQuestionCellDictation(i, `expectedKeyword:${answerIdx}`)}
+                                                                                            title="Dicter cette réponse attendue"
+                                                                                        >
+                                                                                            🎙️
+                                                                                        </button>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="v84-del-btn !h-auto !w-8"
+                                                                                            onClick={() => {
+                                                                                                const rows = [...getQuestionPairRowsForEditor()];
+                                                                                                const current = rows[i] || { question: '', answer: '', expectedKeywords: [] };
+                                                                                                const kws = Array.isArray(current.expectedKeywords) ? [...current.expectedKeywords] : [];
+                                                                                                kws.splice(answerIdx, 1);
+                                                                                                rows[i] = { ...current, expectedKeywords: kws };
+                                                                                                updateQuestionPairsDraft(rows);
+                                                                                            }}
+                                                                                            title="Supprimer cette réponse attendue"
+                                                                                        >
+                                                                                            ✕
+                                                                                        </button>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="v84-res-btn upload !mt-2 !px-3 !py-2 !text-[11px]"
+                                                                            onClick={() => addPairExpectedKeywordField(i)}
+                                                                        >
+                                                                            + Réponse attendue
+                                                                        </button>
+                                                                    </div>}
                                                                 </div>
                                                                 <div className="flex items-center justify-center border-l border-slate-100">
                                                                     <button
@@ -4790,19 +5052,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                 />
                                                 <button
                                                     type="button"
-                                                    className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700"
-                                                    onClick={generateQuestionAnswerPairsFromSource}
-                                                    disabled={aiTesting || !(selectedQuestionSource?.url || forcedQuestionSource?.value)}
-                                                    title="Génère des questions depuis la fiche ou vidéo précédente."
-                                                >
-                                                    {aiTesting ? 'Génération...' : '✨ Générer depuis fiche précédente'}
-                                                </button>
-                                                <button
-                                                    type="button"
                                                     className="v84-res-btn upload"
                                                     onClick={() => {
                                                         const rows = [...getQuestionPairRowsForEditor()];
-                                                        rows.push({ question: '', answer: '', expectedKeywords: [], generatedByAi: false });
+                                                        rows.push({ question: '', answer: '', expectedKeywords: [], generatedByAi: false, validationType: 'open' });
                                                         updateQuestionPairsDraft(rows);
                                                     }}
                                                 >

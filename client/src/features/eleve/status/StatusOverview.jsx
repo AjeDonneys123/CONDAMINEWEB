@@ -68,7 +68,7 @@ export default function StatusOverview({ user, onOpenActivity }) {
 
             {(d.activities?.todoItems?.length > 0) && (
               <div className="status-todo">
-                <div className="mb-1">À faire:</div>
+                <div className="mb-1">{Number(d.activities?.todo || 0) > 0 ? 'À faire:' : 'À refaire:'}</div>
                 <div className="flex flex-wrap gap-2">
                   {(d.activities.todoItems || []).map((it, idx) => (
                     <button
@@ -86,7 +86,7 @@ export default function StatusOverview({ user, onOpenActivity }) {
 
             {(d.activities?.savedItems?.length > 0) && (
               <div className="status-saved">
-                <div className="mb-1">Déjà enregistré:</div>
+                <div className="mb-1">À refaire:</div>
                 <div className="flex flex-wrap gap-2">
                   {(d.activities.savedItems || []).map((it, idx) => (
                     <button

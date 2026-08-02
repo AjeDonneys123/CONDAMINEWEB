@@ -345,7 +345,7 @@ router.post('/behavior', async (req, res) => {
         if (!s) return res.status(404).json({ error: "Élève non trouvé" });
         applyCrossDecay(s.behaviorRecords || []);
         let r = s.behaviorRecords.find(x => x.teacherId && String(x.teacherId) === String(teacherId));
-        if (!r) { s.behaviorRecords.push({ teacherId, crosses: 0, bonuses: 0, nextCrossRemovalAt: null }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
+        if (!r) { s.behaviorRecords.push({ teacherId, baseScore: 15, crosses: 0, bonuses: 0, nextCrossRemovalAt: null }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
         if (type === 'CROSS') {
             const hadNoCross = Number(r.crosses || 0) <= 0;
             r.crosses = Number(r.crosses || 0) + 1;

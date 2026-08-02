@@ -58,6 +58,11 @@ function addClassTarget(set, value) {
         .replace(/[^A-Z0-9]/g, '');
     if (!normalized) return;
     set.add(normalized);
+    const levelLetter = normalized.match(/^(\d)(?:E|EME|ER|ERE|DE|NDE)?([A-Z])$/);
+    if (levelLetter) {
+        set.add(`${levelLetter[1]}${levelLetter[2]}`);
+        set.add(`${levelLetter[1]}E${levelLetter[2]}`);
+    }
 }
 
 function normalizeTargetKey(value = '') {
@@ -367,7 +372,7 @@ const buildTutorSessionContextText = ({ req, token, student, moduleDoc, stepId =
     const moduleTitle = String(moduleDoc.title || moduleDoc.chapterTitle || 'Apprentissage').trim();
     const questionList = questions.length
         ? questions.map((q) => `${q.index}. ${q.question}`).join('\n')
-        : 'Aucune question professeur. Cree tes propres questions a partir de la fiche, une par une.';
+        : 'Aucune question professeur fournie. Ne cree pas de question.';
     return [
         'SOURCE CONDAWEB POUR CONDATUTEUR',
         '',
@@ -393,7 +398,7 @@ const buildTutorSessionContextText = ({ req, token, student, moduleDoc, stepId =
         'Puis donne le lien de validation finale ci-dessus et demande a l utilisateur de cliquer dessus pour confirmer dans CondaWeb.',
         'Ne donne pas ce lien avant la fin de l entrainement.',
         '',
-        'QUESTIONS PROFESSEUR FACULTATIVES',
+        'QUESTIONS PROFESSEUR OBLIGATOIRES',
         questionList,
         '',
         'FICHE DE REVISION / SOURCE DE CORRECTION',
@@ -637,14 +642,13 @@ router.get('/list/:studentId', async (req, res) => {
         const chapterById = new Map(chapters.map(ch => [String(ch._id), ch]));
 
         const withChapter = modules
-            .filter(m => m.chapterId && chapterById.has(String(m.chapterId)))
             .map(m => {
                 const chapter = chapterById.get(String(m.chapterId));
                 const completion = (m.completions || []).find(c => String(c.studentId) === String(student._id));
                 return {
                     ...m,
-                    chapterTitle: chapter?.title || 'CHAPITRE',
-                    chapterSection: chapter?.section || 'GÉNÉRAL',
+                    chapterTitle: chapter?.title || m.chapterTitle || m.title || 'APPRENTISSAGE',
+                    chapterSection: chapter?.section || m.subject || 'GÉNÉRAL',
                     completion: completion || null
                 };
             });
@@ -736,22 +740,22 @@ router.post('/realtime-session', express.text({ type: ['application/sdp', 'text/
         const moduleTitle = String(moduleDoc.title || 'apprentissage').trim();
         const questionList = questions.length
             ? questions.map((q) => `${q.index}. ${q.question}`).join('\n')
-            : 'Aucune question professeur. Crée tes propres questions à partir de la fiche.';
+            : 'Aucune question professeur fournie. Ne crée pas de question.';
 
         const instructions = [
             `Tu es CondaTuteur, un tuteur vocal de révision intégré à CondaWeb pour JP Vuillet.`,
             `Tu travailles avec ${fullName}, classe ${student.currentClass || 'inconnue'}.`,
             `Leçon: ${moduleTitle}.`,
             `Règles: pose une seule question à la fois, attends la réponse, corrige brièvement, puis continue.`,
-            `Utilise exclusivement la fiche ci-dessous pour vérifier les réponses. Si les questions professeur existent, utilise-les en priorité.`,
+            `Utilise exclusivement les questions professeur ci-dessous. Ne crée jamais tes propres questions.`,
             `Ne valide pas après une seule bonne réponse si plusieurs connaissances sont nécessaires.`,
             `Quand la fiche est réellement maîtrisée, dis exactement: "Fiche apprise." puis ajoute sur une nouvelle ligne le marqueur CONDA_LEARNING_VALIDATED.`,
             ``,
-            `Questions professeur facultatives:`,
+            `Questions professeur obligatoires:`,
             questionList,
             ``,
             `Fiche de révision:`,
-            lessonText || 'Aucune fiche textuelle disponible. Pose quelques questions simples sur le titre de la leçon.'
+            lessonText || 'Aucune fiche textuelle disponible. Demande au professeur de fournir une fiche.'
         ].join('\n');
 
         const fd = new FormData();

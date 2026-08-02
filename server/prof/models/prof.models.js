@@ -80,6 +80,7 @@ const StudentSchema = new mongoose.Schema({
     assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
     behaviorRecords: [{
         teacherId: mongoose.Schema.Types.ObjectId,
+        baseScore: { type: Number, default: 15 },
         crosses: { type: Number, default: 0 },
         bonuses: { type: Number, default: 0 },
         weeksToRedemption: { type: Number, default: 3 },

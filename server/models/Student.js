@@ -4,6 +4,7 @@ const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 // Schéma pour les croix/bonus
 const BehaviorRecordSchema = new mongoose.Schema({
     teacherId: { type: String, required: true },
+    baseScore: { type: Number, default: 15 },
     crosses: { type: Number, default: 0 },
     bonuses: { type: Number, default: 0 },
     lastCrossDate: { type: Date, default: null },

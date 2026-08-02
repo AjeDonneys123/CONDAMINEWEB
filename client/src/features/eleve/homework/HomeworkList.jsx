@@ -11,7 +11,9 @@ export default function HomeworkList({
   onOpenHandled,
   assessmentKinds = null,
   levelFilter = null,
-  emptyTitle = ''
+  emptyTitle = '',
+  compact = false,
+  titleOverride = ''
 }) {
   const [homeworks, setHomeworks] = useState([]);
   const [selectedHw, setSelectedHw] = useState(null);
@@ -101,6 +103,28 @@ export default function HomeworkList({
               <div className="text-3xl mb-2">📁</div>
               <div className="text-lg font-black text-slate-700">{emptyTitle}</div>
               <div className="text-sm font-bold text-slate-400 mt-1">Ton professeur publiera les sujets ici.</div>
+            </div>
+          ) : compact ? (
+            <div className="grid gap-2">
+              {homeworks.map((hw) => (
+                <button
+                  key={hw._id}
+                  type="button"
+                  onClick={() => setSelectedHw(hw)}
+                  className="w-full rounded-2xl border border-violet-100 bg-white px-3 py-2 text-left transition hover:border-violet-300 hover:bg-violet-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-lg bg-emerald-100 px-2 py-1 text-[10px] font-black uppercase text-emerald-700">DNB</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-black text-slate-900">
+                      {titleOverride || hw.title}
+                    </span>
+                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase ${hw.status === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {hw.status === 'done' ? 'Fait' : 'À faire'}
+                    </span>
+                    <span className="text-sm font-black text-violet-400">›</span>
+                  </div>
+                </button>
+              ))}
             </div>
           ) : (
             <DashboardFolder items={homeworks} type="homework" onSelect={setSelectedHw} />

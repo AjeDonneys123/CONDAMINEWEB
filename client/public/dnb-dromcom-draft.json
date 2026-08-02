@@ -1,0 +1,19 @@
+{
+  "slots": [
+    { "id": "dromcom-slot-1785681733823", "x": 2.84, "y": 8.01, "width": 16.78, "height": 4.67, "answer": "", "expectedName": "Polynésie française" },
+    { "id": "dromcom-slot-1785681741973", "x": 4.54, "y": 23.55, "width": 18.48, "height": 4.27, "answer": "", "expectedName": "Saint-Barthélemy" },
+    { "id": "dromcom-slot-1785681744056", "x": 10.11, "y": 29.02, "width": 12.8, "height": 3.5, "answer": "", "expectedName": "Saint-Martin" },
+    { "id": "dromcom-slot-1785681746224", "x": 25.33, "y": 9.53, "width": 17.92, "height": 7.02, "answer": "", "expectedName": "Saint-Pierre-et-Miquelon" },
+    { "id": "dromcom-slot-1785681748406", "x": 26.04, "y": 22.72, "width": 17.99, "height": 4.8, "answer": "", "expectedName": "Guadeloupe" },
+    { "id": "dromcom-slot-1785681749940", "x": 26.89, "y": 30.41, "width": 16.38, "height": 4.27, "answer": "", "expectedName": "Martinique" },
+    { "id": "dromcom-slot-1785681752373", "x": 21.62, "y": 36.95, "width": 12.29, "height": 4.35, "answer": "", "expectedName": "Guyane" },
+    { "id": "dromcom-slot-1785681755290", "x": 65.63, "y": 6.74, "width": 21.5, "height": 7.5, "answer": "", "expectedName": "Wallis-et-Futuna" },
+    { "id": "dromcom-slot-1785681757889", "x": 49.76, "y": 37.44, "width": 17, "height": 6, "answer": "", "expectedName": "Mayotte" },
+    { "id": "dromcom-slot-1785681759607", "x": 65.29, "y": 44.36, "width": 17, "height": 6, "answer": "", "expectedName": "La Réunion" },
+    { "id": "dromcom-slot-1785681832989", "x": 1.32, "y": 93.59, "width": 17, "height": 6, "answer": "", "expectedName": "Guyane" },
+    { "id": "dromcom-slot-1785681835323", "x": 25.02, "y": 93.76, "width": 17, "height": 6, "answer": "", "expectedName": "Martinique" },
+    { "id": "dromcom-slot-1785681837124", "x": 42.07, "y": 93.41, "width": 17, "height": 6, "answer": "", "expectedName": "Guadeloupe" },
+    { "id": "dromcom-slot-1785681838539", "x": 60.37, "y": 93.41, "width": 17, "height": 6, "answer": "", "expectedName": "La Réunion" },
+    { "id": "dromcom-slot-1785682068038", "x": 83, "y": 93.24, "width": 17, "height": 6, "answer": "", "expectedName": "Mayotte" }
+  ]
+}

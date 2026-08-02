@@ -209,10 +209,10 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDragOver = (e, x, y) => { e.preventDefault(); setDragOverCell(`${x}-${y}`); };
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
-    const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
+    const getMyStats = (stu) => { if (!stu.behaviorRecords) return { baseScore: 15, crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { baseScore: 15, crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
     const getStudentScore = (stu) => {
         const stats = getMyStats(stu);
-        return (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0);
+        return Number(stats.baseScore ?? 15) + (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0);
     };
     const formatScore = (value) => {
         const n = Number(value || 0);
@@ -449,12 +449,16 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const stopBehaviorRepeat = (closeDrawer = true) => {
+        const hadActiveRepeat = Boolean(
+            behaviorRepeatIntervalRef.current
+            || behaviorRepeatStudentRef.current
+        );
         if (behaviorRepeatIntervalRef.current) {
             clearInterval(behaviorRepeatIntervalRef.current);
             behaviorRepeatIntervalRef.current = null;
         }
         behaviorRepeatStudentRef.current = null;
-        if (closeDrawer) setSelectedStudent(null);
+        if (closeDrawer && hadActiveRepeat) setSelectedStudent(null);
     };
 
     const startBehaviorRepeat = (studentId, type) => {
@@ -500,7 +504,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             if (s._id !== sid) return s;
             const newS = { ...s, behaviorRecords: [...(s.behaviorRecords || [])] };
             let rIdx = newS.behaviorRecords.findIndex(r => r.teacherId === myId);
-            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, crosses: 0, bonuses: 0, weeksToRedemption: 3 }); rIdx = newS.behaviorRecords.length - 1; }
+            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, baseScore: 15, crosses: 0, bonuses: 0, weeksToRedemption: 3 }); rIdx = newS.behaviorRecords.length - 1; }
             
             const r = { ...newS.behaviorRecords[rIdx] };
             if (type === 'CROSS') r.crosses++;

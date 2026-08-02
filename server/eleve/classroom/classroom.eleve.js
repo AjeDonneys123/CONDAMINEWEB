@@ -425,12 +425,14 @@ router.get('/status-summary/:studentId', async (req, res) => {
             entry.activities.total += 1;
             if (done) {
                 entry.activities.done += 1;
-                entry.activities.savedItems.push({
+                const replayItem = {
                     id: String(m._id),
                     type: 'learning',
                     title: m.title || 'Apprentissage',
                     label: `🧠 Refaire ${m.title || 'Apprentissage'}`
-                });
+                };
+                entry.activities.todoItems.push(replayItem);
+                entry.activities.savedItems.push(replayItem);
             } else {
                 entry.activities.todo += 1;
                 entry.activities.todoTitles.push(`🧠 ${m.title || 'Apprentissage'}`);

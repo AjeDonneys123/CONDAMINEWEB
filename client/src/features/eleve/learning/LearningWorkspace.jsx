@@ -63,6 +63,50 @@ const snippetKeywords = (snippets = []) =>
         .filter((w) => w.length >= 4))]
         .slice(0, 12);
 
+const parseFillBlankText = (value = '') => {
+    const source = String(value || '');
+    const parts = [];
+    const blanks = [];
+    const quoteAt = (position) => {
+        const match = source.slice(position).match(/^[\"“«]([^\"”»]+)[\"”»]/);
+        return match ? { raw: match[0], content: String(match[1] || '').trim(), end: position + match[0].length } : null;
+    };
+    let cursor = 0;
+    while (cursor < source.length) {
+        const rest = source.slice(cursor);
+        const offset = rest.search(/[\"“«]/);
+        if (offset < 0) break;
+        const start = cursor + offset;
+        const first = quoteAt(start);
+        if (!first) {
+            cursor = start + 1;
+            continue;
+        }
+        const flexibleItems = [first.content];
+        let sequenceEnd = first.end;
+        while (source[sequenceEnd] === '+') {
+            const next = quoteAt(sequenceEnd + 1);
+            if (!next) break;
+            flexibleItems.push(next.content);
+            sequenceEnd = next.end;
+        }
+        parts.push(source.slice(parts.length === 0 ? 0 : cursor, start));
+        if (flexibleItems.length > 1) {
+            blanks.push({ type: 'list_flexible', items: flexibleItems, raw: flexibleItems.join('+') });
+            cursor = sequenceEnd;
+        } else if (first.content.includes('+')) {
+            const items = first.content.split('+').map((item) => item.trim()).filter(Boolean);
+            blanks.push({ type: 'list_strict', items, raw: first.content });
+            cursor = first.end;
+        } else {
+            blanks.push({ type: 'exact', items: [first.content], raw: first.content });
+            cursor = first.end;
+        }
+    }
+    parts.push(source.slice(cursor));
+    return { parts, blanks, answers: blanks.map((blank) => blank.raw) };
+};
+
 const isGoogleSlidesUrl = (url = '') => /docs\.google\.com\/presentation\/d\//i.test(String(url || '').trim());
 
 function buildQuestion(step, module) {
@@ -99,7 +143,8 @@ function extractQuestionItems(step = null, module = null) {
                 id: `sec_${sectionIdx}_${rowIdx}`,
                 question,
                 expectedAnswer,
-                expectedKeywords
+                expectedKeywords,
+                validationType: row?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'
             });
         });
     });
@@ -117,7 +162,8 @@ function extractQuestionItems(step = null, module = null) {
             id: `pair_${idx}`,
             question,
             expectedAnswer,
-            expectedKeywords
+            expectedKeywords,
+            validationType: pair?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open'
         });
     });
     if (out.length > 0) return out;
@@ -276,6 +322,33 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
             const allowed = Math.max(1, Math.floor(keySimple.length * 0.12));
             if (levenshtein(windowPhrase, keySimple) <= allowed) return true;
         }
+
+        // Accepte les petits mots de liaison ajoutés par l'élève, tout en
+        // exigeant tous les éléments significatifs dans le bon ordre.
+        let answerIndex = 0;
+        let firstMatch = -1;
+        let lastMatch = -1;
+        for (const expectedWord of keyWords) {
+            let foundAt = -1;
+            for (let i = answerIndex; i < simpleWords.length; i += 1) {
+                const answerWord = simpleWords[i];
+                const maxTypos = expectedWord.length >= 8 ? 2 : 1;
+                if (
+                    answerWord === expectedWord
+                    || answerWord.includes(expectedWord)
+                    || expectedWord.includes(answerWord)
+                    || levenshtein(answerWord, expectedWord) <= maxTypos
+                ) {
+                    foundAt = i;
+                    break;
+                }
+            }
+            if (foundAt < 0) return false;
+            if (firstMatch < 0) firstMatch = foundAt;
+            lastMatch = foundAt;
+            answerIndex = foundAt + 1;
+        }
+        if (firstMatch >= 0 && lastMatch - firstMatch <= keyWords.length + 5) return true;
         return false;
     };
 
@@ -288,8 +361,29 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
     const keys = (directKeys.length > 0 ? directKeys : fallbackKeys)
         .map((k) => {
             const raw = String(k || '').trim();
+            const quotedListMatch = raw.match(/^[\"“«](.+)[\"”»]$/);
+            const listSource = quotedListMatch ? String(quotedListMatch[1] || '').trim() : raw;
+            if (listSource.includes('+')) {
+                const listItems = listSource
+                    .split('+')
+                    .map((item) => String(item || '').trim())
+                    .filter(Boolean)
+                    .map((item) => item
+                        .split(/[=/]/)
+                        .map((variant) => normalize(variant))
+                        .filter(Boolean))
+                    .filter((variants) => variants.length > 0);
+                return {
+                    raw,
+                    variants: [],
+                    listItems,
+                    minListItems: quotedListMatch
+                        ? listItems.length
+                        : Math.max(1, listItems.length - 2)
+                };
+            }
             const variants = raw
-                .split('=')
+                .split(/[=/]/)
                 .map((v) => String(v || '').trim())
                 .filter(Boolean);
             const normalizedVariants = variants
@@ -300,8 +394,10 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
                 variants: normalizedVariants.length > 0 ? normalizedVariants : [normalize(raw)].filter(Boolean)
             };
         })
-        .filter((k) => k.variants.length > 0);
-    const minMatches = Math.max(1, Number(step?.minKeywordMatches || 1));
+        .filter((k) => k.variants.length > 0 || k.listItems?.length > 0);
+    const minMatches = directKeys.length > 0
+        ? directKeys.length
+        : Math.max(1, Number(step?.minKeywordMatches || 1));
 
     if (keys.length === 0) {
         const ok = txt.length >= 10;
@@ -314,7 +410,15 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
         };
     }
 
-    const isKeyMatched = (key) => Array.isArray(key?.variants) && key.variants.some((variant) => keywordMatchesText(variant));
+    const isKeyMatched = (key) => {
+        if (Array.isArray(key?.listItems) && key.listItems.length > 0) {
+            const matchedItems = key.listItems.filter((variants) =>
+                variants.some((variant) => keywordMatchesText(variant))
+            ).length;
+            return matchedItems >= Number(key.minListItems || key.listItems.length);
+        }
+        return Array.isArray(key?.variants) && key.variants.some((variant) => keywordMatchesText(variant));
+    };
     const matched = keys.filter((k) => isKeyMatched(k)).map((k) => k.raw);
     const missing = keys.filter((k) => !isKeyMatched(k)).map((k) => k.raw);
     const required = Math.min(keys.length, minMatches);
@@ -402,6 +506,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [saving, setSaving] = useState(false);
     const [gateHint, setGateHint] = useState('');
     const [questionCursor, setQuestionCursor] = useState(0);
+    const [quizStates, setQuizStates] = useState({});
     const [questionFeedback, setQuestionFeedback] = useState(null);
     const [questionSuccessFlash, setQuestionSuccessFlash] = useState(false);
     const [aiErrorPanel, setAiErrorPanel] = useState(null); // { message, expected, missingWords[] }
@@ -452,6 +557,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const pendingAudioRef = useRef(null);
     const recordedTranscriptRef = useRef('');
     const recordingStartedAtRef = useRef(0);
+    const recordingQuestionIdRef = useRef('');
     const lastVoiceAtRef = useRef(0);
     const voiceDetectedRef = useRef(false);
     const recordingMonitorRef = useRef(0);
@@ -609,41 +715,20 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const buildLearningGptPrompt = (session = {}) => {
         const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
-        const sourceText = String(session?.preview || '').trim();
-        return `Tu es CondaTuteur, tuteur de revision associe a CondaWeb pour le professeur JP Vuillet.
+        const studentName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || String(session?.studentName || '').trim();
+        const studentClass = String(user?.currentClass || user?.studentClass || session?.studentClass || '').trim();
+        const studentCode = String(session?.studentCode || user?.gptCode || '').trim();
+        const moduleId = String(module?._id || module?.id || session?.moduleId || '').trim();
+        const stepId = String(currentStep?.id || session?.stepId || '').trim();
+        return `SESSION CONDAWEB
+nom utilisateur : ${studentName || 'non renseigne'}
+classe : ${studentClass || 'non renseignee'}
+code CondaWeb : ${studentCode || 'non renseigne'}
+lecon a reviser : ${moduleTitle}
+moduleId : ${moduleId || 'non renseigne'}
+stepId : ${stepId || 'non renseigne'}
 
-Objectif : aider l'utilisateur a reviser la fiche CondaWeb "${moduleTitle}", puis valider quand la lecon est reellement maitrisee.
-
-Tu n'as pas besoin d'ouvrir un lien externe. La source CondaWeb complete est collee ci-dessous.
-Lis-la integralement et suis strictement ses instructions.
-
-Apres lecture de la source :
-- cite le titre exact de la lecon ;
-- cite une notion precise de la fiche pour prouver que tu l'as sous les yeux ;
-- commence ensuite l'entrainement.
-
-Regles de tutorat :
-- pose une question a la fois ;
-- ne donne pas la reponse avant une tentative ;
-- corrige gentiment les erreurs ;
-- repose plus tard les notions ratees ;
-- si des questions professeur sont presentes dans la source, utilise-les en priorite ;
-- sinon cree tes propres questions uniquement a partir de la fiche.
-
-Validation :
-Quand l'utilisateur maitrise bien la lecon, dis :
-"Bravo ${studentFullNameForGpt}, apprentissage valide."
-Puis donne le lien de validation CondaWeb qui se trouve dans la source et demande a l'utilisateur de cliquer dessus.
-
-Important :
-- Ne donne jamais le lien de validation avant une vraie maitrise.
-- Ne valide pas apres une seule bonne reponse si la fiche contient plusieurs connaissances.
-- Parle d'utilisateur ou d'apprenant, pas d'enfant.
-- Reste sobre, encourageant, et centre sur l'apprentissage.
-
-SOURCE CONDAWEB COMPLETE A UTILISER :
-
-${sourceText || 'SOURCE CONDAWEB MANQUANTE. Demande a l utilisateur de relancer le bouton CondaWeb.'}`;
+Utilise ces parametres seulement pour identifier la session CondaWeb et poster les retours si necessaire.`;
     };
 
     const buildLearningGeminiLinkPrompt = (session = {}) => {
@@ -697,6 +782,10 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
     };
 
     const openLearningGptTutor = async () => {
+        if (!studentGptUrl || /g-xxxxxxxx/i.test(String(studentGptUrl))) {
+            setStudentGptStatus("URL du GPT CondaTuteur invalide. Mets le vrai lien du GPT dans VITE_STUDENT_GPT_URL puis redemarre le front.");
+            return;
+        }
         let session = null;
         try {
             session = await prepareTutorSession();
@@ -707,9 +796,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         const prompt = buildLearningGptPrompt(session);
         try {
             await copyTextForLearning(prompt);
-            setStudentGptStatus('Source CondaWeb complete copiee. Colle-la dans GPT si besoin.');
+            setStudentGptStatus('Consigne CondaTuteur copiee. Colle-la dans ChatGPT.');
         } catch (_) {
-            setStudentGptStatus('Source CondaWeb preparee. Copie-colle la fiche depuis CondaWeb si besoin.');
+            setStudentGptStatus('Consigne preparee. Copie-colle la fiche depuis CondaWeb si besoin.');
         }
         window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
     };
@@ -1083,6 +1172,79 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
     const questionItems = useMemo(() => extractQuestionItems(currentStep, module), [currentStep, module]);
     const activeQuestionItem = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
+    const currentQuizKey = String(currentStep?.id || `question_${stepIndex}`);
+    const currentQuizState = quizStates[currentQuizKey] || {
+        answers: {},
+        blankAnswers: {},
+        results: {},
+        stage: 'answering',
+        revealed: {}
+    };
+    const updateCurrentQuizState = (updater) => {
+        setQuizStates((previous) => {
+            const base = previous[currentQuizKey] || {
+                answers: {},
+                blankAnswers: {},
+                results: {},
+                stage: 'answering',
+                revealed: {}
+            };
+            const next = typeof updater === 'function' ? updater(base) : { ...base, ...updater };
+            return { ...previous, [currentQuizKey]: next };
+        });
+    };
+    const updateQuizAnswer = (questionId, value) => {
+        const id = String(questionId || '');
+        if (!id) return;
+        updateCurrentQuizState((state) => ({
+            ...state,
+            answers: { ...state.answers, [id]: String(value ?? '') }
+        }));
+    };
+    const updateBlankAnswer = (questionId, blankIndex, value) => {
+        const id = String(questionId || '');
+        if (!id) return;
+        updateCurrentQuizState((state) => {
+            const rows = { ...(state.blankAnswers || {}) };
+            const values = Array.isArray(rows[id]) ? [...rows[id]] : [];
+            values[blankIndex] = String(value ?? '');
+            rows[id] = values;
+            return { ...state, blankAnswers: rows };
+        });
+    };
+    const appendQuizAnswer = (quizKey, questionId, addition) => {
+        const key = String(quizKey || '');
+        const id = String(questionId || '');
+        const text = String(addition || '').replace(/\s+/g, ' ').trim();
+        if (!key || !id || !text) return;
+        setQuizStates((previous) => {
+            const state = previous[key] || { answers: {}, results: {}, stage: 'answering', revealed: {} };
+            const before = String(state.answers?.[id] || '').trim();
+            const next = before ? `${before} ${text}` : text;
+            return {
+                ...previous,
+                [key]: {
+                    ...state,
+                    answers: { ...(state.answers || {}), [id]: next }
+                }
+            };
+        });
+    };
+    const setQuizAnswerForKey = (quizKey, questionId, value) => {
+        const key = String(quizKey || '');
+        const id = String(questionId || '');
+        if (!key || !id) return;
+        setQuizStates((previous) => {
+            const state = previous[key] || { answers: {}, results: {}, stage: 'answering', revealed: {} };
+            return {
+                ...previous,
+                [key]: {
+                    ...state,
+                    answers: { ...(state.answers || {}), [id]: String(value ?? '') }
+                }
+            };
+        });
+    };
     const isCorrectionLock = currentStep?.type === 'question' && !!pendingSheetReturn;
     const generatedQuestion = useMemo(() => {
         if (currentStep?.type !== 'question') return buildQuestion(currentStep, module);
@@ -1141,11 +1303,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return sheetScrollRatio >= 0.9 && !activeOral && oralQueue.length === 0;
         }
         if (currentStep.type === 'video') return videoUnlocked;
-        if (currentStep.type === 'question') {
-            return studentGptValidated;
-        }
+        if (currentStep.type === 'question') return true;
         return false;
-    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, studentGptValidated]);
+    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked]);
 
     useEffect(() => {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
@@ -1197,16 +1357,6 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (isCorrectionLock) return;
         speakAiText(generatedQuestion, { resumeQuestionMic: true });
     };
-
-    useEffect(() => {
-        if (currentStep?.type !== 'question') return;
-        if (isCorrectionLock) return;
-        // Laisse le DOM se stabiliser puis lance la lecture auto.
-        const t = setTimeout(() => {
-            speakQuestion();
-        }, 250);
-        return () => clearTimeout(t);
-    }, [currentStep?.id, currentStep?.type, questionCursor, generatedQuestion, isCorrectionLock]);
 
     const cleanupAudioRecording = async () => {
         if (recordingMonitorRef.current) {
@@ -1265,7 +1415,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             }
             setAnswerText((prev) => {
                 const before = String(prev || '').trim();
-                return before ? `${before} ${text}` : text;
+                const next = before ? `${before} ${text}` : text;
+                updateQuizAnswer(recordingQuestionIdRef.current || activeQuestionItem?.id, next);
+                return next;
             });
             setQuestionFeedback(null);
             setAiErrorPanel(null);
@@ -1294,7 +1446,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         }
         setAnswerText((prev) => {
             const before = String(prev || '').trim();
-            return before ? `${before} ${text}` : text;
+            const next = before ? `${before} ${text}` : text;
+            updateQuizAnswer(recordingQuestionIdRef.current || activeQuestionItem?.id, next);
+            return next;
         });
         setQuestionFeedback(null);
         setAiErrorPanel(null);
@@ -1344,6 +1498,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                 .trim();
             if (!text) return;
             setAnswerText(text);
+            updateQuizAnswer(recordingQuestionIdRef.current || activeQuestionItem?.id, text);
             setQuestionFeedback(null);
             setAiErrorPanel(null);
         };
@@ -1413,6 +1568,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
+            recorder.__questionId = String(recordingQuestionIdRef.current || activeQuestionItem?.id || '');
+            recorder.__quizKey = currentQuizKey;
+            recorder.__baseAnswer = String(currentQuizState.answers?.[recorder.__questionId] || '').trim();
             mediaStreamRef.current = stream;
             mediaRecorderRef.current = recorder;
             audioChunksRef.current = [];
@@ -1435,6 +1593,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             .replace(/\s+/g, ' ')
                             .trim();
                         recordedTranscriptRef.current = text;
+                        if (text) {
+                            const next = recorder.__baseAnswer ? `${recorder.__baseAnswer} ${text}` : text;
+                            recorder.__browserApplied = true;
+                            setQuizAnswerForKey(recorder.__quizKey, recorder.__questionId, next);
+                            if (String(recordingQuestionIdRef.current || '') === String(recorder.__questionId || '')) {
+                                setAnswerText(next);
+                            }
+                        }
                     };
                     rec.onerror = () => {
                         // L'audio reste utilisable même si la dictée navigateur lâche.
@@ -1462,6 +1628,11 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                 const durationMs = Math.max(0, Date.now() - Number(recordingStartedAtRef.current || Date.now()));
                 const chunks = [...(audioChunksRef.current || [])];
                 const shouldKeepAudio = recorder.__shouldTranscribe !== false;
+                const questionId = String(recorder.__questionId || '');
+                const quizKey = String(recorder.__quizKey || '');
+                const browserTranscript = String(recordedTranscriptRef.current || '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
                 setRecording(false);
                 await cleanupAudioRecording();
                 audioChunksRef.current = [];
@@ -1477,10 +1648,21 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                     return;
                 }
                 clearPendingAudio();
+                if (browserTranscript) {
+                    if (!recorder.__browserApplied) {
+                        appendQuizAnswer(quizKey, questionId, browserTranscript);
+                        if (String(recordingQuestionIdRef.current || '') === questionId) {
+                            setAnswerText((previous) => {
+                                const before = String(previous || '').trim();
+                                return before ? `${before} ${browserTranscript}` : browserTranscript;
+                            });
+                        }
+                    }
+                    setMicMutedByUser(true);
+                    setRecordError(`Dictée ajoutée (${Math.round(durationMs / 1000)}s).`);
+                    return;
+                }
                 const url = URL.createObjectURL(blob);
-                const browserTranscript = String(recordedTranscriptRef.current || '')
-                    .replace(/\s+/g, ' ')
-                    .trim();
                 const nextAudio = {
                     blob,
                     url,
@@ -1750,6 +1932,153 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         };
     }, []);
 
+    const finishQuestionPage = async () => {
+        const next = new Set([...validated, stepIndex]);
+        setValidated(next);
+        setGateHint('');
+        const isLast = stepIndex >= steps.length - 1;
+        setSaving(true);
+        try {
+            if (isLast) {
+                await saveProgress({ currentStep: steps.length, completed: true });
+                speakAiText('Bravo, tu as terminé cette séquence.');
+                alert('Apprentissage validé ✅');
+                onQuit();
+                return;
+            }
+            const nextStep = stepIndex + 1;
+            await saveProgress({ currentStep: nextStep, completed: false });
+            setStepIndex(nextStep);
+        } catch (e) {
+            console.error("Learning progress save error", e);
+            setGateHint("Progression locale validée, mais la sauvegarde serveur a échoué.");
+            if (!isLast) setStepIndex(stepIndex + 1);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const findReviewSheetIndex = () => {
+        const sourceRef = String(currentStep?.sourceSheetUrl || '').trim();
+        const sourceId = sourceRef.startsWith('sheet:') ? sourceRef.slice(6) : '';
+        if (sourceId) {
+            const linkedIndex = steps.findIndex((candidate) => String(candidate?.id || '') === sourceId);
+            if (linkedIndex >= 0) return linkedIndex;
+        }
+        for (let index = stepIndex - 1; index >= 0; index -= 1) {
+            if (steps[index]?.type === 'sheet') return index;
+        }
+        return Math.max(0, stepIndex - 1);
+    };
+
+    const evaluateFillBlankAnswers = (item, values = []) => {
+        const expected = parseFillBlankText(item?.question || '').blanks;
+        if (expected.length === 0) return false;
+        const normalizeBlank = (value = '') => normalize(value)
+            .replace(/['-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const containsItem = (studentValue, rawItem) => String(rawItem || '')
+            .split(/[=/]/)
+            .map((variant) => normalizeBlank(variant))
+            .filter(Boolean)
+            .some((variant) => (` ${studentValue} `).includes(` ${variant} `));
+        return expected.every((blank, index) => {
+            const studentValue = normalizeBlank(values[index] || '');
+            if (!studentValue) return false;
+            if (blank.type === 'exact') return containsItem(studentValue, blank.items[0]) && blank.items.some((item) => normalizeBlank(item) === studentValue || containsItem(studentValue, item));
+            const matched = blank.items.filter((item) => containsItem(studentValue, item)).length;
+            const required = blank.type === 'list_strict'
+                ? blank.items.length
+                : Math.max(1, blank.items.length - 2);
+            return matched >= required;
+        });
+    };
+
+    const verifyQuestionPage = async () => {
+        const unresolved = questionItems.filter((item) => currentQuizState.results?.[item.id] !== 'correct');
+        const hasMissingAnswer = unresolved.some((item) => {
+            if (item.validationType !== 'fill_blanks') {
+                return !String(currentQuizState.answers?.[item.id] || '').trim();
+            }
+            const expectedCount = parseFillBlankText(item.question).answers.length;
+            const values = currentQuizState.blankAnswers?.[item.id] || [];
+            return expectedCount === 0 || Array.from({ length: expectedCount }).some((_, index) => !String(values[index] || '').trim());
+        });
+        if (hasMissingAnswer) {
+            setGateHint('Réponds à toutes les questions restantes avant de vérifier.');
+            return;
+        }
+        const nextResults = { ...(currentQuizState.results || {}) };
+        unresolved.forEach((item) => {
+            if (item.validationType === 'fill_blanks') {
+                nextResults[item.id] = evaluateFillBlankAnswers(item, currentQuizState.blankAnswers?.[item.id] || [])
+                    ? 'correct'
+                    : 'incorrect';
+                return;
+            }
+            const evaluation = evaluateQuestionAnswer(currentStep, item, currentQuizState.answers?.[item.id] || '');
+            nextResults[item.id] = evaluation.ok ? 'correct' : 'incorrect';
+        });
+        const failed = questionItems.filter((item) => nextResults[item.id] !== 'correct');
+        if (failed.length === 0) {
+            updateCurrentQuizState((state) => ({ ...state, results: nextResults, stage: 'complete' }));
+            await finishQuestionPage();
+            return;
+        }
+        updateCurrentQuizState((state) => ({
+            ...state,
+            results: nextResults,
+            stage: 'must_review',
+            revealed: {}
+        }));
+        setGateHint(`${failed.length} réponse${failed.length > 1 ? 's' : ''} à revoir. Retourne à la fiche avant de réessayer.`);
+        stopRecording({ transcribe: false });
+    };
+
+    const returnToReviewSheet = () => {
+        const reviewStepIndex = findReviewSheetIndex();
+        setForcedSheetReview({
+            stepIndex: reviewStepIndex,
+            minMs: FORCED_SHEET_REVIEW_MS,
+            questionStepIndex: stepIndex,
+            questionStepKey: currentQuizKey
+        });
+        setStepIndex(reviewStepIndex);
+        setGateHint('Relis la fiche jusqu’en bas, puis valide-la pour revenir aux questions.');
+    };
+
+    const revealExpectedAnswer = (questionId) => {
+        updateCurrentQuizState((state) => ({
+            ...state,
+            revealed: { ...state.revealed, [questionId]: true }
+        }));
+    };
+
+    const retryIncorrectAnswers = () => {
+        const failedIds = questionItems
+            .filter((item) => currentQuizState.results?.[item.id] === 'incorrect')
+            .map((item) => item.id);
+        if (failedIds.some((id) => !currentQuizState.revealed?.[id])) {
+            setGateHint('Affiche et apprends chaque réponse incorrecte avant de réessayer.');
+            return;
+        }
+        updateCurrentQuizState((state) => {
+            const answers = { ...(state.answers || {}) };
+            const blankAnswers = { ...(state.blankAnswers || {}) };
+            const results = { ...(state.results || {}) };
+            failedIds.forEach((id) => {
+                answers[id] = '';
+                blankAnswers[id] = [];
+                delete results[id];
+            });
+            return { ...state, answers, blankAnswers, results, stage: 'answering', revealed: {} };
+        });
+        setAnswerText('');
+        clearPendingAudio();
+        setGateHint('Les réponses incorrectes ont été effacées. Réponds de nouveau aux questions restantes.');
+    };
+
     const handleValidate = async () => {
         if (!currentStep) return;
         if (currentStep.type === 'question' && pendingSheetReturn && Number.isInteger(pendingSheetReturn.stepIndex)) {
@@ -1783,11 +2112,21 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return;
         }
         if (currentStep.type === 'sheet' && forcedSheetReview && Number(forcedSheetReview.stepIndex) === Number(stepIndex)) {
+            const questionStepIndex = Number(forcedSheetReview.questionStepIndex);
+            const questionStepKey = String(forcedSheetReview.questionStepKey || '');
             setForcedSheetReview(null);
+            if (Number.isInteger(questionStepIndex) && questionStepIndex >= 0 && questionStepKey) {
+                setQuizStates((previous) => {
+                    const state = previous[questionStepKey] || { answers: {}, results: {}, revealed: {} };
+                    return { ...previous, [questionStepKey]: { ...state, stage: 'correction', revealed: {} } };
+                });
+                setStepIndex(questionStepIndex);
+                setGateHint('Tu peux maintenant afficher les réponses incorrectes pour les apprendre.');
+                return;
+            }
         }
         if (currentStep.type === 'question') {
-            setAiErrorPanel(null);
-            await advanceAfterAcceptedQuestion();
+            await verifyQuestionPage();
             return;
         }
         setGateHint('');
@@ -2128,71 +2467,141 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
                 {currentStep.type === 'question' && (
                     <>
-                        {studentGptValidated && (
-                            <div
-                                style={{
-                                    marginBottom: 10,
-                                    padding: '8px 12px',
-                                    borderRadius: 10,
-                                    border: '1px solid #86efac',
-                                    background: '#f0fdf4',
-                                    color: '#166534',
-                                    fontWeight: 900,
-                                    fontSize: 14
-                                }}
-                            >
-                                Fiche apprise. Validation reçue par CondaWeb.
+                        <div className="learning-quiz-intro">
+                            Réponds à toutes les questions. Les bonnes réponses seront conservées ; tu recommenceras uniquement celles qui sont incorrectes.
+                        </div>
+                        <div className="learning-quiz-list">
+                            {questionItems.map((item, index) => {
+                                const result = currentQuizState.results?.[item.id] || '';
+                                const isCorrect = result === 'correct';
+                                const isIncorrect = result === 'incorrect';
+                                const canEdit = currentQuizState.stage === 'answering' && !isCorrect;
+                                const isRevealed = Boolean(currentQuizState.revealed?.[item.id]);
+                                const isFillBlanks = item.validationType === 'fill_blanks';
+                                const fillBlank = isFillBlanks ? parseFillBlankText(item.question) : { parts: [], answers: [] };
+                                const expected = isFillBlanks
+                                    ? String(item.question || '').replace(/[\"“”«»]/g, '')
+                                    : String(item.expectedAnswer || item.expectedKeywords?.join(' / ') || '').trim();
+                                const isThisRecording = recording && String(recordingQuestionIdRef.current) === String(item.id);
+                                return (
+                                    <article
+                                        key={item.id}
+                                        className={`learning-quiz-item ${isCorrect ? 'is-correct' : ''} ${isIncorrect ? 'is-incorrect' : ''}`}
+                                    >
+                                        <div className="learning-quiz-head">
+                                            <div>
+                                                <span className="learning-quiz-number">{isFillBlanks ? 'Texte à trous' : `Question ${index + 1}`}</span>
+                                                {!isFillBlanks && (
+                                                    <div className="learning-question">{item.question || buildQuestion(currentStep, module)}</div>
+                                                )}
+                                            </div>
+                                            <span className="learning-quiz-status">
+                                                {isCorrect ? '✓ Validée' : (isIncorrect ? 'À revoir' : 'À répondre')}
+                                            </span>
+                                        </div>
+                                        {isFillBlanks ? (
+                                            <div className="learning-fill-sentence">
+                                                {fillBlank.parts.map((part, blankIndex) => (
+                                                    <React.Fragment key={`${item.id}_blank_${blankIndex}`}>
+                                                        <span>{part}</span>
+                                                        {blankIndex < fillBlank.answers.length && (
+                                                            <input
+                                                                className="learning-fill-input"
+                                                                value={currentQuizState.blankAnswers?.[item.id]?.[blankIndex] || ''}
+                                                                disabled={!canEdit}
+                                                                aria-label={`Trou ${blankIndex + 1}`}
+                                                                onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
+                                                            />
+                                                        )}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                        <div className="learning-quiz-answer-row">
+                                            <textarea
+                                                className="learning-quiz-textarea"
+                                                value={currentQuizState.answers?.[item.id] || ''}
+                                                disabled={!canEdit}
+                                                placeholder="Écris ou dicte ta réponse…"
+                                                onFocus={() => {
+                                                    setQuestionCursor(index);
+                                                    recordingQuestionIdRef.current = item.id;
+                                                    setAnswerText(currentQuizState.answers?.[item.id] || '');
+                                                }}
+                                                onChange={(event) => {
+                                                    setQuestionCursor(index);
+                                                    recordingQuestionIdRef.current = item.id;
+                                                    setAnswerText(event.target.value);
+                                                    updateQuizAnswer(item.id, event.target.value);
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                className={`learning-quiz-mic ${isThisRecording ? 'is-recording' : ''}`}
+                                                disabled={!canEdit || transcribingAudio || isAiSpeaking}
+                                                title={isThisRecording ? 'Arrêter le micro' : 'Répondre avec le micro'}
+                                                onClick={() => {
+                                                    if (isThisRecording) {
+                                                        toggleRecording();
+                                                        return;
+                                                    }
+                                                    if (recording) stopRecording({ transcribe: true });
+                                                    setQuestionCursor(index);
+                                                    recordingQuestionIdRef.current = item.id;
+                                                    setAnswerText(currentQuizState.answers?.[item.id] || '');
+                                                    setMicMutedByUser(false);
+                                                    setRecordError('');
+                                                    startRecording();
+                                                }}
+                                            >
+                                                {isThisRecording ? '■' : '🎙️'}
+                                            </button>
+                                        </div>
+                                        )}
+                                        {currentQuizState.stage === 'correction' && isIncorrect && (
+                                            <div className="learning-correction-actions">
+                                                {!isRevealed ? (
+                                                    <button
+                                                        type="button"
+                                                        className="learning-btn danger"
+                                                        onClick={() => revealExpectedAnswer(item.id)}
+                                                    >
+                                                        Afficher la réponse
+                                                    </button>
+                                                ) : (
+                                                    <div className="learning-expected-answer">
+                                                        <strong>Réponse à apprendre :</strong> {expected || 'Aucune réponse attendue configurée.'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </article>
+                                );
+                            })}
+                        </div>
+                        {(recordError || transcribingAudio) && (
+                            <div className="learning-hint">
+                                {transcribingAudio ? 'Transcription en cours…' : recordError}
                             </div>
                         )}
-                        {questionItems.length > 0 && (
-                            <div className="learning-meta">
-                                <span>{questionItems.length} question{questionItems.length > 1 ? 's' : ''} professeur disponible{questionItems.length > 1 ? 's' : ''}</span>
-                                <span>Code {studentCodeForGpt}</span>
-                            </div>
-                        )}
-                        <div className="learning-question">
-                            Lance le tuteur vocal pour réviser cette fiche. Quand la maîtrise est validée, CondaWeb affiche automatiquement la fiche comme apprise.
-                        </div>
-                        <div className="learning-actions">
-                            <button
-                                type="button"
-                                className={`learning-btn gpt ${realtimeActive ? 'danger' : ''}`}
-                                onClick={startRealtimeTutor}
-                            >
-                                {realtimeActive ? 'Arrêter vocal' : 'Conversation vocale native'}
-                            </button>
-                            <button
-                                type="button"
-                                className="learning-btn ghost"
-                                onClick={openLearningGptTutor}
-                            >
-                                Ouvrir GPT externe
-                            </button>
-                            <button
-                                type="button"
-                                className="learning-btn ghost"
-                                onClick={openLearningGeminiTutor}
-                            >
-                                Ouvrir Gemini
-                            </button>
-                            <button
-                                type="button"
-                                className="learning-btn ghost"
-                                disabled={studentGptChecking}
-                                onClick={() => checkStudentGptValidation({ manual: true })}
-                            >
-                                {studentGptChecking ? 'Vérification...' : 'Vérifier la validation'}
-                            </button>
-                        </div>
-                        {studentGptStatus && (
-                            <div className="learning-gpt-status">{studentGptStatus}</div>
-                        )}
-                        {realtimeStatus && (
-                            <div className="learning-gpt-status">{realtimeStatus}</div>
-                        )}
-                        {isCorrectionLock && (
-                            <div className="learning-hint" style={{ color: '#b91c1c', fontWeight: 800 }}>
-                                Réponse incorrecte. Clique sur « Revenir à la fiche » pour relire avant de continuer.
+                        {pendingAudio && (
+                            <div className="learning-actions">
+                                <button type="button" className="learning-btn ghost" onClick={playPendingAudio}>
+                                    Écouter
+                                </button>
+                                {String(pendingTranscript || pendingAudio?.transcript || '').trim() && (
+                                    <button type="button" className="learning-btn" onClick={applyPendingBrowserTranscript}>
+                                        Ajouter la transcription
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    className="learning-btn"
+                                    disabled={transcribingAudio}
+                                    onClick={() => transcribeRecordedAudio(pendingAudio.blob, pendingAudio.durationMs)}
+                                >
+                                    Transcrire l’audio
+                                </button>
                             </div>
                         )}
                     </>
@@ -2212,17 +2621,23 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                         Étape précédente
                     </button>
                 )}
-                <button className="learning-btn" disabled={saving} onClick={handleValidate}>
-                    {saving
-                        ? 'Validation...'
-                        : (currentStep?.type === 'question' && pendingSheetReturn
-                            ? 'Revenir à la fiche'
-                            : (currentStep?.type === 'question' && !studentGptValidated
-                                ? 'En attente de GPT'
-                                : (currentStep?.type === 'question' && studentGptValidated
-                                    ? 'Continuer'
-                                    : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))))}
-                </button>
+                {currentStep?.type === 'question' && currentQuizState.stage === 'must_review' ? (
+                    <button className="learning-btn danger" disabled={saving} onClick={returnToReviewSheet}>
+                        Revenir à la fiche
+                    </button>
+                ) : currentStep?.type === 'question' && currentQuizState.stage === 'correction' ? (
+                    <button className="learning-btn" disabled={saving} onClick={retryIncorrectAnswers}>
+                        Réessayer
+                    </button>
+                ) : (
+                    <button className="learning-btn" disabled={saving} onClick={handleValidate}>
+                        {saving
+                            ? 'Validation...'
+                            : (currentStep?.type === 'question'
+                                ? 'Vérifier mes réponses'
+                                : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))}
+                    </button>
+                )}
             </div>
             {gateHint && <div className="learning-error">{gateHint}</div>}
             {activeOral && (

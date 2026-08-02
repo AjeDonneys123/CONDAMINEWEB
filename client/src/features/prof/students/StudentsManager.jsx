@@ -71,6 +71,10 @@ export default function StudentsManager({ globalClassId }) {
   const [ficheBoardActivity, setFicheBoardActivity] = useState(null);
   const [ficheBoardEditing, setFicheBoardEditing] = useState(null);
   const [ficheBoardSaving, setFicheBoardSaving] = useState(false);
+  const [gptFeedbackModal, setGptFeedbackModal] = useState(null);
+  const [gptFeedbackEntries, setGptFeedbackEntries] = useState([]);
+  const [gptFeedbackLoading, setGptFeedbackLoading] = useState(false);
+  const [gptFeedbackError, setGptFeedbackError] = useState('');
 
   useEffect(() => {
     if (!globalClassId) return;
@@ -378,6 +382,48 @@ export default function StudentsManager({ globalClassId }) {
           studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
           recovery: rec
       });
+  };
+
+  const formatGptFeedbackDate = (value) => {
+      const d = new Date(value || Date.now());
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+      });
+  };
+
+  const openGptFeedback = async (student, act) => {
+      const sid = extractId(student?._id);
+      const moduleId = extractId(act?._id);
+      const studentName = `${student?.firstName || ''} ${student?.lastName || ''}`.trim();
+      setGptFeedbackModal({ student, act });
+      setGptFeedbackEntries([]);
+      setGptFeedbackError('');
+      setGptFeedbackLoading(true);
+      try {
+          const params = new URLSearchParams();
+          if (moduleId) params.set('moduleId', moduleId);
+          if (sid) params.set('studentId', sid);
+          params.set('limit', '60');
+          const res = await fetch(`/api/learning/gpt-inbox?${params.toString()}`);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Lecture impossible');
+          const entries = Array.isArray(data?.entries) ? data.entries : [];
+          const studentKey = norm(studentName);
+          const filtered = entries.filter((entry) => {
+              const entryStudentId = extractId(entry?.studentId);
+              if (sid && entryStudentId && entryStudentId === sid) return true;
+              return studentKey && norm(entry?.studentName || '') === studentKey;
+          });
+          setGptFeedbackEntries(filtered.length ? filtered : entries);
+      } catch (e) {
+          setGptFeedbackError(e.message || 'Impossible de consulter les retours GPT');
+      } finally {
+          setGptFeedbackLoading(false);
+      }
   };
 
   // --- HELPER POUR LA MODALE SUIVI ---
@@ -1122,6 +1168,70 @@ export default function StudentsManager({ globalClassId }) {
             </div>
         )}
 
+        {gptFeedbackModal && (
+            <div className="correction-overlay" onClick={() => setGptFeedbackModal(null)}>
+                <div className="students-gpt-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="students-gpt-modal-header">
+                        <div>
+                            <h2>Retours GPT</h2>
+                            <p>
+                                {gptFeedbackModal.student?.firstName} {gptFeedbackModal.student?.lastName}
+                                {' '}• {gptFeedbackModal.act?.title || 'Apprentissage'}
+                            </p>
+                        </div>
+                        <button type="button" onClick={() => setGptFeedbackModal(null)}>✕</button>
+                    </div>
+                    <div className="students-gpt-modal-body">
+                        {gptFeedbackLoading && (
+                            <div className="students-gpt-empty">Chargement des messages GPT...</div>
+                        )}
+                        {!gptFeedbackLoading && gptFeedbackError && (
+                            <div className="students-gpt-error">{gptFeedbackError}</div>
+                        )}
+                        {!gptFeedbackLoading && !gptFeedbackError && gptFeedbackEntries.length === 0 && (
+                            <div className="students-gpt-empty">
+                                Aucun post GPT reçu pour cet élève et cette fiche.
+                            </div>
+                        )}
+                        {!gptFeedbackLoading && !gptFeedbackError && gptFeedbackEntries.map((entry) => (
+                            <article key={entry._id || `${entry.receivedAt}-${entry.message}`} className="students-gpt-entry">
+                                <div className="students-gpt-entry-top">
+                                    <span>{formatGptFeedbackDate(entry.receivedAt || entry.createdAt)}</span>
+                                    <span className="students-gpt-chip">{entry.type || 'feedback'}</span>
+                                    {entry.questionNumber ? <span className="students-gpt-chip is-question">Question {entry.questionNumber}</span> : null}
+                                    {entry.mastered ? <span className="students-gpt-chip is-valid">Validé</span> : null}
+                                </div>
+                                {entry.message && <h3>{entry.message}</h3>}
+                                {entry.feedback && <p>{entry.feedback}</p>}
+                                {entry.summary && <p>{entry.summary}</p>}
+                                {Array.isArray(entry.weakPoints) && entry.weakPoints.length > 0 && (
+                                    <div className="students-gpt-subblock">
+                                        <strong>À renforcer :</strong> {entry.weakPoints.join(', ')}
+                                    </div>
+                                )}
+                                {Array.isArray(entry.errors) && entry.errors.length > 0 && (
+                                    <div className="students-gpt-errors-list">
+                                        {entry.errors.map((err, idx) => (
+                                            <div key={`${entry._id || 'err'}-${idx}`}>
+                                                <strong>{err.question || `Erreur ${idx + 1}`}</strong>
+                                                {err.studentAnswer && <span> Réponse : {err.studentAnswer}</span>}
+                                                {err.expected && <span> Attendu : {err.expected}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </article>
+                        ))}
+                    </div>
+                    <div className="students-gpt-modal-footer">
+                        <button type="button" onClick={() => openGptFeedback(gptFeedbackModal.student, gptFeedbackModal.act)}>
+                            Actualiser
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* MODALE CORRECTION (Existante) */}
         {editingSub && (
             <div className="correction-overlay">
@@ -1289,25 +1399,37 @@ export default function StudentsManager({ globalClassId }) {
                                         trackingData[`${studentNameKey}_TITLE_${norm(act.title)}`];
                                     return (
                                         <td key={act._id} className="p-2 text-center border-b">
-                                            {status?.done ? (
-                                                <button
-                                                    onClick={() => handleOpenActivityWork(s, act, status)}
-                                                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${
-                                                        act.type === 'homework'
-                                                            ? 'bg-green-100 text-green-700 border-green-200'
-                                                            : act.type === 'game'
-                                                                ? 'bg-purple-100 text-purple-700 border-purple-200'
-                                                                : act.type === 'production'
-                                                                    ? 'bg-cyan-100 text-cyan-700 border-cyan-200'
-                                                                    : act.type === 'fiche'
-                                                                        ? 'bg-sky-100 text-sky-700 border-sky-200'
-                                                                        : 'bg-rose-100 text-rose-700 border-rose-200'
-                                                    }`}
-                                                    title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}
-                                                >
-                                                    {status.score || 'OK'}
-                                                </button>
-                                            ) : <div className="text-slate-200 text-xs">•</div>}
+                                            <div className="students-activity-cell-actions">
+                                                {status?.done ? (
+                                                    <button
+                                                        onClick={() => handleOpenActivityWork(s, act, status)}
+                                                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${
+                                                            act.type === 'homework'
+                                                                ? 'bg-green-100 text-green-700 border-green-200'
+                                                                : act.type === 'game'
+                                                                    ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                                                    : act.type === 'production'
+                                                                        ? 'bg-cyan-100 text-cyan-700 border-cyan-200'
+                                                                        : act.type === 'fiche'
+                                                                            ? 'bg-sky-100 text-sky-700 border-sky-200'
+                                                                            : 'bg-rose-100 text-rose-700 border-rose-200'
+                                                        }`}
+                                                        title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}
+                                                    >
+                                                        {status.score || 'OK'}
+                                                    </button>
+                                                ) : <div className="text-slate-200 text-xs">•</div>}
+                                                {act.type === 'learning' && (
+                                                    <button
+                                                        type="button"
+                                                        className="students-gpt-feedback-btn"
+                                                        onClick={() => openGptFeedback(s, act)}
+                                                        title="Voir les posts et feedbacks envoyés par le GPT"
+                                                    >
+                                                        GPT
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     );
                                 })}

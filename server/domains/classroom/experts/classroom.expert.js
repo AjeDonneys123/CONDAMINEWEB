@@ -66,7 +66,7 @@ const ClassroomExpert = {
         
         if(!s.behaviorRecords) s.behaviorRecords=[];
         let r = s.behaviorRecords.find(x=>x.teacherId===tid);
-        if(!r) { r={teacherId:tid,crosses:0,bonuses:0,weeksToRedemption:3}; s.behaviorRecords.push(r); r=s.behaviorRecords[s.behaviorRecords.length-1]; }
+        if(!r) { r={teacherId:tid,baseScore:15,crosses:0,bonuses:0,weeksToRedemption:3}; s.behaviorRecords.push(r); r=s.behaviorRecords[s.behaviorRecords.length-1]; }
         
         if(!s.teacherNotes) s.teacherNotes=[];
         let n = s.teacherNotes.find(x=>x.teacherId===tid);

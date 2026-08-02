@@ -11,6 +11,47 @@ const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 const VERIFY_TTL_MS = 2 * 60 * 60 * 1000;
 const verifyStore = new Map();
 
+const LOCAL_DNB_PARAGRAPHS = {
+    'civilians-ww1-real': {
+        title: 'Les civils dans la Première Guerre mondiale',
+        instruction: "Dans un développement construit d'une vingtaine de lignes, décrivez et expliquez les souffrances subies par les civils au cours de la Première Guerre mondiale.",
+        aiHints: [
+            "Sujet officiel: Amérique du Nord — Juin 2019.",
+            "Introduction attendue: situation dans le temps (1914-1918) et rappel que le conflit est une guerre totale où l'arrière subit aussi la violence.",
+            "Axe 1: souffrances au quotidien à l'arrière: pénuries, rationnement, hausse des prix, dénutrition; deuil massif; angoisse de l'attente; nouvelles du front; censure; mobilisation du travail des femmes, munitionnettes, industrie de guerre et champs.",
+            "Axe 2: violences directes: zones occupées/proches du front; réquisitions; travail forcé; bombardements d'artillerie et premiers bombardements aériens; génocide des Arméniens en 1915 par l'Empire ottoman, déportations, massacres systématiques, plus d'un million de victimes civiles.",
+            "Conclusion attendue: les civils deviennent des cibles et des acteurs à part entière de la guerre."
+        ].join('\n')
+    },
+    'soldiers-ww1-real': {
+        title: 'Les militaires dans la Première Guerre mondiale',
+        instruction: "Dans un développement construit d'une vingtaine de lignes, décrivez les conditions de vie des soldats dans les tranchées et montrez la violence des combats.",
+        aiHints: [
+            "Sujet officiel: Centres Étrangers — Juin 2017.",
+            "Introduction attendue: cadre 1914-1918, guerre de position/tranchées à partir de fin 1914, combattants/Poilus.",
+            "Axe 1: vie quotidienne dans les tranchées: boue, froid, vermine, poux, rats, manque de sommeil, mauvaise hygiène; peur permanente de la mort; éloignement des proches; rôle du courrier.",
+            "Axe 2: violence extrême des combats: artillerie lourde, obus, mitrailleuses, gaz asphyxiants, lance-flammes; exemple Verdun 1916 ou Somme 1916; mortalité massive, traumatismes psychologiques, blessures graves, gueules cassées.",
+            "Conclusion attendue: violence de masse subie par une génération entière de soldats."
+        ].join('\n')
+    },
+    'total-war-ww1-real': {
+        title: 'La Première Guerre mondiale, une guerre totale',
+        instruction: "Dans un développement construit d'une vingtaine de lignes, vous montrerez que la Première Guerre mondiale est une guerre totale qui touche les militaires et les civils.",
+        aiHints: [
+            "Sujet officiel: Métropole — Juin 2018.",
+            "Introduction attendue: définition de la guerre totale, conflit mobilisant l'ensemble des ressources humaines, économiques et culturelles des États.",
+            "Axe 1: front et militaires: mobilisation de millions d'hommes y compris des colonies; guerre de tranchées; violence de masse; exemple Verdun.",
+            "Axe 2: arrière et civils: reconversion de l'économie vers la guerre; usines d'armement; rôle des femmes; emprunts nationaux; hausse des impôts; pénuries; travail forcé dans les zones occupées; génocide arménien.",
+            "Axe 3: mobilisation des esprits: censure; propagande; bourrage de crâne; maintenir le moral; diaboliser l'ennemi.",
+            "Conclusion attendue: effacement de la frontière entre combattants et non-combattants de 1914 à 1918."
+        ].join('\n')
+    }
+};
+
+const localDnbHomeworkId = (activityId = '') => new mongoose.Types.ObjectId(
+    crypto.createHash('md5').update(`conda-local-dnb-paragraph:${activityId}`).digest('hex').slice(0, 24)
+);
+
 const stripUnderlinedMarkup = (html = '') => {
     return String(html || '')
         .replace(/<span[^>]*class=["'][^"']*ai-red-mark[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi, '$1')
@@ -679,6 +720,86 @@ router.post('/anti-cheat/verify', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ ok: false, error: "Erreur de vérification." });
+    }
+});
+
+router.post('/submit-local-dnb-paragraph', async (req, res) => {
+    try {
+        const activityId = String(req.body?.activityId || '').trim();
+        const userText = String(req.body?.userText || '').trim();
+        const playerId = String(req.body?.playerId || '').trim();
+        const activity = LOCAL_DNB_PARAGRAPHS[activityId];
+        if (!activity) return res.status(404).json({ ok: false, error: 'Activité inconnue.' });
+        if (!userText) return res.status(400).json({ ok: false, error: 'Réponse vide.' });
+        if (!playerId || !mongoose.Types.ObjectId.isValid(playerId)) return res.status(400).json({ ok: false, error: 'Élève invalide.' });
+
+        const Homework = mongoose.model('Homework');
+        const Submission = mongoose.model('Submission');
+        const Student = mongoose.model('Student');
+        const Chapter = mongoose.model('Chapter');
+        const student = await Student.findById(playerId, 'currentClass className').lean();
+        const studentClass = String(student?.currentClass || student?.className || '').trim();
+        const chapter = await Chapter.findOne({
+            title: /premi[eè]re guerre mondiale/i,
+            section: /hist/i,
+            isArchived: { $ne: true }
+        }).sort({ updatedAt: -1 }).lean().catch(() => null);
+
+        const homeworkId = localDnbHomeworkId(activityId);
+        await Homework.findByIdAndUpdate(
+            homeworkId,
+            {
+                title: activity.title,
+                subject: 'HISTOIRE',
+                assessmentKind: 'dnb',
+                targetClassrooms: studentClass ? [studentClass] : [],
+                chapterId: chapter?._id || null,
+                levels: [{
+                    instruction: activity.instruction,
+                    aiHints: activity.aiHints,
+                    dnbSection: 'paragraphe',
+                    dnbSubject: 'histoire',
+                    maxPoints: 20,
+                    responseMode: 'text'
+                }],
+                assignedStudents: [],
+                isAllClass: true,
+                isEnabled: true
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+
+        const analysis = await EleveAI.correctDnbSimple({
+            userText,
+            instruction: activity.instruction,
+            aiHints: activity.aiHints,
+            studentClass,
+            context: {
+                assessmentKind: 'dnb',
+                dnbSection: 'paragraphe',
+                dnbSubject: 'histoire',
+                maxPoints: 20
+            }
+        });
+        const cleanFeedback = stripUnderlinedMarkup(analysis?.feedback_fond || '');
+        await Submission.create({
+            studentId: playerId,
+            homeworkId,
+            levelIndex: 0,
+            content: userText,
+            feedback: cleanFeedback,
+            grade: analysis.grade,
+            antiCheat: {
+                localDnbParagraph: true,
+                activityId,
+                officialSubject: activity.instruction,
+                correctionElements: activity.aiHints
+            }
+        });
+        res.json({ ...analysis, feedback_fond: cleanFeedback, ok: true });
+    } catch (error) {
+        console.error('submit-local-dnb-paragraph error:', error);
+        res.status(500).json({ ok: false, error: error.message || 'Erreur correction IA.' });
     }
 });
 

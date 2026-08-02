@@ -372,6 +372,7 @@ const sanitizeSteps = (steps = []) => {
                             question: String(pair?.question || '').trim().slice(0, 500),
                             answer: String(pair?.answer || pair?.expectedAnswer || '').trim().slice(0, 500),
                             generatedByAi: pair?.generatedByAi === true,
+                            validationType: pair?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open',
                             expectedKeywords: Array.isArray(pair?.expectedKeywords)
                                 ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
                                 : []
@@ -394,6 +395,7 @@ const sanitizeSteps = (steps = []) => {
                                 question: String(q?.question || q?.q || '').trim().slice(0, 500),
                                 expectedAnswer: String(q?.expectedAnswer || '').trim().slice(0, 500),
                                 generatedByAi: q?.generatedByAi === true,
+                                validationType: q?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open',
                                 expectedKeywords: Array.isArray(q?.expectedKeywords)
                                     ? q.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 30)
                                     : []
@@ -1126,6 +1128,9 @@ router.get('/gpt-inbox', async (req, res) => {
         const teacherEmail = String(req.query.teacherEmail || '').trim().toLowerCase();
         const teacherName = String(req.query.teacherName || '').trim().toLowerCase();
         const moduleId = String(req.query.moduleId || '').trim();
+        const studentId = String(req.query.studentId || '').trim();
+        const studentName = String(req.query.studentName || '').trim();
+        const studentClass = String(req.query.studentClass || '').trim();
         const limit = Math.min(60, Math.max(1, Number(req.query.limit || 20)));
         const query = {};
         const teacherFilters = [];
@@ -1136,6 +1141,9 @@ router.get('/gpt-inbox', async (req, res) => {
         }
         if (teacherFilters.length) query.$or = teacherFilters;
         if (moduleId) query.moduleId = moduleId;
+        if (studentId) query.studentId = studentId;
+        if (studentName) query.studentName = { $regex: escapeRegex(studentName), $options: 'i' };
+        if (studentClass) query.studentClass = { $regex: escapeRegex(studentClass), $options: 'i' };
         const entries = await GptInboxMessage.find(query).sort({ receivedAt: -1, createdAt: -1 }).limit(limit).lean();
         return res.json({ ok: true, entries });
     } catch (e) {

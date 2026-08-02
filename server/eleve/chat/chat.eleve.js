@@ -648,12 +648,15 @@ router.post('/message', async (req, res) => {
 router.get('/status', (_req, res) => {
     const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim() || 'gemini';
     const isGemini = provider === 'gemini';
+    const isAlbert = provider === 'albert';
     res.json({
         ok: true,
         provider,
-        label: isGemini ? 'Gemini' : 'Ollama',
+        label: isAlbert ? 'Albert API' : (isGemini ? 'Gemini' : 'Ollama'),
         model: isGemini
             ? String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim()
+            : isAlbert
+                ? String(process.env.ALBERT_MODEL || 'modele auto').trim()
             : String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '').trim()
     });
 });
@@ -685,7 +688,9 @@ router.post('/message/stream', async (req, res) => {
         writeNdjson(res, {
             status: String(process.env.AI_PROVIDER || '').toLowerCase().trim() === 'gemini'
                 ? "Connexion a Gemini..."
-                : "Connexion au modele local...",
+                : String(process.env.AI_PROVIDER || '').toLowerCase().trim() === 'albert'
+                    ? "Connexion a Albert API..."
+                    : "Connexion au modele local...",
             elapsedMs: Date.now() - startedAt
         });
 
@@ -709,6 +714,24 @@ router.post('/message/stream', async (req, res) => {
             }) || '').trim();
             if (answer && answer !== '[]' && answer !== 'ERROR_KEY') {
                 res.write(`${JSON.stringify({ text: answer, provider: 'gemini', model })}\n`);
+            }
+        } else if (provider === 'albert') {
+            answer = String(await AIEngine.askAlbert(prompt, system, {
+                ...aiOptions,
+                route: '/api/eleve/chat/message/stream',
+                feature: 'student-chat',
+                maxOutputTokens: Math.max(300, Number(aiOptions?.numPredict || 700)),
+                temperature: Number(aiOptions?.temperature ?? 0.2),
+                onStatus: (status) => writeNdjson(res, {
+                    status: status.message || 'Connexion a Albert API...',
+                    model: status.model,
+                    phase: status.phase,
+                    provider: 'albert',
+                    elapsedMs: Date.now() - startedAt
+                })
+            }) || '').trim();
+            if (answer && answer !== '[]' && answer !== 'ERROR_KEY') {
+                res.write(`${JSON.stringify({ text: answer, provider: 'albert' })}\n`);
             }
         } else {
             answer = await AIEngine.askOllamaServerStream(prompt, system, (text) => {
