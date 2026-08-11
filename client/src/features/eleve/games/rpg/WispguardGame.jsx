@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './WispguardGame.css';
+import { gameUrl } from './gameHosting';
 
 const createQuestion = () => {
   const left = 2 + Math.floor(Math.random() * 10);
@@ -62,11 +63,7 @@ export default function WispguardGame({ onExit }) {
   };
 
   const sendToGame = (type, payload = {}) => {
-    if (type === 'grant-bonus' && typeof frameRef.current?.contentWindow?.condamineGrantBonus === 'function') {
-      frameRef.current.contentWindow.condamineGrantBonus(payload.bonus);
-      return;
-    }
-    frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type, ...payload }, window.location.origin);
+    frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type, ...payload }, '*');
   };
 
   const openBonusQuestion = () => {
@@ -114,12 +111,7 @@ export default function WispguardGame({ onExit }) {
       context.imageSmoothingEnabled = false;
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/png');
-      const gameWindow = frameRef.current?.contentWindow;
-      if (typeof gameWindow?.condamineBeginSpritePlacement === 'function') {
-        gameWindow.condamineBeginSpritePlacement(dataUrl);
-      } else {
-        gameWindow?.postMessage({ source: 'condamine', type: 'place-blocking-sprite', dataUrl }, '*');
-      }
+      frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'place-blocking-sprite', dataUrl }, '*');
       setPlacingSprite(true);
       setSpriteNotice('Préparation du sprite…');
       focusGame();
@@ -257,12 +249,7 @@ export default function WispguardGame({ onExit }) {
         return output.toDataURL('image/png');
       });
 
-      const gameWindow = frameRef.current?.contentWindow;
-      if (typeof gameWindow?.condamineBeginAnimatedSpritePlacement === 'function') {
-        gameWindow.condamineBeginAnimatedSpritePlacement(frames);
-      } else {
-        gameWindow?.postMessage({ source: 'condamine', type: 'place-animated-sprite', frames }, '*');
-      }
+      frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'place-animated-sprite', frames }, '*');
       setPlacingSprite(true);
       spriteImportPendingRef.current = true;
       setSpriteNotice('Chargement des 12 poses sélectionnées…');
@@ -344,7 +331,7 @@ export default function WispguardGame({ onExit }) {
         <iframe
           ref={frameRef}
           title="La légende du Gardien"
-          src="/games/wispguard/index.html?v=manual-mage-calibration-1"
+          src={gameUrl('wispguard/index.html?v=bridge-1')}
           allow="autoplay; fullscreen"
           tabIndex="0"
         />

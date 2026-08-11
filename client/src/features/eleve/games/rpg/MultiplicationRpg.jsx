@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './MultiplicationRpg.css';
+import { gameUrl } from './gameHosting';
 
-const ASSET_ROOT = '/games/simple-rpg/assets';
+const ASSET_ROOT = gameUrl('simple-rpg/assets');
 const QUESTION_DELAY_MS = 20000;
 // Phase de test libre : les questions seront réactivées après validation du jeu.
 const ENABLE_MULTIPLICATION_QUESTIONS = false;

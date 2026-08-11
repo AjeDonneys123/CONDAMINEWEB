@@ -1,9 +1,29 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './MonsterTamerGame.css';
+import { gameUrl } from './gameHosting';
 
-export default function MonsterTamerGame({ onExit }) {
+export default function MonsterTamerGame({ onExit, learningContext = { lessons: [] } }) {
   const frameRef = useRef(null);
   const [started, setStarted] = useState(false);
+
+  const sendLearningContext = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({
+      source: 'condamine',
+      type: 'game-context',
+      context: learningContext
+    }, '*');
+  }, [learningContext]);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+      if (event.data?.source === 'condamine-game' && event.data?.type === 'game-ready') {
+        sendLearningContext();
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [sendLearningContext]);
 
   const focusGame = () => {
     setStarted(true);
@@ -33,9 +53,10 @@ export default function MonsterTamerGame({ onExit }) {
         <iframe
           ref={frameRef}
           title="Monster Tamer"
-          src="/games/monster-tamer/index.html"
+          src={gameUrl('monster-tamer/index.html?v=bridge-1')}
           allow="autoplay; fullscreen"
           tabIndex="0"
+          onLoad={sendLearningContext}
         />
         {!started && (
           <button type="button" className="monster-tamer-start" onClick={focusGame}>

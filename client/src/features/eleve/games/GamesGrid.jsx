@@ -5,6 +5,7 @@ import DashboardFolder from '../components/DashboardFolder';
 import MultiplicationRpg from './rpg/MultiplicationRpg';
 import WispguardGame from './rpg/WispguardGame';
 import MonsterTamerGame from './rpg/MonsterTamerGame';
+import { buildGameLearningContext } from './rpg/gameLearningContext';
 
 /**
  * 🎮 GRILLE ÉLÈVE FUSIONNÉE V2
@@ -23,20 +24,23 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   const [playingWispguard, setPlayingWispguard] = useState(false);
   const [playingMonsterTamer, setPlayingMonsterTamer] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [learningModules, setLearningModules] = useState([]);
 
   const loadData = async () => {
     setLoading(true);
     try {
         const sId = user._id || user.id;
-        const [actRes, skinRes, tappingRes] = await Promise.all([
+        const [actRes, skinRes, tappingRes, learningRes] = await Promise.all([
             fetch(`/api/eleve/games/list/${sId}`).then(r => r.json()),
             fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json()),
-            fetch('/api/eleve/games/tapping-project').then(r => r.ok ? r.json() : null)
+            fetch('/api/eleve/games/tapping-project').then(r => r.ok ? r.json() : null),
+            fetch(`/api/eleve/learning/list/${sId}`).then(r => r.ok ? r.json() : [])
         ]);
         
         setActivities((actRes || []).map(a => ({ ...a, actType: 'game' })));
         setSkins(skinRes || []);
         setTappingProject(tappingRes || null);
+        setLearningModules(Array.isArray(learningRes) ? learningRes : []);
     } catch(e) { console.error("Load Games Error", e); }
     setLoading(false);
   };
@@ -128,7 +132,12 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   }
 
   if (playingMonsterTamer) {
-      return <MonsterTamerGame onExit={() => setPlayingMonsterTamer(false)} />;
+      return (
+          <MonsterTamerGame
+            onExit={() => setPlayingMonsterTamer(false)}
+            learningContext={buildGameLearningContext(learningModules, user)}
+          />
+      );
   }
 
   return (
