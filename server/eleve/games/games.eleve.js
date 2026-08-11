@@ -86,6 +86,12 @@ function normalizeSubjectName(v = '') {
 // 1. Liste des activités assignées (Filtrée et Sécurisée)
 router.get('/list/:studentId', async (req, res) => {
     try {
+        // La prévisualisation professeur utilise un identifiant virtuel et non un ObjectId MongoDB.
+        // Les jeux intégrés restent disponibles côté client ; il n'y a simplement aucune activité
+        // individuelle à charger pour ce visiteur.
+        if (!mongoose.Types.ObjectId.isValid(String(req.params.studentId || ''))) {
+            return res.json([]);
+        }
         const Student = mongoose.model('Student');
         const GameLevel = mongoose.model('GameLevel');
         const Chapter = mongoose.model('Chapter');

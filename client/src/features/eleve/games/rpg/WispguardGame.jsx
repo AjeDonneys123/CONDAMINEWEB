@@ -331,7 +331,7 @@ export default function WispguardGame({ onExit }) {
         <iframe
           ref={frameRef}
           title="La légende du Gardien"
-          src={gameUrl('wispguard/index.html?v=bridge-1')}
+          src={gameUrl('wispguard/?v=bridge-2')}
           allow="autoplay; fullscreen"
           tabIndex="0"
         />
