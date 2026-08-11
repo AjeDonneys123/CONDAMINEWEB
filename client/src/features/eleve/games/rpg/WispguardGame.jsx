@@ -57,6 +57,20 @@ export default function WispguardGame({ onExit }) {
     };
   });
 
+  // L'iframe peut perdre le focus quand l'élève utilise les commandes situées
+  // autour du jeu. La barre d'espace doit néanmoins toujours ouvrir l'aide.
+  useEffect(() => {
+    const handleSpace = (event) => {
+      if (event.code !== 'Space' || event.repeat || question) return;
+      const tag = String(event.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      event.preventDefault();
+      openBonusQuestion();
+    };
+    window.addEventListener('keydown', handleSpace);
+    return () => window.removeEventListener('keydown', handleSpace);
+  }, [question]);
+
   const focusGame = () => {
     setStarted(true);
     window.setTimeout(() => frameRef.current?.focus(), 30);

@@ -27,8 +27,28 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
 
   const focusGame = () => {
     setStarted(true);
-    window.setTimeout(() => frameRef.current?.focus(), 30);
+    window.setTimeout(() => {
+      frameRef.current?.focus();
+      frameRef.current?.contentWindow?.postMessage({
+        source: 'condamine',
+        type: 'simulate-key',
+        code: 'Space',
+        key: ' '
+      }, '*');
+    }, 80);
   };
+
+  useEffect(() => {
+    const forwardKey = (event) => {
+      if (!started || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'ShiftLeft', 'ShiftRight'].includes(event.code)) return;
+      event.preventDefault();
+      frameRef.current?.contentWindow?.postMessage({
+        source: 'condamine', type: 'simulate-key', code: event.code, key: event.key
+      }, '*');
+    };
+    window.addEventListener('keydown', forwardKey);
+    return () => window.removeEventListener('keydown', forwardKey);
+  }, [started]);
 
   return (
     <div className="monster-tamer-shell">

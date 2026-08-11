@@ -39,11 +39,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
       return aTs - bTs;
     })[0] || { _crosses: 0, _bonuses: 0, weeksToRedemption: 3, _nextTs: null };
 
-  const crosses = primaryRecord._crosses;
+  const crosses = Math.max(0, Math.min(3, Number.isFinite(primaryRecord._crosses) ? primaryRecord._crosses : 0));
   const weeksLeft = Number(primaryRecord.weeksToRedemption || 3);
   const nextCrossRemovalAt = Number.isFinite(primaryRecord._nextTs) ? primaryRecord._nextTs : null;
   
-  const totalBonuses = primaryRecord._bonuses;
+  const totalBonuses = Math.max(0, Number.isFinite(primaryRecord._bonuses) ? primaryRecord._bonuses : 0);
   const currentBonuses = totalBonuses % 4; // 0, 1, 2, 3
   const nextAPlus = 4 - currentBonuses;
 
