@@ -1773,11 +1773,7 @@ function PresentationEditor({ block, onChange, readOnly, previewOnly = false, se
             key={slide.id}
             type="button"
             className={`presentation-slide-tab ${index === presentation.activeSlideIndex ? 'active' : ''}`}
-            onClick={() => {
-              if (index > presentation.activeSlideIndex && !isPresenterValid) return;
-              patchPresentation({ activeSlideIndex: index });
-            }}
-            disabled={index > presentation.activeSlideIndex && !isPresenterValid}
+            onClick={() => patchPresentation({ activeSlideIndex: index, activeEditorTab: 'slides' })}
           >
             {`Slide ${index + 1}`}
           </button>

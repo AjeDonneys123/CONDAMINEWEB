@@ -1,0 +1,283 @@
+# Season 1
+
+Project Setup:
+  ☐ create basic html page with minor css
+  ☐ running project on local web server
+  ☐ add phaser 3 library
+  ☐ create a basic phaser 3 game instance
+  ☐ add jsconfig to get phaser 3 types and intellisense
+
+Game Project Assets:
+  ☐ download game assets and add to project
+  ☐ show links to where assets can be found
+
+Battle System:
+  ☐ load game assets
+  ☐ create battle scene layout
+  ☐ create dialog menu
+  ☐ create option menu
+  ☐ create monster attack move list
+  ☐ handle player input
+  ☐ code optimization - move logic to components
+    ☐ create health component
+    ☐ create background component
+    ☐ create monster components
+  ☐ adding basic attack logic
+  ☐ taking damage and monster knock out
+  ☐ battle state machine
+    ☐ what is a finite state machine
+    ☐ review the battle states and what each one represents
+    ☐ implement each state
+    ☐ add item, flee, and monster states
+    ☐ player input improvements
+  ☐ battle scene polish
+    ☐ text animations
+    ☐ monster animations
+    ☐ skip animations
+    ☐ attack animations
+    ☐ scene transitions
+    ☐ custom fonts
+
+World Scene:
+  ☐ load level background
+  ☐ create player
+  ☐ handle player input
+  ☐ camera movement
+  ☐ handle grid based movement
+  ☐ handle collisions
+  ☐ add wild monster encounter logic
+  ☐ store player position in data manager
+
+Level Development With Tiled:
+  ☐ Basic level design concepts
+  ☐ Add collision layer
+  ☐ Add custom types to Tiled
+  ☐ Add game objects
+  ☐ Add npcs
+  ☐ Exporting level images and JSON
+
+World Scene Part 2:
+  ☐ add interactive game objects
+  ☐ dialog ui component
+  ☐ add npcs
+  ☐ add npc dialog
+  ☐ add npc movement
+
+Title Screen:
+  ☐ create basic title screen
+  ☐ add options menu
+  ☐ save & loading options
+  ☐ connecting option data to battle scene
+
+Bug Fixes Part 1:
+  ☐ battle scene - health bar value when battle starts
+  ☐ health bar - animation when value of delay is provided
+  ☐ battle scene - at battle start player can provide input
+  ☐ world scene - player movement, handle when only sprite direction changes
+
+Tools Part 1:
+  ☐ using tweakpane for testing
+    ☐ tweakpane basics
+    ☐ positioning game objects
+    ☐ monster attacks
+    ☐ animations
+  ☐ util function for moving game objects
+
+Saving & Loading:
+  ☐ add game menu with option to save game
+  ☐ update menu scene with continue option to load game
+  ☐ on new game, we should reset the player data (pos, monsters, etc)
+
+Monster Party & Monster Detail Scenes:
+  ☐ create monster party scene
+  ☐ allow player to select a monster in the scene
+  ☐ create monster detail scene
+  ☐ connect monster detail scene to monster party scene
+  ☐ add game menu option for viewing monster party scene
+
+Inventory:
+  ☐ create class for items and inventory
+  ☐ create ui screen for viewing items
+  ☐ update menu to have view bag option
+  ☐ update data manager to allow saving of inventory items
+  ☐ update ui screen to allow player to use items
+
+Battle Scene Part 2:
+  ☐ using items
+  ☐ running away
+  ☐ enemy random attack
+  ☐ player faint
+  ☐ attacking order
+  ☐ update data manager to persist monster data and current stats
+  ☐ dynamic monster data based on player party and encounter
+
+Audio:
+  ☐ adding background music
+  ☐ adding battle music
+  ☐ adding attack effects
+  ☐ connecting audio options to settings
+
+World Scene Part 3:
+  ☐ advanced wild monster encounter logic
+  ☐ buildings
+  ☐ items in the field
+  ☐ npc event data structure
+  ☐ respawn next to npc
+
+Leveling & Experience:
+  ☐ review math for leveling and exp gain
+  ☐ update monseters json file and types to include exp info
+  ☐ add new assets for exp bar
+  ☐ refactor hp bar into re-usable class
+  ☐ update battle scene to display exp bar
+  ☐ update monster details scene to display exp bar
+  ☐ gain exp when battle is over
+    ☐ add new battle state for tracking
+    ☐ new leveling utils for updates
+    ☐ update monster classes to support
+    ☐ update battle menu ui to have wordwrap
+
+Multiple Monsters:
+  ☐ load new assets
+  ☐ battle scene
+    ☐ battle monster class
+      ☐ add support for switching monster details
+    ☐ player battle monster class
+      ☐ add support for switching monster details
+      ☐ update deatch animation to hide health bar components
+    ☐ battle menu
+      ☐ update switch monster logic to align with flee attempt
+    ☐ battle scene
+      ☐ new state for switching monsters and scene resume logic
+      ☐ update existing states to support switching active monster
+      ☐ update existing logic for switching monster when active monster is knocked out
+      ☐ update logic tied to exp gain and message ordering
+      ☐ add ui to show number of monsters in party
+    ☐ monster party scene
+      ☐ add support for selecting monster for switching active monster during battle
+  ☐ world scene
+    ☐ refactor world menu into reusable component
+    ☐ create confirmation sub menu
+    ☐ switch monsters positions in party
+    ☐ release monster into the wild
+
+Catching Monsters:
+  ☐ review feature and load assets
+  ☐ item and monster model updates
+    ☐ add category to items
+    ☐ add new item type for capture
+    ☐ update monster id field to be a string
+    ☐ add new item to json data
+    ☐ add new item to data manager
+  ☐ create ball class
+    ☐ test new animations in test scene
+    ☐ add new animations to battle monster class
+  ☐ inventory scene
+    ☐ support for capture items
+    ☐ safe guard if monster party is full
+  ☐ battle menu
+    ☐ support to get used item details
+  ☐ battle scene
+    ☐ new battle states for using items
+    ☐ new battle state for catching monster with stubbed logic
+  ☐ review monster catching logic
+
+Cutscenes & In Game Events:
+  ☐ update npc animation logic
+    ☐ add new npc animations to animation json file
+    ☐ update npc json file to support animation key prefix
+    ☐ update npc class to support animation prefix
+  ☐ update map data
+    ☐ update tilemap to show event areas
+    ☐ update world scene to create event zone areas
+    ☐ update world scene update logic to check for overlaps with event zones
+  ☐ story events
+    ☐ create events json file for cutscenes
+    ☐ add events data types
+    ☐ update data utils for parsing events data
+    ☐ update data manager for viewed events
+    ☐ update npc class to support custom movement path
+    ☐ update world scene to handle custom events
+  ☐ story flags
+    ☐ update data manager for story flags
+    ☐ update npc json file to support required story flags
+    ☐ update events json file to support setting and removing flags
+    ☐ add data types for story flags
+  ☐ cutscenes
+    ☐ create new cutscene class and trigger from world scene
+    ☐ update dialog ui to be a new scene
+
+Full Screen Support:
+  ☐ update controls to support full screen button
+  ☐ update base scene to launch full screen mode
+
+Bug Fixes Part 2:
+  ☐ fix bug with resetting battle scene state
+  ☐ fix beach asset file name
+
+Multiple Encounter Areas & Special Tiles:
+  ☐ tiled updates
+    ☐ support multiple encounter zones
+    ☐ new class with tile type
+  ☐ update to support multiple encounter zones
+  ☐ import new spritesheet
+  ☐ refactor encounter check to start before player moves
+  ☐ add grass tiles
+
+# Season 2
+
+New Areas:
+  ☐ expand "main" level in tiled
+  ☐ organizing tiled level layers
+  ☐ create "forest" level in tiled
+  ☐ import new tiled levels and test
+  ☐ dynamic spawn locations
+  ☐ event file - npc spawn location updates
+  ☐ tiled level updates - add npcs, signs, and buildings
+
+Dynamic Camera:
+  ☐ new tiled layers for camera bounds
+  ☐ phaser camera updates
+
+Sign Message Enhancements:
+  ☐ create signs json file
+  ☐ update data utils to import new data
+  ☐ update sign class in tiled
+
+Player Running:
+  ☐ enhance player class to support dynamic speed
+  ☐ enhance player class to support dynamic animation duration
+
+NPC Battles 1:
+  ☐ load new assets for trainers
+  ☐ npc json enhancements
+  ☐ monster json enhancements
+  ☐ battle scene updates
+    ☐ prevent flee attempt
+    ☐ prevent capture attempts
+    ☐ state machine updates for npc trainer
+  ☐ world scene updates
+    ☐ support for npc battle event triggers
+    ☐ data manager and tracking defeated npcs
+    ☐ fix data utils for monster lookup
+
+Tools Part 2:
+  ☐ download new tool files
+  ☐ integrate tools with base scene class
+  ☐ state machine logging from config
+  ☐ promisify util review
+  ☐ custom saves
+  ☐ disable encounters
+  ☐ skip events
+
+-------------------------------
+
+Possible Future Content:
+  ☐ shops
+  ☐ battle npcs
+  ☐ monster encyclopedia
+  ☐ monster league/gyms
+
+-------------------------------
+☐ ✔ ✘
+-------------------------------

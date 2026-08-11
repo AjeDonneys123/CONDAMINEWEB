@@ -69,7 +69,14 @@ const parseFillBlankText = (value = '') => {
     const blanks = [];
     const quoteAt = (position) => {
         const match = source.slice(position).match(/^[\"“«]([^\"”»]+)[\"”»]/);
-        return match ? { raw: match[0], content: String(match[1] || '').trim(), end: position + match[0].length } : null;
+        if (!match) return null;
+        const content = String(match[1] || '')
+            .trim()
+            // Compatibilité avec les anciennes fiches déjà sauvegardées : les
+            // signes de structure ne font jamais partie de la réponse attendue.
+            .replace(/^\s*(?:\d{1,2}\s*[-.)]|[a-z]\)|[-–—•▪◦])\s*/i, '')
+            .trim();
+        return { raw: match[0], content, end: position + match[0].length };
     };
     let cursor = 0;
     while (cursor < source.length) {
@@ -468,6 +475,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         const raw = Array.isArray(module?.steps) ? module.steps : [];
         return [...raw]
             .filter((s) => {
+                if (String(s?.type || '') === 'quiz' || s?.hiddenFromLearning === true) return false;
                 const sid = String(s?.sectionId || '').trim();
                 if (!sid) return true;
                 if (visibleSectionIds.size === 0) return true;
@@ -570,6 +578,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
+    const isHardRecitation = currentStep?.type === 'question' && String(currentStep?.questionMode || 'easy') === 'hard';
     const studentIdForGpt = String(user?._id || user?.id || '').trim();
     const studentCodeForGpt = (() => {
         const raw = studentIdForGpt.replace(/[^a-f0-9]/gi, '').slice(-8);
@@ -714,6 +723,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     };
 
     const buildLearningGptPrompt = (session = {}) => {
+        if (String(session?.preview || '').trim()) return String(session.preview).trim();
         const moduleTitle = String(module?.title || module?.chapterTitle || 'apprentissage').trim();
         const studentName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || String(session?.studentName || '').trim();
         const studentClass = String(user?.currentClass || user?.studentClass || session?.studentClass || '').trim();
@@ -786,21 +796,27 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             setStudentGptStatus("URL du GPT CondaTuteur invalide. Mets le vrai lien du GPT dans VITE_STUDENT_GPT_URL puis redemarre le front.");
             return;
         }
+        const popup = window.open('about:blank', 'condamine-recitation-gpt');
+        if (popup) {
+            try { popup.document.write('<title>Préparation…</title><p style="font-family:Arial;padding:24px">Préparation de la récitation Condamine…</p>'); } catch (_) {}
+        }
         let session = null;
         try {
             session = await prepareTutorSession();
         } catch (e) {
+            try { popup?.close?.(); } catch (_) {}
             setStudentGptStatus(String(e?.message || 'Impossible de preparer la source CondaWeb.'));
             return;
         }
         const prompt = buildLearningGptPrompt(session);
         try {
             await copyTextForLearning(prompt);
-            setStudentGptStatus('Consigne CondaTuteur copiee. Colle-la dans ChatGPT.');
+            setStudentGptStatus('Leçon copiée en arrière-plan. Colle-la dans le GPT puis commence ta récitation.');
         } catch (_) {
             setStudentGptStatus('Consigne preparee. Copie-colle la fiche depuis CondaWeb si besoin.');
         }
-        window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
+        if (popup) popup.location.href = studentGptUrl;
+        else window.open(studentGptUrl, '_blank', 'noopener,noreferrer');
     };
 
     const openLearningGeminiTutor = async () => {
@@ -1303,9 +1319,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return sheetScrollRatio >= 0.9 && !activeOral && oralQueue.length === 0;
         }
         if (currentStep.type === 'video') return videoUnlocked;
-        if (currentStep.type === 'question') return true;
+        if (currentStep.type === 'question') return isHardRecitation ? studentGptValidated : true;
         return false;
-    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked]);
+    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, isHardRecitation, studentGptValidated]);
 
     useEffect(() => {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
@@ -2125,6 +2141,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                 return;
             }
         }
+        if (currentStep.type === 'question' && isHardRecitation) {
+            if (!studentGptValidated) {
+                setGateHint('Termine la récitation dans le GPT puis clique sur son lien de retour vers Condamine.');
+                return;
+            }
+            await finishQuestionPage();
+            return;
+        }
         if (currentStep.type === 'question') {
             await verifyQuestionPage();
             return;
@@ -2467,8 +2491,32 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
                 {currentStep.type === 'question' && (
                     <>
+                        {isHardRecitation && (
+                            <div className="learning-quiz-item" style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
+                                <div className="learning-quiz-head">
+                                    <div>
+                                        <span className="learning-quiz-number">Mode difficile</span>
+                                        <div className="learning-question">Récite toute la leçon avec tes propres phrases</div>
+                                    </div>
+                                    <span className="learning-quiz-status">{studentGptValidated ? '✓ Validée' : 'GPT'}</span>
+                                </div>
+                                <div className="learning-hint">
+                                    Le bouton copie discrètement la fiche et ouvre le GPT. Colle le contenu, commence ta récitation puis corrige seulement les éléments oubliés. Quand tout est acquis, clique sur le lien de retour donné par le GPT.
+                                </div>
+                                <div className="learning-actions">
+                                    <button type="button" className="learning-btn" onClick={openLearningGptTutor}>
+                                        Ouvrir le GPT et réciter
+                                    </button>
+                                    <button type="button" className="learning-btn ghost" disabled={studentGptChecking} onClick={() => checkStudentGptValidation({ manual: true })}>
+                                        {studentGptChecking ? 'Vérification…' : 'Vérifier mon retour'}
+                                    </button>
+                                </div>
+                                {!!studentGptStatus && <div className="learning-meta">{studentGptStatus}</div>}
+                            </div>
+                        )}
+                        {!isHardRecitation && <>
                         <div className="learning-quiz-intro">
-                            Réponds à toutes les questions. Les bonnes réponses seront conservées ; tu recommenceras uniquement celles qui sont incorrectes.
+                            Complète le texte à trous. Les accents, apostrophes, tirets et variantes de caractères français sont acceptés avec souplesse.
                         </div>
                         <div className="learning-quiz-list">
                             {questionItems.map((item, index) => {
@@ -2604,6 +2652,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 </button>
                             </div>
                         )}
+                        </>}
                     </>
                 )}
             </div>
@@ -2634,7 +2683,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                         {saving
                             ? 'Validation...'
                             : (currentStep?.type === 'question'
-                                ? 'Vérifier mes réponses'
+                                ? (isHardRecitation ? 'Valider après le retour GPT' : 'Vérifier mes réponses')
                                 : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))}
                     </button>
                 )}

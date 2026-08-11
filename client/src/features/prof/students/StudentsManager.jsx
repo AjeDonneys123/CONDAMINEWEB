@@ -60,6 +60,7 @@ export default function StudentsManager({ globalClassId }) {
   const [className, setClassName] = useState("");
   const [latePunishmentNames, setLatePunishmentNames] = useState([]);
   const [chapterNameById, setChapterNameById] = useState({});
+  const [dnbMethodProgress, setDnbMethodProgress] = useState({});
 
   // MODALES
   const [editingSub, setEditingSub] = useState(null); 
@@ -114,6 +115,19 @@ export default function StudentsManager({ globalClassId }) {
             })
             .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
+        const methodProgress = {};
+        progs.forEach((progress) => {
+            const gameId = String(progress?.gameId || '');
+            const match = gameId.match(/^dnb-doc-method-(presentation|image)::(\d+)$/);
+            if (!match) return;
+            const studentId = extractId(progress.studentId);
+            if (!studentId) return;
+            const total = Math.max(1, Number(match[2] || 1));
+            const reached = Math.min(total, Math.max(0, Number(progress.levelReached || 0)));
+            if (!methodProgress[studentId]) methodProgress[studentId] = {};
+            methodProgress[studentId][match[1]] = { reached, total, complete: reached >= total };
+        });
+        setDnbMethodProgress(methodProgress);
         const recoveryPairs = await Promise.all(
           myStudents.map(async (student) => {
             const sid = extractId(student?._id);
@@ -1358,6 +1372,12 @@ export default function StudentsManager({ globalClassId }) {
                                 <td className="p-4 text-xs font-bold text-slate-700 border-r border-b group-hover:text-indigo-700">
                                     {s.firstName} {s.lastName}
                                     {s.punishmentStatus !== 'NONE' && <span className="ml-2 text-[8px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-black">PUNI</span>}
+                                    {(() => {
+                                        const progress = dnbMethodProgress[extractId(s._id)] || {};
+                                        const items = [['presentation', 'DOC'], ['image', 'IMAGE']].filter(([key]) => progress[key]);
+                                        if (!items.length) return null;
+                                        return <div className="mt-1 flex flex-wrap gap-1">{items.map(([key, label]) => <span key={key} title={`Méthodo ${label.toLowerCase()} : ${progress[key].reached}/${progress[key].total}`} className={`rounded px-1.5 py-0.5 text-[8px] font-black ${progress[key].complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{label} {progress[key].complete ? '✓ FINI' : `${progress[key].reached}/${progress[key].total}`}</span>)}</div>;
+                                    })()}
                                 </td>
                                 <td className="p-2 text-center border-b">
                                     <button onClick={() => setViewingStudent(s)} className="bg-slate-100 text-slate-500 px-3 py-1 rounded hover:bg-indigo-100 hover:text-indigo-600 text-[10px] font-black">📋 SUIVI</button>

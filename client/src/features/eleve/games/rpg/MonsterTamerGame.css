@@ -1,0 +1,51 @@
+.monster-tamer-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: 100vw;
+  height: 100dvh;
+  box-sizing: border-box;
+  padding: 14px;
+  color: #fff;
+  background: radial-gradient(circle at 50% 0, #225f91 0, #142b50 46%, #081427 100%);
+}
+
+.monster-tamer-header,
+.monster-tamer-help,
+.monster-tamer-credit {
+  width: min(1500px, 100%);
+  margin-inline: auto;
+}
+
+.monster-tamer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 4px 4px 12px;
+}
+
+.monster-tamer-header h1 { margin: 2px 0 0; font-size: clamp(25px, 3vw, 46px); line-height: 1; font-weight: 950; }
+.monster-tamer-kicker { color: #fde047; font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+.monster-tamer-actions { display: flex; gap: 8px; }
+.monster-tamer-actions button,
+.monster-tamer-start { border: 0; border-radius: 14px; padding: 12px 18px; color: #172554; background: #fde047; font-weight: 950; box-shadow: 0 8px 24px #0005; cursor: pointer; }
+.monster-tamer-actions .is-exit { color: #fff; background: #dc2626; }
+.monster-tamer-help { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-bottom: 10px; }
+.monster-tamer-help span { padding: 7px 12px; border: 1px solid #ffffff24; border-radius: 999px; color: #dbeafe; background: #02061799; font-size: 12px; }
+.monster-tamer-stage { position: relative; width: min(1500px, 100%); min-height: 0; height: 100%; margin: auto; overflow: hidden; border: 4px solid #fde047; border-radius: 20px; background: #000; box-shadow: 0 20px 70px #000a; }
+.monster-tamer-stage iframe { display: block; width: 100%; height: 100%; border: 0; background: #000; }
+.monster-tamer-start { position: absolute; inset: 50% auto auto 50%; display: grid; justify-items: center; gap: 5px; min-width: 260px; transform: translate(-50%, -50%); font-size: 20px; }
+.monster-tamer-start span { font-size: 42px; }
+.monster-tamer-start small { font-size: 11px; font-weight: 750; }
+.monster-tamer-credit { padding-top: 7px; color: #bfdbfe; font-size: 10px; text-align: center; }
+
+@media (max-width: 700px) {
+  .monster-tamer-shell { padding: 8px; }
+  .monster-tamer-header { align-items: flex-start; }
+  .monster-tamer-actions button:first-child { display: none; }
+  .monster-tamer-help { justify-content: flex-start; }
+  .monster-tamer-help span { font-size: 10px; }
+}

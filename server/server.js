@@ -391,6 +391,7 @@ safeLoad('/api/classroom', './prof/classroom/classroom.prof');
 safeLoad('/api/scans', './prof/scans/scans.prof');
 safeLoad('/api/structure', './prof/structure/structure.prof');
 safeLoad('/api/studio', './prof/studio/studio.prof');
+safeLoad('/api/training-config', './training/training.routes');
 
 safeLoad('/api/eleve/auth', './eleve/auth/auth.eleve');
 safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');

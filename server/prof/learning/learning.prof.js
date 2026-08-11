@@ -1,10 +1,42 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
-const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage } = require('../models/prof.models');
+const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Chapter } = require('../models/prof.models');
 const fetch = require('node-fetch');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
+
+const inferAcademicLevel = (value = '') => {
+    const cleaned = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+    const match = cleaned.match(/^([1-6])/);
+    if (match) return match[1];
+    if (/^(T|TERM|TERMINALE)/.test(cleaned)) return 'T';
+    return '';
+};
+
+const assertLearningChapterMatchesTargets = async (data) => {
+    const chapterId = String(data?.chapterId || '').trim();
+    if (!chapterId || !mongoose.Types.ObjectId.isValid(chapterId)) {
+        throw Object.assign(new Error('Chapitre invalide.'), { status: 400 });
+    }
+    const chapter = await Chapter.findById(chapterId).lean();
+    if (!chapter) throw Object.assign(new Error('Chapitre introuvable.'), { status: 400 });
+    const targetClassrooms = [...new Set((data?.targetClassrooms || []).map((value) => String(value || '').trim()).filter(Boolean))];
+    const targetLevels = [...new Set(targetClassrooms.map(inferAcademicLevel).filter(Boolean))];
+    const chapterLevel = inferAcademicLevel(chapter.sharedLevel || chapter.classroom || '');
+    if (chapterLevel && targetLevels.some((level) => level !== chapterLevel)) {
+        throw Object.assign(new Error(`Ce chapitre est réservé au niveau ${chapterLevel}e et ne peut pas être publié pour ${targetClassrooms.join(', ')}.`), { status: 400 });
+    }
+    if (chapter.classroom && targetClassrooms.some((className) => String(className).toUpperCase() !== String(chapter.classroom).toUpperCase())) {
+        throw Object.assign(new Error(`Ce chapitre est réservé à la classe ${chapter.classroom}.`), { status: 400 });
+    }
+    const subject = String(data?.subject || '').trim().toUpperCase();
+    const chapterSection = String(chapter.section || '').trim().toUpperCase();
+    if (subject && chapterSection && subject !== chapterSection) {
+        throw Object.assign(new Error(`Le chapitre choisi appartient à ${chapterSection}, pas à ${subject}.`), { status: 400 });
+    }
+    return chapter;
+};
 
 const sanitizeGptInboxImages = (images = []) => {
     if (!Array.isArray(images)) return [];
@@ -246,13 +278,36 @@ const sanitizeSteps = (steps = []) => {
     const sanitized = steps
         .map((step, idx) => {
             const type = String(step?.type || '').toLowerCase();
-            if (!['sheet', 'video', 'question'].includes(type)) return null;
+            if (!['sheet', 'video', 'question', 'quiz'].includes(type)) return null;
             const base = {
                 id: String(step?.id || `step_${idx + 1}`),
                 title: String(step?.title || '').trim().slice(0, 120),
                 type,
                 sectionId: String(step?.sectionId || '').trim().slice(0, 120)
             };
+            if (type === 'quiz') {
+                return {
+                    ...base,
+                    hiddenFromLearning: true,
+                    gameQuestionBank: true,
+                    quizSourceTitle: String(step?.quizSourceTitle || '').trim().slice(0, 160),
+                    quizQuestions: (Array.isArray(step?.quizQuestions) ? step.quizQuestions : [])
+                        .map((question, questionIndex) => {
+                            const choices = (Array.isArray(question?.choices) ? question.choices : [])
+                                .map((choice) => String(choice || '').trim().slice(0, 500))
+                                .slice(0, 4);
+                            const correctIndex = Math.max(0, Math.min(Math.max(0, choices.length - 1), Number(question?.correctIndex || 0)));
+                            return {
+                                id: String(question?.id || `quiz_${idx + 1}_${questionIndex + 1}`).slice(0, 120),
+                                question: String(question?.question || '').trim().slice(0, 1000),
+                                choices,
+                                correctIndex
+                            };
+                        })
+                        .filter((question) => question.question && question.choices.filter(Boolean).length >= 2)
+                        .slice(0, 100)
+                };
+            }
             if (type === 'sheet') {
                 const sheetText = String(step?.sheetText || '').slice(0, 60000);
                 const sheetZoneRanges = sanitizeRanges(step?.sheetZoneRanges);
@@ -260,6 +315,7 @@ const sanitizeSteps = (steps = []) => {
                     ...base,
                     sheetUrl: String(step?.sheetUrl || '').trim(),
                     sheetText,
+                    sheetTextHtml: String(step?.sheetTextHtml || '').slice(0, 120000),
                     sheetSlidesCondition: String(step?.sheetSlidesCondition || '').trim().slice(0, 200),
                     sheetSlideSectionMap: (() => {
                         const raw = step?.sheetSlideSectionMap && typeof step.sheetSlideSectionMap === 'object'
@@ -314,6 +370,10 @@ const sanitizeSteps = (steps = []) => {
                 return {
                     ...base,
                     videoUrl: String(step?.videoUrl || '').trim(),
+                    videoSegmentId: String(step?.videoSegmentId || '').trim().slice(0, 120),
+                    segmentSourceStepId: String(step?.segmentSourceStepId || '').trim().slice(0, 120),
+                    segmentSourceUrl: String(step?.segmentSourceUrl || '').trim(),
+                    generatedFromVideoSegments: step?.generatedFromVideoSegments === true,
                     videoSourceName: String(step?.videoSourceName || '').trim().slice(0, 120),
                     thumbnailUrl: String(step?.thumbnailUrl || '').trim(),
                     videoTranscript,
@@ -344,6 +404,10 @@ const sanitizeSteps = (steps = []) => {
                 difficulty: ['easy', 'medium', 'hard'].includes(String(step?.difficulty || '').toLowerCase())
                     ? String(step.difficulty).toLowerCase()
                     : 'easy',
+                questionMode: String(step?.questionMode || '').toLowerCase() === 'hard' ? 'hard' : 'easy',
+                autoLinkedSheetId: String(step?.autoLinkedSheetId || '').trim().slice(0, 160),
+                autoLinkedSheetMode: String(step?.autoLinkedSheetMode || '').toLowerCase() === 'plan' ? 'plan' : 'full',
+                autoRevisionKind: String(step?.autoRevisionKind || '').toLowerCase() === 'plan' ? 'plan' : 'full',
                 customQuestion: String(step?.customQuestion || '').trim(),
                 sourceKind: ['sheet', 'video', 'slides'].includes(String(step?.sourceKind || '').toLowerCase())
                     ? String(step.sourceKind).toLowerCase()
@@ -369,7 +433,7 @@ const sanitizeSteps = (steps = []) => {
                 questionAnswerPairs: Array.isArray(step?.questionAnswerPairs)
                     ? step.questionAnswerPairs
                         .map((pair) => ({
-                            question: String(pair?.question || '').trim().slice(0, 500),
+                            question: String(pair?.question || '').trim().slice(0, pair?.validationType === 'fill_blanks' ? 60000 : 500),
                             answer: String(pair?.answer || pair?.expectedAnswer || '').trim().slice(0, 500),
                             generatedByAi: pair?.generatedByAi === true,
                             validationType: pair?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open',
@@ -391,8 +455,8 @@ const sanitizeSteps = (steps = []) => {
                         const rows = Array.isArray(raw[k]) ? raw[k] : [];
                         const mapped = rows
                             .map((q) => ({
-                                q: String(q?.q || q?.question || '').trim().slice(0, 500),
-                                question: String(q?.question || q?.q || '').trim().slice(0, 500),
+                                q: String(q?.q || q?.question || '').trim().slice(0, q?.validationType === 'fill_blanks' ? 60000 : 500),
+                                question: String(q?.question || q?.q || '').trim().slice(0, q?.validationType === 'fill_blanks' ? 60000 : 500),
                                 expectedAnswer: String(q?.expectedAnswer || '').trim().slice(0, 500),
                                 generatedByAi: q?.generatedByAi === true,
                                 validationType: q?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open',
@@ -769,7 +833,7 @@ router.post('/generate-section-questions', async (req, res) => {
 
 router.post('/slides/extract-text', async (req, res) => {
     try {
-        const presentationUrl = String(req.body?.presentationUrl || '').trim();
+        const presentationUrl = String(req.body?.presentationUrl || req.body?.presentationId || '').trim();
         const slideSelection = String(req.body?.slideSelection || '').trim();
         if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
         const selectedSlides = parseSlideSelection(slideSelection);
@@ -794,7 +858,7 @@ router.post('/slides/manifest', async (req, res) => {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        const presentationUrl = String(req.body?.presentationUrl || '').trim();
+        const presentationUrl = String(req.body?.presentationUrl || req.body?.presentationId || '').trim();
         const slideSelection = String(req.body?.slideSelection || '').trim();
         const filterCondition = String(req.body?.filterCondition || '').trim();
         const includeThumbnails = req.body?.includeThumbnails !== false;
@@ -1228,6 +1292,46 @@ router.delete('/gpt-inbox', async (req, res) => {
     }
 });
 
+router.get('/game-question-bank', async (req, res) => {
+    try {
+        const query = {};
+        const moduleId = String(req.query.moduleId || '').trim();
+        const chapterId = String(req.query.chapterId || '').trim();
+        const targetClass = String(req.query.className || req.query.targetClass || '').trim().toUpperCase();
+        if (moduleId) query._id = moduleId;
+        if (chapterId) query.chapterId = chapterId;
+        if (targetClass) query.targetClassrooms = targetClass;
+        query.isEnabled = { $ne: false };
+        const modules = await LearningModule.find(query).select('title chapterId sections steps').lean();
+        const questions = [];
+        modules.forEach((module) => {
+            const sectionNames = new Map((Array.isArray(module.sections) ? module.sections : [])
+                .map((section) => [String(section?.id || ''), String(section?.name || '')]));
+            (Array.isArray(module.steps) ? module.steps : []).forEach((step) => {
+                if (String(step?.type || '') !== 'quiz' || step?.gameQuestionBank === false) return;
+                (Array.isArray(step?.quizQuestions) ? step.quizQuestions : []).forEach((question) => {
+                    if (!String(question?.question || '').trim()) return;
+                    questions.push({
+                        id: String(question?.id || ''),
+                        moduleId: String(module._id || ''),
+                        moduleTitle: String(module.title || ''),
+                        chapterId: String(module.chapterId || ''),
+                        sectionId: String(step.sectionId || ''),
+                        sectionName: sectionNames.get(String(step.sectionId || '')) || '',
+                        quizTitle: String(step.title || ''),
+                        question: String(question.question || ''),
+                        choices: Array.isArray(question.choices) ? question.choices : [],
+                        correctIndex: Number(question.correctIndex || 0)
+                    });
+                });
+            });
+        });
+        res.json({ ok: true, count: questions.length, questions });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/:id', async (req, res) => {
     try {
         const row = await LearningModule.findById(req.params.id).lean();
@@ -1249,13 +1353,14 @@ router.post('/', async (req, res) => {
         data.presentationUrl = String(data.presentationUrl || '').trim();
         data.presentationSlidesFocus = String(data.presentationSlidesFocus || '').trim().slice(0, 200);
         if (!data.title) data.title = 'APPRENTISSAGE';
+        await assertLearningChapterMatchesTargets(data);
 
         const saved = data._id
             ? await LearningModule.findByIdAndUpdate(data._id, data, { new: true })
             : await LearningModule.create(data);
         res.json(saved);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(Number(e.status || 500)).json({ error: e.message });
     }
 });
 
@@ -1268,9 +1373,17 @@ router.patch('/:id/step-text', async (req, res) => {
         if (!moduleId || !stepId) return res.status(400).json({ error: 'moduleId/stepId requis' });
         const row = await LearningModule.findById(moduleId);
         if (!row) return res.status(404).json({ error: 'Apprentissage introuvable' });
-        const steps = Array.isArray(row.steps) ? [...row.steps] : [];
-        const idx = steps.findIndex((s) => String(s?.id || '') === stepId);
-        if (idx < 0) return res.status(404).json({ error: 'Étape introuvable' });
+        let steps = Array.isArray(row.steps) ? [...row.steps] : [];
+        let idx = steps.findIndex((s) => String(s?.id || '') === stepId);
+        if (idx < 0) {
+            const snapshot = req.body?.stepSnapshot && typeof req.body.stepSnapshot === 'object'
+                ? { ...req.body.stepSnapshot, id: stepId }
+                : null;
+            if (!snapshot) return res.status(404).json({ error: 'Étape introuvable' });
+            steps = sanitizeSteps([...steps, snapshot]);
+            idx = steps.findIndex((s) => String(s?.id || '') === stepId);
+            if (idx < 0) return res.status(400).json({ error: "Impossible de recréer l'étape" });
+        }
         const target = { ...(steps[idx] || {}) };
         if (kind === 'video') target.videoTranscript = text;
         else if (kind === 'question') target.materialText = text;
@@ -1293,14 +1406,24 @@ router.patch('/:id/step-data', async (req, res) => {
 
         const row = await LearningModule.findById(moduleId);
         if (!row) return res.status(404).json({ error: 'Apprentissage introuvable' });
-        const steps = Array.isArray(row.steps) ? [...row.steps] : [];
-        const idx = steps.findIndex((s) => String(s?.id || '') === stepId);
-        if (idx < 0) return res.status(404).json({ error: 'Étape introuvable' });
+        let steps = Array.isArray(row.steps) ? [...row.steps] : [];
+        let idx = steps.findIndex((s) => String(s?.id || '') === stepId);
+        if (idx < 0) {
+            const snapshot = req.body?.stepSnapshot && typeof req.body.stepSnapshot === 'object'
+                ? { ...req.body.stepSnapshot, id: stepId }
+                : null;
+            if (!snapshot) return res.status(404).json({ error: 'Étape introuvable' });
+            steps = sanitizeSteps([...steps, snapshot]);
+            idx = steps.findIndex((s) => String(s?.id || '') === stepId);
+            if (idx < 0) return res.status(400).json({ error: "Impossible de recréer l'étape" });
+        }
 
         const target = { ...(steps[idx] || {}) };
         if (patch.materialText !== undefined) target.materialText = String(patch.materialText || '').slice(0, 60000);
         if (patch.sheetText !== undefined) target.sheetText = String(patch.sheetText || '').slice(0, 60000);
+        if (patch.sheetTextHtml !== undefined) target.sheetTextHtml = String(patch.sheetTextHtml || '').slice(0, 120000);
         if (patch.videoTranscript !== undefined) target.videoTranscript = String(patch.videoTranscript || '').slice(0, 60000);
+        if (patch.questionMode !== undefined) target.questionMode = String(patch.questionMode || '').toLowerCase() === 'hard' ? 'hard' : 'easy';
         if (patch.startSec !== undefined) {
             target.startSec = Math.max(0, Number(patch.startSec || 0));
         }
@@ -1313,9 +1436,10 @@ router.patch('/:id/step-data', async (req, res) => {
             target.questionAnswerPairs = patch.questionAnswerPairs
                 .slice(0, 20)
                 .map((pair) => ({
-                    question: String(pair?.question || pair?.q || '').trim().slice(0, 500),
+                    question: String(pair?.question || pair?.q || '').trim().slice(0, pair?.validationType === 'fill_blanks' ? 60000 : 500),
                     answer: String(pair?.answer || pair?.expectedAnswer || '').trim().slice(0, 500),
                     generatedByAi: pair?.generatedByAi === true,
+                    validationType: pair?.validationType === 'fill_blanks' ? 'fill_blanks' : 'open',
                     expectedKeywords: Array.isArray(pair?.expectedKeywords)
                         ? pair.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
                         : []
@@ -1377,6 +1501,22 @@ router.patch('/:id/step-data', async (req, res) => {
         row.steps = steps;
         await row.save();
         res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.patch('/:id/structure', async (req, res) => {
+    try {
+        const row = await LearningModule.findById(String(req.params.id || '').trim());
+        if (!row) return res.status(404).json({ error: 'Apprentissage introuvable' });
+        const sections = Array.isArray(req.body?.sections) ? sanitizeSections(req.body.sections) : null;
+        const steps = Array.isArray(req.body?.steps) ? sanitizeSteps(req.body.steps) : null;
+        if (!sections || !steps) return res.status(400).json({ error: 'Sections et étapes requises' });
+        row.sections = sections;
+        row.steps = steps;
+        await row.save();
+        res.json({ ok: true, sections: row.sections, steps: row.steps });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

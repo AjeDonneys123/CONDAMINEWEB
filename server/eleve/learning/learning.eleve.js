@@ -356,6 +356,14 @@ const findTutorStep = (moduleDoc = {}, stepId = '', stepIndex = 0) => {
 };
 
 const collectTutorLessonText = (steps = [], currentStep = {}, stepIndex = 0) => {
+    if (String(currentStep?.autoLinkedSheetId || '').trim()) {
+        const structuredRevision = (Array.isArray(currentStep?.questionAnswerPairs) ? currentStep.questionAnswerPairs : [])
+            .filter((pair) => pair?.validationType === 'fill_blanks')
+            .map((pair) => String(pair?.question || pair?.q || '').trim())
+            .filter(Boolean)
+            .join('\n\n');
+        if (structuredRevision) return structuredRevision;
+    }
     return findSourceTextForQuestionStep(steps, Number(stepIndex || 0), currentStep)
         || collectSheetSourceText(currentStep)
         || steps.map(collectSheetSourceText).filter(Boolean).join('\n\n');
@@ -364,23 +372,24 @@ const collectTutorLessonText = (steps = [], currentStep = {}, stepIndex = 0) => 
 const buildTutorSessionContextText = ({ req, token, student, moduleDoc, stepId = '', stepIndex = 0 }) => {
     const steps = Array.isArray(moduleDoc.steps) ? moduleDoc.steps : [];
     const currentStep = findTutorStep(moduleDoc, stepId, stepIndex);
-    const questions = extractRealtimeQuestions(currentStep);
     const lessonText = collectTutorLessonText(steps, currentStep, stepIndex);
     const baseUrl = buildPublicBaseUrl(req);
-    const validationUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/validate`;
+    const attemptActionUrl = `${baseUrl}/api/eleve/learning/tutor-session/${encodeURIComponent(token)}/attempt`;
     const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.nickname || 'utilisateur';
     const moduleTitle = String(moduleDoc.title || moduleDoc.chapterTitle || 'Apprentissage').trim();
-    const questionList = questions.length
-        ? questions.map((q) => `${q.index}. ${q.question}`).join('\n')
-        : 'Aucune question professeur fournie. Ne cree pas de question.';
     return [
-        'SOURCE CONDAWEB POUR CONDATUTEUR',
+        'SESSION CONDAMINE RECITATION DIFFICILE',
         '',
         'IMPORTANT',
         '- Cette source remplace toute identification par nom/classe.',
         '- Tu dois utiliser exclusivement les informations ci-dessous.',
-        '- Au debut, prouve que tu as lu cette source en citant le titre exact de la lecon et une notion precise de la fiche.',
-        '- Ne donne le lien de validation qu apres une vraie maitrise.',
+        '- Les expressions entre guillemets sont les seuls elements obligatoires.',
+        '- L eleve recite librement avec ses propres phrases.',
+        '- Les lignes 1-, 2-, 3- sont les points principaux. Les lignes commencant par un tiret sont leurs sous-points.',
+        '- Apres chaque tentative, liste les expressions oubliees en indiquant toujours leur numero de point principal.',
+        '- Formule le retour ainsi: "Dans le point 2, tu as oublie le mot-cle ...". Precise le sous-point si cela aide.',
+        '- Apres ce retour, appelle l Action GPT.',
+        '- Ne fabrique jamais toi-meme un lien de validation.',
         '',
         'SESSION',
         `studentName: ${fullName}`,
@@ -389,19 +398,18 @@ const buildTutorSessionContextText = ({ req, token, student, moduleDoc, stepId =
         `moduleId: ${moduleDoc._id}`,
         `stepId: ${String(currentStep?.id || stepId || '')}`,
         `lessonTitle: ${moduleTitle}`,
+        `sessionToken: ${token}`,
         '',
-        'URL DE VALIDATION FINALE',
-        validationUrl,
+        'ACTION A APPELER APRES CHAQUE TENTATIVE',
+        `POST ${attemptActionUrl}`,
+        'Corps: { foundWords: string[], missingWords: string[], complete: boolean }',
         '',
-        'CONSIGNE DE VALIDATION',
-        'Quand la fiche est reellement maitrisee, dis: "Bravo, apprentissage valide."',
-        'Puis donne le lien de validation finale ci-dessus et demande a l utilisateur de cliquer dessus pour confirmer dans CondaWeb.',
-        'Ne donne pas ce lien avant la fin de l entrainement.',
+        'REGLE DE FIN',
+        '- complete=false tant qu une expression entre guillemets reste absente.',
+        '- complete=true uniquement lorsque toutes les expressions ont ete recitees au fil des tentatives.',
+        '- Quand complete=true, l Action renvoie returnUrl. Donne ce lien a l eleve et demande-lui de cliquer dessus.',
         '',
-        'QUESTIONS PROFESSEUR OBLIGATOIRES',
-        questionList,
-        '',
-        'FICHE DE REVISION / SOURCE DE CORRECTION',
+        'LECON COMPLETE A RECITER',
         String(lessonText || 'Aucune fiche textuelle disponible. Interroge seulement sur le titre et demande au professeur de verifier la fiche.').trim().slice(0, 25000)
     ].join('\n');
 };
@@ -428,24 +436,82 @@ const updateTutorInstructionDoc = async ({ student, text }) => {
     return { instructionDocId, instructionDocUrl, instructionDocTextUrl };
 };
 
-const markLearningCompletedByTutorToken = async ({ studentId = '', moduleId = '' }) => {
+const markLearningCompletedByTutorToken = async ({ studentId = '', moduleId = '', stepIndex = null }) => {
     const LearningModule = mongoose.model('LearningModule');
     const moduleDoc = await LearningModule.findById(moduleId);
     if (!moduleDoc) return false;
     const now = new Date();
     const sid = String(studentId);
     const stepsLength = Array.isArray(moduleDoc.steps) ? moduleDoc.steps.length : 0;
+    const requestedNextStep = stepIndex !== null && stepIndex !== '' && Number.isFinite(Number(stepIndex))
+        ? Math.min(stepsLength, Math.max(0, Math.floor(Number(stepIndex)) + 1))
+        : stepsLength;
     const completions = Array.isArray(moduleDoc.completions) ? [...moduleDoc.completions] : [];
     const idx = completions.findIndex((entry) => String(entry?.studentId || '') === sid);
     if (idx >= 0) {
         const base = typeof completions[idx]?.toObject === 'function' ? completions[idx].toObject() : completions[idx];
-        completions[idx] = { ...base, currentStep: stepsLength, completedAt: base?.completedAt || now, lastUpdateAt: now };
+        const nextStep = Math.max(Number(base?.currentStep || 0), requestedNextStep);
+        completions[idx] = {
+            ...base,
+            currentStep: nextStep,
+            completedAt: nextStep >= stepsLength ? (base?.completedAt || now) : base?.completedAt,
+            lastUpdateAt: now
+        };
     } else {
-        completions.push({ studentId, currentStep: stepsLength, completedAt: now, lastUpdateAt: now });
+        completions.push({
+            studentId,
+            currentStep: requestedNextStep,
+            completedAt: requestedNextStep >= stepsLength ? now : undefined,
+            lastUpdateAt: now
+        });
     }
     moduleDoc.completions = completions;
     await moduleDoc.save();
     return true;
+};
+
+const requireTutorActionKey = (req) => {
+    const expected = String(process.env.CONDAMINE_GPT_ACTION_KEY || process.env.GPT_INBOX_TOKEN || '').trim();
+    if (!expected) return;
+    const received = String(req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    const valid = received
+        && Buffer.byteLength(received) === Buffer.byteLength(expected)
+        && crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected));
+    if (!valid) {
+        const err = new Error('Action GPT non autorisee');
+        err.status = 401;
+        throw err;
+    }
+};
+
+const saveRecitationAttempt = async ({ studentId = '', moduleId = '', stepId = '', foundWords = [], missingWords = [], complete = false }) => {
+    const LearningModule = mongoose.model('LearningModule');
+    const moduleDoc = await LearningModule.findById(moduleId);
+    if (!moduleDoc) throw Object.assign(new Error('Apprentissage introuvable'), { status: 404 });
+    const sid = String(studentId);
+    const completions = Array.isArray(moduleDoc.completions) ? [...moduleDoc.completions] : [];
+    let idx = completions.findIndex((entry) => String(entry?.studentId || '') === sid);
+    if (idx < 0) {
+        completions.push({ studentId, currentStep: 0, recitationAttempts: [], recitationValidatedWords: [] });
+        idx = completions.length - 1;
+    }
+    const base = typeof completions[idx]?.toObject === 'function' ? completions[idx].toObject() : { ...(completions[idx] || {}) };
+    const cleanFound = [...new Set((foundWords || []).map((word) => String(word || '').trim()).filter(Boolean))].slice(0, 100);
+    const cleanMissing = [...new Set((missingWords || []).map((word) => String(word || '').trim()).filter(Boolean))].slice(0, 100);
+    const alreadyValidated = Array.isArray(base.recitationValidatedWords) ? base.recitationValidatedWords : [];
+    const validatedWords = [...new Set([...alreadyValidated, ...cleanFound])].slice(0, 200);
+    const attempts = Array.isArray(base.recitationAttempts) ? [...base.recitationAttempts] : [];
+    attempts.push({ stepId, foundWords: cleanFound, missingWords: cleanMissing, complete: complete === true, at: new Date() });
+    completions[idx] = {
+        ...base,
+        studentId,
+        recitationValidatedWords: validatedWords,
+        recitationAttempts: attempts.slice(-40),
+        lastUpdateAt: new Date()
+    };
+    moduleDoc.completions = completions;
+    await moduleDoc.save();
+    return { validatedWords, attemptCount: attempts.length };
 };
 
 router.post('/tutor-session', async (req, res) => {
@@ -506,6 +572,154 @@ router.post('/tutor-session', async (req, res) => {
         });
     } catch (e) {
         return res.status(e.status || 500).json({ ok: false, error: String(e?.message || 'Session tuteur impossible') });
+    }
+});
+
+router.get('/tutor-action-openapi.json', (req, res) => {
+    const baseUrl = buildPublicBaseUrl(req);
+    return res.json({
+        openapi: '3.1.0',
+        info: {
+            title: 'Condamine Recitation',
+            version: '1.0.0',
+            description: 'Enregistre chaque tentative de recitation et genere le lien de retour final.'
+        },
+        servers: [{ url: baseUrl }],
+        paths: {
+            '/api/eleve/learning/tutor-session/{token}/attempt': {
+                post: {
+                    operationId: 'saveRecitationAttempt',
+                    summary: 'Enregistrer une tentative de recitation',
+                    description: 'Appeler apres chaque tentative. Mettre complete a true uniquement lorsque toutes les expressions entre guillemets ont ete retrouvees.',
+                    parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    required: ['foundWords', 'missingWords', 'complete'],
+                                    properties: {
+                                        foundWords: { type: 'array', items: { type: 'string' } },
+                                        missingWords: { type: 'array', items: { type: 'string' } },
+                                        complete: { type: 'boolean' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    responses: {
+                        200: {
+                            description: 'Tentative enregistree. Si complete=true, returnUrl doit etre montre a l eleve.',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            ok: { type: 'boolean' }, complete: { type: 'boolean' },
+                                            validatedWords: { type: 'array', items: { type: 'string' } },
+                                            missingWords: { type: 'array', items: { type: 'string' } },
+                                            attemptCount: { type: 'integer' }, returnUrl: { type: 'string', format: 'uri' }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    security: [{ bearerAuth: [] }],
+                    'x-openai-isConsequential': false
+                }
+            }
+        },
+        components: {
+            securitySchemes: {
+                bearerAuth: { type: 'http', scheme: 'bearer' }
+            }
+        }
+    });
+});
+
+router.post('/tutor-session/:token/attempt', async (req, res) => {
+    try {
+        requireTutorActionKey(req);
+        const sessionToken = String(req.params.token || '').trim();
+        const payload = verifyTutorToken(sessionToken);
+        if (payload.kind !== 'learning_tutor') throw new Error('Type de session invalide');
+        const { student, moduleDoc } = await ensureLearningAccess({ studentId: payload.studentId, moduleId: payload.moduleId });
+        const foundWords = Array.isArray(req.body?.foundWords) ? req.body.foundWords : [];
+        const missingWords = Array.isArray(req.body?.missingWords) ? req.body.missingWords : [];
+        const complete = req.body?.complete === true;
+        const progress = await saveRecitationAttempt({
+            studentId: payload.studentId,
+            moduleId: payload.moduleId,
+            stepId: String(payload.stepId || ''),
+            foundWords,
+            missingWords,
+            complete
+        });
+        const GptInboxMessage = mongoose.model('GptInboxMessage');
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.nickname || 'utilisateur';
+        await GptInboxMessage.create({
+            receivedAt: new Date(),
+            moduleId: String(moduleDoc._id),
+            stepId: String(payload.stepId || ''),
+            studentId: String(student._id),
+            studentName: fullName,
+            studentClass: String(student.currentClass || ''),
+            type: complete ? 'recitation_complete_pending_return' : 'recitation_attempt',
+            message: complete ? 'Recitation complete' : 'Tentative de recitation',
+            feedback: missingWords.length ? `Oublis: ${missingWords.map(String).join(', ')}`.slice(0, 2000) : 'Aucun oubli signale.',
+            mastered: false,
+            source: 'gpt_recitation_action',
+            raw: JSON.stringify({ foundWords, missingWords, complete, attemptCount: progress.attemptCount }).slice(0, 5000)
+        });
+        const response = {
+            ok: true,
+            complete,
+            validatedWords: progress.validatedWords,
+            missingWords: missingWords.map(String),
+            attemptCount: progress.attemptCount
+        };
+        if (complete) {
+            const returnToken = signTutorPayload({
+                studentId: payload.studentId,
+                moduleId: payload.moduleId,
+                stepId: payload.stepId,
+                stepIndex: payload.stepIndex,
+                sessionToken,
+                exp: Date.now() + (20 * 60 * 1000),
+                kind: 'learning_tutor_return'
+            });
+            response.returnUrl = `${buildPublicBaseUrl(req)}/api/eleve/learning/tutor-return/${encodeURIComponent(returnToken)}`;
+        }
+        return res.json(response);
+    } catch (e) {
+        return res.status(e.status || 400).json({ ok: false, error: String(e?.message || e) });
+    }
+});
+
+router.get('/tutor-return/:token', async (req, res) => {
+    try {
+        const payload = verifyTutorToken(String(req.params.token || ''));
+        if (payload.kind !== 'learning_tutor_return') throw new Error('Lien de retour invalide');
+        const { student, moduleDoc } = await ensureLearningAccess({ studentId: payload.studentId, moduleId: payload.moduleId });
+        if (String(student?.activeTutorSession?.token || '') !== String(payload.sessionToken || '')) {
+            throw new Error('Ce lien de retour a deja ete utilise ou remplace');
+        }
+        await markLearningCompletedByTutorToken({ studentId: payload.studentId, moduleId: payload.moduleId, stepIndex: payload.stepIndex });
+        const GptInboxMessage = mongoose.model('GptInboxMessage');
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.nickname || 'utilisateur';
+        await GptInboxMessage.create({
+            receivedAt: new Date(), moduleId: String(moduleDoc._id), stepId: String(payload.stepId || ''),
+            studentId: String(student._id), studentName: fullName, studentClass: String(student.currentClass || ''),
+            type: 'learning_validated', message: 'Apprentissage valide', feedback: 'Recitation GPT terminee et retour confirme.',
+            mastered: true, source: 'gpt_recitation_return_link'
+        });
+        await mongoose.model('Student').updateOne({ _id: student._id }, { $unset: { activeTutorSession: 1 } });
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Récitation validée</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f3ff;font-family:Arial;color:#111827}main{max-width:680px;margin:20px;padding:34px;border:3px solid #86efac;border-radius:26px;background:white;text-align:center;box-shadow:0 20px 60px #312e8130}h1{color:#15803d;font-size:36px}p{font-size:18px;font-weight:700;line-height:1.5}</style></head><body><main><h1>✓ Récitation validée</h1><p>${fullName}, ton résultat a bien été enregistré dans Condamine.</p><p>Tu peux fermer cet onglet et revenir à l’exercice.</p></main></body></html>`);
+    } catch (e) {
+        return res.status(e.status || 400).type('text/plain').send(`Validation impossible: ${String(e?.message || e)}`);
     }
 });
 

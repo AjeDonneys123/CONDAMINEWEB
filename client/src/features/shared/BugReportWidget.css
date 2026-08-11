@@ -1,7 +1,8 @@
 .bug-fab {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  /* Garde libres les aides et raccourcis affichés en bas des écrans. */
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   z-index: 21000;
   border: none;
   border-radius: 999px;

@@ -143,13 +143,13 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
       <div className="top-bar">
         <div className="flex items-center gap-4">
           <h1 className="brand-name">Condamine</h1>
-          {(user.isDeveloper || isJean) && (
-            <button onClick={onBackToProf} className="v80-back-prof">🎓 RETOUR PROF</button>
+          {(user.isDeveloper || isJean || user.isVisitorPreview) && (
+            <button onClick={onBackToProf} className="v80-back-prof">{user.isVisitorPreview ? '↩ CHANGER DE NIVEAU' : '🎓 RETOUR PROF'}</button>
           )}
         </div>
 
         <div className="flex items-center gap-3">
-            <button onClick={handlePasswordReset} className="v80-password-btn">RÉCUPÉRER MON MOT DE PASSE</button>
+            {!user.isVisitorPreview && <button onClick={handlePasswordReset} className="v80-password-btn">RÉCUPÉRER MON MOT DE PASSE</button>}
             <div className="v80-user-info">
                 <span className="v80-user-name">{user.firstName} {user.lastName}</span>
                 <div className="v80-badges-row">
@@ -175,7 +175,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
             <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
             <button onClick={() => onTabChange('training')} className={`tab-item ${activeTab === 'training' ? 'tab-active' : ''}`}>{trainingTabLabel}</button>
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
-            <button onClick={() => onTabChange('chat')} className={`tab-item ${activeTab === 'chat' ? 'tab-active' : ''}`}>💬 CHAT</button>
+            <button onClick={() => onTabChange('chat')} className={`tab-item ${activeTab === 'chat' ? 'tab-active' : ''}`}>🔎 RECHERCHE</button>
         </div>
 
         {/* Stats à Droite (Simple et discret) */}

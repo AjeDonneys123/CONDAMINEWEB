@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Course } = require('../models/prof.models');
+const { Course, CourseSection } = require('../models/prof.models');
 
 const extractPresentationId = (value = '') => {
     const text = String(value || '').trim();
@@ -43,6 +43,8 @@ const normalizeCourse = (body = {}) => {
         targetClassroomId,
         targetClassroomName: String(body.targetClassroomName || '').trim(),
         isEnabled: body.isEnabled !== false,
+        courseSectionId: String(body.courseSectionId || '').trim(),
+        order: Math.max(0, Number(body.order || 0)),
         publishedUntilSlide: Math.max(0, Math.floor(Number(body.publishedUntilSlide || 0))),
         overlays: Array.isArray(body.overlays) ? body.overlays : []
     };
@@ -54,6 +56,39 @@ router.get('/', async (req, res) => {
         const query = classId ? { targetClassroomId: classId } : {};
         const rows = await Course.find(query).sort({ date: -1, createdAt: -1 }).lean();
         res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/sections/list', async (req, res) => {
+    try {
+        const classId = String(req.query.classId || '').trim();
+        const rows = await CourseSection.find(classId ? { targetClassroomId: classId } : {}).sort({ order: 1, createdAt: 1 }).lean();
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/sections', async (req, res) => {
+    try {
+        const name = String(req.body?.name || '').trim();
+        const targetClassroomId = String(req.body?.targetClassroomId || '').trim();
+        if (!name || !targetClassroomId) return res.status(400).json({ error: 'Nom et classe requis' });
+        const count = await CourseSection.countDocuments({ targetClassroomId });
+        const row = await CourseSection.create({ name, targetClassroomId, order: count });
+        res.status(201).json(row);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.patch('/:id/placement', async (req, res) => {
+    try {
+        const row = await Course.findByIdAndUpdate(req.params.id, { $set: { courseSectionId: String(req.body?.courseSectionId || ''), order: Math.max(0, Number(req.body?.order || 0)) } }, { new: true }).lean();
+        if (!row) return res.status(404).json({ error: 'Cours introuvable' });
+        res.json(row);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

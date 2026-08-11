@@ -219,7 +219,9 @@ const Models = {
                 chatDocRevisionCount: { type: Number, default: 0 },
                 chatDocRevisionAt: { type: Date, default: null },
                 chatLogText: { type: String, default: '' },
-                sheetTimesMs: { type: Object, default: {} }
+                sheetTimesMs: { type: Object, default: {} },
+                recitationAttempts: { type: [Object], default: [] },
+                recitationValidatedWords: { type: [String], default: [] }
             }],
             default: []
         },
@@ -273,6 +275,8 @@ const Models = {
         targetClassroomId: { type: String, required: true, index: true },
         targetClassroomName: { type: String, default: '', trim: true },
         isEnabled: { type: Boolean, default: true },
+        courseSectionId: { type: String, default: '', index: true },
+        order: { type: Number, default: 0 },
         publishedUntilSlide: { type: Number, default: 0, min: 0 },
         overlays: {
             type: [{
@@ -288,6 +292,13 @@ const Models = {
             default: []
         },
         date: { type: Date, default: Date.now }
+    }),
+
+    CourseSection: getModel('CourseSection', {
+        name: { type: String, required: true, trim: true },
+        targetClassroomId: { type: String, required: true, index: true },
+        order: { type: Number, default: 0 },
+        createdAt: { type: Date, default: Date.now }
     }),
 
     Lecture: getModel('Lecture', {

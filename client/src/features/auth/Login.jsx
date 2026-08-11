@@ -169,6 +169,28 @@ export default function Login({ onLoginSuccess }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    const visitorTyped = clean(inputLast) === 'prof' && !clean(inputFirst);
+    if (selectedProfile?.type === 'visitor-teacher' || visitorTyped) {
+      if (password !== 'spartacus') {
+        alert('Mot de passe visiteur incorrect.');
+        return;
+      }
+      const visitorUser = {
+        id: 'visitor-prof-preview',
+        _id: 'visitor-prof-preview',
+        firstName: 'Prof',
+        lastName: 'visiteur',
+        role: 'visitor-prof',
+        isVisitorTeacher: true,
+        isVisitorPreview: true,
+        currentClass: '',
+        behaviorRecords: [],
+        assignedGroups: []
+      };
+      localStorage.setItem('player', JSON.stringify(visitorUser));
+      onLoginSuccess(visitorUser);
+      return;
+    }
     if (!selectedProfile) {
       // Détection silencieuse d'un compte saisi à la main (sans suggestion affichée).
       const typedFirst = clean(inputFirst);
@@ -314,7 +336,8 @@ export default function Login({ onLoginSuccess }) {
   const isStudentProfile = selectedProfile?.type === 'student';
   const isTestStudentProfile = isStudentProfile && clean(selectedProfile?.lastName) === 'test';
   const hasStudentPassword = selectedProfile?.hasStudentPassword === true;
-  const hasTypedIdentity = clean(inputLast).length > 0 && clean(inputFirst).length > 0;
+  const visitorIdentity = clean(inputLast) === 'prof' && !clean(inputFirst);
+  const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
     ? (isTestStudentProfile || devFinderEnabled || password.trim().length > 0)
     : hasTypedIdentity;
@@ -415,7 +438,7 @@ export default function Login({ onLoginSuccess }) {
             )}
           </div>
 
-          {(isTeacherProfile || (isStudentProfile && !devFinderEnabled)) && (
+          {(isTeacherProfile || selectedProfile?.type === 'visitor-teacher' || (clean(inputLast) === 'prof' && !clean(inputFirst)) || (isStudentProfile && !devFinderEnabled)) && (
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -536,6 +559,19 @@ export default function Login({ onLoginSuccess }) {
 
           <button className="login-submit-btn" disabled={loading || !canSubmit}>
             {loading ? 'Connexion...' : 'Connexion'}
+          </button>
+          <button
+            type="button"
+            className="student-password-btn"
+            onClick={() => {
+              setInputClass('');
+              setInputLast('prof');
+              setInputFirst('');
+              setSelectedProfile({ type: 'visitor-teacher', id: 'visitor-prof-preview', lastName: 'prof', firstName: '' });
+              setPassword('');
+            }}
+          >
+            👀 ACCÈS PROFESSEUR VISITEUR
           </button>
           {googleClientId && (
             <div className="login-google-section">

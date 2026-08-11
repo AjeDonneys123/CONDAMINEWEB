@@ -2,8 +2,23 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
+import SheetRichTextEditor from './SheetRichTextEditor';
 
 const uid = () => `st_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+const inferLearningLevelFromClass = (value = '') => {
+    const match = String(value || '').trim().toUpperCase().match(/^([1-6])/);
+    return match ? match[1] : '';
+};
+const normalizeLearningLevel = (value = '') => {
+    const cleaned = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+    if (/^(6|6E|6EME|SIXIEME)/.test(cleaned)) return '6';
+    if (/^(5|5E|5EME|CINQUIEME)/.test(cleaned)) return '5';
+    if (/^(4|4E|4EME|QUATRIEME)/.test(cleaned)) return '4';
+    if (/^(3|3E|3EME|TROISIEME)/.test(cleaned)) return '3';
+    if (/^(2|2DE|2NDE|SECONDE)/.test(cleaned)) return '2';
+    if (/^(1|1ERE|PREMIERE)/.test(cleaned)) return '1';
+    return cleaned;
+};
 const renderFillBlankDetectionPreview = (value = '', placeholder = '') => {
     const source = String(value || '');
     const matcher = /[\"“«]([^\"”»]+)[\"”»]/g;
@@ -209,6 +224,21 @@ const withSegmentParams = (rawUrl = '', startSec = 0, endSec = 0) => {
         return base;
     }
 };
+const withAutoplay = (rawUrl = '') => {
+    const base = String(rawUrl || '').trim();
+    if (!base) return '';
+    try {
+        const u = new URL(base, window.location.origin);
+        u.searchParams.set('autoplay', '1');
+        if (u.hostname.includes('youtube.com')) {
+            u.searchParams.set('enablejsapi', '1');
+            u.searchParams.set('playsinline', '1');
+        }
+        return u.toString();
+    } catch (_) {
+        return base;
+    }
+};
 const QUESTION_DRAFT_FIELDS = [
     'title',
     'difficulty',
@@ -236,18 +266,38 @@ const QUESTION_DRAFT_FIELDS = [
 
 const emptyStep = (type = 'sheet') => {
     if (type === 'video') return { id: uid(), type: 'video', title: 'Vidéo', videoUrl: '', videoSourceName: '', thumbnailUrl: '', videoTranscript: '', questionCount: 3, startSec: 0, endSec: 0, mustWatchToEnd: true };
+    if (type === 'quiz') return {
+        id: uid(),
+        type: 'quiz',
+        title: 'Quiz de révision',
+        hiddenFromLearning: true,
+        gameQuestionBank: true,
+        quizQuestions: [{
+            id: uid(),
+            question: '',
+            choices: ['', '', '', ''],
+            correctIndex: 0
+        }]
+    };
     if (type === 'question') return {
         id: uid(),
         type: 'question',
         title: 'Questions contrôlées',
         difficulty: 'easy',
+        questionMode: 'easy',
         customQuestion: '',
         sourceKind: 'sheet',
         sourceSheetUrl: '',
         sourceVideoRef: '',
         sourceSlidesUrl: '',
-        questionCount: 3,
-        questionAnswerPairs: [],
+        questionCount: 1,
+        questionAnswerPairs: [{
+            question: '',
+            answer: '',
+            expectedKeywords: [],
+            generatedByAi: false,
+            validationType: 'fill_blanks'
+        }],
         orangeHighlights: [],
         redHighlights: [],
         sheetAnnotations: [],
@@ -255,7 +305,430 @@ const emptyStep = (type = 'sheet') => {
         minKeywordMatches: 1,
         aiPreviewQuestions: []
     };
-    return { id: uid(), type: 'sheet', title: 'Fiche', sheetUrl: '', sheetText: '', questionCount: 3, minReadSeconds: 20 };
+    return { id: uid(), type: 'sheet', title: 'Fiche', sheetUrl: '', sheetText: '', sheetTextHtml: '', questionCount: 3, minReadSeconds: 20 };
+};
+
+const sheetToFillBlankText = (sheet = null) => {
+    const plainText = String(sheet?.sheetText || '');
+    const html = String(sheet?.sheetTextHtml || '').trim();
+    if (!html || typeof DOMParser === 'undefined') return plainText;
+    try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        doc.body.querySelectorAll('strong, b').forEach((node) => {
+            const value = String(node.textContent || '')
+                .trim()
+                .replace(/^["“”«»]+|["“”«»]+$/g, '')
+                // Les marqueurs servent uniquement à structurer la fiche : un
+                // élève ne doit jamais avoir à saisir « - », « 1- » ou « a) ».
+                .replace(/^\s*(?:\d{1,2}\s*[-.)]|[a-z]\)|[-–—•▪◦])\s*/i, '')
+                .trim();
+            if (value) node.replaceWith(doc.createTextNode(`"${value}"`));
+            else node.replaceWith(doc.createTextNode(''));
+        });
+        doc.body.querySelectorAll('br').forEach((node) => node.replaceWith(doc.createTextNode('\n')));
+        doc.body.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6').forEach((node) => {
+            node.appendChild(doc.createTextNode('\n'));
+        });
+        const converted = String(doc.body.textContent || '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/[ \t]+\n/g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        return converted || plainText;
+    } catch {
+        return plainText;
+    }
+};
+
+const unquoteKeywordsOnFirstContentLine = (value = '') => {
+    let firstContentLineHandled = false;
+    return String(value || '').split('\n').map((line) => {
+        if (firstContentLineHandled || !String(line || '').trim()) return line;
+        firstContentLineHandled = true;
+        return String(line || '').replace(/["“«]([^"”»\n]+)["”»]/g, '$1');
+    }).join('\n');
+};
+
+const structureRevisionLines = (value = '') => {
+    let titleHandled = false;
+    let pointNumber = 0;
+    return String(value || '').replace(/\r/g, '').split('\n').map((line) => {
+        const raw = String(line || '');
+        const trimmed = raw.trim();
+        if (!trimmed) return '';
+        if (!titleHandled) {
+            titleHandled = true;
+            return trimmed;
+        }
+        if (/^[-–—•▪◦➤⇒→]\s*/.test(trimmed)) {
+            return `- ${trimmed.replace(/^[-–—•▪◦➤⇒→]\s*/, '')}`;
+        }
+        pointNumber += 1;
+        return `${pointNumber}- ${trimmed.replace(/^\d+\s*[-.)]\s*/, '')}`;
+    }).join('\n');
+};
+
+const structureRevisionHtml = (value = '') => {
+    const html = String(value || '').trim();
+    if (!html || typeof DOMParser === 'undefined') return html;
+    try {
+        const doc = new DOMParser().parseFromString(`<div id="revision-root">${html}</div>`, 'text/html');
+        const root = doc.getElementById('revision-root');
+        if (!root) return html;
+        const blockTags = new Set(['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+        let atLineStart = true;
+        let titleHandled = false;
+        let pointNumber = 0;
+        const visit = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const source = String(node.nodeValue || '');
+                if (!atLineStart || !source.trim()) return;
+                if (!titleHandled) {
+                    titleHandled = true;
+                    node.nodeValue = source;
+                } else if (/^\s*[-–—•▪◦➤⇒→]\s*/.test(source)) {
+                    node.nodeValue = source.replace(/^\s*[-–—•▪◦➤⇒→]\s*/, '- ');
+                } else {
+                    pointNumber += 1;
+                    node.nodeValue = source.replace(/^\s*(?:\d+\s*[-.)]\s*)?/, `${pointNumber}- `);
+                }
+                atLineStart = false;
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            if (node.tagName === 'BR') {
+                atLineStart = true;
+                return;
+            }
+            const isBlock = blockTags.has(node.tagName);
+            if (isBlock) atLineStart = true;
+            Array.from(node.childNodes).forEach(visit);
+            if (isBlock) atLineStart = true;
+        };
+        Array.from(root.childNodes).forEach(visit);
+        return root.innerHTML;
+    } catch (_) {
+        return html;
+    }
+};
+
+const structureSheetForRevision = (sheet = null) => ({
+    ...sheet,
+    sheetText: structureRevisionLines(sheet?.sheetText || ''),
+    sheetTextHtml: structureRevisionHtml(sheet?.sheetTextHtml || '')
+});
+
+const renumberRemainingMainPoints = (value = '') => {
+    let nextNumber = 0;
+    return String(value || '').split('\n').map((line) => {
+        const match = String(line || '').match(/^(\s*)(?:\d+\s*[-.)]|-\s*\d+)\s*(.*)$/);
+        if (!match) return line;
+        nextNumber += 1;
+        return `${match[1]}${nextNumber}- ${match[2]}`;
+    }).join('\n');
+};
+
+const escapeGeneralSheetHtml = (value = '') => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+// Découpe le HTML de la Superfiche ligne par ligne sans casser les balises
+// englobantes. Un éditeur contenteditable peut produire par exemple
+// `<strong>ligne 1<br>ligne 2</strong>` : un simple split sur BR faisait perdre
+// le gras de la ligne 2 et donc les mots-clés des fiches de sous-sections.
+const generalSheetHtmlToBlocks = (richHtml = '') => {
+    if (!String(richHtml || '').trim() || typeof DOMParser === 'undefined') return [];
+    const doc = new DOMParser().parseFromString(`<div id="general-sheet-root">${String(richHtml)}</div>`, 'text/html');
+    const root = doc.getElementById('general-sheet-root');
+    if (!root) return [];
+
+    const blocks = [];
+    let textParts = [];
+    let htmlParts = [];
+    const flush = () => {
+        const text = textParts.join('').replace(/\u00a0/g, ' ').trim();
+        const html = htmlParts.join('').trim();
+        if (text) blocks.push({ text, html: `<div>${html || escapeGeneralSheetHtml(text)}</div>` });
+        textParts = [];
+        htmlParts = [];
+    };
+    const wrapText = (text = '', context = {}) => {
+        let value = escapeGeneralSheetHtml(String(text || '').replace(/\u00a0/g, ' '));
+        if (context.italic) value = `<em>${value}</em>`;
+        if (context.color) value = `<span style="color:${escapeGeneralSheetHtml(context.color)}">${value}</span>`;
+        if (context.bold) value = `<strong>${value}</strong>`;
+        return value;
+    };
+    const visit = (node, inherited = {}) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const value = String(node.nodeValue || '').replace(/\u00a0/g, ' ');
+            if (!value) return;
+            textParts.push(value);
+            htmlParts.push(wrapText(value, inherited));
+            return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const element = node;
+        if (element.tagName === 'BR') {
+            flush();
+            return;
+        }
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'SVG'].includes(element.tagName)) return;
+        const blockElement = ['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(element.tagName);
+        if (blockElement && textParts.join('').trim()) flush();
+        const fontWeight = String(element.style?.fontWeight || '').toLowerCase();
+        const color = String(element.style?.color || element.getAttribute?.('color') || inherited.color || '').trim();
+        const context = {
+            bold: Boolean(inherited.bold
+                || ['B', 'STRONG'].includes(element.tagName)
+                || element.getAttribute?.('data-expected-word') === 'true'
+                || fontWeight === 'bold'
+                || Number.parseInt(fontWeight, 10) >= 600),
+            italic: Boolean(inherited.italic
+                || ['I', 'EM'].includes(element.tagName)
+                || String(element.style?.fontStyle || '').toLowerCase() === 'italic'),
+            color
+        };
+        Array.from(element.childNodes).forEach((child) => visit(child, context));
+        if (blockElement && textParts.join('').trim()) flush();
+    };
+    Array.from(root.childNodes).forEach((node) => visit(node, {}));
+    flush();
+    return blocks;
+};
+
+const toRomanPartNumber = (value = 1) => {
+    const safe = Math.max(1, Math.min(20, Number(value || 1)));
+    const table = [
+        [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']
+    ];
+    let remaining = safe;
+    let result = '';
+    table.forEach(([amount, symbol]) => {
+        while (remaining >= amount) {
+            result += symbol;
+            remaining -= amount;
+        }
+    });
+    return result;
+};
+
+const replaceGeneralSheetLinePrefix = (block = {}, matcher, replacement = '') => {
+    const text = String(block?.text || '').replace(/\u00a0/g, ' ').trim();
+    const nextText = text.replace(matcher, replacement);
+    // Une ligne déjà normalisée ne doit surtout pas être reconstruite depuis
+    // son texte brut : cela supprimerait les balises <strong> de ses mots-clés.
+    if (nextText === text) {
+        return {
+            ...block,
+            text: nextText,
+            html: String(block?.html || '').trim() || `<div>${escapeGeneralSheetHtml(nextText)}</div>`
+        };
+    }
+    if (typeof DOMParser === 'undefined') {
+        return {
+            ...block,
+            text: nextText,
+            html: `<div>${escapeGeneralSheetHtml(nextText)}</div>`
+        };
+    }
+    try {
+        const doc = new DOMParser().parseFromString(`<div id="general-sheet-line">${String(block?.html || '')}</div>`, 'text/html');
+        const root = doc.getElementById('general-sheet-line');
+        const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node && !String(node.nodeValue || '').trim()) node = walker.nextNode();
+        if (node) node.nodeValue = String(node.nodeValue || '').replace(matcher, replacement);
+        return { ...block, text: nextText, html: root?.innerHTML || `<div>${escapeGeneralSheetHtml(nextText)}</div>` };
+    } catch (_) {
+        return { ...block, text: nextText, html: `<div>${escapeGeneralSheetHtml(nextText)}</div>` };
+    }
+};
+
+const normalizeGeneralSheetLessonBlocks = (sourceBlocks = []) => {
+    let automaticSubIdeas = false;
+    return sourceBlocks
+        .filter((block) => String(block?.text || '').replace(/\u00a0/g, ' ').trim())
+        .map((sourceBlock) => {
+            let block = {
+                ...sourceBlock,
+                text: String(sourceBlock?.text || '').replace(/\u00a0/g, ' ').trim()
+            };
+            const text = block.text;
+            const romanHeading = /^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)(?:\s*[.):\-–—]\s*|\s+).+/i.test(text);
+            const mainIdea = /^\d{1,2}\s*[-.)]\s*.+/.test(text);
+            const explicitSubIdea = /^[a-z]\)\s*.+/i.test(text);
+            const alreadyDashed = /^[-–—•▪◦]\s*.+/.test(text);
+
+            if (romanHeading) {
+                automaticSubIdeas = false;
+                return block;
+            }
+            if (mainIdea) {
+                automaticSubIdeas = /:\s*$/.test(text);
+                return block;
+            }
+            if (explicitSubIdea) {
+                return replaceGeneralSheetLinePrefix(block, /^\s*[a-z]\)\s*/i, '- ');
+            }
+            if (alreadyDashed) {
+                return replaceGeneralSheetLinePrefix(block, /^\s*[-–—•▪◦]\s*/, '- ');
+            }
+            if (automaticSubIdeas) {
+                return replaceGeneralSheetLinePrefix(block, /^\s*/, '- ');
+            }
+            return block;
+        });
+};
+
+const splitGeneralSheetIntoParts = (plainText = '', richHtml = '') => {
+    const fallbackLines = String(plainText || '').replace(/\r/g, '').split('\n');
+    let blocks = fallbackLines.map((text) => ({ text, html: `<div>${escapeGeneralSheetHtml(text)}</div>` }));
+    if (String(richHtml || '').trim() && typeof DOMParser !== 'undefined') {
+        try {
+            const parsed = generalSheetHtmlToBlocks(richHtml);
+            if (parsed.some((row) => row.text)) blocks = parsed;
+        } catch (_) {}
+    }
+    // NotebookLM insère parfois plusieurs paragraphes vides entre deux idées.
+    // Ils ne portent aucune information et produisent de très grands blancs dans la fiche.
+    blocks = blocks.filter((block) => String(block?.text || '').replace(/\u00a0/g, ' ').trim());
+    const qcmStart = blocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block.text || '').trim()));
+    const lessonBlocks = normalizeGeneralSheetLessonBlocks(qcmStart >= 0 ? blocks.slice(0, qcmStart) : blocks);
+    // Dans le QCM, a), b), c), d) restent des choix : ils ne sont jamais changés en tirets.
+    const quizBlocks = qcmStart >= 0 ? blocks.slice(qcmStart + 1) : [];
+    const isRomanHeading = (text = '') => /^(VIII|VII|VI|IV|III|II|IX|X|V|I)(?:\s*[.):\-–—]\s*|\s+).+/i.test(String(text || '').trim());
+    const hasRomanHierarchy = lessonBlocks.some((block) => isRomanHeading(block.text));
+    const headingInfo = (text = '') => {
+        const value = String(text || '').trim();
+        const roman = value.match(/^(VIII|VII|VI|IV|III|II|IX|X|V|I)(?:\s*[.):\-–—]\s*|\s+)(.+)$/i);
+        if (roman) return { key: String(roman[1] || '').toUpperCase(), title: String(roman[2] || '').trim() };
+        if (hasRomanHierarchy) return null;
+        const arabic = value.match(/^(\d{1,2})\s*[.)\-–—]\s*(.+)$/);
+        if (arabic) return { key: String(Number(arabic[1])), title: String(arabic[2] || '').trim() };
+        return null;
+    };
+    const firstContent = lessonBlocks.find((row) => row.text)?.text || 'Fiche générale';
+    const parts = [];
+    let current = null;
+    lessonBlocks.forEach((block) => {
+        const heading = headingInfo(block.text);
+        if (heading) {
+            current = { ...heading, blocks: [block] };
+            parts.push(current);
+            return;
+        }
+        if (current) current.blocks.push(block);
+    });
+    const romanValue = (value = '') => {
+        const roman = String(value || '').toUpperCase();
+        const values = { I: 1, V: 5, X: 10 };
+        let total = 0;
+        for (let i = 0; i < roman.length; i += 1) {
+            const currentValue = values[roman[i]] || 0;
+            const nextValue = values[roman[i + 1]] || 0;
+            total += currentValue < nextValue ? -currentValue : currentValue;
+        }
+        return total;
+    };
+    const quizGroups = [];
+    let quizGroup = null;
+    let quizQuestion = null;
+    const ensureQuizGroup = (key = '') => {
+        if (quizGroup) return quizGroup;
+        quizGroup = { key: String(key || '1'), title: '', questions: [] };
+        quizGroups.push(quizGroup);
+        return quizGroup;
+    };
+    quizBlocks.forEach((block) => {
+        const text = String(block.text || '').trim();
+        if (!text) return;
+        const groupMatch = text.match(/^(?:LE[CÇ]ON|PARTIE|SECTION)\s+([IVX]+|\d+)\s*(?:[:\-–—]\s*)?(.*)$/i);
+        if (groupMatch) {
+            const rawKey = String(groupMatch[1] || '1');
+            quizGroup = {
+                key: /^\d+$/.test(rawKey) ? String(Number(rawKey)) : String(romanValue(rawKey)),
+                title: String(groupMatch[2] || '').trim(),
+                questions: []
+            };
+            quizGroups.push(quizGroup);
+            quizQuestion = null;
+            return;
+        }
+        const questionMatch = text.match(/^\d+\s*[.)\-]\s*(.+)$/);
+        if (questionMatch) {
+            quizQuestion = { id: uid(), question: String(questionMatch[1] || '').trim(), choices: [], correctIndex: -1 };
+            ensureQuizGroup().questions.push(quizQuestion);
+            return;
+        }
+        const choiceMatch = text.match(/^(?:[-•]\s*)?([A-D])\s*[.)\-]\s*(.+)$/i);
+        if (choiceMatch && quizQuestion) {
+            const choice = String(choiceMatch[2] || '').trim();
+            const choiceIndex = quizQuestion.choices.length;
+            quizQuestion.choices.push(choice);
+            if (/<(?:strong|b)\b/i.test(String(block.html || ''))) quizQuestion.correctIndex = choiceIndex;
+        }
+    });
+    quizGroups.forEach((group) => {
+        group.questions = group.questions
+            .filter((question) => question.question && question.choices.length >= 2)
+            .map((question) => ({
+                ...question,
+                choices: [...question.choices, '', '', '', ''].slice(0, 4),
+                correctIndex: question.correctIndex >= 0 ? question.correctIndex : 0
+            }));
+    });
+    return {
+        documentTitle: firstContent,
+        quizGroups,
+        parts: parts.map((part) => ({
+            ...part,
+            text: part.blocks.map((row) => row.text).join('\n').trim(),
+            html: part.blocks.map((row) => row.html).join('')
+        }))
+    };
+};
+
+const sheetToRevisionQuestion = (sheet = null, requestedKind = 'full') => {
+    const fullRevisionText = sheetToFillBlankText(sheet);
+    const sourceText = String(sheet?.sheetText || fullRevisionText || '').replace(/\r/g, '');
+    const headings = [];
+    const seen = new Set();
+    sourceText.split('\n').forEach((line) => {
+        const rawLine = String(line || '');
+        const romanMatch = rawLine.match(/^\s*(?:partie\s+)?(VIII|VII|VI|IV|III|II|IX|X|V|I)(?:\s*[.):\-–—]\s*|\s+)(.+?)\s*$/i);
+        const arabicMatch = rawLine.match(/^\s*(\d{1,2})\s*[.)\-–—]\s*(.+?)\s*$/);
+        const match = romanMatch || arabicMatch;
+        if (!match) return;
+        const headingKey = romanMatch
+            ? String(match[1] || '').toUpperCase()
+            : String(Number(match[1] || 0));
+        const title = String(match[2] || '')
+            .trim()
+            .replace(/^["“”«»]+|["“”«»]+$/g, '')
+            .trim();
+        if (!title || seen.has(headingKey)) return;
+        seen.add(headingKey);
+        headings.push({ key: headingKey, title });
+    });
+    if (requestedKind === 'plan') {
+        return {
+            kind: 'plan',
+            title: 'Question IA · restituer le plan de la fiche',
+            text: headings.map(({ title }, index) => `${index + 1} "${title}"`).join('\n')
+        };
+    }
+    const revisionTextWithoutTitleKeyword = unquoteKeywordsOnFirstContentLine(fullRevisionText);
+    return {
+        kind: 'full',
+        title: 'Question IA · révision de la fiche',
+        // Une super fiche est déjà structurée par NotebookLM : conserver ses
+        // numéros et ses sous-points au lieu de les recalculer côté CondaWeb.
+        text: sheet?.generalSheetGenerated
+            ? revisionTextWithoutTitleKeyword
+            : structureRevisionLines(revisionTextWithoutTitleKeyword)
+    };
 };
 
 const normalizeLoadedSteps = (rawSteps = []) => {
@@ -308,6 +781,10 @@ const normalizeLoadedSections = (rawSections = []) => {
 };
 
 export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
+    // Le contentEditable peut contenir une frappe plus récente que le dernier rendu React.
+    // Ce registre synchrone garantit que « Inspecter fiche » utilise toujours ce qui est
+    // réellement visible dans l'éditeur au moment du clic.
+    const sheetDraftsRef = useRef(new Map());
     const [formData, setFormData] = useState(() => ({
         ...(() => {
             const sections = normalizeLoadedSections(initialData?.sections);
@@ -344,6 +821,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [annotDraft, setAnnotDraft] = useState(null);
     const [aiTesting, setAiTesting] = useState(false);
     const [showVideoEditor, setShowVideoEditor] = useState(false);
+    const [videoSequencePreviewStepId, setVideoSequencePreviewStepId] = useState('');
+    const [localVideoPreviewUrl, setLocalVideoPreviewUrl] = useState('');
+    const [localVideoStepId, setLocalVideoStepId] = useState('');
+    const [localVideoName, setLocalVideoName] = useState('');
+    const [localVideoSegmentKey, setLocalVideoSegmentKey] = useState('');
     const [segmentStart, setSegmentStart] = useState(0);
     const [segmentEnd, setSegmentEnd] = useState(0);
     const [segmentLabel, setSegmentLabel] = useState('');
@@ -387,6 +869,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [sourcePickerExistingUrl, setSourcePickerExistingUrl] = useState('');
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
     const [sourcePickerVideoName, setSourcePickerVideoName] = useState('');
+    const [showGeneralSheetBuilder, setShowGeneralSheetBuilder] = useState(false);
+    const [generalSheetText, setGeneralSheetText] = useState('');
+    const [generalSheetHtml, setGeneralSheetHtml] = useState('');
     const [globalSheetSourceUrl, setGlobalSheetSourceUrl] = useState('');
     const [globalVideoSourceUrl, setGlobalVideoSourceUrl] = useState('');
     const [globalVideoSourceName, setGlobalVideoSourceName] = useState('');
@@ -506,14 +991,24 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const availableChapters = useMemo(() => {
         const section = String(targetSection || 'GÉNÉRAL').toUpperCase();
-        const filtered = (chapters || []).filter(ch => !ch.isArchived && String(ch.section || 'GÉNÉRAL').toUpperCase() === section);
-        return filtered.length > 0 ? filtered : (chapters || []).filter(ch => !ch.isArchived);
-    }, [chapters, targetSection]);
+        const targetClassNames = initialData?.targetClassrooms || Object.keys(distribution || {});
+        const classLevel = targetClassNames.map(inferLearningLevelFromClass).find(Boolean);
+        const level = normalizeLearningLevel(targetLevel || classLevel);
+        return (chapters || []).filter((chapter) => {
+            if (chapter?.isArchived) return false;
+            if (String(chapter?.section || 'GÉNÉRAL').toUpperCase() !== section) return false;
+            if (!level) return true;
+            if (chapter?.sharedLevel) return normalizeLearningLevel(chapter.sharedLevel) === level;
+            if (chapter?.classroom) return inferLearningLevelFromClass(chapter.classroom) === level;
+            return false;
+        });
+    }, [chapters, targetSection, targetLevel, initialData?.targetClassrooms, distribution]);
 
     useEffect(() => {
-        if (formData.chapterId || availableChapters.length === 0) return;
+        const selectedStillAllowed = availableChapters.some((chapter) => String(chapter._id) === String(formData.chapterId || ''));
+        if (selectedStillAllowed) return;
         const first = availableChapters[0];
-        setFormData(prev => ({ ...prev, chapterId: String(first._id), subject: first.section || prev.subject }));
+        setFormData(prev => ({ ...prev, chapterId: first ? String(first._id) : '', subject: first?.section || prev.subject }));
     }, [availableChapters, formData.chapterId]);
 
     useEffect(() => {
@@ -551,6 +1046,51 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const steps = [...(prev.steps || [])];
             if (!steps[idx]) return prev;
             steps[idx] = { ...steps[idx], ...patch };
+            if (steps[idx]?.type === 'sheet' && ('sheetText' in patch || 'sheetTextHtml' in patch)) {
+                const sheetId = String(steps[idx]?.id || '');
+                const sheetSource = `sheet:${sheetId}`;
+                let linkedIndexes = steps.reduce((indexes, candidate, candidateIndex) => {
+                    if (candidate?.type === 'question' && (
+                        String(candidate?.autoLinkedSheetId || '') === sheetId
+                        || String(candidate?.sourceSheetUrl || '') === sheetSource
+                    )) indexes.push(candidateIndex);
+                    return indexes;
+                }, []);
+
+                // Répare aussi les anciennes fiches : avant la liaison explicite, la question IA
+                // était simplement placée juste après la fiche dans la même section.
+                if (!linkedIndexes.length) {
+                    const nextCandidate = steps[idx + 1];
+                    if (nextCandidate?.type === 'question'
+                        && String(nextCandidate?.sectionId || '') === String(steps[idx]?.sectionId || '')
+                        && !String(nextCandidate?.autoLinkedSheetId || '').trim()) {
+                        linkedIndexes = [idx + 1];
+                    }
+                }
+
+                linkedIndexes.forEach((linkedQuestionIndex) => {
+                    const candidate = steps[linkedQuestionIndex];
+                    const linkedMode = candidate?.autoLinkedSheetMode === 'plan' ? 'plan' : 'full';
+                    const revision = sheetToRevisionQuestion(steps[idx], linkedMode);
+                    steps[linkedQuestionIndex] = {
+                        ...steps[linkedQuestionIndex],
+                        title: revision.title,
+                        autoLinkedSheetId: sheetId,
+                        autoLinkedSheetMode: linkedMode,
+                        autoRevisionKind: revision.kind,
+                        sourceKind: 'sheet',
+                        sourceSheetUrl: sheetSource,
+                        questionCount: 1,
+                        questionAnswerPairs: [{
+                            question: revision.text,
+                            answer: '',
+                            expectedKeywords: [],
+                            generatedByAi: false,
+                            validationType: 'fill_blanks'
+                        }]
+                    };
+                });
+            }
             return { ...prev, steps };
         });
     };
@@ -568,6 +1108,24 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const name = `Section ${current.length + 1}`;
             current.push({ id, name, order: current.length, visible: true });
             return { ...prev, sections: current };
+        });
+    };
+    const removeSection = (sectionId) => {
+        const sections = Array.isArray(formData.sections) ? formData.sections : [];
+        if (sections.length <= 1) return alert("Impossible de supprimer la dernière section.");
+        const section = sections.find((row) => String(row?.id) === String(sectionId));
+        if (!window.confirm(`Supprimer la section « ${section?.name || 'sans nom'} » ? Les éléments qu’elle contient seront déplacés dans la première section restante.`)) return;
+        setFormData((prev) => {
+            const nextSections = (prev.sections || [])
+                .filter((row) => String(row?.id) !== String(sectionId))
+                .map((row, index) => ({ ...row, order: index }));
+            const fallbackId = String(nextSections[0]?.id || '');
+            const nextSteps = (prev.steps || []).map((row) => (
+                String(row?.sectionId || '') === String(sectionId)
+                    ? { ...row, sectionId: fallbackId }
+                    : row
+            ));
+            return { ...prev, sections: nextSections, steps: nextSteps };
         });
     };
     const renameSection = (sectionId, name) => {
@@ -950,13 +1508,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const getQuestionPairRowsForEditorOrPlaceholders = () => {
         const rows = getQuestionPairRowsForEditor();
         if (rows.length > 0) return rows;
-        const count = Math.max(1, Math.min(20, Number(step?.questionCount || 3)));
+        const count = Math.max(1, Math.min(20, Number(step?.questionCount || 1)));
         return Array.from({ length: count }, (_, idx) => ({
             question: '',
             answer: '',
             expectedKeywords: [],
             generatedByAi: false,
-            validationType: 'open',
+            validationType: 'fill_blanks',
             placeholder: true,
             placeholderLabel: `Question ${idx + 1}`
         }));
@@ -964,7 +1522,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const updateQuestionPairRow = (rowIdx = 0, patch = {}) => {
         if (!step || step.type !== 'question') return;
         const rows = [...getQuestionPairRowsForEditor()];
-        rows[rowIdx] = { ...(rows[rowIdx] || { question: '', answer: '', expectedKeywords: [], validationType: 'open' }), ...patch };
+        const current = rows[rowIdx] || { question: '', answer: '', expectedKeywords: [], validationType: 'open' };
+        const nextPatch = { ...patch };
+        if (Object.prototype.hasOwnProperty.call(nextPatch, 'question')
+            && (current.validationType === 'fill_blanks' || nextPatch.validationType === 'fill_blanks')) {
+            nextPatch.question = renumberRemainingMainPoints(nextPatch.question);
+        }
+        rows[rowIdx] = { ...current, ...nextPatch };
         updateQuestionPairsDraft(rows);
     };
     const moveQuestionPairRow = (fromIdx = 0, toIdx = 0) => {
@@ -1383,7 +1947,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
 
     const openVideoEditor = () => {
-        if (!step || step.type !== 'video' || !step.videoUrl) return;
+        if (!step || step.type !== 'video' || (!step.videoUrl && localVideoStepId !== String(step.id || ''))) return;
         setSegmentStart(Math.max(0, Number(step.startSec || 0)));
         setSegmentEnd(Math.max(0, Number(step.endSec || 0)));
         setSegmentEndFollowPlayhead(true);
@@ -1400,6 +1964,36 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setEditorPlaying(false);
         refreshKnownSegments(step.videoUrl, step.id);
         setShowVideoEditor(true);
+    };
+
+    const chooseLocalVideo = (file) => {
+        if (!file || !step || step.type !== 'video') return;
+        if (localVideoPreviewUrl) URL.revokeObjectURL(localVideoPreviewUrl);
+        const objectUrl = URL.createObjectURL(file);
+        const fingerprint = `local-video://${encodeURIComponent(file.name)}-${Number(file.size || 0)}-${Number(file.lastModified || 0)}`;
+        setLocalVideoPreviewUrl(objectUrl);
+        setLocalVideoStepId(String(step.id || ''));
+        setLocalVideoName(file.name || 'Vidéo locale');
+        setLocalVideoSegmentKey(fingerprint);
+        updateStep(activeStep, { videoUrl: fingerprint, videoSourceName: file.name || 'Vidéo locale', startSec: 0, endSec: 0 });
+        setSelectedSegmentId('');
+        setSelectedSegmentLabel('');
+        setSelectedSegmentTranscript('');
+        refreshKnownSegments(fingerprint, step.id);
+    };
+
+    const cloneLocalSegmentsToOnlineUrl = async (onlineUrl) => {
+        const targetUrl = String(onlineUrl || '').trim();
+        if (!teacherId || !localVideoSegmentKey || !/^https?:\/\//i.test(targetUrl)) return;
+        try {
+            await fetch('/api/learning/video-segments/clone', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId, fromUrl: localVideoSegmentKey, toUrl: targetUrl })
+            });
+            setLocalVideoSegmentKey('');
+            refreshKnownSegments(targetUrl, step?.id || '');
+        } catch (_) {}
     };
 
     const saveCurrentSegment = async (overrides = null) => {
@@ -1449,8 +2043,19 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         }
         return Math.max(0, Math.floor(Number(editorCurrentAbsSec || 0)));
     };
-    const seekEditorTo = (absSec = 0) => {
+    const seekEditorTo = (absSec = 0, { freePlayback = false } = {}) => {
         const target = Math.max(0, Number(absSec || 0));
+        if (freePlayback || (editorPlaybackMode === 'video' && !String(selectedSegmentId || '').trim())) {
+            // Un segment supprimé peut avoir laissé une ancienne borne dans le
+            // lecteur YouTube déjà monté. Un déplacement en mode vidéo libre
+            // doit toujours neutraliser cette borne avant le seek.
+            youtubeBoundsRef.current = { start: 0, end: 0 };
+            setPreviewSegmentMode(false);
+            if (freePlayback) {
+                setEditorPlaybackMode('video');
+                setEmbedPreviewSeekSec(null);
+            }
+        }
         setEditorCurrentAbsSec(target);
         if (videoEditorRef.current) {
             try { videoEditorRef.current.currentTime = target; } catch (_) {}
@@ -1595,7 +2200,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setEmbedPreviewSeekSec(start);
         setEditorEmbedReloadKey(Date.now());
     };
-    const continueAfterSelectedSegment = () => {
+    const continueAfterSelectedSegment = async () => {
         const lastKnownEnd = (Array.isArray(knownSegments) ? knownSegments : [])
             .map((seg) => Math.max(0, Number(seg?.endSec || seg?.startSec || 0)))
             .sort((a, b) => b - a)[0] || 0;
@@ -1603,33 +2208,38 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             ? Math.max(0, Number(selectedSegment.endSec || selectedSegment.startSec || 0))
             : Math.max(0, Number(lastKnownEnd || segmentEnd || segmentStart || editorCurrentAbsSec || 0));
         const nextStart = Math.max(0, Math.floor(baseEnd));
+        const followingStart = (Array.isArray(knownSegments) ? knownSegments : [])
+            .filter((seg) => String(seg?._id || seg?.id || '') !== String(selectedSegment?._id || selectedSegment?.id || ''))
+            .map((seg) => Math.max(0, Math.floor(Number(seg?.startSec || 0))))
+            .filter((startSec) => startSec > nextStart)
+            .sort((a, b) => a - b)[0];
+        const availableEnd = Number.isFinite(followingStart)
+            ? followingStart
+            : (timelineDurationSec > nextStart ? timelineDurationSec : 0);
+        if (availableEnd > 0 && availableEnd <= nextStart) {
+            alert("Il n'y a aucun espace libre après cette séquence.");
+            return;
+        }
+        const saved = await saveCurrentSegment({
+            startSec: nextStart,
+            endSec: availableEnd,
+            label: `Séquence ${(Array.isArray(knownSegments) ? knownSegments.length : 0) + 1}`,
+            transcript: ''
+        });
+        if (!saved) return;
         setSelectedSegmentId('');
         setSelectedSegmentLabel('');
         setSelectedSegmentTranscript('');
         setLastSavedSegmentLabel('');
         setLastSavedSegmentTranscript('');
         setSegmentStart(nextStart);
-        setSegmentEnd(nextStart);
-        setSegmentEndFollowPlayhead(true);
+        setSegmentEnd(availableEnd);
+        setSegmentEndFollowPlayhead(false);
         setSegmentLabel('');
         setSegmentPreviewRelSec(0);
         setPreviewSegmentMode(false);
-        setEditorPlaybackMode('video');
-        setEmbedPreviewSeekSec(null);
-        seekEditorTo(nextStart);
-        if (editorIsDirect && videoEditorRef.current) {
-            videoEditorRef.current.play().catch(() => {});
-            return;
-        }
-        if (youtubeEditorPlayerRef.current?.seekTo) {
-            try {
-                youtubeEditorPlayerRef.current.seekTo(nextStart, true);
-                youtubeEditorPlayerRef.current.playVideo?.();
-            } catch (_) {}
-            return;
-        }
-        setEmbedPreviewSeekSec(nextStart);
-        setEditorEmbedReloadKey(Date.now());
+        setEditorPlaybackMode('segment');
+        playSelectedSegmentNow(saved);
     };
     const removeKnownSegment = async (seg) => {
         if (!seg || !step?.videoUrl) return;
@@ -1637,12 +2247,26 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         if (!sid) return;
         const res = await fetch(`/api/learning/video-segments/${encodeURIComponent(sid)}?teacherId=${encodeURIComponent(teacherId)}`, { method: 'DELETE' });
         if (!res.ok) return;
-        if (selectedSegmentId === sid) {
+        const wasSelected = selectedSegmentId === sid;
+        // Retire immédiatement la ligne locale afin que l'effet de synchronisation
+        // ne puisse pas resélectionner le segment pendant le rafraîchissement API.
+        setKnownSegments((prev) => (Array.isArray(prev) ? prev.filter((row) => String(row?._id || row?.id || '') !== sid) : []));
+        if (wasSelected) {
+            const resumeAt = Math.max(0, Number(editorCurrentAbsSec || seg.startSec || 0));
             setSelectedSegmentId('');
             setSelectedSegmentLabel('');
             setSelectedSegmentTranscript('');
             setLastSavedSegmentLabel('');
             setLastSavedSegmentTranscript('');
+            setPreviewSegmentMode(false);
+            setEditorPlaybackMode('video');
+            setEmbedPreviewSeekSec(null);
+            setSegmentStart(resumeAt);
+            setSegmentEnd(resumeAt);
+            setSegmentEndFollowPlayhead(true);
+            youtubeBoundsRef.current = { start: 0, end: 0 };
+            updateStep(activeStep, { startSec: 0, endSec: 0 });
+            seekEditorTo(resumeAt);
         }
         await refreshKnownSegments(step.videoUrl, step.id);
     };
@@ -1665,6 +2289,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             setSegmentStart(0);
             setSegmentEnd(0);
             setSegmentEndFollowPlayhead(true);
+            setPreviewSegmentMode(false);
+            setEditorPlaybackMode('video');
+            setEmbedPreviewSeekSec(null);
+            youtubeBoundsRef.current = { start: 0, end: 0 };
             updateStep(activeStep, { startSec: 0, endSec: 0 });
         } catch (e) {
             alert(`Suppression impossible: ${String(e?.message || 'Erreur')}`);
@@ -1687,6 +2315,115 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         updateStep(activeStep, { startSec, endSec });
         await refreshKnownSegments(step.videoUrl, step.id);
         return true;
+    };
+    const buildVideoSegmentStructure = ({ sourceUrl = '', sourceName = '', segments = [], templateStep = null } = {}) => {
+        const safeUrl = String(sourceUrl || '').trim();
+        const orderedSegments = (Array.isArray(segments) ? segments : [])
+            .filter(Boolean)
+            .sort((a, b) => Number(a?.startSec || 0) - Number(b?.startSec || 0));
+        if (!safeUrl || orderedSegments.length === 0) return null;
+
+        let nextSections = Array.isArray(formData.sections) ? formData.sections.map((row) => ({ ...row })) : [];
+        if (nextSections.length === 0) nextSections = [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+        while (nextSections.length < orderedSegments.length) {
+            const sectionNumber = nextSections.length + 1;
+            nextSections.push({ id: `sec_${Date.now()}_${sectionNumber}`, name: `Section ${sectionNumber}`, order: nextSections.length, visible: true });
+        }
+        nextSections = nextSections.map((section, index) => index < orderedSegments.length ? {
+            ...section,
+            name: index === 0 ? 'Introduction' : `Partie ${toRomanPartNumber(index)}`,
+            order: index
+        } : section);
+
+        const sourceTemplate = templateStep || (formData.steps || []).find((row) => row?.type === 'video' && String(row?.videoUrl || '').trim() === safeUrl) || {
+            ...emptyStep('video'),
+            videoUrl: safeUrl
+        };
+        const sourceStepId = String(sourceTemplate?.segmentSourceStepId || sourceTemplate?.id || uid());
+        const removableIds = new Set((formData.steps || [])
+            .filter((row) => row?.type === 'video' && (
+                String(row?.id || '') === String(sourceTemplate?.id || '')
+                || String(row?.segmentSourceUrl || '').trim() === safeUrl
+                || (row?.generatedFromVideoSegments === true && String(row?.videoUrl || '').trim() === safeUrl)
+            ))
+            .map((row) => String(row?.id || '')));
+        const baseSteps = (formData.steps || []).filter((row) => !removableIds.has(String(row?.id || '')));
+        const generatedSteps = orderedSegments.map((segment, index) => ({
+            ...sourceTemplate,
+            id: index === 0 ? String(sourceTemplate?.id || uid()) : uid(),
+            type: 'video',
+            sectionId: String(nextSections[index]?.id || nextSections[0]?.id || ''),
+            title: index === 0 ? 'Introduction' : `Partie ${toRomanPartNumber(index)}`,
+            videoUrl: safeUrl,
+            ...(sourceName ? { videoSourceName: sourceName } : {}),
+            startSec: Math.max(0, Number(segment?.startSec || 0)),
+            endSec: Math.max(0, Number(segment?.endSec || 0)),
+            videoTranscript: String(segment?.transcript || ''),
+            videoSegmentId: String(segment?._id || segment?.id || `segment_${index + 1}`),
+            segmentSourceStepId: sourceStepId,
+            segmentSourceUrl: safeUrl,
+            generatedFromVideoSegments: true
+        }));
+        const nextSteps = [...baseSteps];
+        [...generatedSteps].reverse().forEach((videoStep) => {
+            const firstInSection = nextSteps.findIndex((row) => String(row?.sectionId || '') === String(videoStep.sectionId || ''));
+            if (firstInSection < 0) nextSteps.push(videoStep);
+            else nextSteps.splice(firstInSection, 0, videoStep);
+        });
+        return { nextSections, nextSteps, generatedSteps };
+    };
+    const applySelectedSegmentToStep = async () => {
+        if (!selectedSegment || !selectedSegmentId || !step) return;
+        const startSec = Math.max(0, Math.floor(Number(segmentStart || selectedSegment.startSec || 0)));
+        const endSec = Math.max(startSec + 1, Math.floor(Number(segmentEnd || selectedSegment.endSec || startSec + 1)));
+        const label = String(selectedSegmentLabel || selectedSegment.label || '').trim();
+        const videoTranscript = String(selectedSegmentTranscript || '');
+        setSavingStepData(true);
+        try {
+            const segmentRes = await fetch(`/api/learning/video-segments/${encodeURIComponent(selectedSegmentId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId, startSec, endSec, label, transcript: videoTranscript })
+            });
+            const segmentData = await segmentRes.json().catch(() => ({}));
+            if (!segmentRes.ok) throw new Error(segmentData?.error || 'Enregistrement de la séquence impossible');
+
+            const sourceUrl = String(step.videoUrl || '').trim();
+            const sourceStepId = String(step.segmentSourceStepId || step.id || '');
+            const orderedSegments = (Array.isArray(knownSegments) ? knownSegments : [])
+                .map((row) => String(row?._id || row?.id || '') === String(selectedSegmentId)
+                    ? { ...row, startSec, endSec, label, transcript: videoTranscript }
+                    : row)
+                .sort((a, b) => Number(a?.startSec || 0) - Number(b?.startSec || 0));
+
+            const structure = buildVideoSegmentStructure({ sourceUrl, segments: orderedSegments, templateStep: { ...step, segmentSourceStepId: sourceStepId } });
+            if (!structure) throw new Error('Aucune séquence enregistrée pour cette vidéo');
+            const { nextSections, nextSteps, generatedSteps } = structure;
+            const nextFormData = { ...formData, sections: nextSections, steps: nextSteps };
+            setFormData(nextFormData);
+            setActiveStep(Math.max(0, nextSteps.findIndex((row) => String(row?.id || '') === String(generatedSteps[0]?.id || ''))));
+
+            if (formData?._id) {
+                const stepRes = await fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/structure`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sections: nextSections,
+                        steps: nextSteps
+                    })
+                });
+                const stepData = await stepRes.json().catch(() => ({}));
+                if (!stepRes.ok) throw new Error(stepData?.error || "Enregistrement de la structure impossible");
+            }
+
+            setLastSavedSegmentLabel(label);
+            setLastSavedSegmentTranscript(videoTranscript);
+            setShowVideoEditor(false);
+        } catch (error) {
+            alert(`Sauvegarde impossible : ${String(error?.message || 'Erreur')}`);
+        } finally {
+            setSavingStepData(false);
+        }
     };
     const clearSelectedSegment = () => {
         setSelectedSegmentId('');
@@ -3241,6 +3978,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         rows[rowIdx] = { ...rows[rowIdx], ...patch };
         updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
     };
+    const renumberZoneQuestion = (zoneIdx = 0, rowIdx = 0) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        const currentText = String(rows[rowIdx]?.question || rows[rowIdx]?.q || '');
+        const nextText = renumberRemainingMainPoints(currentText);
+        rows[rowIdx] = { ...rows[rowIdx], question: nextText, q: nextText };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+    };
     const removeZoneKeyword = (zoneIdx = 0, rowIdx = 0, keywordIdx = 0) => {
         const map = getCurrentSectionQuestionsMap();
         const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
@@ -3275,7 +4021,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const addZoneQuestion = (zoneIdx = 0) => {
         const map = getCurrentSectionQuestionsMap();
         const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
-        rows.push({ q: '', question: '', expectedAnswer: '', expectedKeywords: [] });
+        rows.push({ q: '', question: '', expectedAnswer: '', expectedKeywords: [], validationType: 'fill_blanks' });
         updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
     };
     const importQuestionsForZone = (zoneIdx = 0) => {
@@ -3318,21 +4064,81 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         updateZoneQuestion(zoneIdx, rowIdx, patch);
     };
     const keepQuestionTextareaSpace = (event, value = '', onValueChange = () => {}) => {
+        const target = event.currentTarget;
+        const source = String(value || '');
+        const start = Number.isFinite(target.selectionStart) ? target.selectionStart : source.length;
+        const end = Number.isFinite(target.selectionEnd) ? target.selectionEnd : start;
+        if (event.key === 'Tab' && !event.shiftKey) {
+            const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+            const currentLine = source.slice(lineStart, start);
+            const prefixMatch = currentLine.match(/^(\s*)\d+\s*[-.)]\s*/);
+            if (prefixMatch) {
+                event.preventDefault();
+                event.stopPropagation();
+                const replacement = `${prefixMatch[1]}- `;
+                const prefixEnd = lineStart + prefixMatch[0].length;
+                const nextValue = `${source.slice(0, lineStart)}${replacement}${source.slice(prefixEnd)}`;
+                const delta = replacement.length - prefixMatch[0].length;
+                onValueChange(nextValue);
+                window.requestAnimationFrame(() => {
+                    try {
+                        target.selectionStart = Math.max(lineStart + replacement.length, start + delta);
+                        target.selectionEnd = Math.max(lineStart + replacement.length, end + delta);
+                    } catch (_) {}
+                });
+                return;
+            }
+        }
         if (event.key !== ' ') {
             event.stopPropagation();
             return;
         }
         event.preventDefault();
         event.stopPropagation();
-        const target = event.currentTarget;
-        const start = Number.isFinite(target.selectionStart) ? target.selectionStart : String(value || '').length;
-        const end = Number.isFinite(target.selectionEnd) ? target.selectionEnd : start;
-        const nextValue = `${String(value || '').slice(0, start)} ${String(value || '').slice(end)}`;
+        const nextValue = `${source.slice(0, start)} ${source.slice(end)}`;
         onValueChange(nextValue);
         window.requestAnimationFrame(() => {
             try {
                 target.selectionStart = start + 1;
                 target.selectionEnd = start + 1;
+            } catch (_) {}
+        });
+    };
+    const keepQuestionEditorKey = (
+        event,
+        value = '',
+        onValueChange = () => {},
+        onKeywordValueChange = onValueChange
+    ) => {
+        const isBoldShortcut = (event.metaKey || event.ctrlKey)
+            && !event.altKey
+            && String(event.key || '').toLowerCase() === 'b';
+        if (!isBoldShortcut) {
+            keepQuestionTextareaSpace(event, value, onValueChange);
+            return;
+        }
+
+        const target = event.currentTarget;
+        const source = String(value || '');
+        const start = Number.isFinite(target.selectionStart) ? target.selectionStart : source.length;
+        const end = Number.isFinite(target.selectionEnd) ? target.selectionEnd : start;
+        event.preventDefault();
+        event.stopPropagation();
+        if (start === end) return;
+
+        const alreadyQuoted = start > 0
+            && end < source.length
+            && /[\"“«]/.test(source[start - 1])
+            && /[\"”»]/.test(source[end]);
+        const nextValue = alreadyQuoted
+            ? source
+            : `${source.slice(0, start)}\"${source.slice(start, end)}\"${source.slice(end)}`;
+        onKeywordValueChange(nextValue);
+        window.requestAnimationFrame(() => {
+            try {
+                target.focus();
+                target.selectionStart = alreadyQuoted ? start : start + 1;
+                target.selectionEnd = alreadyQuoted ? end : end + 1;
             } catch (_) {}
         });
     };
@@ -3420,8 +4226,19 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         <option value="fill_blanks">Texte à trous</option>
                     </select>
                 </div>
-                <div className="text-[11px] font-black uppercase text-slate-400 mb-1">
-                    {q?.validationType === 'fill_blanks' ? 'Texte — réponses entre guillemets' : 'Question'}
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[11px] font-black uppercase text-slate-400">
+                        {q?.validationType === 'fill_blanks' ? 'Texte — réponses entre guillemets' : 'Question'}
+                    </div>
+                    {q?.validationType === 'fill_blanks' && (
+                        <button
+                            type="button"
+                            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase text-indigo-700 hover:bg-indigo-600 hover:text-white"
+                            onClick={() => renumberZoneQuestion(sectionIdx, i)}
+                        >
+                            1-2-3 Renuméroter
+                        </button>
+                    )}
                 </div>
                 <div className="flex gap-1">
                     {q?.validationType === 'fill_blanks' ? (
@@ -3429,7 +4246,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                             rows={2}
                             value={questionValue}
                             onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
-                            onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }))}
+                            onKeyDown={(e) => keepQuestionEditorKey(
+                                e,
+                                questionValue,
+                                (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }),
+                                (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue, validationType: 'fill_blanks' })
+                            )}
                             placeholder={'Les soldats vivent dans des "tranchées".'}
                         />
                     ) : (
@@ -3438,7 +4260,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                             className="v84-q-input !text-[13px] !leading-snug"
                             value={questionValue}
                             onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
-                            onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }))}
+                            onKeyDown={(e) => keepQuestionEditorKey(
+                                e,
+                                questionValue,
+                                (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue }),
+                                (nextValue) => updateZoneQuestion(sectionIdx, i, { question: nextValue, q: nextValue, validationType: 'fill_blanks' })
+                            )}
                             placeholder={`Question ${i + 1}`}
                         />
                     )}
@@ -3515,6 +4342,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 patch.questionSectionQuestions = step.questionSectionQuestions || {};
             } else if (step.type === 'sheet') {
                 patch.sheetText = String(step.sheetText || '');
+                patch.sheetTextHtml = String(step.sheetTextHtml || '');
                 patch.sheetSlideSectionMap = sanitizeSlideSectionMap(step.sheetSlideSectionMap);
                 patch.sheetSlideTextMap = sanitizeSlideTextMap(step.sheetSlideTextMap);
             } else if (step.type === 'video') {
@@ -3525,7 +4353,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const res = await fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/step-data`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stepId: String(step.id || ''), patch, sections: formData.sections || [] })
+                body: JSON.stringify({
+                    stepId: String(step.id || ''),
+                    patch,
+                    stepSnapshot: { ...step, ...patch },
+                    sections: formData.sections || []
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Erreur sauvegarde');
@@ -3547,6 +4380,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             updateStep(activeStep, {
                 sheetUrl: String(data.url || ''),
                 sheetText: '',
+                sheetTextHtml: '',
                 sheetSlideTextMap: {}
             });
         } catch (err) {
@@ -3577,7 +4411,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const text = String(event.clipboardData?.getData('text/plain') || '').trim();
         if (/^(https?:\/\/|\/api\/|data:image\/)/i.test(text)) {
             event.preventDefault();
-            updateStep(activeStep, { sheetUrl: text, sheetText: '', sheetSlideTextMap: {} });
+            updateStep(activeStep, { sheetUrl: text, sheetText: '', sheetTextHtml: '', sheetSlideTextMap: {} });
         }
     };
     const clearSheetStep = () => {
@@ -3585,6 +4419,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         updateStep(activeStep, {
             sheetUrl: '',
             sheetText: '',
+            sheetTextHtml: '',
             extractedSheetText: '',
             sheetSlideTextMap: {},
             sheetZoneRanges: [],
@@ -3593,6 +4428,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             redHighlights: [],
             keywords: []
         });
+    };
+    const confirmClearSheetStep = () => {
+        if (!step || step.type !== 'sheet') return;
+        const hasContent = String(step.sheetUrl || '').trim() || String(step.sheetText || '').trim();
+        if (!hasContent) return;
+        if (!window.confirm('Supprimer cette fiche, son URL et tout son texte ?')) return;
+        clearSheetStep();
     };
     const generateQuestionsForActiveZone = async (zoneIdxOverride = null, countOverride = null) => {
         if (!step) return;
@@ -3711,6 +4553,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setSelectedSegmentTranscript(String(active.transcript || ''));
         setLastSavedSegmentLabel(String(active.label || ''));
         setLastSavedSegmentTranscript(String(active.transcript || ''));
+        setSegmentStart(Math.max(0, Number(active.startSec || 0)));
+        setSegmentEnd(Math.max(0, Number(active.endSec || 0)));
+        setSegmentEndFollowPlayhead(false);
+        setEditorPlaybackMode('segment');
     }, [knownSegments, step?.id, step?.type, step?.startSec, step?.endSec, selectedSegmentId]);
 
     useEffect(() => {
@@ -3784,6 +4630,25 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     ...(inferredVideoName ? { videoSourceName: inferredVideoName } : {})
                 };
             }
+            if (type === 'question') {
+                const precedingSheet = [...(Array.isArray(formData.steps) ? formData.steps : [])]
+                    .reverse()
+                    .find((candidate) => candidate?.type === 'sheet'
+                        && (!fallbackSection || String(candidate?.sectionId || '') === fallbackSection));
+                const fillBlankText = sheetToFillBlankText(precedingSheet);
+                return {
+                    questionCount: 1,
+                    sourceKind: 'sheet',
+                    sourceSheetUrl: precedingSheet?.id ? `sheet:${precedingSheet.id}` : '',
+                    questionAnswerPairs: [{
+                        question: fillBlankText,
+                        answer: '',
+                        expectedKeywords: [],
+                        generatedByAi: false,
+                        validationType: 'fill_blanks'
+                    }]
+                };
+            }
             return {};
         })();
         setFormData(prev => ({
@@ -3791,6 +4656,280 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             steps: [...(prev.steps || []), { ...emptyStep(type), sectionId: fallbackSection, ...autoPatch, ...customPatch }]
         }));
         setActiveStep((formData.steps || []).length);
+    };
+
+    const createOrInspectSheetQuestion = (sheetIndex, requestedKind = 'full') => {
+        const steps = Array.isArray(formData.steps) ? formData.steps : [];
+        const storedSheetStep = steps[sheetIndex];
+        if (!storedSheetStep || storedSheetStep.type !== 'sheet') return;
+        const linkedMode = requestedKind === 'plan' ? 'plan' : 'full';
+        const liveDraft = sheetDraftsRef.current.get(String(storedSheetStep.id || ''));
+        const currentSheetStep = liveDraft
+            ? { ...storedSheetStep, sheetText: liveDraft.text, sheetTextHtml: liveDraft.html }
+            : storedSheetStep;
+        const shouldAutoStructure = linkedMode === 'full' && currentSheetStep?.generalSheetGenerated !== true;
+        const sheetStep = shouldAutoStructure
+            ? structureSheetForRevision(currentSheetStep)
+            : currentSheetStep;
+        if (shouldAutoStructure) {
+            sheetDraftsRef.current.set(String(sheetStep.id || ''), {
+                text: sheetStep.sheetText,
+                html: sheetStep.sheetTextHtml
+            });
+        }
+        const existingIndex = steps.findIndex((candidate) => candidate?.type === 'question'
+            && (String(candidate?.autoLinkedSheetId || '') === String(sheetStep.id || '')
+                || String(candidate?.sourceSheetUrl || '') === `sheet:${sheetStep.id}`)
+            && (candidate?.autoLinkedSheetMode === 'plan' ? 'plan' : 'full') === linkedMode);
+        if (existingIndex >= 0) {
+            const existingQuestionId = String(steps[existingIndex]?.id || '');
+            setFormData((prev) => {
+                const next = [...(prev.steps || [])];
+                const freshSheetIndex = next.findIndex((candidate) => String(candidate?.id || '') === String(sheetStep.id || ''));
+                const freshStoredSheet = freshSheetIndex >= 0 ? next[freshSheetIndex] : sheetStep;
+                const freshDraft = sheetDraftsRef.current.get(String(sheetStep.id || ''));
+                const freshUnstructuredSheet = freshDraft
+                    ? { ...freshStoredSheet, sheetText: freshDraft.text, sheetTextHtml: freshDraft.html }
+                    : freshStoredSheet;
+                const shouldStructureFreshSheet = linkedMode === 'full' && freshUnstructuredSheet?.generalSheetGenerated !== true;
+                const freshSheet = shouldStructureFreshSheet
+                    ? structureSheetForRevision(freshUnstructuredSheet)
+                    : freshUnstructuredSheet;
+                if (freshSheetIndex >= 0 && shouldStructureFreshSheet) {
+                    next[freshSheetIndex] = {
+                        ...next[freshSheetIndex],
+                        sheetText: freshSheet.sheetText,
+                        sheetTextHtml: freshSheet.sheetTextHtml
+                    };
+                    sheetDraftsRef.current.set(String(sheetStep.id || ''), {
+                        text: freshSheet.sheetText,
+                        html: freshSheet.sheetTextHtml
+                    });
+                }
+                const freshQuestionIndex = next.findIndex((candidate) => (
+                    (existingQuestionId && String(candidate?.id || '') === existingQuestionId)
+                    || (candidate?.type === 'question'
+                        && String(candidate?.autoLinkedSheetId || '') === String(sheetStep.id || '')
+                        && (candidate?.autoLinkedSheetMode === 'plan' ? 'plan' : 'full') === linkedMode)
+                ));
+                if (freshQuestionIndex < 0) return prev;
+                const revision = sheetToRevisionQuestion(freshSheet, linkedMode);
+                next[freshQuestionIndex] = {
+                    ...next[freshQuestionIndex],
+                    title: revision.title,
+                    autoLinkedSheetId: sheetStep.id,
+                    autoLinkedSheetMode: linkedMode,
+                    autoRevisionKind: revision.kind,
+                    sourceKind: 'sheet',
+                    sourceSheetUrl: `sheet:${sheetStep.id}`,
+                    questionCount: 1,
+                    questionAnswerPairs: [{
+                        question: revision.text,
+                        answer: '',
+                        expectedKeywords: [],
+                        generatedByAi: false,
+                        validationType: 'fill_blanks'
+                    }]
+                };
+                return { ...prev, steps: next };
+            });
+            setActiveStep(existingIndex);
+            return;
+        }
+        const revision = sheetToRevisionQuestion(sheetStep, linkedMode);
+        const linkedQuestion = {
+            ...emptyStep('question'),
+            sectionId: String(sheetStep.sectionId || getDefaultSectionId()),
+            title: revision.title,
+            autoLinkedSheetId: sheetStep.id,
+            autoLinkedSheetMode: linkedMode,
+            autoRevisionKind: revision.kind,
+            sourceKind: 'sheet',
+            sourceSheetUrl: `sheet:${sheetStep.id}`,
+            questionCount: 1,
+            questionAnswerPairs: [{
+                question: revision.text,
+                answer: '',
+                expectedKeywords: [],
+                generatedByAi: false,
+                validationType: 'fill_blanks'
+            }]
+        };
+        const next = [...steps];
+        if (linkedMode === 'full' && sheetStep?.generalSheetGenerated !== true) {
+            next[sheetIndex] = {
+                ...next[sheetIndex],
+                sheetText: sheetStep.sheetText,
+                sheetTextHtml: sheetStep.sheetTextHtml
+            };
+        }
+        const lastLinkedOffset = steps.slice(sheetIndex + 1).findIndex((candidate) => candidate?.type !== 'question'
+            || String(candidate?.autoLinkedSheetId || '') !== String(sheetStep.id || ''));
+        const insertionIndex = lastLinkedOffset < 0 ? steps.length : sheetIndex + 1 + lastLinkedOffset;
+        next.splice(insertionIndex, 0, linkedQuestion);
+        setFormData((prev) => ({ ...prev, steps: next }));
+        setActiveStep(insertionIndex);
+    };
+
+    const generateLearningFromGeneralSheet = () => {
+        const parsed = splitGeneralSheetIntoParts(generalSheetText, generalSheetHtml);
+        if (!parsed.parts.length) {
+            alert('Aucune grande partie détectée. Utilise des titres comme « 1. Titre », « 2. Titre » ou « I. Titre », « II. Titre ».');
+            return;
+        }
+        const hasExistingWork = (formData.steps || []).length > 0;
+        if (hasExistingWork && !window.confirm('Cette génération va remplacer les sections et étapes actuelles de cet apprentissage. Continuer ?')) return;
+
+        const sections = [];
+        const steps = [];
+        const addLinkedQuestion = (sheetStep, mode = 'full') => {
+            const revision = sheetToRevisionQuestion(sheetStep, mode);
+            steps.push({
+                ...emptyStep('question'),
+                sectionId: sheetStep.sectionId,
+                title: revision.title,
+                autoLinkedSheetId: sheetStep.id,
+                autoLinkedSheetMode: mode,
+                autoRevisionKind: revision.kind,
+                sourceKind: 'sheet',
+                sourceSheetUrl: `sheet:${sheetStep.id}`,
+                questionCount: 1,
+                questionAnswerPairs: [{
+                    question: revision.text,
+                    answer: '',
+                    expectedKeywords: [],
+                    generatedByAi: false,
+                    validationType: 'fill_blanks'
+                }]
+            });
+        };
+
+        const planSectionId = uid();
+        sections.push({ id: planSectionId, name: 'Introduction', order: 0, visible: true });
+        const planLines = parsed.parts.map((part, index) => `${toRomanPartNumber(index + 1)} ${part.title}`);
+        const planSheet = {
+            ...emptyStep('sheet'),
+            sectionId: planSectionId,
+            title: `Introduction · Plan des grandes parties`,
+            sheetText: `${parsed.documentTitle}\n${planLines.join('\n')}`,
+            sheetTextHtml: `<div>${escapeGeneralSheetHtml(parsed.documentTitle)}</div>${planLines.map((line) => `<div><strong>${escapeGeneralSheetHtml(line)}</strong></div>`).join('')}`,
+            generalSheetGenerated: true
+        };
+        steps.push(planSheet);
+        addLinkedQuestion(planSheet, 'plan');
+
+        parsed.parts.forEach((part, index) => {
+            const sectionId = uid();
+            const romanPart = toRomanPartNumber(index + 1);
+            sections.push({ id: sectionId, name: `Partie ${romanPart}`, order: index + 1, visible: true });
+            const partSheet = {
+                ...emptyStep('sheet'),
+                sectionId,
+                title: `Partie ${romanPart} · ${part.title}`,
+                sheetText: part.text,
+                sheetTextHtml: part.html,
+                generalSheetGenerated: true
+            };
+            steps.push(partSheet);
+            addLinkedQuestion(partSheet, 'full');
+            const quizGroup = (parsed.quizGroups || []).find((group) => String(group?.key || '') === String(index + 1));
+            steps.push({
+                ...emptyStep('quiz'),
+                sectionId,
+                title: `Quiz · Partie ${romanPart}`,
+                quizSourceTitle: String(quizGroup?.title || part.title || '').trim(),
+                quizQuestions: Array.isArray(quizGroup?.questions) && quizGroup.questions.length > 0
+                    ? quizGroup.questions
+                    : emptyStep('quiz').quizQuestions,
+                generalSheetGenerated: true
+            });
+        });
+
+        setFormData((prev) => ({ ...prev, sections, steps }));
+        setActiveStep(0);
+        setShowGeneralSheetBuilder(false);
+    };
+
+    const copyNotebookLmSuperSheetPrompt = async () => {
+        const prompt = `PROMPT SUPERFICHE CONDAWEB
+
+À partir de mes sources, produis UNE SEULE SUPERFICHE de cours prête à être importée dans CondaWeb.
+
+FORMAT IMPÉRATIF — PARTIE 1 : FICHE DE COURS
+
+Première ligne : titre général de la leçon.
+
+Respecte exactement cette hiérarchie :
+
+I. Titre de la grande partie
+1- Idée principale
+a) Sous-idée
+b) Sous-idée
+2- Idée principale suivante
+a) Sous-idée
+II. Titre de la grande partie suivante
+RÈGLES STRICTES
+Après chaque élément, insère immédiatement un retour à la ligne.
+Un marqueur I., 1- ou a) doit toujours être le premier élément de sa ligne.
+Il est interdit de placer deux éléments sur une même ligne.
+Les chiffres romains correspondent aux grandes parties.
+Les nombres suivis de - correspondent aux idées principales.
+Les lettres a), b), c), d)... correspondent uniquement aux précisions, conséquences, listes, exemples ou cas particuliers de l'idée principale.
+Aucune phrase libre n'est autorisée. Toute information doit appartenir soit à une idée principale (1-, 2-, 3-...), soit à une sous-idée (a), b), c)...).
+Une idée principale doit être une phrase complète (sujet + verbe + complément) ou une affirmation claire.
+Les sous-idées ne doivent jamais répéter l'idée principale.
+Utiliser a), b), c)... uniquement lorsqu'une idée nécessite un niveau de détail supplémentaire.
+S'il n'y a aucune précision utile, ne créer aucune sous-idée.
+Mettre en gras uniquement les dates, personnages, lieux, notions, mots-clés et expressions que l'élève devra restituer dans un texte à trous.
+Tous les éléments en gras doivent pouvoir être supprimés pour créer automatiquement un texte à trous.
+Ne jamais mettre en gras un détail secondaire ou anecdotique.
+Supprimer les informations inutiles au niveau collège.
+Le contenu doit être exact, clair, synthétique et adapté à des élèves de collège.
+N'ajouter aucune source, citation, commentaire ou remarque méthodologique.
+FORMAT IMPÉRATIF — PARTIE 2 : QCM DE RÉVISION
+Après la fiche, écrire exactement :
+QCM DE RÉVISION
+Créer un bloc pour chaque grande partie, dans le même ordre :
+LEÇON 1 : [titre de I]
+LEÇON 2 : [titre de II]
+LEÇON 3 : [titre de III]
+...
+RÈGLES STRICTES
+Chaque leçon doit comporter entre 4 et 6 questions, même si la partie contient moins ou plus d'idées principales.
+Les questions doivent couvrir toutes les connaissances essentielles de la partie.
+Les questions doivent être réparties entre les idées principales et leurs sous-idées importantes.
+Numéroter les questions :
+1-
+2-
+3-
+...
+Chaque question comporte exactement quatre propositions :
+a)
+b)
+c)
+d)
+Une seule réponse est correcte.
+Mettre en gras uniquement la bonne réponse, et toute la bonne réponse.
+Les mauvaises réponses doivent être plausibles mais sans ambiguïté.
+Les questions doivent porter sur les éléments en gras de la fiche (dates, personnages, lieux, notions, mots-clés...).
+Chaque proposition (a, b, c, d) doit être écrite sur sa propre ligne.
+Ne produire aucune correction séparée : la bonne réponse est uniquement identifiable grâce au gras.
+Ne rien écrire avant le titre de la fiche.
+Ne rien écrire après la dernière réponse du dernier QCM.`;
+        try {
+            await navigator.clipboard.writeText(prompt);
+            alert('Prompt NotebookLM copié.');
+        } catch (_) {
+            const textarea = document.createElement('textarea');
+            textarea.value = prompt;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+            alert('Prompt NotebookLM copié.');
+        }
     };
 
     const openSourcePicker = (kind = '') => {
@@ -3823,6 +4962,39 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setSourcePickerCustomUrl('');
         setSourcePickerVideoName('');
     };
+    const openGeneralVideoEditor = async () => {
+        const url = String(sourcePickerCustomUrl || sourcePickerExistingUrl || '').trim();
+        if (!url) return alert("Ajoute ou choisis une URL vidéo.");
+        const videoName = String(sourcePickerVideoName || '').trim();
+        const existingIndex = (formData.steps || []).findIndex((row) => row?.type === 'video' && (
+            String(row?.videoUrl || '').trim() === url || String(row?.segmentSourceUrl || '').trim() === url
+        ));
+        let targetIndex = existingIndex;
+        let targetId = existingIndex >= 0 ? String(formData.steps[existingIndex]?.id || '') : '';
+        if (existingIndex < 0) {
+            const sections = Array.isArray(formData.sections) && formData.sections.length > 0
+                ? formData.sections
+                : [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+            const videoStep = {
+                ...emptyStep('video'),
+                sectionId: String(sections[0]?.id || 'sec_1'),
+                title: videoName || 'Vidéo générale',
+                videoUrl: url,
+                ...(videoName ? { videoSourceName: videoName } : {})
+            };
+            const nextSteps = [...(formData.steps || [])];
+            const firstInSection = nextSteps.findIndex((row) => String(row?.sectionId || '') === String(videoStep.sectionId || ''));
+            targetIndex = firstInSection < 0 ? nextSteps.length : firstInSection;
+            nextSteps.splice(targetIndex, 0, videoStep);
+            targetId = String(videoStep.id || '');
+            setFormData((prev) => ({ ...prev, sections, steps: nextSteps }));
+        }
+        setGlobalVideoSourceUrl(url);
+        setGlobalVideoSourceName(videoName);
+        closeSourcePicker();
+        setActiveStep(Math.max(0, targetIndex));
+        setPendingVideoEditorStepId(targetId);
+    };
     const applySourceToAllSteps = async () => {
         const kind = String(sourcePickerKind || '');
         if (!['video', 'sheet'].includes(kind)) return;
@@ -3833,28 +5005,52 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         }
         const videoName = String(sourcePickerVideoName || '').trim();
 
-        setFormData((prev) => {
-            const steps = Array.isArray(prev.steps) ? prev.steps : [];
-            const next = steps.map((s) => {
-                if (!s) return s;
-                if (kind === 'video' && s.type === 'video') {
-                    const patch = { videoUrl: url };
-                    if (videoName) patch.videoSourceName = videoName;
-                    return { ...s, ...patch };
-                }
-                if (kind === 'sheet' && s.type === 'sheet') return { ...s, sheetUrl: url };
-                return s;
-            });
-            return { ...prev, steps: next };
-        });
         if (kind === 'video') {
             setGlobalVideoSourceUrl(url);
             setGlobalVideoSourceName(videoName);
-            if (step?.type === 'video') {
-                await refreshKnownSegments(url, step?.id);
+            const segments = await refreshKnownSegments(url, '');
+            const existingVideo = (formData.steps || []).find((row) => row?.type === 'video' && (
+                String(row?.videoUrl || '').trim() === url || String(row?.segmentSourceUrl || '').trim() === url
+            ));
+            if (segments.length > 0) {
+                const structure = buildVideoSegmentStructure({
+                    sourceUrl: url,
+                    sourceName: videoName,
+                    segments,
+                    templateStep: existingVideo || { ...emptyStep('video'), videoUrl: url, videoSourceName: videoName }
+                });
+                if (structure) {
+                    const { nextSections, nextSteps, generatedSteps } = structure;
+                    setFormData((prev) => ({ ...prev, sections: nextSections, steps: nextSteps }));
+                    setActiveStep(Math.max(0, nextSteps.findIndex((row) => String(row?.id || '') === String(generatedSteps[0]?.id || ''))));
+                    if (formData?._id) {
+                        const saveRes = await fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/structure`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sections: nextSections, steps: nextSteps })
+                        });
+                        if (!saveRes.ok) return alert("Les séquences ont été retrouvées, mais leur attribution n'a pas pu être sauvegardée.");
+                    }
+                }
+            } else {
+                const sections = Array.isArray(formData.sections) && formData.sections.length > 0
+                    ? formData.sections
+                    : [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+                const videoStep = existingVideo
+                    ? { ...existingVideo, videoUrl: url, ...(videoName ? { videoSourceName: videoName } : {}) }
+                    : { ...emptyStep('video'), sectionId: String(sections[0]?.id || 'sec_1'), title: videoName || 'Vidéo générale', videoUrl: url, ...(videoName ? { videoSourceName: videoName } : {}) };
+                const withoutTarget = (formData.steps || []).filter((row) => String(row?.id || '') !== String(existingVideo?.id || ''));
+                const firstInSection = withoutTarget.findIndex((row) => String(row?.sectionId || '') === String(videoStep.sectionId || ''));
+                if (firstInSection < 0) withoutTarget.push(videoStep);
+                else withoutTarget.splice(firstInSection, 0, videoStep);
+                setFormData((prev) => ({ ...prev, sections, steps: withoutTarget }));
             }
         } else {
             setGlobalSheetSourceUrl(url);
+            setFormData((prev) => ({
+                ...prev,
+                steps: (prev.steps || []).map((s) => s?.type === 'sheet' ? { ...s, sheetUrl: url } : s)
+            }));
         }
         closeSourcePicker();
     };
@@ -3937,7 +5133,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const removeStep = (idx) => {
         if (!window.confirm('Supprimer cette étape ?')) return;
-        const next = formData.steps.filter((_, i) => i !== idx);
+        const removed = formData.steps[idx];
+        const next = formData.steps.filter((candidate, i) => i !== idx
+            && !(removed?.type === 'sheet'
+                && candidate?.type === 'question'
+                && String(candidate?.autoLinkedSheetId || '') === String(removed?.id || '')));
         setFormData(prev => ({ ...prev, steps: next }));
         setActiveStep(Math.max(0, Math.min(activeStep, next.length - 1)));
     };
@@ -4008,7 +5208,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setLoading(false);
     };
 
-    const editorVideoUrl = step?.type === 'video' ? resolveDriveAssetUrl(step.videoUrl || '') : '';
+    const activeStepUsesLocalVideo = step?.type === 'video'
+        && localVideoPreviewUrl
+        && localVideoStepId === String(step.id || '');
+    const editorVideoUrl = step?.type === 'video'
+        ? (activeStepUsesLocalVideo ? localVideoPreviewUrl : resolveDriveAssetUrl(step.videoUrl || ''))
+        : '';
     const editorIsDirect = isProbablyDirectVideo(editorVideoUrl);
     const editorYoutubeId = extractYoutubeId(step?.videoUrl || '');
     const editorIsYoutube = !editorIsDirect && !!editorYoutubeId;
@@ -4039,6 +5244,52 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             };
         })
         .sort((a, b) => a.startSec - b.startSec);
+    const selectedTimelineIndex = timelineSegments.findIndex((seg) => String(seg.sid || '') === String(selectedSegmentId || ''));
+    const previousTimelineSegment = selectedTimelineIndex > 0 ? timelineSegments[selectedTimelineIndex - 1] : null;
+    const currentTimelineSegment = selectedTimelineIndex >= 0 ? timelineSegments[selectedTimelineIndex] : null;
+    const nextTimelineSegment = selectedTimelineIndex >= 0 && selectedTimelineIndex < timelineSegments.length - 1
+        ? timelineSegments[selectedTimelineIndex + 1]
+        : null;
+    const lockedSegmentStartSec = previousTimelineSegment
+        ? Math.max(0, Number(previousTimelineSegment.endSec || 0))
+        : 0;
+    const saveSelectedEdge = async (edge, rawValue) => {
+        if (!currentTimelineSegment) return false;
+        const requested = Math.max(0, Math.floor(Number(rawValue || 0)));
+        if (edge === 'start') {
+            const maxStart = Math.max(0, Number(segmentEnd || currentTimelineSegment.endSec || 0) - 1);
+            const minStart = previousTimelineSegment ? previousTimelineSegment.startSec + 1 : 0;
+            const boundary = Math.max(minStart, Math.min(maxStart, requested));
+            setSegmentStart(boundary);
+            if (previousTimelineSegment) {
+                return resizeBoundarySegments({
+                    leftSid: previousTimelineSegment.sid,
+                    rightSid: currentTimelineSegment.sid,
+                    leftStartSec: previousTimelineSegment.startSec,
+                    rightEndSec: Math.max(boundary + 1, Number(segmentEnd || currentTimelineSegment.endSec || 0)),
+                    boundarySec: boundary
+                });
+            }
+            return saveSelectedSegmentBounds(boundary, Math.max(boundary + 1, Number(segmentEnd || currentTimelineSegment.endSec || 0)));
+        }
+        const minEnd = Math.max(1, lockedSegmentStartSec + 1);
+        const maxEnd = nextTimelineSegment
+            ? Math.max(minEnd, nextTimelineSegment.endSec - 1)
+            : timelineDurationSec;
+        const boundary = Math.max(minEnd, Math.min(maxEnd, requested));
+        setSegmentEnd(boundary);
+        if (nextTimelineSegment) {
+            return resizeBoundarySegments({
+                leftSid: currentTimelineSegment.sid,
+                rightSid: nextTimelineSegment.sid,
+                leftStartSec: lockedSegmentStartSec,
+                rightEndSec: nextTimelineSegment.endSec,
+                boundarySec: boundary
+            });
+        }
+        setSegmentStart(lockedSegmentStartSec);
+        return saveSelectedSegmentBounds(lockedSegmentStartSec, boundary);
+    };
     const cutMarkersSec = [...new Set(
         timelineSegments
             .map((seg) => Math.max(0, Math.floor(Number(seg?.endSec || 0))))
@@ -4148,6 +5399,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     useEffect(() => {
         if (!showVideoEditor || !editorIsYoutube || !youtubeEditorPlayerRef.current?.seekTo) return;
+        // En mode vidéo libre, « Suite » et la suppression d'un segment gèrent
+        // eux-mêmes la position. Ne pas les renvoyer à 0 après le rendu React.
+        if (editorPlaybackMode !== 'segment') return;
         try {
             youtubeEditorPlayerRef.current.pauseVideo?.();
             youtubeEditorPlayerRef.current.seekTo(playbackStartSec, true);
@@ -4207,7 +5461,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     </button>
                     <button
                         className={`v84-res-btn upload ${sheetBtnClass}`}
-                        onClick={() => openSourcePicker('sheet')}
+                        onClick={() => setShowGeneralSheetBuilder(true)}
                         title={hasGlobalSheet ? `Source: ${effectiveGlobalSheetSource}` : ''}
                         style={hasGlobalSheet ? { backgroundColor: '#4f46e5', color: '#ffffff', borderColor: '#4338ca' } : undefined}
                     >
@@ -4295,17 +5549,75 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         <div className="mt-4 flex items-center gap-2">
                             <button className="v84-res-btn upload" onClick={closeSourcePicker}>Annuler</button>
                             {sourcePickerKind === 'video' && (
-                                <button
-                                    className="v84-res-btn upload bg-slate-700 text-white border-slate-800"
-                                    onClick={saveVideoSourceToLibrary}
-                                    disabled={savingVideoSource}
-                                >
-                                    {savingVideoSource ? 'Sauvegarde...' : 'Sauvegarder'}
-                                </button>
+                                <>
+                                    <button
+                                        className="v84-res-btn upload bg-slate-700 text-white border-slate-800"
+                                        onClick={saveVideoSourceToLibrary}
+                                        disabled={savingVideoSource}
+                                    >
+                                        {savingVideoSource ? 'Sauvegarde...' : 'Sauvegarder'}
+                                    </button>
+                                    <button
+                                        className="v84-res-btn upload bg-sky-600 text-white border-sky-700"
+                                        onClick={openGeneralVideoEditor}
+                                    >
+                                        ✂️ Éditeur de séquences
+                                    </button>
+                                </>
                             )}
                             <button className="v84-res-btn upload bg-violet-600 text-white border-violet-700" onClick={applySourceToAllSteps}>
                                 Appliquer globalement
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showGeneralSheetBuilder && (
+                <div className="fixed inset-0 z-[50030] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-2xl">
+                        <div className="flex items-center gap-3 border-b border-slate-200 px-6 py-4">
+                            <div>
+                                <div className="text-xl font-black text-slate-900">Créer une fiche générale</div>
+                                <div className="text-sm font-bold text-slate-500">Colle la fiche puis son QCM : le programme crée les sections, les questions IA et les banques de questions des jeux.</div>
+                            </div>
+                            <button
+                                type="button"
+                                className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
+                                onClick={copyNotebookLmSuperSheetPrompt}
+                            >📋 Copier le prompt NotebookLM</button>
+                            <button className="v84-close-btn" onClick={() => setShowGeneralSheetBuilder(false)}>✕</button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-6">
+                            <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
+                                La partie cours utilise <b>I. Titre</b>, <b>II. Titre</b>… Puis ajoute <b>QCM DE RÉVISION</b> et des blocs <b>LEÇON 1</b>, <b>LEÇON 2</b>… La bonne réponse de chaque QCM doit être en gras.
+                            </div>
+                            <SheetRichTextEditor
+                                html={generalSheetHtml}
+                                plainText={generalSheetText}
+                                onChange={({ html, text }) => {
+                                    setGeneralSheetHtml(html);
+                                    setGeneralSheetText(text);
+                                }}
+                            />
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+                            <button type="button" className="v84-res-btn upload" onClick={() => {
+                                setShowGeneralSheetBuilder(false);
+                                openSourcePicker('sheet');
+                            }}>
+                                Utiliser une source externe
+                            </button>
+                            <div className="flex gap-2">
+                                <button type="button" className="v84-res-btn upload" onClick={() => setShowGeneralSheetBuilder(false)}>Annuler</button>
+                                <button
+                                    type="button"
+                                    className="v84-res-btn upload !bg-violet-600 !text-white !border-violet-700"
+                                    onClick={generateLearningFromGeneralSheet}
+                                    disabled={!String(generalSheetText || '').trim()}
+                                >
+                                    Valider et créer les sections
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4349,12 +5661,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 }}
                             >
                                 <div className="mb-2">
+                                    <div className="flex items-center gap-2">
                                     <input
                                         className="v84-ans-input !h-9 !text-[22px] !font-black mb-2 leading-none placeholder:!text-slate-400"
                                         value={String(sec.name || '')}
                                         onChange={(e) => renameSection(sec.id, e.target.value)}
                                         placeholder="Nouveau"
                                     />
+                                    <button
+                                        type="button"
+                                        className="v84-del-btn mb-2 shrink-0"
+                                        onClick={() => removeSection(sec.id)}
+                                        title="Supprimer cette section"
+                                        aria-label={`Supprimer la section ${sec.name || ''}`}
+                                    >✕</button>
+                                    </div>
                                     <button
                                         className={`v84-add-q-btn w-full !py-1 !text-[11px] ${sec.visible === false ? '!bg-slate-200 !text-slate-700 !border-slate-300' : '!bg-emerald-100 !text-emerald-800 !border-emerald-300'}`}
                                         onClick={() => toggleSectionVisible(sec.id)}
@@ -4388,7 +5709,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             }}
                                             onDragEnd={() => setDragStepIdx(null)}
                                         >
-                                            {s.type === 'sheet' ? '📄' : s.type === 'video' ? '🎬' : '🎤'} {s.title || `Étape ${idx + 1}`}
+                                            {s.type === 'sheet' ? '📄' : s.type === 'video' ? '🎬' : s.type === 'quiz' ? '🎮' : '🎤'} {s.title || `Étape ${idx + 1}`}
                                             <div className="flex ml-auto gap-1">
                                                 <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); moveStepInSection(idx, -1, sec.id); }}>↑</button>
                                                 <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); moveStepInSection(idx, 1, sec.id); }}>↓</button>
@@ -4397,10 +5718,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         </div>
                                     );
                                 })}
-                                <div className="grid grid-cols-3 gap-1 mt-2">
+                                <div className="grid grid-cols-2 gap-1 mt-2">
                                     <button className="v84-add-q-btn !py-1 !text-[11px]" onClick={() => addStep('sheet', sec.id)}>+ FICHE</button>
                                     <button className="v84-add-q-btn !py-1 !text-[11px]" onClick={() => addStep('video', sec.id)}>+ VIDÉO</button>
                                     <button className="v84-add-q-btn !py-1 !text-[11px]" onClick={() => addStep('question', sec.id)}>+ QUESTIONS IA</button>
+                                    <button className="v84-add-q-btn !py-1 !text-[11px] !border-amber-300 !bg-amber-50 !text-amber-800" onClick={() => addStep('quiz', sec.id)}>+ QUIZ JEUX</button>
                                 </div>
                             </div>
                         ))}
@@ -4441,11 +5763,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 <>
                                     <div className="mt-4 flex items-center justify-between gap-3">
                                         <div className="hw-section-title !mt-0">Source fiche (menu)</div>
-                                        {String(step.sheetUrl || '').trim() && (
+                                        {(String(step.sheetUrl || '').trim() || String(step.sheetText || '').trim()) && (
                                             <button
                                                 type="button"
                                                 className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 text-[14px] font-black text-red-600 shadow-sm hover:bg-red-600 hover:text-white"
-                                                onClick={clearSheetStep}
+                                                onClick={confirmClearSheetStep}
                                                 title="Supprimer la fiche de cette étape"
                                                 aria-label="Supprimer la fiche"
                                             >
@@ -4545,7 +5867,129 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             Éditer texte / zones réponses
                                         </button>
                                     </div>
+                                    <div className="mt-7 border-t-4 border-slate-200 pt-6">
+                                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <div className="text-lg font-black uppercase text-slate-800">Grand éditeur de texte</div>
+                                                <div className="text-xs font-bold text-slate-400">Colle puis modifie librement le contenu de la fiche.</div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="rounded-xl border-2 border-red-300 bg-red-50 px-5 py-3 text-sm font-black uppercase text-red-700 shadow-sm transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                                onClick={confirmClearSheetStep}
+                                                disabled={!String(step.sheetUrl || '').trim() && !String(step.sheetText || '').trim()}
+                                            >
+                                                🗑️ Supprimer la fiche
+                                            </button>
+                                        </div>
+                                        <SheetRichTextEditor
+                                            key={step.id}
+                                            html={step.sheetTextHtml || ''}
+                                            plainText={step.sheetText || ''}
+                                            onChange={({ html, text }) => {
+                                                sheetDraftsRef.current.set(String(step.id || ''), { html, text });
+                                                updateStep(activeStep, {
+                                                    sheetTextHtml: html,
+                                                    sheetText: text,
+                                                });
+                                            }}
+                                        />
+                                        <div className="mt-2 text-sm font-bold text-slate-400">
+                                            {String(step.sheetText || '').length.toLocaleString('fr-FR')} caractère(s) — sauvegardé avec l’apprentissage.
+                                        </div>
+                                        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            {[
+                                                { mode: 'plan', label: 'Plan', icon: '📋' },
+                                                { mode: 'full', label: 'Fiche', icon: '📄' }
+                                            ].map(({ mode, label, icon }) => {
+                                                const exists = formData.steps.some((candidate) => candidate?.type === 'question'
+                                                    && String(candidate?.autoLinkedSheetId || '') === String(step.id || '')
+                                                    && (candidate?.autoLinkedSheetMode === 'plan' ? 'plan' : 'full') === mode);
+                                                return (
+                                                    <button
+                                                        key={mode}
+                                                        type="button"
+                                                        className="w-full rounded-2xl border-2 border-violet-500 bg-violet-600 px-6 py-4 text-base font-black uppercase text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-violet-700"
+                                                        onClick={() => createOrInspectSheetQuestion(activeStep, mode)}
+                                                    >
+                                                        {exists ? `👁 Inspecter ${label}` : `${icon} Créer ${label}`}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
                                 </>
+                            )}
+
+                            {step.type === 'quiz' && (
+                                <div className="mt-5 rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
+                                    <div className="mb-1 text-lg font-black text-amber-900">🎮 Banque de questions pour les jeux</div>
+                                    <div className="mb-4 text-xs font-bold text-amber-700">Cette étape est enregistrée avec l’apprentissage, mais reste invisible dans sa lecture côté élève.</div>
+                                    <div className="space-y-4">
+                                        {(Array.isArray(step.quizQuestions) ? step.quizQuestions : []).map((quizQuestion, questionIndex) => (
+                                            <div key={quizQuestion.id || questionIndex} className="rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
+                                                <div className="mb-2 flex items-center gap-2">
+                                                    <span className="font-black text-amber-800">Question {questionIndex + 1}</span>
+                                                    <button
+                                                        type="button"
+                                                        className="v84-del-btn ml-auto"
+                                                        onClick={() => updateStep(activeStep, {
+                                                            quizQuestions: step.quizQuestions.filter((_, index) => index !== questionIndex)
+                                                        })}
+                                                    >✕</button>
+                                                </div>
+                                                <textarea
+                                                    className="v84-ans-input min-h-[78px]"
+                                                    value={quizQuestion.question || ''}
+                                                    onChange={(event) => {
+                                                        const quizQuestions = step.quizQuestions.map((row, index) => index === questionIndex
+                                                            ? { ...row, question: event.target.value }
+                                                            : row);
+                                                        updateStep(activeStep, { quizQuestions });
+                                                    }}
+                                                    placeholder="Question du QCM"
+                                                />
+                                                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                                    {(Array.isArray(quizQuestion.choices) ? quizQuestion.choices : ['', '', '', '']).map((choice, choiceIndex) => (
+                                                        <label key={choiceIndex} className={`flex items-center gap-2 rounded-xl border p-2 ${Number(quizQuestion.correctIndex) === choiceIndex ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                                                            <input
+                                                                type="radio"
+                                                                name={`quiz-correct-${step.id}-${questionIndex}`}
+                                                                checked={Number(quizQuestion.correctIndex) === choiceIndex}
+                                                                onChange={() => {
+                                                                    const quizQuestions = step.quizQuestions.map((row, index) => index === questionIndex
+                                                                        ? { ...row, correctIndex: choiceIndex }
+                                                                        : row);
+                                                                    updateStep(activeStep, { quizQuestions });
+                                                                }}
+                                                            />
+                                                            <input
+                                                                className="min-w-0 flex-1 bg-transparent font-bold outline-none"
+                                                                value={choice || ''}
+                                                                onChange={(event) => {
+                                                                    const choices = [...quizQuestion.choices];
+                                                                    choices[choiceIndex] = event.target.value;
+                                                                    const quizQuestions = step.quizQuestions.map((row, index) => index === questionIndex
+                                                                        ? { ...row, choices }
+                                                                        : row);
+                                                                    updateStep(activeStep, { quizQuestions });
+                                                                }}
+                                                                placeholder={`Réponse ${String.fromCharCode(65 + choiceIndex)}`}
+                                                            />
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="v84-add-q-btn mt-4 w-full !border-amber-300 !bg-white !text-amber-800"
+                                        onClick={() => updateStep(activeStep, {
+                                            quizQuestions: [...(step.quizQuestions || []), { id: uid(), question: '', choices: ['', '', '', ''], correctIndex: 0 }]
+                                        })}
+                                    >+ Ajouter une question</button>
+                                </div>
                             )}
 
                             {step.type === 'video' && (
@@ -4576,6 +6020,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                 setSelectedSegmentTranscript('');
                                                 setLastSavedSegmentLabel('');
                                                 setLastSavedSegmentTranscript('');
+                                                setVideoSequencePreviewStepId('');
+                                                if (url) refreshKnownSegments(url, step.id);
                                             }}
                                         >
                                             <option value="">Choisir une vidéo source</option>
@@ -4617,17 +6063,85 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         className="v84-ans-input"
                                         value={step.videoUrl || ''}
                                         onChange={(e) => updateStep(activeStep, { videoUrl: e.target.value })}
+                                        onBlur={(e) => cloneLocalSegmentsToOnlineUrl(e.currentTarget.value)}
                                         placeholder="https://..."
                                     />
+                                    <div className="mt-3 rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50 p-3">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <label className="cursor-pointer rounded-xl bg-sky-600 px-4 py-3 text-xs font-black text-white shadow">
+                                                📁 Ajouter une vidéo locale
+                                                <input type="file" accept="video/mp4,video/webm,video/ogg,video/*" className="hidden" onChange={(event) => { chooseLocalVideo(event.target.files?.[0]); event.target.value = ''; }} />
+                                            </label>
+                                            <div className="min-w-0 text-xs font-bold text-sky-900">
+                                                {activeStepUsesLocalVideo ? <><strong>{localVideoName}</strong><br />Découpage local actif. Tu pourras ensuite coller l’URL en ligne dans le champ ci-dessus.</> : 'Le fichier reste sur cet ordinateur ; seules les secondes de découpage sont enregistrées.'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-3">
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload bg-violet-600 text-white border-violet-700"
+                                            onClick={openVideoEditor}
+                                            disabled={!step.videoUrl && !activeStepUsesLocalVideo}
+                                        >
+                                            ✂️ Éditeur de séquences
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload bg-emerald-600 text-white border-emerald-700"
+                                            disabled={!selectedSegmentId}
+                                            onClick={() => setVideoSequencePreviewStepId(`${String(step.id || '')}:${Date.now()}`)}
+                                        >
+                                            ▶ Play la séquence
+                                        </button>
+                                        {!selectedSegmentId && <span className="text-xs font-bold text-violet-700">Choisissez d’abord une séquence dans le sélecteur ci-dessus.</span>}
+                                    </div>
+                                    {videoSequencePreviewStepId.startsWith(`${String(step.id || '')}:`) && selectedSegmentId && selectedSegment && (
+                                        <div className="mt-3 overflow-hidden rounded-2xl border-2 border-emerald-300 bg-black shadow-lg">
+                                            <div className="flex items-center justify-between bg-emerald-50 px-4 py-2">
+                                                <span className="text-xs font-black uppercase text-emerald-800">Lecture de la séquence sélectionnée</span>
+                                                <button type="button" className="font-black text-red-600" onClick={() => setVideoSequencePreviewStepId('')}>✕</button>
+                                            </div>
+                                            <div className="h-[260px]">
+                                                {activeStepUsesLocalVideo || isProbablyDirectVideo(resolveDriveAssetUrl(step.videoUrl || '')) ? (
+                                                    <video
+                                                        key={`compact-preview-${videoSequencePreviewStepId}`}
+                                                        src={activeStepUsesLocalVideo ? localVideoPreviewUrl : resolveDriveAssetUrl(step.videoUrl || '')}
+                                                        controls
+                                                        autoPlay
+                                                        className="h-full w-full object-contain bg-black"
+                                                        onLoadedMetadata={(event) => { try { event.currentTarget.currentTime = Math.max(0, Number(selectedSegment.startSec || 0)); } catch (_) {} }}
+                                                        onTimeUpdate={(event) => {
+                                                            const end = Math.max(0, Number(selectedSegment.endSec || 0));
+                                                            if (end > 0 && event.currentTarget.currentTime >= end) event.currentTarget.pause();
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <iframe
+                                                        key={`compact-youtube-preview-${videoSequencePreviewStepId}`}
+                                                        title={`compact-video-preview-${step.id}`}
+                                                        src={withAutoplay(withSegmentParams(
+                                                            toEmbedUrl(resolveDriveAssetUrl(step.videoUrl || '')),
+                                                            Number(selectedSegment.startSec || 0),
+                                                            Number(selectedSegment.endSec || 0)
+                                                        ))}
+                                                        className="h-full w-full bg-black"
+                                                        allow="autoplay; encrypted-media; picture-in-picture"
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {false && <>
                                     <div className="hw-section-title mt-4">Aperçu vidéo / séquence</div>
                                     <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden h-[220px]">
-                                        {!String(step.videoUrl || '').trim() ? (
+                                        {!String(step.videoUrl || '').trim() && !activeStepUsesLocalVideo ? (
                                             <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">Ajoute une URL vidéo pour voir l'aperçu.</div>
-                                        ) : isProbablyDirectVideo(resolveDriveAssetUrl(step.videoUrl || '')) ? (
+                                        ) : activeStepUsesLocalVideo || isProbablyDirectVideo(resolveDriveAssetUrl(step.videoUrl || '')) ? (
                                             <video
-                                                key={`${resolveDriveAssetUrl(step.videoUrl || '')}_${Number(step.startSec || 0)}_${Number(step.endSec || 0)}`}
+                                                key={`${activeStepUsesLocalVideo ? localVideoPreviewUrl : resolveDriveAssetUrl(step.videoUrl || '')}_${Number(step.startSec || 0)}_${Number(step.endSec || 0)}`}
                                                 ref={videoPreviewRef}
-                                                src={resolveDriveAssetUrl(step.videoUrl || '')}
+                                                src={activeStepUsesLocalVideo ? localVideoPreviewUrl : resolveDriveAssetUrl(step.videoUrl || '')}
                                                 controls
                                                 className="w-full h-full object-contain bg-black"
                                                 onLoadedMetadata={(e) => {
@@ -4749,7 +6263,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         Le texte vidéo vient des segments sauvegardés dans l’éditeur de séquences.
                                     </div>
                                     <div className="mt-3 flex items-center gap-2">
-                                        <button type="button" className="v84-res-btn upload" onClick={openVideoEditor} disabled={!step.videoUrl}>
+                                        <button type="button" className="v84-res-btn upload" onClick={openVideoEditor} disabled={!step.videoUrl && !activeStepUsesLocalVideo}>
                                             Éditeur Séquences
                                         </button>
                                         <button
@@ -4768,6 +6282,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             Éditer texte / zones réponses
                                         </button>
                                     </div>
+                                    </>}
                                 </>
                             )}
 
@@ -4844,7 +6359,28 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             </div>
                                         )}
                                     </div>
-                                    <div className="hw-section-title mt-4">Questions contrôlées CondaWeb</div>
+                                    <div className="mt-4 rounded-2xl border-2 border-indigo-100 bg-indigo-50/50 p-3">
+                                        <div className="mb-2 text-[11px] font-black uppercase text-indigo-700">Mode proposé à l’élève</div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                className={`rounded-xl border-2 px-3 py-3 text-left text-[12px] font-black ${String(step.questionMode || 'easy') !== 'hard' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-500'}`}
+                                                onClick={() => updateStep(activeStep, { questionMode: 'easy' })}
+                                            >
+                                                Facile · texte à trous
+                                                <span className="mt-1 block text-[10px] font-bold opacity-75">Correction locale, sans IA.</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`rounded-xl border-2 px-3 py-3 text-left text-[12px] font-black ${String(step.questionMode || '') === 'hard' ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-slate-200 bg-white text-slate-500'}`}
+                                                onClick={() => updateStep(activeStep, { questionMode: 'hard' })}
+                                            >
+                                                Difficile · récitation GPT
+                                                <span className="mt-1 block text-[10px] font-bold opacity-75">Le GPT relève les oublis puis renvoie la validation.</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="hw-section-title mt-4">Texte attendu et questions facultatives</div>
                                     {questionSectionsFromDb.length > 0 ? (
                                         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3 max-h-[440px] overflow-auto">
                                             {questionSectionsFromDb.map((section) => (
@@ -4939,6 +6475,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                                                 Rouge : "réponse". Bleu : "mot1"+"mot2"+"mot3" (liste souple) ou "mot1+mot2+mot3" (liste complète).
                                                                             </span>
                                                                         )}
+                                                                        {pair?.validationType === 'fill_blanks' && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="ml-auto rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase text-indigo-700 hover:bg-indigo-600 hover:text-white"
+                                                                                onClick={() => updateQuestionPairRow(i, { question: renumberRemainingMainPoints(questionValue) })}
+                                                                            >
+                                                                                1-2-3 Renuméroter
+                                                                            </button>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex gap-1">
                                                                         {pair?.validationType === 'fill_blanks' ? (
@@ -4946,7 +6491,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                                                 rows={3}
                                                                                 value={questionValue}
                                                                                 onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
-                                                                                onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateQuestionPairRow(i, { question: nextValue }))}
+                                                                                onKeyDown={(e) => keepQuestionEditorKey(
+                                                                                    e,
+                                                                                    questionValue,
+                                                                                    (nextValue) => updateQuestionPairRow(i, { question: nextValue }),
+                                                                                    (nextValue) => updateQuestionPairRow(i, { question: nextValue, validationType: 'fill_blanks' })
+                                                                                )}
                                                                                 placeholder={'La guerre commence en "1914" et se termine en "1918".'}
                                                                             />
                                                                         ) : (
@@ -4955,7 +6505,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                                                 className="v84-q-input !text-[13px] !leading-snug"
                                                                                 value={questionValue}
                                                                                 onChange={(e) => updateQuestionPairRow(i, { question: e.target.value })}
-                                                                                onKeyDown={(e) => keepQuestionTextareaSpace(e, questionValue, (nextValue) => updateQuestionPairRow(i, { question: nextValue }))}
+                                                                                onKeyDown={(e) => keepQuestionEditorKey(
+                                                                                    e,
+                                                                                    questionValue,
+                                                                                    (nextValue) => updateQuestionPairRow(i, { question: nextValue }),
+                                                                                    (nextValue) => updateQuestionPairRow(i, { question: nextValue, validationType: 'fill_blanks' })
+                                                                                )}
                                                                                 placeholder={pair?.placeholderLabel || `Question ${i + 1}`}
                                                                             />
                                                                         )}
@@ -5055,7 +6610,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                     className="v84-res-btn upload"
                                                     onClick={() => {
                                                         const rows = [...getQuestionPairRowsForEditor()];
-                                                        rows.push({ question: '', answer: '', expectedKeywords: [], generatedByAi: false, validationType: 'open' });
+                                                        rows.push({ question: '', answer: '', expectedKeywords: [], generatedByAi: false, validationType: 'fill_blanks' });
                                                         updateQuestionPairsDraft(rows);
                                                     }}
                                                 >
@@ -5200,6 +6755,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     <div className="bg-white rounded-[24px] w-full max-w-5xl h-[82vh] flex flex-col overflow-hidden">
                         <div className="p-4 border-b border-slate-200 flex items-center gap-2">
                             <div className="text-sm font-black uppercase text-slate-700">Éditeur séquences vidéo</div>
+                            {activeStepUsesLocalVideo && <div className="rounded-lg bg-sky-100 px-3 py-2 text-[11px] font-black text-sky-800">📁 Local : {localVideoName}</div>}
                             <button className="v84-close-btn ml-auto" onClick={() => setShowVideoEditor(false)}>✕</button>
                         </div>
                         <div className="flex-1 grid grid-cols-[1fr_290px] min-h-0">
@@ -5299,18 +6855,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             className="v84-res-btn upload bg-violet-600 text-white"
                                             onClick={() => {
                                                 try {
-                                                    if (selectedSegment) {
-                                                        if (editorPlaying) {
-                                                            if (editorIsDirect && videoEditorRef.current) {
-                                                                videoEditorRef.current.pause();
-                                                            } else if (youtubeEditorPlayerRef.current) {
-                                                                youtubeEditorPlayerRef.current.pauseVideo?.();
-                                                            }
-                                                            return;
-                                                        }
-                                                        playSelectedSegmentNow(selectedSegment);
-                                                        return;
-                                                    }
+                                                    // Le bouton principal ignore toujours les séquences.
+                                                    // La sélection reste affichée uniquement pour l'édition.
+                                                    youtubeBoundsRef.current = { start: 0, end: 0 };
+                                                    setEditorPlaybackMode('video');
+                                                    setPreviewSegmentMode(false);
+                                                    setEmbedPreviewSeekSec(null);
                                                     if (editorIsDirect && videoEditorRef.current) {
                                                         if (editorPlaying) videoEditorRef.current.pause();
                                                         else videoEditorRef.current.play().catch(() => {});
@@ -5318,7 +6868,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                     }
                                                     if (youtubeEditorPlayerRef.current) {
                                                         if (editorPlaying) youtubeEditorPlayerRef.current.pauseVideo?.();
-                                                        else youtubeEditorPlayerRef.current.playVideo?.();
+                                                        else {
+                                                            youtubeEditorPlayerRef.current.seekTo?.(Math.max(0, Number(editorCurrentAbsSec || 0)), true);
+                                                            youtubeEditorPlayerRef.current.playVideo?.();
+                                                        }
                                                     }
                                                 } catch (_) {}
                                             }}
@@ -5339,7 +6892,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             max={timelineDurationSec}
                                             step={1}
                                             value={timelineCurrentSec}
-                                            onChange={(e) => seekEditorTo(Number(e.target.value || 0))}
+                                            onChange={(e) => seekEditorTo(Number(e.target.value || 0), { freePlayback: true })}
                                             className="w-full"
                                         />
                                         {timelineDurationSec > 1 && cutMarkersSec.map((sec) => {
@@ -5398,40 +6951,26 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     {selectedSegment && (
                                         <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
                                             <div className="text-[11px] font-black text-slate-600 mb-1">Ajuster séquence sélectionnée</div>
-                                            <div className="grid grid-cols-[56px_1fr_58px] gap-2 items-center mb-1">
-                                                <div className="text-[10px] font-black text-slate-500 uppercase">Début</div>
-                                                <input
-                                                    type="range"
-                                                    min={0}
-                                                    max={timelineDurationSec}
-                                                    step={1}
-                                                    value={Math.max(0, Math.min(timelineDurationSec, Number(segmentStart || 0)))}
-                                                    onChange={(e) => {
-                                                        const v = Math.max(0, Math.floor(Number(e.target.value || 0)));
-                                                        const end = Math.max(v + 1, Number(segmentEnd || 0));
-                                                        setSegmentStart(v);
-                                                        setSegmentEnd(end);
-                                                    }}
-                                                    onMouseUp={() => saveSelectedSegmentBounds(segmentStart, segmentEnd)}
-                                                    onTouchEnd={() => saveSelectedSegmentBounds(segmentStart, segmentEnd)}
-                                                />
-                                                <div className="text-[11px] font-black text-slate-700 text-right">{Math.floor(Number(segmentStart || 0))}s</div>
+                                            <div className="mb-2 rounded-md bg-blue-50 px-3 py-2 text-[11px] font-black text-blue-800">
+                                                Début automatique : {Math.floor(lockedSegmentStartSec)}s
                                             </div>
                                             <div className="grid grid-cols-[56px_1fr_58px] gap-2 items-center">
                                                 <div className="text-[10px] font-black text-slate-500 uppercase">Fin</div>
                                                 <input
                                                     type="range"
-                                                    min={0}
-                                                    max={timelineDurationSec}
+                                                    min={Math.max(1, lockedSegmentStartSec + 1)}
+                                                    max={nextTimelineSegment ? Math.max(1, nextTimelineSegment.endSec - 1) : timelineDurationSec}
                                                     step={1}
                                                     value={Math.max(0, Math.min(timelineDurationSec, Number(segmentEnd || 0)))}
                                                     onChange={(e) => {
                                                         const v = Math.max(0, Math.floor(Number(e.target.value || 0)));
-                                                        const start = Math.max(0, Number(segmentStart || 0));
-                                                        setSegmentEnd(Math.max(start + 1, v));
+                                                        const start = lockedSegmentStartSec;
+                                                        setSegmentStart(start);
+                                                        const maxEnd = nextTimelineSegment ? Math.max(start + 1, nextTimelineSegment.endSec - 1) : timelineDurationSec;
+                                                        setSegmentEnd(Math.max(start + 1, Math.min(maxEnd, v)));
                                                     }}
-                                                    onMouseUp={() => saveSelectedSegmentBounds(segmentStart, segmentEnd)}
-                                                    onTouchEnd={() => saveSelectedSegmentBounds(segmentStart, segmentEnd)}
+                                                    onMouseUp={(e) => saveSelectedEdge('end', e.currentTarget.value)}
+                                                    onTouchEnd={(e) => saveSelectedEdge('end', e.currentTarget.value)}
                                                 />
                                                 <div className="text-[11px] font-black text-slate-700 text-right">{Math.floor(Number(segmentEnd || 0))}s</div>
                                             </div>
@@ -5498,9 +7037,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         </button>
                                     </div>
                                     <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Section vidéo</div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <select
-                                            className="v84-ans-input !h-[42px]"
+                                            className="v84-ans-input !h-[42px] basis-full"
                                             value={selectedSegmentId}
                                             onChange={(e) => {
                                                 const sid = String(e.target.value || '');
@@ -5519,6 +7058,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                 );
                                             })}
                                         </select>
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload bg-red-600 text-white !h-[42px] !px-3 whitespace-nowrap"
+                                            title="Supprimer uniquement la séquence sélectionnée"
+                                            onClick={() => selectedSegment && removeKnownSegment(selectedSegment)}
+                                            disabled={!selectedSegment}
+                                        >
+                                            Supprimer
+                                        </button>
                                         <button
                                             type="button"
                                             className="v84-del-btn"
@@ -5547,14 +7095,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 <div className="mt-4 pt-3 border-t border-slate-200">
                                     <button
                                         className="v84-res-btn upload bg-violet-600 text-white w-full"
-                                        disabled={!selectedSegment}
-                                        onClick={() => {
-                                            if (!selectedSegment) return;
-                                            applyKnownSegment(selectedSegment);
-                                            updateStep(activeStep, { videoTranscript: String(selectedSegment.transcript || '') });
-                                        }}
+                                        disabled={!selectedSegment || savingStepData}
+                                        onClick={applySelectedSegmentToStep}
                                     >
-                                        Appliquer à l'étape
+                                        {savingStepData ? 'Sauvegarde…' : "Appliquer à l'étape"}
                                     </button>
                                 </div>
                             </div>

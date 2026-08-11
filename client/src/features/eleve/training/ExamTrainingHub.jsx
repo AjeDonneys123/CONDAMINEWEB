@@ -1,6 +1,65 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import HomeworkList from '../homework/HomeworkList';
 
+const TRAINING_SCORE_EVENT = 'condaweb:training-score';
+
+const reportTrainingScore = (exerciseId, correct, total) => {
+  if (typeof window === 'undefined' || !exerciseId) return;
+  window.dispatchEvent(new CustomEvent(TRAINING_SCORE_EVENT, {
+    detail: {
+      exerciseId: String(exerciseId),
+      correct: Math.max(0, Number(correct) || 0),
+      total: Math.max(0, Number(total) || 0)
+    }
+  }));
+};
+
+function TrainingPointsBadge({ user }) {
+  const studentKey = String(user?._id || user?.id || user?.name || 'student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const storageKey = `condaweb-training-points-v1:${studentKey}`;
+  const [progress, setProgress] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+      if (saved && typeof saved === 'object') return { points: Number(saved.points) || 0, best: saved.best || {} };
+    } catch (_) {}
+    return { points: 0, best: {} };
+  });
+  const [gain, setGain] = useState(0);
+
+  useEffect(() => {
+    const onScore = (event) => {
+      const detail = event?.detail || {};
+      if (!detail.exerciseId || detail.total <= 0) return;
+      setProgress((previous) => {
+        const oldBest = Math.max(0, Number(previous.best?.[detail.exerciseId]) || 0);
+        const nextBest = Math.min(detail.total, Math.max(oldBest, detail.correct));
+        const newlyCorrect = Math.max(0, nextBest - oldBest);
+        const perfectBonus = nextBest === detail.total && oldBest < detail.total ? 20 : 0;
+        const earned = newlyCorrect * 10 + perfectBonus;
+        if (!earned) return previous;
+        const next = {
+          points: previous.points + earned,
+          best: { ...previous.best, [detail.exerciseId]: nextBest }
+        };
+        try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {}
+        setGain(earned);
+        window.setTimeout(() => setGain(0), 1800);
+        return next;
+      });
+    };
+    window.addEventListener(TRAINING_SCORE_EVENT, onScore);
+    return () => window.removeEventListener(TRAINING_SCORE_EVENT, onScore);
+  }, [storageKey]);
+
+  return (
+    <div className="fixed right-5 top-4 z-[900] flex items-center gap-2 rounded-2xl border-2 border-amber-300 bg-white/95 px-4 py-3 font-black text-amber-700 shadow-xl backdrop-blur">
+      <span className="text-xl">⭐</span>
+      <span>{progress.points} points</span>
+      {gain > 0 && <span className="animate-pulse rounded-xl bg-emerald-100 px-2 py-1 text-xs text-emerald-700">+{gain}</span>}
+    </div>
+  );
+}
+
 const normalizeClass = (value = '') => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -23,6 +82,7 @@ const normalizeLevel = (value = '') => {
 export const getTrainingModeForStudent = (user = {}) => {
   const cls = normalizeClass(user.currentClass || user.className || '');
   if (/^3/.test(cls)) return 'dnb';
+  if (/^(5|5E|5EME|CINQUIEME)/.test(cls)) return 'cinquieme';
   if (/^(2|2DE|SECONDE)/.test(cls)) return 'seconde';
   return '';
 };
@@ -339,6 +399,7 @@ function DnbHistoryReperesWorkspace({ onBack }) {
           >
             ← Retour
           </button>
+          {mode === 'revision' && <button type="button" onClick={() => setMode('game')} className="rounded-2xl bg-violet-600 px-5 py-3 text-sm font-black text-white shadow-sm">Entraînement</button>}
         </div>
       </div>
       {mode === 'revision' && <DnbHistoryReperesRevision />}
@@ -832,8 +893,37 @@ function DnbHistoryPeopleGame({ compact = false }) {
 }
 
 function DnbGeoReperesWorkspace({ onBack }) {
+  const marathonGames = [
+    ['metropoles', 'Métropoles'], ['territoire', 'Territoire'], ['repartition', 'Répartition'],
+    ['espacesProductifs', 'Espaces productifs'], ['dromCom', 'DROM-COM'], ['ue', 'Union européenne'],
+    ['regions', 'Régions'], ['orgUe', 'Organisation UE'], ['aireUrbaine', 'Aire urbaine']
+  ];
   const [mode, setMode] = useState('revision');
   const [geoGame, setGeoGame] = useState('metropoles');
+  const [marathonIndex, setMarathonIndex] = useState(-1);
+  const marathonActive = marathonIndex >= 0;
+  const selectGeoGame = (game) => {
+    setMarathonIndex(-1);
+    setGeoGame(game);
+    setMode('revision');
+  };
+  const startMarathon = () => {
+    setMarathonIndex(0);
+    setGeoGame(marathonGames[0][0]);
+    setMode('game');
+  };
+  const moveMarathon = (offset) => {
+    const nextIndex = marathonIndex + offset;
+    if (nextIndex < 0) return;
+    if (nextIndex >= marathonGames.length) {
+      setMarathonIndex(-1);
+      setMode('revision');
+      return;
+    }
+    setMarathonIndex(nextIndex);
+    setGeoGame(marathonGames[nextIndex][0]);
+    setMode('game');
+  };
   const isMetropoles = geoGame === 'metropoles';
   const isTerritoire = geoGame === 'territoire';
   const isRepartition = geoGame === 'repartition';
@@ -854,8 +944,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              setGeoGame('metropoles');
-              setMode('revision');
+              selectGeoGame('metropoles');
             }}
             className={`rounded-2xl border px-4 py-3 text-xs font-black ${isMetropoles ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
           >
@@ -864,8 +953,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              setGeoGame('territoire');
-              setMode('game');
+              selectGeoGame('territoire');
             }}
             className={`rounded-2xl border px-4 py-3 text-xs font-black ${isTerritoire ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
           >
@@ -874,8 +962,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              setGeoGame('repartition');
-              setMode('game');
+              selectGeoGame('repartition');
             }}
             className={`rounded-2xl border px-4 py-3 text-xs font-black ${isRepartition ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
           >
@@ -884,8 +971,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              setGeoGame('espacesProductifs');
-              setMode('game');
+              selectGeoGame('espacesProductifs');
             }}
             className={`rounded-2xl border px-4 py-3 text-xs font-black ${isEspacesProductifs ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
           >
@@ -894,21 +980,19 @@ function DnbGeoReperesWorkspace({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              setGeoGame('dromCom');
-              setMode('game');
+              selectGeoGame('dromCom');
             }}
             className={`rounded-2xl border px-4 py-3 text-xs font-black ${isDromCom ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
           >
             DROM-COM
           </button>
-          <button type="button" onClick={() => { setGeoGame('ue'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Union européenne</button>
-          <button type="button" onClick={() => { setGeoGame('regions'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isRegions ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Régions</button>
-          <button type="button" onClick={() => { setGeoGame('orgUe'); setMode('game'); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isOrgUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Organisation UE</button>
+          <button type="button" onClick={() => selectGeoGame('ue')} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Union européenne</button>
+          <button type="button" onClick={() => selectGeoGame('regions')} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isRegions ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Régions</button>
+          <button type="button" onClick={() => selectGeoGame('orgUe')} className={`rounded-2xl border px-4 py-3 text-xs font-black ${isOrgUe ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>Organisation UE</button>
           <button
             type="button"
             onClick={() => {
-              setGeoGame('aireUrbaine');
-              setMode('game');
+              selectGeoGame('aireUrbaine');
             }}
             className={`rounded-2xl border px-4 py-3 text-xs font-black ${geoGame === 'aireUrbaine' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
           >
@@ -916,18 +1000,10 @@ function DnbGeoReperesWorkspace({ onBack }) {
           </button>
           <button
             type="button"
-            onClick={() => setMode('revision')}
-            disabled={!isMetropoles}
-            className={`rounded-2xl border px-4 py-3 text-xs font-black ${mode === 'revision' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-slate-50 text-slate-600'}`}
+            onClick={startMarathon}
+            className={`rounded-2xl border px-5 py-3 text-sm font-black ${marathonActive ? 'border-violet-600 bg-violet-600 text-white' : 'border-violet-300 bg-violet-50 text-violet-700'}`}
           >
-            Voir les repères
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('game')}
-            className={`rounded-2xl border px-4 py-3 text-xs font-black ${mode === 'game' ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-200 bg-slate-50 text-slate-600'}`}
-          >
-            Jouer au jeu
+            🏃 Marathon
           </button>
           <button
             type="button"
@@ -938,15 +1014,24 @@ function DnbGeoReperesWorkspace({ onBack }) {
           </button>
         </div>
       </div>
+      {marathonActive ? <div className="flex flex-wrap items-center gap-3 rounded-3xl border-2 border-violet-300 bg-violet-50 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-black uppercase text-violet-600">Marathon géographie · {marathonIndex + 1}/{marathonGames.length}</div>
+          <div className="mt-1 text-xl font-black text-slate-900">{marathonGames[marathonIndex]?.[1]}</div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${((marathonIndex + 1) / marathonGames.length) * 100}%` }} /></div>
+        </div>
+        {marathonIndex > 0 && <button type="button" onClick={() => moveMarathon(-1)} className="rounded-xl bg-white px-4 py-3 text-xs font-black text-violet-700">← Précédente</button>}
+        <button type="button" onClick={() => moveMarathon(1)} className="rounded-xl bg-violet-600 px-5 py-3 text-xs font-black text-white">{marathonIndex === marathonGames.length - 1 ? 'Terminer le marathon ✓' : 'Carte suivante →'}</button>
+      </div> : null}
       {geoGame === 'metropoles'
         ? (mode === 'revision' ? <DnbGeoMetropolesRevision /> : <DnbGeoMetropolesGame />)
-        : geoGame === 'territoire'
-          ? <DnbGeoTerritoryDrawingGame />
+          : geoGame === 'territoire'
+          ? <DnbGeoTerritoryDrawingGame revisionMode={mode === 'revision' && !marathonActive} />
           : geoGame === 'repartition'
-            ? <DnbGeoRepartitionColoringGame key="repartition" />
+            ? <DnbGeoRepartitionColoringGame key={`repartition-${mode}`} revisionMode={mode === 'revision' && !marathonActive} />
           : geoGame === 'espacesProductifs'
             ? <DnbGeoRepartitionColoringGame
-                key="espaces-productifs-v8"
+                key={`espaces-productifs-v8-${mode}`}
                 mapUrl={DNB_GEO_ESPACESP_MAP_URL}
                 draftUrl={DNB_GEO_ESPACESP_DRAFT_URL}
                 draftKey={DNB_GEO_ESPACESP_DRAFT_KEY}
@@ -962,13 +1047,15 @@ function DnbGeoReperesWorkspace({ onBack }) {
                 allowPoints
                 allowSquares
                 allowBackgroundFill
+                revisionMode={mode === 'revision' && !marathonActive}
+                revisionLegendBelow
               />
           : geoGame === 'dromCom'
-            ? <DnbDromComLabelGame />
+            ? <DnbDromComLabelGame revisionMode={mode === 'revision' && !marathonActive} />
           : geoGame === 'ue'
-            ? <DnbUeNumberGame />
+            ? <DnbUeNumberGame revisionMode={mode === 'revision' && !marathonActive} />
           : geoGame === 'regions'
-            ? <DnbRegionsPointGame />
+            ? <DnbRegionsPointGame revisionMode={mode === 'revision' && !marathonActive} />
           : geoGame === 'orgUe'
             ? <DnbGeoRepartitionColoringGame
                 key="organisation-ue-v1"
@@ -993,8 +1080,10 @@ function DnbGeoReperesWorkspace({ onBack }) {
                 allowStraightAxes
                 allowPointLabels
                 stagedWorkflow
+                revisionMode={mode === 'revision' && !marathonActive}
+                revisionLegendBelow
               />
-          : <DnbUrbanAreaSchemaGame />}
+          : <DnbUrbanAreaSchemaGame revisionMode={mode === 'revision' && !marathonActive} />}
     </div>
   );
 }
@@ -1002,14 +1091,18 @@ function DnbGeoReperesWorkspace({ onBack }) {
 function DnbGeoMetropolesRevision() {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-xl font-black text-slate-900">Métropoles à connaître</div>
-      <div className="mt-4 flex flex-wrap gap-3">
+      <div className="text-xl font-black text-slate-900">Carte complète des métropoles françaises</div>
+      <div className="relative mx-auto mt-4 max-w-[760px] overflow-hidden rounded-2xl border-2 border-emerald-300 bg-white">
+        <img src={DNB_GEO_METROPOLES_MAP_URL} alt="Carte complète des métropoles françaises" draggable={false} className="block h-auto w-full select-none" />
+        {DNB_GEO_WHITE_MASKS.map((mask) => <span key={mask.id} className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" style={{ left: `${mask.x}%`, top: `${mask.y}%`, width: `${mask.size}%`, aspectRatio: '1 / 1' }} />)}
         {DNB_GEO_METROPOLES.map((city) => (
-          <span key={city.id} className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">
-            {city.name}
-          </span>
+          <div key={city.id} className="absolute" style={{ left: `${city.x}%`, top: `${city.y}%` }}>
+            <span className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-violet-600 shadow" />
+            <span className={`absolute top-[-14px] whitespace-nowrap rounded-md bg-white/95 px-2 py-1 text-[clamp(8px,1vw,12px)] font-black text-slate-800 shadow ${city.label === 'left' ? 'right-[10px]' : 'left-[10px]'}`}>{city.name}</span>
+          </div>
         ))}
       </div>
+      <div className="mx-auto mt-4 max-w-[760px] rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-800">Repère chaque point violet et mémorise le nom placé à côté avant de lancer l’entraînement.</div>
     </section>
   );
 }
@@ -1339,6 +1432,43 @@ const DNB_ESPACESP_MAP_SECTIONS = [
   { key: 'services', label: 'Carte des services', minX: 66.66, maxX: 100, pencilKeys: ['services-red', 'tourism-green', 'transport-purple'] }
 ];
 
+const DNB_ESPACESP_REVISION_LABELS = {
+  'solid:#ef5b78': 'Grande région industrielle',
+  'solid:#3974ad': 'Vieille région industrielle',
+  'solid:#f5c635': 'Espace de hautes technologies',
+  'solid:#f6b82f': 'Grande culture céréalière',
+  'solid:#42b649': 'Élevage intensif',
+  'solid:#ef3155': 'Cultures spécialisées',
+  'solid:#dce8a8': 'Polyculture et élevage extensif',
+  'dashed:#111827': 'Régions intégrées à la mondialisation',
+  'point:#f23b20': 'Pôles tertiaires',
+  'solid:#a9cc2f': 'Espaces touristiques',
+  'line:#7c3aed': 'Axes de transports'
+};
+
+const DNB_ESPACESP_REVISION_TITLES = {
+  industrial: 'Les espaces industriels',
+  agricultural: 'Les espaces agricoles',
+  services: 'Les espaces de services'
+};
+
+const DNB_ORG_UE_REVISION_LABELS = {
+  'solid:#ef5b78': 'Mégalopole européenne',
+  'dashed:#111827': 'Limites de la mégalopole européenne',
+  'point:#dc2626': 'Métropoles mondiales et autres métropoles',
+  'star:#f8ef45': 'Sièges des institutions de l’UE',
+  'solid:#f2a866': 'Périphéries dynamiques',
+  'solid:#f5d75a': 'Périphéries en cours d’intégration',
+  'line:#ef5b78': 'Axes terrestres majeurs',
+  'line:#1677b8': 'Axe maritime mondial'
+};
+
+const DNB_ORG_UE_REVISION_GROUP_TITLES = {
+  center: '1. Le centre de l’UE',
+  peripheries: '2. Les périphéries de l’UE',
+  axes: '3. Les axes de communication'
+};
+
 function DnbGeoRepartitionColoringGame({
   mapUrl = DNB_GEO_REPARTITION_MAP_URL,
   draftUrl = DNB_GEO_REPARTITION_DRAFT_URL,
@@ -1363,7 +1493,9 @@ function DnbGeoRepartitionColoringGame({
   smallRoundPoints = false,
   allowStraightAxes = false,
   allowPointLabels = false,
-  stagedWorkflow = false
+  stagedWorkflow = false,
+  revisionMode = false,
+  revisionLegendBelow = false
 }) {
   const drawingRef = useRef(null);
   const mapImageRef = useRef(null);
@@ -1373,6 +1505,7 @@ function DnbGeoRepartitionColoringGame({
   const [drawMode, setDrawMode] = useState('line');
   const [activeMapSection, setActiveMapSection] = useState(() => mapSections[0]?.key || '');
   const [savedDrawing] = useState(() => {
+    if (revisionMode) return { paths: [], fills: [], hasLocalDraft: false };
     if (typeof window === 'undefined') return { paths: [], fills: [], hasLocalDraft: false };
     try {
       const rawStored = window.localStorage.getItem(draftKey);
@@ -1478,7 +1611,7 @@ function DnbGeoRepartitionColoringGame({
   }, [draftUrl, savedDrawing.hasLocalDraft]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !draftReady) return;
+    if (revisionMode || typeof window === 'undefined' || !draftReady) return;
     const payload = JSON.stringify({
       paths,
       fills: fills.filter((fill) => !fill?.expectedOnly),
@@ -1509,7 +1642,7 @@ function DnbGeoRepartitionColoringGame({
         console.warn('Sauvegarde locale de la carte impossible : quota atteint.', retryError || error);
       }
     }
-  }, [draftKey, draftReady, paths, fills, mapTitle, mapTitles, centralLabel, legendItems, legendGroupTitles, mapRectangles]);
+  }, [draftKey, draftReady, paths, fills, mapTitle, mapTitles, centralLabel, legendItems, legendGroupTitles, mapRectangles, revisionMode]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -1608,6 +1741,7 @@ function DnbGeoRepartitionColoringGame({
 
   const startColoring = (event) => {
     event.preventDefault();
+    if (revisionMode) return;
     if (stagedWorkflow && workflowStage !== 'color') return;
     const pointerPoint = pointerToPercent(event);
     if (drawMode !== 'eraser' && erasedSnapshot) setErasedSnapshot(null);
@@ -2021,7 +2155,23 @@ function DnbGeoRepartitionColoringGame({
       label: ''
     }]);
   };
-  const legendGroupKeyForItem = (item) => item?.groupKey || (item?.pattern === 'solid' ? 'distribution' : 'dynamics');
+  const isOrgUeRevision = revisionMode && mapUrl === DNB_GEO_ORG_UE_MAP_URL;
+  const orgUeLegendKey = (item) => `${item?.pattern}:${String(item?.color || '').toLowerCase()}`;
+  const orgUeGroupKey = (item) => {
+    const key = orgUeLegendKey(item);
+    if (key === 'solid:#f2a866' || key === 'solid:#f5d75a') return 'peripheries';
+    if (item?.pattern === 'line') return 'axes';
+    return 'center';
+  };
+  const legendGroupKeyForItem = (item) => item?.groupKey || (isOrgUeRevision ? orgUeGroupKey(item) : (item?.pattern === 'solid' ? 'distribution' : 'dynamics'));
+  const displayedLegendItems = isOrgUeRevision
+    ? legendItems
+      .filter((item) => Object.prototype.hasOwnProperty.call(DNB_ORG_UE_REVISION_LABELS, orgUeLegendKey(item)))
+      .sort((left, right) => {
+        const order = ['solid:#ef5b78', 'point:#dc2626', 'star:#f8ef45', 'dashed:#111827', 'solid:#f2a866', 'solid:#f5d75a', 'line:#ef5b78', 'line:#1677b8'];
+        return order.indexOf(orgUeLegendKey(left)) - order.indexOf(orgUeLegendKey(right));
+      })
+    : legendItems;
   const selectedMapSection = effectiveMapSections.find((section) => section.key === activeMapSection);
   const visiblePencils = selectedMapSection
     ? pencils.filter((item) => selectedMapSection.pencilKeys.includes(item.key))
@@ -2031,7 +2181,10 @@ function DnbGeoRepartitionColoringGame({
     const matchingPencil = pencils.find((candidate) => candidate.color === item?.color);
     return mapSections.find((section) => matchingPencil && section.pencilKeys.includes(matchingPencil.key))?.key || '';
   };
-  const legendItemsForSection = (sectionKey) => legendItems.filter((item) => !item?.expectedOnly && sectionKeyForLegendItem(item) === sectionKey);
+  const legendItemsForSection = (sectionKey) => legendItems.filter((item) => (revisionMode || !item?.expectedOnly) && sectionKeyForLegendItem(item) === sectionKey);
+  const revisionLegendLabel = (item) => item?.label
+    || (isOrgUeRevision ? DNB_ORG_UE_REVISION_LABELS[orgUeLegendKey(item)] : DNB_ESPACESP_REVISION_LABELS[`${item?.pattern}:${String(item?.color || '').toLowerCase()}`])
+    || '';
 
   return (
     <section className="rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
@@ -2040,7 +2193,7 @@ function DnbGeoRepartitionColoringGame({
           <div className="text-[11px] font-black uppercase text-emerald-500">Partie 2 · Géo</div>
           <div className="text-2xl font-black text-slate-900">{heading}</div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!revisionMode && <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={copyRepartitionDraft}
@@ -2069,10 +2222,10 @@ function DnbGeoRepartitionColoringGame({
           >
             Tout effacer
           </button>
-        </div>
+        </div>}
       </div>
 
-      {stagedWorkflow && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      {!revisionMode && stagedWorkflow && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {[
           ['color', '🎨 Colorier'],
           ['names', '✍ Noms'],
@@ -2086,11 +2239,11 @@ function DnbGeoRepartitionColoringGame({
         {workflowValidated && <span className="text-xs font-black text-emerald-700">Carte envoyée à la validation.</span>}
       </div>}
 
-      <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
+      {!revisionMode && <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
         {stagedWorkflow && workflowStage === 'names' ? 'Complète les noms des métropoles et des institutions.' : stagedWorkflow && workflowStage === 'legend' ? 'Complète le titre et les éléments de la légende.' : 'Choisis un crayon et colorie directement les espaces de la carte. Le dessin est sauvegardé automatiquement sur cet appareil.'}
-      </div>
+      </div>}
 
-      {(!stagedWorkflow || workflowStage === 'color') && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      {!revisionMode && (!stagedWorkflow || workflowStage === 'color') && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
         {selectedMapSection && (
           <span className="mr-2 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700">
             {selectedMapSection.label}
@@ -2261,19 +2414,20 @@ function DnbGeoRepartitionColoringGame({
         {!editPointLabels && <button type="button" onClick={() => setCheckedPointLabels(true)} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">✓ Vérifier les noms</button>}
       </div>}
 
-      <div className="mt-5">
-        {mapSections.length === 0 && (!stagedWorkflow || workflowStage === 'legend') && <label className="mx-auto mb-3 block max-w-[820px]">
+      <div className={revisionMode && !revisionLegendBelow ? 'mt-3 grid items-start gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)]' : 'mt-5'}>
+        {mapSections.length === 0 && (revisionMode || !stagedWorkflow || workflowStage === 'legend') && <label className={`mx-auto mb-3 block max-w-[820px] ${revisionMode ? 'w-full lg:col-span-2' : ''}`}>
           <span className="mb-1 block text-xs font-black uppercase text-slate-500">Titre de la carte</span>
           <input
             value={mapTitle}
             onChange={(event) => setMapTitle(event.target.value)}
+            readOnly={revisionMode}
             placeholder="Écris le titre de la carte"
             className="w-full rounded-2xl border-2 border-slate-300 bg-white px-4 py-3 text-center text-lg font-black text-slate-900 outline-none focus:border-violet-500"
           />
         </label>}
         <div
           ref={drawingRef}
-          className={`relative mx-auto max-w-[820px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white ${stagedWorkflow && workflowStage !== 'color' ? 'cursor-default' : drawMode === 'fill' || drawMode === 'hatch' ? 'cursor-cell' : drawMode === 'eraser' ? 'cursor-not-allowed' : 'cursor-crosshair'}`}
+          className={`relative mx-auto w-full max-w-[820px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white ${revisionMode ? 'pointer-events-none cursor-default' : stagedWorkflow && workflowStage !== 'color' ? 'cursor-default' : drawMode === 'fill' || drawMode === 'hatch' ? 'cursor-cell' : drawMode === 'eraser' ? 'cursor-not-allowed' : 'cursor-crosshair'}`}
           onPointerDown={startColoring}
           onPointerMove={continueColoring}
           onPointerUp={endColoring}
@@ -2305,7 +2459,10 @@ function DnbGeoRepartitionColoringGame({
               ))}
             </div>
           )}
-          {[...fills].filter((fill) => fill?.image && !fill?.expectedOnly).sort((left, right) => {
+          {[...fills].filter((fill) => fill?.image
+            && (revisionMode || !fill?.expectedOnly)
+            && fill?.pattern !== 'hatch'
+            && !(isOrgUeRevision && String(fill?.color).toLowerCase() === '#dc2626')).sort((left, right) => {
             const layer = (fill) => fill?.background ? -1 : (fill?.pattern === 'hatch' ? 1 : 0);
             return layer(left) - layer(right);
           }).map((fill) => (
@@ -2379,7 +2536,7 @@ function DnbGeoRepartitionColoringGame({
                 key={path.id}
                 d={pathToD(path.points)}
                 fill="none"
-                stroke={path.color}
+                stroke={isOrgUeRevision && String(path.color).toLowerCase() === '#dc2626' ? '#ef5b78' : path.color}
                 strokeWidth={path.width}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -2425,7 +2582,18 @@ function DnbGeoRepartitionColoringGame({
               return <polygon key={`symbol-star-${fill.id}-${index}`} points={points} fill={fill.color} stroke="#111827" strokeWidth="0.25" />;
             }))}
           </svg>
-          {allowPointLabels && (!stagedWorkflow || workflowStage === 'names') && fills.filter((fill) => !fill?.expectedOnly && (fill?.pattern === 'point' || fill?.pattern === 'star')).flatMap((fill) => {
+          {fills.filter((fill) => fill?.image && fill?.pattern === 'hatch' && (revisionMode || !fill?.expectedOnly)).map((fill) => (
+            <img
+              key={`top-hatch-${fill.id}`}
+              src={fill.image}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-30 h-full w-full select-none"
+              style={String(fill.color).toLowerCase() === '#38bdf8' ? { filter: 'saturate(2.5) contrast(1.15)' } : undefined}
+              draggable={false}
+            />
+          ))}
+          {allowPointLabels && (revisionMode || !stagedWorkflow || workflowStage === 'names') && fills.filter((fill) => !fill?.expectedOnly && (fill?.pattern === 'point' || fill?.pattern === 'star')).flatMap((fill) => {
             const symbols = fill.pattern === 'star' ? (fill.svgStars || []) : (fill.svgCircles || []);
             return symbols.map((symbol, index) => {
             const answer = fill.answer || '';
@@ -2435,18 +2603,18 @@ function DnbGeoRepartitionColoringGame({
             const isCompleted = !editPointLabels && !checkedPointLabels && answer.trim() && !isActive;
             return <div
               key={`point-label-${fill.id}-${index}`}
-              className={`absolute z-40 flex items-center rounded-md border-2 transition-colors ${editPointLabels ? `cursor-move bg-white/95 shadow ${fill.pattern === 'star' ? 'border-blue-500' : 'border-amber-400'}` : isCompleted ? 'border-transparent bg-transparent shadow-none' : `bg-white/95 shadow ${isCorrect ? 'border-emerald-500' : isWrong ? 'border-red-500' : fill.pattern === 'star' ? 'border-blue-300' : 'border-amber-300'}`}`}
-              style={{ left: `${fill.labelX ?? symbol.x + 1.1}%`, top: `${fill.labelY ?? symbol.y - 2}%`, width: `${fill.labelWidth || 10}%`, height: `${fill.labelHeight || 4}%` }}
+              className={`absolute z-40 flex items-center rounded-md border-2 transition-colors ${revisionMode ? 'border-transparent bg-white/45 shadow-none' : editPointLabels ? `cursor-move bg-white/95 shadow ${fill.pattern === 'star' ? 'border-blue-500' : 'border-amber-400'}` : isCompleted ? 'border-transparent bg-transparent shadow-none' : `bg-white/95 shadow ${isCorrect ? 'border-emerald-500' : isWrong ? 'border-red-500' : fill.pattern === 'star' ? 'border-blue-300' : 'border-amber-300'}`}`}
+              style={{ left: `${fill.labelX ?? symbol.x + 1.1}%`, top: `${fill.labelY ?? symbol.y - 2}%`, width: `${isOrgUeRevision && fill.pattern === 'star' ? Math.min(Number(fill.labelWidth || 9), 8) : (fill.labelWidth || 10)}%`, height: `${isOrgUeRevision && fill.pattern === 'star' ? Math.min(Number(fill.labelHeight || 2.6), 2.4) : (fill.labelHeight || 4)}%` }}
               onPointerDown={(event) => editPointLabels ? startPointLabelDrag(event, fill, 'move') : event.stopPropagation()}
               onPointerMove={(event) => { if (editPointLabels) movePointLabel(event); }}
               onPointerUp={(event) => { if (draggingPointLabel) { event.stopPropagation(); setDraggingPointLabel(null); } }}
               onPointerCancel={() => setDraggingPointLabel(null)}
             >
-              {editPointLabels ? <>
+              {revisionMode ? <span className={`w-full whitespace-nowrap px-0.5 text-center font-black leading-none ${fill.pattern === 'star' ? 'text-[clamp(6px,0.7vw,9px)] text-blue-800' : 'text-[clamp(7px,0.8vw,10px)] text-slate-900'}`} title={fill.expectedName}>{fill.expectedName || answer}</span> : editPointLabels ? <>
                 <button type="button" data-resize-handle onPointerDown={(event) => startPointLabelDrag(event, fill, 'resize')} className={`absolute left-0 top-0 z-10 flex h-3.5 w-3.5 -translate-x-1/3 -translate-y-1/3 cursor-nw-resize items-center justify-center rounded-full border bg-white text-[7px] font-black shadow ${fill.pattern === 'star' ? 'border-blue-500 text-blue-700' : 'border-amber-500 text-amber-700'}`} title="Tirer pour redimensionner">↖</button>
                 <span className={`min-w-0 flex-1 truncate text-center font-black ${fill.pattern === 'star' ? 'px-1 text-[8px] leading-none text-blue-700' : 'px-2 text-[10px] text-amber-800'}`} title={fill.expectedName}>{fill.expectedName}</span>
               </> : <input
-                value={answer}
+                value={revisionMode ? (fill.expectedName || answer) : answer}
                 onChange={(event) => {
                   setCheckedPointLabels(false);
                   setFills((previous) => previous.map((item) => item.id === fill.id ? { ...item, answer: event.target.value } : item));
@@ -2461,10 +2629,19 @@ function DnbGeoRepartitionColoringGame({
               {isWrong && <div className="mt-0.5 rounded bg-white/95 px-1 py-0.5 text-[9px] font-black text-red-600">{fill.expectedName}</div>}
             </div>;
           });})}
+          {revisionMode && mapUrl === DNB_GEO_ESPACESP_MAP_URL && fills.filter((fill) => !fill?.expectedOnly && fill?.pattern === 'square').flatMap((fill) => fill.svgRectangles || []).map((rectangle, index) => (
+            <span
+              key={`industrial-city-${index}`}
+              className="absolute z-30 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[clamp(8px,1vw,11px)] font-black text-slate-900 shadow"
+              style={{ left: `${Number(rectangle.x || 0) + Number(rectangle.width || 0) + 0.5}%`, top: `${Number(rectangle.y || 0) - 0.3}%` }}
+            >
+              {index === 0 ? 'Paris' : 'Lyon'}
+            </span>
+          ))}
           {mapSections.length > 0 && effectiveMapSections.map((section) => (
             <input
               key={`map-title-${section.key}`}
-              value={mapTitles[section.key] || ''}
+              value={mapTitles[section.key] || (revisionMode ? DNB_ESPACESP_REVISION_TITLES[section.key] || section.label : '')}
               onChange={(event) => setMapTitles((previous) => ({ ...previous, [section.key]: event.target.value }))}
               onPointerDown={(event) => {
                 event.stopPropagation();
@@ -2490,23 +2667,36 @@ function DnbGeoRepartitionColoringGame({
             className="absolute left-[49%] top-[55%] z-20 w-[25%] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-amber-500/70 bg-white/85 px-2 py-2 text-center text-[clamp(9px,1.5vw,14px)] font-black text-slate-800 shadow-sm outline-none focus:border-violet-500"
           />}
         </div>
-        {(!stagedWorkflow || workflowStage === 'legend') && (mapSections.length === 0 ? <div className="mx-auto mt-4 max-w-[820px] rounded-2xl border-2 border-slate-300 bg-white p-4">
+        {(revisionMode || !stagedWorkflow || workflowStage === 'legend') && (mapSections.length === 0 ? <div className={`mx-auto max-w-[820px] rounded-2xl border-2 border-slate-300 bg-white p-4 ${revisionMode ? 'pointer-events-none mt-0 w-full text-sm' : 'mt-4'}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-black uppercase text-slate-700">Légende</div>
-            <button
+            {!revisionMode && <button
               type="button"
               onClick={addRepartitionLegendItem}
               className="rounded-xl bg-violet-100 px-3 py-2 text-xs font-black text-violet-700"
             >
               + Ajouter l’outil sélectionné
-            </button>
+            </button>}
           </div>
           <div className="mt-3 space-y-2">
-            {legendItems.map((item, index) => (
+            {isOrgUeRevision && <div className="grid grid-cols-3 gap-3">
+              {['center', 'peripheries', 'axes'].map((groupKey) => <div key={`org-legend-${groupKey}`} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                <div className="mb-2 text-[11px] font-black text-slate-800">{DNB_ORG_UE_REVISION_GROUP_TITLES[groupKey]}</div>
+                <div className="space-y-1.5">{displayedLegendItems.filter((item) => orgUeGroupKey(item) === groupKey).map((item) => <div key={`org-item-${item.id}`} className="flex items-center gap-2 rounded-lg bg-white p-1.5">
+                  {item.pattern === 'point' ? <span className="mx-1 h-4 w-4 shrink-0 rounded-full bg-red-600" />
+                    : item.pattern === 'star' ? <span className="w-7 shrink-0 text-center text-xl font-black text-yellow-300" style={{ WebkitTextStroke: '1px #111827' }}>★</span>
+                      : item.pattern === 'dashed' ? <span className="w-7 shrink-0 border-t-4 border-dashed border-slate-900" />
+                        : item.pattern === 'line' ? <span className="h-1 w-7 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                          : <span className="h-5 w-7 shrink-0 rounded border border-slate-300" style={{ backgroundColor: item.color }} />}
+                  <span className="min-w-0 text-[10px] font-bold leading-tight text-slate-800">{revisionLegendLabel(item)}</span>
+                </div>)}</div>
+              </div>)}
+            </div>}
+            {!isOrgUeRevision && displayedLegendItems.map((item, index) => (
               <React.Fragment key={item.id}>
-                {(index === 0 || legendGroupKeyForItem(item) !== legendGroupKeyForItem(legendItems[index - 1])) && (
+                {(index === 0 || legendGroupKeyForItem(item) !== legendGroupKeyForItem(displayedLegendItems[index - 1])) && (
                   <input
-                    value={legendGroupTitles[legendGroupKeyForItem(item)] || ''}
+                    value={legendGroupTitles[legendGroupKeyForItem(item)] || (isOrgUeRevision ? DNB_ORG_UE_REVISION_GROUP_TITLES[legendGroupKeyForItem(item)] || '' : '')}
                     onChange={(event) => {
                       const groupKey = legendGroupKeyForItem(item);
                       setLegendGroupTitles((previous) => ({ ...previous, [groupKey]: event.target.value }));
@@ -2537,31 +2727,39 @@ function DnbGeoRepartitionColoringGame({
                   />
                 )}
                 <input
-                  value={item.label}
+                  value={revisionMode ? revisionLegendLabel(item) : item.label}
                   onChange={(event) => setLegendItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, label: event.target.value } : entry))}
                   placeholder="Signification dans la légende"
                   className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold outline-none focus:border-violet-500"
                 />
                 {showDensityInputs && item.pattern === 'solid' && (
-                  <input
-                    value={item.density || ''}
-                    onChange={(event) => setLegendItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, density: event.target.value } : entry))}
-                    placeholder="habitants/km²"
-                    className="w-40 rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold outline-none focus:border-violet-500"
-                  />
+                  revisionMode ? (
+                    null
+                  ) : (
+                    <label className="w-20 shrink-0 text-center text-[8px] font-bold leading-tight text-slate-400">
+                      <input
+                        value={item.density || ''}
+                        onChange={(event) => setLegendItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, density: event.target.value } : entry))}
+                        placeholder="facultatif"
+                        className="mb-1 w-full rounded-lg border border-slate-300 px-1.5 py-1 text-center text-[10px] font-bold text-slate-700 outline-none placeholder:text-[9px] focus:border-violet-500"
+                      />
+                      hab/km² · optionnel
+                    </label>
+                  )
                 )}
-                <button
+                {!revisionMode && <button
                   type="button"
                   onClick={() => setLegendItems((previous) => previous.filter((entry) => entry.id !== item.id))}
                   className="rounded-lg bg-red-50 px-3 py-2 font-black text-red-500"
                   title="Supprimer cet élément de légende"
                 >
                   ✕
-                </button>
+                </button>}
               </div>
               </React.Fragment>
             ))}
-            {legendItems.length === 0 && <div className="text-sm font-bold text-slate-400">Sélectionne une couleur et un outil, puis ajoute-le à la légende.</div>}
+            {revisionMode && showDensityInputs && <div className="pt-1 text-right text-[8px] font-bold text-slate-400">Densités en hab/km² : optionnelles</div>}
+            {displayedLegendItems.length === 0 && <div className="text-sm font-bold text-slate-400">Sélectionne une couleur et un outil, puis ajoute-le à la légende.</div>}
           </div>
         </div> : (
           <div className="mx-auto mt-4 grid max-w-[820px] grid-cols-3 gap-2">
@@ -2572,12 +2770,12 @@ function DnbGeoRepartitionColoringGame({
                 <div
                   key={`map-legend-${section.key}`}
                   onClick={() => setActiveMapSection(section.key)}
-                  className={`min-w-0 rounded-2xl border-2 bg-white p-3 transition ${isActive ? 'border-violet-500 shadow-md' : 'border-slate-200 opacity-75'}`}
+                  className={`min-w-0 rounded-2xl border-2 bg-white p-3 transition ${revisionMode ? 'border-slate-300' : isActive ? 'border-violet-500 shadow-md' : 'border-slate-200 opacity-75'}`}
                 >
                   <input
-                    value={legendGroupTitles[section.key] || ''}
+                    value={legendGroupTitles[section.key] || (revisionMode ? DNB_ESPACESP_REVISION_TITLES[section.key] || section.label : '')}
                     onChange={(event) => setLegendGroupTitles((previous) => ({ ...previous, [section.key]: event.target.value }))}
-                    readOnly={!isActive}
+                    readOnly={revisionMode || !isActive}
                     placeholder={isActive ? 'Titre de la légende' : section.label}
                     className="w-full rounded-lg border border-slate-300 bg-slate-50 px-2 py-2 text-center text-xs font-black outline-none focus:border-violet-500"
                   />
@@ -2597,9 +2795,9 @@ function DnbGeoRepartitionColoringGame({
                           />
                         )}
                         <input
-                          value={item.label || ''}
+                          value={revisionMode ? revisionLegendLabel(item) : (item.label || '')}
                           onChange={(event) => setLegendItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, label: event.target.value } : entry))}
-                          readOnly={!isActive}
+                          readOnly={revisionMode || !isActive}
                           placeholder={isActive ? 'Légende' : ''}
                           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-[11px] font-bold outline-none focus:border-violet-500"
                         />
@@ -2617,7 +2815,7 @@ function DnbGeoRepartitionColoringGame({
   );
 }
 
-function DnbRegionsPointGame() {
+function DnbRegionsPointGame({ revisionMode = false }) {
   const boardRef = useRef(null);
   const [markers, setMarkers] = useState([]);
   const [defining, setDefining] = useState(false);
@@ -2674,21 +2872,29 @@ function DnbRegionsPointGame() {
     try { await navigator.clipboard.writeText(payload); window.alert('Sauvegarde des régions copiée.'); }
     catch (_) { window.prompt('Copie la sauvegarde :', payload); }
   };
+  const displayedMarkers = revisionMode
+    ? DNB_REGIONS_POSITIONS.map((region, index) => {
+      const adjusted = region.name === 'Normandie' ? { x: 35.2, y: 22.2 }
+        : region.name === 'Île-de-France' ? { x: 55.8, y: 28.4 }
+          : region;
+      return { id: `region-revision-${region.name}`, number: index + 1, x: adjusted.x, y: adjusted.y, expectedName: region.name, answer: region.name };
+    })
+    : markers;
 
   return <section className="rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><div className="text-[11px] font-black uppercase text-emerald-600">Repères DNB · France</div><div className="text-2xl font-black">Les régions françaises</div></div>
-      <div className="flex flex-wrap gap-2">
+      {!revisionMode && <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => { setDefining(true); setChecked(false); }} className={`rounded-xl px-4 py-3 text-xs font-black ${defining ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'}`}>Placer les champs</button>
         <button type="button" onClick={() => setDefining(false)} className="rounded-xl bg-blue-100 px-4 py-3 text-xs font-black text-blue-700">Terminer</button>
         <button type="button" onClick={() => setMarkers((previous) => previous.slice(0, -1))} className="rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white">↶ Annuler</button>
         <button type="button" onClick={copy} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">Copier sauvegarde</button>
         {!defining && markers.length > 0 && <button type="button" onClick={() => setChecked(true)} className="rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">Vérifier</button>}
-      </div>
+      </div>}
     </div>
-    <div ref={boardRef} onClick={place} onPointerMove={move} onPointerUp={() => setDragId('')} onPointerCancel={() => setDragId('')} className={`relative mx-auto mt-4 max-w-[900px] overflow-hidden rounded-2xl border-2 border-slate-300 ${defining ? 'cursor-crosshair' : ''}`}>
+    <div ref={boardRef} onClick={place} onPointerMove={move} onPointerUp={() => setDragId('')} onPointerCancel={() => setDragId('')} className={`relative mx-auto mt-4 overflow-hidden rounded-2xl border-2 border-slate-300 ${revisionMode ? 'pointer-events-none max-w-[680px]' : 'max-w-[900px]'} ${defining ? 'cursor-crosshair' : ''}`}>
       <img src={DNB_GEO_REGIONS_MAP_URL} alt="Carte muette des régions françaises" draggable={false} className="block w-full select-none" />
-      {markers.map((marker) => {
+      {displayedMarkers.map((marker) => {
         const answer = marker.answer || '';
         const isCorrect = checked && normalizeAnswer(answer) === normalizeAnswer(marker.expectedName);
         const isWrong = checked && !isCorrect;
@@ -2697,8 +2903,8 @@ function DnbRegionsPointGame() {
         event.preventDefault();
         event.currentTarget.setPointerCapture?.(event.pointerId);
         setDragId(marker.id);
-      }} className={`absolute z-10 w-[145px] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 bg-white p-0.5 shadow-md ${defining ? 'cursor-move border-amber-500' : isCorrect ? 'border-emerald-500' : isWrong ? 'border-red-500' : 'border-slate-300'}`} style={{ left: `${marker.x}%`, top: `${marker.y}%` }} title={defining ? 'Glisser pour déplacer' : undefined}>
-          {defining ? <div className="px-1.5 py-1.5 text-center text-[10px] font-black leading-tight text-amber-800">{marker.expectedName}</div> : <input value={answer} onChange={(event) => {
+      }} className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 p-0.5 shadow-md ${revisionMode ? 'w-[102px] border-emerald-700 bg-emerald-600' : 'w-[145px] bg-white'} ${defining ? 'cursor-move border-amber-500' : isCorrect ? 'border-emerald-500' : isWrong ? 'border-red-500' : 'border-slate-300'}`} style={{ left: `${marker.x}%`, top: `${marker.y}%` }} title={defining ? 'Glisser pour déplacer' : undefined}>
+          {revisionMode ? <div className="px-0.5 py-1 text-center text-[11px] font-black leading-[1.05] text-white">{marker.expectedName}</div> : defining ? <div className="px-1.5 py-1.5 text-center text-[10px] font-black leading-tight text-amber-800">{marker.expectedName}</div> : <input value={answer} onChange={(event) => {
             setChecked(false);
             setMarkers((previous) => previous.map((item) => item.id === marker.id ? { ...item, answer: event.target.value } : item));
           }} onPointerDown={(event) => event.stopPropagation()} placeholder="Nom de la région" className="w-full rounded-md border-0 bg-white px-1.5 py-1.5 text-center text-[11px] font-bold leading-tight text-slate-800 outline-none" />}
@@ -2709,7 +2915,7 @@ function DnbRegionsPointGame() {
   </section>;
 }
 
-function DnbUeNumberGame() {
+function DnbUeNumberGame({ revisionMode = false }) {
   const boardRef = useRef(null);
   const [markers, setMarkers] = useState([]);
   const [masks, setMasks] = useState([]);
@@ -2751,20 +2957,23 @@ function DnbUeNumberGame() {
     const payload = JSON.stringify({ markers, masks }, null, 2);
     try { await navigator.clipboard.writeText(payload); window.alert('Sauvegarde UE copiée.'); } catch (_) { window.prompt('Copie la sauvegarde :', payload); }
   };
+  const displayedMarkers = revisionMode
+    ? DNB_UE_COUNTRY_POSITIONS.map(({ name, x, y }, index) => ({ id: `ue-revision-${name}`, number: index + 1, x, y, expectedName: name, answer: name }))
+    : markers;
   return <section className="rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[11px] font-black uppercase text-blue-600">Repères DNB · Europe</div><div className="text-2xl font-black">Pays de l’Union européenne</div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setDefining(true); setPlacementTool('number'); }} className={`rounded-xl px-4 py-3 text-xs font-black ${defining && placementTool === 'number' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'}`}>Placer les numéros</button><button type="button" onClick={() => { setDefining(true); setPlacementTool('mask'); }} className={`rounded-xl px-4 py-3 text-xs font-black ${defining && placementTool === 'mask' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'}`}>⚪ Masquer un repère</button><button type="button" onClick={() => setDefining(false)} className="rounded-xl bg-blue-100 px-4 py-3 text-xs font-black text-blue-700">Terminer</button><button type="button" onClick={() => placementTool === 'mask' ? setMasks((p) => p.slice(0,-1)) : setMarkers((p) => p.slice(0,-1))} className="rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white">↶ Annuler</button><button type="button" onClick={copy} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">Copier sauvegarde</button></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[11px] font-black uppercase text-blue-600">Repères DNB · Europe</div><div className="text-2xl font-black">Pays de l’Union européenne</div></div>{!revisionMode && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setDefining(true); setPlacementTool('number'); }} className={`rounded-xl px-4 py-3 text-xs font-black ${defining && placementTool === 'number' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'}`}>Placer les numéros</button><button type="button" onClick={() => { setDefining(true); setPlacementTool('mask'); }} className={`rounded-xl px-4 py-3 text-xs font-black ${defining && placementTool === 'mask' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'}`}>⚪ Masquer un repère</button><button type="button" onClick={() => setDefining(false)} className="rounded-xl bg-blue-100 px-4 py-3 text-xs font-black text-blue-700">Terminer</button><button type="button" onClick={() => placementTool === 'mask' ? setMasks((p) => p.slice(0,-1)) : setMarkers((p) => p.slice(0,-1))} className="rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white">↶ Annuler</button><button type="button" onClick={copy} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">Copier sauvegarde</button></div>}</div>
     <div ref={boardRef} onClick={place} onPointerMove={move} onPointerUp={() => setDragId('')} onPointerCancel={() => setDragId('')} className={`relative mx-auto mt-4 max-w-[900px] overflow-hidden rounded-2xl border-2 border-slate-300 ${defining ? 'cursor-crosshair' : ''}`}>
       <img src={DNB_GEO_UE_MAP_URL} alt="Carte de l’Union européenne" draggable={false} className="block w-full select-none" />
       {masks.length > 0 && <div className="pointer-events-none absolute right-2 top-2 z-20 flex items-center gap-2 rounded-full border border-orange-300 bg-white/95 px-3 py-2 text-[11px] font-black uppercase text-orange-700 shadow"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Optionnel</div>}
       {masks.map((mask) => <button key={mask.id} type="button" data-ue-marker onClick={(event) => { event.stopPropagation(); if (defining && placementTool === 'mask') setMasks((previous) => previous.filter((item) => item.id !== mask.id)); }} className={`absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-sm ${defining ? 'border-2 border-dashed border-slate-400' : 'border border-orange-200'}`} style={{left:`${mask.x}%`,top:`${mask.y}%`}} title={defining ? 'Cliquer pour supprimer ce masque' : 'Repère optionnel'}><span className="h-2 w-2 rounded-full bg-orange-500 ring-2 ring-white" /></button>)}
-      {markers.map((marker) => <div key={marker.id} data-ue-marker onPointerDown={(event) => { if (!defining) return; event.preventDefault(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragId(marker.id); }} className={`absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-white text-xs font-black shadow ${defining ? 'cursor-move border-amber-500 text-amber-700' : 'border-blue-600 text-blue-700'}`} style={{left:`${marker.x}%`,top:`${marker.y}%`}} title={defining ? marker.expectedName : undefined}>{marker.number}</div>)}
+      {displayedMarkers.map((marker) => <div key={marker.id} data-ue-marker onPointerDown={(event) => { if (!defining || revisionMode) return; event.preventDefault(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragId(marker.id); }} className={`absolute -translate-x-1/2 -translate-y-1/2 ${revisionMode ? 'z-10' : ''}`} style={{left:`${marker.x}%`,top:`${marker.y}%`}} title={defining ? marker.expectedName : undefined}><span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-blue-600 bg-white text-xs font-black text-blue-700 shadow">{marker.number}</span>{revisionMode && <span className="absolute left-5 top-4 whitespace-nowrap rounded-md border border-blue-200 bg-white/95 px-2 py-1 text-[11px] font-black text-slate-800 shadow">{marker.expectedName}</span>}</div>)}
     </div>
     {masks.length > 0 && <div className="mx-auto mt-4 flex max-w-[900px] items-center gap-3 rounded-2xl border-2 border-orange-300 bg-orange-50 p-4 text-orange-900"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white shadow"><span className="h-3 w-3 rounded-full bg-orange-500" /></span><div><div className="text-sm font-black uppercase">Repères optionnels</div><div className="text-xs font-bold">Les points orange sont facultatifs. Les numéros bleus correspondent aux 12 pays obligatoires à connaître.</div></div></div>}
-    <div className="mx-auto mt-4 grid max-w-[900px] gap-2 sm:grid-cols-2 md:grid-cols-3">{markers.map((marker) => <div key={`legend-${marker.id}`} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-black text-white">{marker.number}</span>{defining ? <span className="text-xs font-black text-slate-700">{marker.expectedName}</span> : <input value={marker.answer || ''} onChange={(event) => setMarkers((previous) => previous.map((item) => item.id === marker.id ? {...item,answer:event.target.value} : item))} placeholder="Nom du pays" className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold outline-none" />}</div>)}</div>
+    <div className="mx-auto mt-4 grid max-w-[900px] gap-2 sm:grid-cols-2 md:grid-cols-3">{displayedMarkers.map((marker) => <div key={`legend-${marker.id}`} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-black text-white">{marker.number}</span>{revisionMode || defining ? <span className="text-xs font-black text-slate-700">{marker.expectedName}</span> : <input value={marker.answer || ''} onChange={(event) => setMarkers((previous) => previous.map((item) => item.id === marker.id ? {...item,answer:event.target.value} : item))} placeholder="Nom du pays" className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold outline-none" />}</div>)}</div>
   </section>;
 }
 
-function DnbDromComLabelGame() {
+function DnbDromComLabelGame({ revisionMode = false }) {
   const boardRef = useRef(null);
   const [slots, setSlots] = useState([]);
   const [defining, setDefining] = useState(false);
@@ -2923,6 +3132,22 @@ function DnbDromComLabelGame() {
       window.prompt('Copie la sauvegarde :', payload);
     }
   };
+
+  if (revisionMode) {
+    const dromNames = Object.entries(DNB_DROMCOM_CATEGORIES).filter(([, category]) => category === 'drom').map(([name]) => name);
+    const comNames = Object.entries(DNB_DROMCOM_CATEGORIES).filter(([, category]) => category === 'com').map(([name]) => name);
+    return <section className="rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm">
+      <div className="text-[11px] font-black uppercase text-cyan-600">Correction complète · DROM-COM</div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4"><div className="mb-2 text-sm font-black uppercase text-red-700">DROM</div>{dromNames.map((name) => <div key={name} className="py-1 text-sm font-bold text-slate-800">• {name}</div>)}</div>
+        <div className="rounded-2xl border-2 border-cyan-200 bg-cyan-50 p-4"><div className="mb-2 text-sm font-black uppercase text-cyan-700">COM</div>{comNames.map((name) => <div key={name} className="py-1 text-sm font-bold text-slate-800">• {name}</div>)}</div>
+      </div>
+      <div className="relative mx-auto mt-4 max-w-[1000px] overflow-hidden rounded-2xl border-2 border-slate-300 bg-white">
+        <img src={DNB_GEO_DROMCOM_MAP_URL} alt="Carte complète des DROM-COM" draggable={false} className="block h-auto w-full select-none" />
+        {slots.map((slot) => <div key={`revision-${slot.id}`} className="absolute flex items-center justify-center rounded-md border-2 border-cyan-500 bg-white/95 px-1 text-center text-[clamp(8px,1vw,13px)] font-black text-cyan-800 shadow" style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.width}%`, height: `${slot.height}%` }}>{slot.expectedName}</div>)}
+      </div>
+    </section>;
+  }
 
   return (
     <section className="rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm">
@@ -3085,7 +3310,7 @@ function DnbDromComLabelGame() {
   );
 }
 
-function DnbGeoTerritoryDrawingGame() {
+function DnbGeoTerritoryDrawingGame({ revisionMode = false }) {
   const drawingRef = useRef(null);
   const [tool, setTool] = useState('mountain');
   const [mapReady, setMapReady] = useState(true);
@@ -3093,7 +3318,7 @@ function DnbGeoTerritoryDrawingGame() {
   const [currentPath, setCurrentPath] = useState(null);
   const [labels, setLabels] = useState([]);
   const [draggingLabelId, setDraggingLabelId] = useState('');
-  const [editModel, setEditModel] = useState(false);
+  const [editModel, setEditModel] = useState(revisionMode);
   const [answers, setAnswers] = useState({});
   const [checked, setChecked] = useState(false);
   const [activeLabelId, setActiveLabelId] = useState('');
@@ -3121,9 +3346,13 @@ function DnbGeoTerritoryDrawingGame() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!draftLoadedRef.current || !editModel) return;
-    window.localStorage.setItem(DNB_GEO_TERRITORY_DRAFT_KEY, JSON.stringify({ paths, labels }));
-  }, [editModel, paths, labels]);
+    if (!draftLoadedRef.current || !editModel || revisionMode) return;
+    try {
+      window.localStorage.setItem(DNB_GEO_TERRITORY_DRAFT_KEY, JSON.stringify({ paths, labels }));
+    } catch (error) {
+      console.warn('Sauvegarde locale du territoire impossible : quota atteint.', error);
+    }
+  }, [editModel, paths, labels, revisionMode]);
 
   const pointerToPercent = (event) => {
     const rect = drawingRef.current?.getBoundingClientRect();
@@ -3209,9 +3438,9 @@ function DnbGeoTerritoryDrawingGame() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[11px] font-black uppercase text-emerald-500">Partie 2 · Géo</div>
-          <div className="text-2xl font-black text-slate-900">Complète les repères du territoire</div>
+          <div className="text-2xl font-black text-slate-900">{revisionMode ? 'Carte complète du territoire français' : 'Complète les repères du territoire'}</div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!revisionMode && <div className="flex flex-wrap gap-2">
           {!editModel && (
             <button
               type="button"
@@ -3273,17 +3502,17 @@ function DnbGeoTerritoryDrawingGame() {
               <button type="button" onClick={copyDraft} className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black text-emerald-700">Copier sauvegarde</button>
             </>
           )}
-        </div>
+        </div>}
       </div>
       <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
-        {editModel
+        {revisionMode ? 'Observe les fleuves en bleu, les massifs en brun et mémorise tous les noms avant l’entraînement.' : editModel
           ? 'Mode modèle : ajuste les tracés et les bulles, puis copie la sauvegarde.'
           : `Écris les noms dans les bulles placées sur la carte. ${checked ? `${goodAnswers}/${labels.length} bonnes réponses.` : ''}`}
       </div>
       <div className="mt-5">
         <div
           ref={drawingRef}
-          className="relative mx-auto max-w-[760px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white"
+          className={`relative mx-auto max-w-[760px] touch-none overflow-hidden rounded-2xl border-2 border-slate-400 bg-white ${revisionMode ? 'pointer-events-none' : ''}`}
           onPointerDown={(event) => {
             if (editModel && !draggingLabelId) startDraw(event);
             if (!editModel) setActiveLabelId('');
@@ -3424,10 +3653,21 @@ const URBAN_AREA_LEGEND = [
   { key: 'commute', label: 'mobilités pendulaires', color: '#2563eb', expected: 'mobilites pendulaires' }
 ];
 
-function DnbUrbanAreaSchemaGame() {
-  const [circles, setCircles] = useState([]);
-  const [arrows, setArrows] = useState([]);
-  const [answers, setAnswers] = useState({});
+function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
+  const [circles, setCircles] = useState(() => revisionMode ? [
+    { key: 'center', cx: 50, cy: 37.5, rx: 11, ry: 7, fill: '#ff2a1f' },
+    { key: 'suburbs', cx: 50, cy: 37.5, rx: 21, ry: 13, fill: '#fb923c' },
+    { key: 'periurban', cx: 50, cy: 37.5, rx: 34, ry: 22, fill: '#fde68a' }
+  ] : []);
+  const [arrows, setArrows] = useState(() => revisionMode ? [
+    { id: 'revision-sprawl-1', type: 'sprawl', x1: 35, y1: 28, x2: 17, y2: 15 },
+    { id: 'revision-sprawl-2', type: 'sprawl', x1: 65, y1: 28, x2: 84, y2: 16 },
+    { id: 'revision-sprawl-3', type: 'sprawl', x1: 35, y1: 48, x2: 17, y2: 64 },
+    { id: 'revision-sprawl-4', type: 'sprawl', x1: 65, y1: 48, x2: 85, y2: 64 },
+    { id: 'revision-commute-1', type: 'double', x1: 24, y1: 37.5, x2: 43, y2: 37.5 },
+    { id: 'revision-commute-2', type: 'double', x1: 57, y1: 37.5, x2: 76, y2: 37.5 }
+  ] : []);
+  const [answers, setAnswers] = useState(() => revisionMode ? Object.fromEntries(URBAN_AREA_LEGEND.map((item) => [item.key, item.expected])) : {});
   const [checked, setChecked] = useState(false);
   const [activeDrag, setActiveDrag] = useState(null);
   const [actions, setActions] = useState([]);
@@ -3440,7 +3680,7 @@ function DnbUrbanAreaSchemaGame() {
     ...(arrows.some((arrow) => arrow.type === 'sprawl') ? ['sprawl'] : []),
     ...(arrows.some((arrow) => arrow.type === 'double') ? ['commute'] : [])
   ]);
-  const visibleLegend = URBAN_AREA_LEGEND.filter((item) => visibleLegendKeys.has(item.key));
+  const visibleLegend = revisionMode ? URBAN_AREA_LEGEND : URBAN_AREA_LEGEND.filter((item) => visibleLegendKeys.has(item.key));
   const goodLegend = visibleLegend.filter((item) => normalizeAnswer(answers[item.key]) === normalizeAnswer(item.expected)).length;
   const sortedCircles = [...circles].sort((a, b) => a.rx - b.rx);
   const hasNestedCircles = sortedCircles.length === 3
@@ -3536,21 +3776,21 @@ function DnbUrbanAreaSchemaGame() {
           <div className="text-[11px] font-black uppercase text-emerald-500">Partie 2 · Géo</div>
           <div className="text-2xl font-black text-slate-900">Schéma d’une aire urbaine</div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!revisionMode && <div className="flex flex-wrap gap-2">
           <button type="button" onClick={addCircle} disabled={nextCircle >= 3} className="rounded-2xl bg-red-500 px-4 py-3 text-xs font-black text-white disabled:opacity-40">Cercles</button>
           <button type="button" onClick={() => addArrow('sprawl')} className="rounded-2xl bg-red-500 px-4 py-3 text-xs font-black text-white">Étalement urbain</button>
           <button type="button" onClick={() => addArrow('double')} className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black text-white">Mobilités pendulaires</button>
           <button type="button" onClick={removeLast} className="rounded-2xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700">Effacer dernier</button>
           <button type="button" onClick={() => setChecked(true)} className="rounded-2xl bg-emerald-500 px-4 py-3 text-xs font-black text-white">Valider</button>
-        </div>
+        </div>}
       </div>
       <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
-        Place les trois espaces, ajoute les flux, puis complète la légende qui apparaît sous le schéma.
+        {revisionMode ? 'Observe les trois espaces emboîtés et les deux types de flux, puis mémorise la légende.' : 'Place les trois espaces, ajoute les flux, puis complète la légende qui apparaît sous le schéma.'}
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_340px]">
         <div
           ref={dragRef}
-          className="relative aspect-[4/3] overflow-hidden rounded-3xl border-2 border-slate-200 bg-[#b9cf32]"
+          className={`relative aspect-[4/3] overflow-hidden rounded-3xl border-2 border-slate-200 bg-[#b9cf32] ${revisionMode ? 'pointer-events-none' : ''}`}
           onPointerMove={moveArrow}
           onPointerUp={() => setActiveDrag(null)}
           onPointerLeave={() => setActiveDrag(null)}
@@ -3587,7 +3827,7 @@ function DnbUrbanAreaSchemaGame() {
                     setActiveDrag({ kind: 'circle', id: circle.key, handle: 'body' });
                   }}
                 />
-                <circle
+                {!revisionMode && <circle
                   cx={circle.cx + circle.rx}
                   cy={circle.cy + circle.ry}
                   r="1.7"
@@ -3599,7 +3839,7 @@ function DnbUrbanAreaSchemaGame() {
                     event.stopPropagation();
                     setActiveDrag({ kind: 'circle', id: circle.key, handle: 'resize' });
                   }}
-                />
+                />}
               </g>
             ))}
             {arrows.map((arrow) => {
@@ -3623,7 +3863,7 @@ function DnbUrbanAreaSchemaGame() {
 	                      setActiveDrag({ kind: 'arrow', id: arrow.id, handle: 'body' });
 	                    }}
                   />
-                  {['start', 'end'].map((handle) => (
+                  {!revisionMode && ['start', 'end'].map((handle) => (
                     <circle
                       key={handle}
                       cx={handle === 'start' ? arrow.x1 : arrow.x2}
@@ -3656,15 +3896,15 @@ function DnbUrbanAreaSchemaGame() {
               return (
                 <label key={item.key} className="flex items-center gap-3 rounded-2xl bg-white p-3">
                   <span className="h-7 w-12 rounded-lg border border-slate-200" style={{ background: item.color }} />
-                  <input
-                    value={answer}
-                    onChange={(event) => {
-                      setAnswers((prev) => ({ ...prev, [item.key]: event.target.value }));
-                      setChecked(false);
-                    }}
-                    className={`min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm font-black outline-none ${checked ? (isGood ? 'border-emerald-300 text-emerald-700' : 'border-red-300 text-red-600') : 'border-slate-200 text-slate-900'}`}
-                    placeholder="..."
-                  />
+                  {revisionMode ? <span className="min-w-0 flex-1 text-sm font-black text-slate-900">{item.label}</span> : <input
+                      value={answer}
+                      onChange={(event) => {
+                        setAnswers((prev) => ({ ...prev, [item.key]: event.target.value }));
+                        setChecked(false);
+                      }}
+                      className={`min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm font-black outline-none ${checked ? (isGood ? 'border-emerald-300 text-emerald-700' : 'border-red-300 text-red-600') : 'border-slate-200 text-slate-900'}`}
+                      placeholder="..."
+                    />}
                 </label>
               );
             })}
@@ -3863,13 +4103,32 @@ function DnbChapterFolders({ user, sectionFilter = 'full', onOpenChapter }) {
   };
 
   return (
-    <div className={`mx-4 grid gap-4 ${sectionFilter === 'emc' ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
+    <div className={`mx-4 grid gap-4 ${sectionFilter === 'emc' ? 'md:grid-cols-1' : ['paragraphe', 'docs'].includes(sectionFilter) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
       {sectionFilter === 'emc' ? (
         renderColumn('emc', 'EMC', 'text-violet-600')
       ) : (
         <>
           {renderColumn('histoire', 'Histoire', 'text-red-500')}
           {renderColumn('geo', 'Géo', 'text-emerald-600')}
+          {(sectionFilter === 'paragraphe' || sectionFilter === 'docs') && <button
+            type="button"
+            onClick={() => onOpenChapter({
+              key: `${sectionFilter}:methodo`,
+              subject: sectionFilter === 'docs' ? 'methodo-docs' : 'methodo',
+              title: sectionFilter === 'docs' ? 'Méthodologie des documents' : 'Méthodologie du développement construit',
+              subjectOnly: true
+            })}
+            className="rounded-2xl border border-blue-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md"
+          >
+            <div className="text-2xl font-black uppercase text-blue-600">Méthodo</div>
+            <div className="mt-3 flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg">🎓</div>
+              <div>
+                <div className="text-sm font-black text-slate-900">{sectionFilter === 'docs' ? 'Présenter et décrire' : 'Réussir son paragraphe'}</div>
+                <div className="mt-0.5 text-[11px] font-black text-blue-500">{sectionFilter === 'docs' ? 'Vidéos + exercices' : 'Vidéo + fiche méthode'}</div>
+              </div>
+            </div>
+          </button>}
         </>
       )}
     </div>
@@ -3907,6 +4166,593 @@ function DnbReperesSubjectFolders({ onOpenSubject }) {
       ))}
     </div>
   );
+}
+
+const DNB_DOC_METHOD_DB = 'condaweb-dnb-method-images';
+const DNB_DOC_METHOD_STORE = 'images';
+
+const openDnbMethodImageDb = () => new Promise((resolve, reject) => {
+  const request = window.indexedDB.open(DNB_DOC_METHOD_DB, 1);
+  request.onupgradeneeded = () => {
+    const db = request.result;
+    if (!db.objectStoreNames.contains(DNB_DOC_METHOD_STORE)) db.createObjectStore(DNB_DOC_METHOD_STORE);
+  };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+const saveDnbMethodImage = async (key, file) => {
+  const db = await openDnbMethodImageDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(DNB_DOC_METHOD_STORE, 'readwrite');
+    transaction.objectStore(DNB_DOC_METHOD_STORE).put(file, key);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
+};
+
+const loadDnbMethodImage = async (key) => {
+  const db = await openDnbMethodImageDb();
+  const blob = await new Promise((resolve, reject) => {
+    const request = db.transaction(DNB_DOC_METHOD_STORE, 'readonly').objectStore(DNB_DOC_METHOD_STORE).get(key);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return blob;
+};
+
+const youtubeEmbedUrl = (url = '') => {
+  const value = String(url || '').trim();
+  const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/i);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : value;
+};
+
+function DnbDocumentsMethodology({ onBack, user }) {
+  const [module, setModule] = useState('home');
+  const canCalibrate = user?.isDeveloper === true || user?.isTestAccount === true;
+  if (module === 'presentation') return canCalibrate
+    ? <DnbDocumentMethodCalibration type="presentation" onBack={() => setModule('home')} />
+    : <DnbDocumentMethodReader type="presentation" user={user} onBack={() => setModule('home')} />;
+  if (module === 'image') return canCalibrate
+    ? <DnbDocumentMethodCalibration type="image" onBack={() => setModule('home')} />
+    : <DnbDocumentMethodReader type="image" user={user} onBack={() => setModule('home')} />;
+  return <section className="mx-4 rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-[11px] font-black uppercase text-cyan-600">Documents · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Présenter et décrire un document</h3></div>
+      <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour aux dossiers</button>
+    </div>
+    <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <button type="button" onClick={() => setModule('presentation')} className="rounded-3xl border-2 border-blue-200 bg-blue-50 p-6 text-left transition hover:border-blue-500 hover:shadow-md">
+        <div className="text-3xl">📄</div><div className="mt-3 text-xl font-black text-slate-900">Présentation de document</div><div className="mt-2 text-sm font-bold text-blue-800">Date, auteur, nature, sujet et contexte.</div><div className="mt-5 inline-flex rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
+      </button>
+      <button type="button" onClick={() => setModule('image')} className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-6 text-left transition hover:border-emerald-500 hover:shadow-md">
+        <div className="text-3xl">🖼️</div><div className="mt-3 text-xl font-black text-slate-900">Description d’image</div><div className="mt-2 text-sm font-bold text-emerald-800">Premier plan, deuxième plan et arrière-plan.</div><div className="mt-5 inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
+      </button>
+    </div>
+  </section>;
+}
+
+const documentMethodFields = {
+  presentation: [
+    ['date', 'Date + mots-clés'], ['author', 'Auteur + mots-clés'], ['nature', 'Nature + mots-clés'], ['subject', 'Sujet + mots-clés'], ['context', 'Contexte + mots-clés']
+  ],
+  image: [
+    ['foreground', 'Au premier plan + mots-clés'], ['middleGround', 'Au deuxième plan + mots-clés'], ['background', 'À l’arrière-plan + mots-clés']
+  ]
+};
+
+const parseExpectedCorrectionRule = (value = '') => {
+  const source = String(value || '');
+  const quoteSource = '(?:"([^"]*)"|«([^»]*)»|“([^”]*)”)';
+  const quoteRegex = /"([^"]*)"|«([^»]*)»|“([^”]*)”/g;
+  const chainRegex = new RegExp(`${quoteSource}(?:\\s*=\\s*${quoteSource})+`, 'g');
+  const groups = [];
+  const chainRanges = [];
+  let chainMatch;
+  while ((chainMatch = chainRegex.exec(source)) !== null) {
+    const alternatives = [];
+    const innerRegex = /"([^"]*)"|«([^»]*)»|“([^”]*)”/g;
+    let innerMatch;
+    while ((innerMatch = innerRegex.exec(chainMatch[0])) !== null) alternatives.push(innerMatch[1] ?? innerMatch[2] ?? innerMatch[3] ?? '');
+    groups.push(alternatives.filter(Boolean));
+    chainRanges.push({ start: chainMatch.index, end: chainMatch.index + chainMatch[0].length });
+  }
+  let quoteMatch;
+  while ((quoteMatch = quoteRegex.exec(source)) !== null) {
+    if (chainRanges.some((range) => quoteMatch.index >= range.start && quoteMatch.index < range.end)) continue;
+    const keyword = quoteMatch[1] ?? quoteMatch[2] ?? quoteMatch[3] ?? '';
+    if (keyword) groups.push([keyword]);
+  }
+  const correction = source
+    .replace(chainRegex, (chain) => {
+      const first = chain.match(/"([^"]*)"|«([^»]*)»|“([^”]*)”/);
+      return first ? (first[1] ?? first[2] ?? first[3] ?? '') : chain;
+    })
+    .replace(quoteRegex, (_match, straight, french, curly) => straight ?? french ?? curly ?? '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return { correction, groups };
+};
+
+const normalizeMethodAnswer = (value = '') => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const methodAnswerMatches = (answer, rule) => {
+  const normalized = normalizeMethodAnswer(answer);
+  const { groups } = parseExpectedCorrectionRule(rule);
+  if (!normalized || groups.length === 0) return false;
+  return groups.every((alternatives) => alternatives.some((item) => normalized.includes(normalizeMethodAnswer(item))));
+};
+
+function DnbDocumentMethodReader({ type, user, onBack }) {
+  const storageKey = `condaweb-dnb-doc-method-${type}-v1`;
+  const isImageDescription = type === 'image';
+  const fields = documentMethodFields[type];
+  const [model] = useState(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+      if (stored && Array.isArray(stored.exercises)) {
+        if (type === 'presentation') stored.exercises = stored.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected, subject: exercise.expected?.subject || exercise.expected?.source || '' } }));
+        return stored;
+      }
+    } catch (_) {}
+    return { videoUrl: '', exercises: [] };
+  });
+  const [page, setPage] = useState(0);
+  const [showLesson, setShowLesson] = useState(true);
+  const [showSheet, setShowSheet] = useState(false);
+  const [answers, setAnswers] = useState({});
+  const [checked, setChecked] = useState({});
+  const [exercisePreview, setExercisePreview] = useState('');
+  const [sheetPreview, setSheetPreview] = useState('');
+  const total = model.exercises.length;
+  const exercise = model.exercises[page];
+  const lessonVideoUrl = type === 'presentation'
+    ? 'https://www.youtube.com/embed/NVh1P8Lbx1A'
+    : youtubeEmbedUrl(model.videoUrl);
+  const effectiveSheetPreview = sheetPreview || (type === 'presentation' ? '/dnb-danse.png' : '');
+
+  useEffect(() => {
+    let cancelled = false;
+    let url = '';
+    if (!model.sheetKey) return undefined;
+    loadDnbMethodImage(model.sheetKey).then((blob) => {
+      if (!blob || cancelled) return;
+      url = URL.createObjectURL(blob);
+      setSheetPreview(url);
+    }).catch(() => {});
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [model.sheetKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let url = '';
+    setExercisePreview('');
+    if (!exercise?.imageKey) return undefined;
+    loadDnbMethodImage(exercise.imageKey).then((blob) => {
+      if (!blob || cancelled) return;
+      url = URL.createObjectURL(blob);
+      setExercisePreview(url);
+    }).catch(() => {});
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [exercise?.imageKey]);
+
+  const reportProgress = (reached) => {
+    const studentId = user?._id || user?.id;
+    if (!studentId || total === 0) return;
+    if (reached >= total) reportTrainingScore(`dnb-doc-method-${type}`, total, total);
+    fetch('/api/games/save-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, gameId: `dnb-doc-method-${type}::${total}`, score: reached >= total ? 100 : 0, levelReached: reached })
+    }).catch(() => {});
+  };
+
+  const methodSheetModal = showSheet ? <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setShowSheet(false)}>
+    <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border-2 border-blue-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3"><div><div className="text-[10px] font-black uppercase text-blue-600">Fiche de méthodologie</div><div className="text-lg font-black text-slate-900">{isImageDescription ? 'Décrire une image' : 'Présenter un document'}</div></div><button type="button" onClick={() => setShowSheet(false)} aria-label="Fermer la fiche" className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xl font-black text-slate-700 hover:bg-red-100 hover:text-red-600">×</button></div>
+      <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3">{effectiveSheetPreview ? (sheetPreview && model.sheetMime === 'application/pdf' ? <iframe src={effectiveSheetPreview} title="Fiche de méthodologie" className="h-[78vh] w-full rounded-xl bg-white" /> : <img src={effectiveSheetPreview} alt="Fiche de méthodologie" className="mx-auto block max-w-full rounded-xl bg-white object-contain" />) : <div className="flex min-h-[45vh] items-center justify-center rounded-2xl bg-white p-8 text-center font-bold text-slate-500">La fiche de méthodologie n’a pas encore été ajoutée aux fichiers de l’application.</div>}</div>
+    </div>
+  </div> : null;
+
+  if (showLesson && type === 'presentation') return <><section className="mx-4 rounded-3xl border border-blue-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={onBack} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">← Retour</button><div className="text-center"><div className="text-[10px] font-black uppercase text-blue-600">Apprentissage</div><h3 className="m-0 text-xl font-black text-slate-900">Comment présenter un document ?</h3></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setShowSheet(true)} className="rounded-xl bg-blue-100 px-4 py-3 text-xs font-black text-blue-700">📘 Consulter la fiche</button><button type="button" onClick={() => setShowLesson(false)} className="rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">Passer aux exercices →</button></div></div>
+    <div className="mt-4 grid min-h-[66vh] gap-4 lg:grid-cols-2">
+      <div className="flex flex-col rounded-2xl border-2 border-blue-100 bg-blue-50 p-3"><div className="mb-2 text-center text-xs font-black uppercase text-blue-700">1. Regarde la vidéo</div><div className="flex flex-1 items-center"><div className="aspect-video w-full overflow-hidden rounded-xl bg-slate-950"><iframe className="h-full w-full" src={lessonVideoUrl} title="Présenter un document au DNB" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div></div></div>
+      <div className="flex min-h-0 flex-col rounded-2xl border-2 border-amber-100 bg-amber-50 p-3"><div className="mb-2 text-center text-xs font-black uppercase text-amber-700">2. Observe le document d’exemple</div><a href="/dnb-presEx.png" target="_blank" rel="noreferrer" className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-white"><img src="/dnb-presEx.png" alt="Document d’exemple à présenter" className="max-h-[62vh] w-full object-contain" /></a></div>
+    </div>
+  </section>{methodSheetModal}</>;
+
+  if (!total) return <section className="mx-4 rounded-3xl border border-cyan-200 bg-white p-6"><button type="button" onClick={onBack} className="rounded-xl bg-slate-100 px-4 py-3 text-xs font-black">← Retour</button><div className="mt-5 text-center font-bold text-slate-400">Aucun exercice n’est encore disponible.</div></section>;
+
+  const pageAnswers = answers[exercise.id] || {};
+  const pageChecked = checked[exercise.id] || false;
+  const correctCount = fields.filter(([key]) => methodAnswerMatches(pageAnswers[key], exercise.expected?.[key])).length;
+  const goNext = () => {
+    reportProgress(page + 1);
+    if (page < total - 1) setPage((value) => value + 1);
+    else setPage(total);
+  };
+
+  if (page >= total) return <section className="mx-4 flex min-h-[62vh] items-center justify-center rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center"><div><div className="text-6xl">🏁</div><h3 className="mt-4 text-3xl font-black text-slate-900">Parcours terminé</h3><p className="mt-2 font-bold text-emerald-800">Ton professeur peut maintenant voir que tu es allé au bout des {total} exercices.</p><div className="mt-5 flex justify-center gap-3"><button type="button" onClick={() => setPage(0)} className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-emerald-700">Recommencer</button><button type="button" onClick={onBack} className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white">Terminer</button></div></div></section>;
+
+  return <><section className="mx-4 rounded-3xl border border-cyan-200 bg-white p-4 shadow-sm">
+    <div className="flex items-center justify-between gap-3"><button type="button" onClick={onBack} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">← Retour</button><div className="text-center"><div className="text-[10px] font-black uppercase text-cyan-600">Mode liseuse</div><div className="text-lg font-black text-slate-900">{isImageDescription ? 'Décrire une image' : 'Présenter un document'}</div></div><div className="rounded-xl bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-700">{page + 1}/{total}</div></div>
+    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-cyan-500 transition-all" style={{ width: `${((page + 1) / total) * 100}%` }} /></div>
+    <div className="mt-4 grid min-h-[62vh] items-start gap-4 lg:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]">
+      <div className="space-y-3">
+        {exercisePreview ? <div className="flex max-h-[58vh] items-center justify-center overflow-hidden rounded-2xl border-2 border-cyan-100 bg-slate-50"><img src={exercisePreview} alt={`Document ${page + 1}`} className="max-h-[58vh] w-full object-contain" /></div> : <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Document non disponible</div>}
+        <button type="button" onClick={() => setShowSheet(true)} className="block w-full rounded-xl bg-blue-50 px-4 py-3 text-center text-xs font-black text-blue-700">📘 Consulter la fiche méthode</button>
+      </div>
+      <div className="space-y-3">{fields.map(([key, label]) => {
+        const ok = pageChecked && methodAnswerMatches(pageAnswers[key], exercise.expected?.[key]);
+        const parsed = parseExpectedCorrectionRule(exercise.expected?.[key] || '');
+        return <label key={key} className={`block rounded-2xl border-2 p-3 ${!pageChecked ? 'border-slate-100 bg-slate-50' : ok ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}><span className="mb-1 block text-[10px] font-black uppercase text-slate-500">{label}</span><textarea value={pageAnswers[key] || ''} onChange={(event) => setAnswers((previous) => ({ ...previous, [exercise.id]: { ...(previous[exercise.id] || {}), [key]: event.target.value } }))} className="min-h-[58px] w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-cyan-400" />{pageChecked && !ok && <div className="mt-2 text-xs font-bold text-amber-800">À retenir : {parsed.correction || 'Réponse à revoir'}</div>}</label>;
+      })}
+        {pageChecked && <div className="rounded-xl bg-cyan-50 p-3 text-sm font-black text-cyan-800">{correctCount}/{fields.length} éléments reconnus. Tu peux continuer même si tout n’est pas juste.{exercise.correction ? <div className="mt-1 font-bold whitespace-pre-wrap">{exercise.correction}</div> : null}</div>}
+        <div className="flex items-center justify-between gap-3 pt-1"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))} className="rounded-xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-600 disabled:opacity-30">Précédent</button><div className="flex gap-2"><button type="button" onClick={() => setChecked((previous) => ({ ...previous, [exercise.id]: true }))} className="rounded-xl bg-cyan-600 px-4 py-3 text-xs font-black text-white">Vérifier</button><button type="button" onClick={goNext} className="rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">{page === total - 1 ? 'Finir' : 'Suivant →'}</button></div></div>
+      </div>
+    </div>
+  </section>{methodSheetModal}</>;
+}
+
+function DnbDocumentMethodCalibration({ type, onBack }) {
+  const storageKey = `condaweb-dnb-doc-method-${type}-v1`;
+  const isImageDescription = type === 'image';
+  const fields = documentMethodFields[type];
+  const [model, setModel] = useState(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+      if (stored && Array.isArray(stored.exercises)) {
+        if (type === 'presentation') stored.exercises = stored.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected, subject: exercise.expected?.subject || exercise.expected?.source || '' } }));
+        return stored;
+      }
+    } catch (_) {}
+    return { videoUrl: '', exercises: [] };
+  });
+  const [previews, setPreviews] = useState({});
+  const [sheetPreview, setSheetPreview] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const urls = [];
+    Promise.all(model.exercises.map(async (exercise) => {
+      if (!exercise.imageKey || previews[exercise.id]) return;
+      try {
+        const blob = await loadDnbMethodImage(exercise.imageKey);
+        if (!blob || cancelled) return;
+        const url = URL.createObjectURL(blob);
+        urls.push(url);
+        setPreviews((previous) => ({ ...previous, [exercise.id]: url }));
+      } catch (_) {}
+    }));
+    return () => { cancelled = true; urls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = '';
+    if (model.sheetKey) {
+      loadDnbMethodImage(model.sheetKey).then((blob) => {
+        if (!blob || cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSheetPreview(objectUrl);
+      }).catch(() => {});
+    }
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, []);
+
+  const addExercise = () => {
+    const id = `${type}-exercise-${Date.now()}`;
+    setModel((previous) => ({ ...previous, exercises: [...previous.exercises, { id, imageKey: '', imageName: '', correction: '', expected: Object.fromEntries(fields.map(([key]) => [key, ''])) }] }));
+    setSaved(false);
+  };
+  const updateExercise = (id, patch) => {
+    setModel((previous) => ({ ...previous, exercises: previous.exercises.map((exercise) => exercise.id === id ? { ...exercise, ...patch } : exercise) }));
+    setSaved(false);
+  };
+  const uploadImage = async (exercise, file) => {
+    if (!file) return;
+    const imageKey = `${storageKey}:${exercise.id}`;
+    await saveDnbMethodImage(imageKey, file);
+    const previousUrl = previews[exercise.id];
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    setPreviews((previous) => ({ ...previous, [exercise.id]: URL.createObjectURL(file) }));
+    updateExercise(exercise.id, { imageKey, imageName: file.name });
+  };
+  const uploadMethodSheet = async (file) => {
+    if (!file) return;
+    const sheetKey = `${storageKey}:method-sheet`;
+    await saveDnbMethodImage(sheetKey, file);
+    if (sheetPreview) URL.revokeObjectURL(sheetPreview);
+    setSheetPreview(URL.createObjectURL(file));
+    setModel((previous) => ({ ...previous, sheetKey, sheetName: file.name, sheetMime: file.type || '' }));
+    setSaved(false);
+  };
+  const save = () => {
+    window.localStorage.setItem(storageKey, JSON.stringify(model));
+    setSaved(true);
+  };
+  const embedUrl = youtubeEmbedUrl(model.videoUrl);
+
+  return <section className="mx-4 rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-[11px] font-black uppercase text-cyan-600">Documents · Calibrage</div><h3 className="m-0 text-2xl font-black text-slate-900">{isImageDescription ? 'Description d’image' : 'Présentation de document'}</h3></div>
+      <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
+    </div>
+    <label className="mt-5 block rounded-2xl bg-cyan-50 p-4"><span className="mb-1 block text-[10px] font-black uppercase text-cyan-700">Lien de la vidéo explicative</span><input value={model.videoUrl || ''} onChange={(event) => { setModel((previous) => ({ ...previous, videoUrl: event.target.value })); setSaved(false); }} placeholder="Colle ici le lien YouTube" className="w-full rounded-xl border-2 border-cyan-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-cyan-400" /></label>
+    {embedUrl && <div className="mx-auto mt-4 max-w-[760px] overflow-hidden rounded-2xl border-2 border-cyan-200 bg-slate-950"><div className="aspect-video"><iframe className="h-full w-full" src={embedUrl} title={`Vidéo ${isImageDescription ? 'description image' : 'présentation document'}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div></div>}
+    <div className="mx-auto mt-4 max-w-[760px] rounded-2xl border-2 border-blue-200 bg-blue-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase text-blue-600">Fiche méthode</div><div className="text-sm font-bold text-slate-700">{model.sheetName || 'Aucune fiche ajoutée'}</div></div><label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white">+ Ajouter la fiche<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(event) => uploadMethodSheet(event.target.files?.[0])} /></label></div>
+      {sheetPreview && <div className="mt-3 overflow-hidden rounded-xl border border-blue-200 bg-white">{model.sheetMime === 'application/pdf' ? <iframe src={sheetPreview} title="Fiche méthode PDF" className="h-[520px] w-full" /> : <a href={sheetPreview} target="_blank" rel="noreferrer"><img src={sheetPreview} alt="Fiche méthode" className="block max-h-[720px] w-full object-contain" /></a>}</div>}
+    </div>
+    <div className="mt-5 flex items-center justify-between gap-3"><div className="text-lg font-black text-slate-900">Exercices calibrés ({model.exercises.length})</div><button type="button" onClick={addExercise} className="rounded-xl bg-cyan-600 px-4 py-3 text-xs font-black text-white">+ Ajouter un exercice</button></div>
+    <div className="mt-4 space-y-5">{model.exercises.map((exercise, index) => <article key={exercise.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">Exercice {index + 1}</div><button type="button" onClick={() => { setModel((previous) => ({ ...previous, exercises: previous.exercises.filter((item) => item.id !== exercise.id) })); setSaved(false); }} className="text-xs font-black text-red-500">Supprimer</button></div>
+      <div className="mt-3 grid gap-4 lg:grid-cols-[300px_1fr]">
+        <label className="flex min-h-[190px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-cyan-300 bg-white text-center">
+          {previews[exercise.id] ? <img src={previews[exercise.id]} alt={`Document exercice ${index + 1}`} className="h-full max-h-[300px] w-full object-contain" /> : <span className="p-5 text-sm font-black text-cyan-700">Ajouter l’image ou le document<br /><span className="text-[10px] text-slate-400">PNG, JPG, WEBP…</span></span>}
+          <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadImage(exercise, event.target.files?.[0])} />
+        </label>
+        <div className="space-y-3">{fields.map(([fieldKey, label]) => {
+          const rawRule = exercise.expected?.[fieldKey] || '';
+          const parsedRule = parseExpectedCorrectionRule(rawRule);
+          return <label key={fieldKey} className="block"><span className="mb-1 block text-[10px] font-black uppercase text-slate-500">{label}</span><input value={rawRule} onChange={(event) => updateExercise(exercise.id, { expected: { ...exercise.expected, [fieldKey]: event.target.value } })} placeholder={'Phrase avec "mots attendus" ou "choix 1"="choix 2"'} className="w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-cyan-400" />
+            {rawRule && <div className="mt-1 rounded-lg bg-white px-2 py-1.5 text-[10px] leading-relaxed text-slate-600"><span className="font-black text-slate-800">Correction affichée :</span> {parsedRule.correction || '—'}{parsedRule.groups.length > 0 && <><br /><span className="font-black text-cyan-700">Attendu :</span> {parsedRule.groups.map((group) => group.join(' / ')).join(' + ')}</>}</div>}
+          </label>;
+        })}</div>
+      </div>
+      <label className="mt-3 block"><span className="mb-1 block text-[10px] font-black uppercase text-blue-600">Description / explication du corrigé</span><textarea value={exercise.correction || ''} onChange={(event) => updateExercise(exercise.id, { correction: event.target.value })} placeholder="Ajoute l’explication qui sera montrée après la correction." className="min-h-[80px] w-full rounded-2xl border-2 border-blue-100 bg-blue-50 p-3 text-sm font-bold leading-relaxed outline-none focus:border-blue-400" /></label>
+    </article>)}</div>
+    {model.exercises.length === 0 && <div className="mt-4 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-400">Ajoute le premier exercice pour commencer le calibrage.</div>}
+    <div className="mt-5 flex flex-wrap items-center gap-3"><button type="button" onClick={save} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">Valider et enregistrer</button>{saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage enregistré</span>}</div>
+  </section>;
+}
+
+function DnbParagraphMethodology({ onBack }) {
+  const [module, setModule] = useState('home');
+  if (module === 'hors-sujet') return <DnbOffTopicCalibration onBack={() => setModule('home')} />;
+  if (module === 'introduction') return <DnbIntroductionCalibration onBack={() => setModule('home')} />;
+  return (
+    <section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase text-blue-500">Paragraphe · Méthodologie</div>
+          <h3 className="m-0 text-2xl font-black text-slate-900">Réussir le développement construit</h3>
+        </div>
+        <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour aux dossiers</button>
+      </div>
+      <div className="mt-4 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)]">
+        <div className="overflow-hidden rounded-2xl border-2 border-blue-200 bg-slate-950 shadow-sm">
+          <div className="aspect-video">
+            <iframe
+              className="h-full w-full"
+              src="https://www.youtube.com/embed/bNAhL2TvU8A"
+              title="Méthodologie du développement construit au DNB"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        </div>
+        <a href="/dnb-paragraph.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-blue-200 bg-white shadow-sm" title="Ouvrir la fiche méthode en grand">
+          <img src="/dnb-paragraph.png" alt="Fiche méthode du développement construit au DNB" className="block h-auto w-full" />
+        </a>
+      </div>
+      <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-800">Regarde d’abord la vidéo, puis utilise la fiche méthode comme modèle. Clique sur la fiche pour l’ouvrir en grand.</div>
+      <div className="mt-5 rounded-3xl border-2 border-amber-200 bg-amber-50 p-4">
+        <div className="mb-3">
+          <div className="text-[11px] font-black uppercase text-amber-600">Deuxième apprentissage</div>
+          <div className="text-xl font-black text-slate-900">Détecter et éviter le hors-sujet</div>
+        </div>
+        <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="overflow-hidden rounded-2xl border-2 border-amber-300 bg-slate-950 shadow-sm">
+            <div className="aspect-video">
+              <iframe className="h-full w-full" src="https://www.youtube.com/embed/S5cXMZk-BDs" title="Éviter le hors-sujet au DNB" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-bold leading-relaxed text-amber-900">Apprends à vérifier que chaque argument répond précisément au sujet demandé.</p>
+            <button type="button" onClick={() => setModule('hors-sujet')} className="mt-4 w-full rounded-2xl bg-amber-500 px-5 py-4 text-sm font-black text-white shadow-sm">S’entraîner à détecter le hors-sujet</button>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-3xl border-2 border-violet-200 bg-violet-50 p-5">
+        <div>
+          <div className="text-[11px] font-black uppercase text-violet-600">Troisième apprentissage</div>
+          <div className="text-xl font-black text-slate-900">Vérifier une introduction</div>
+          <p className="mt-1 text-sm font-bold text-violet-800">Repérer s’il manque une définition ou des bornes spatiales et temporelles.</p>
+        </div>
+        <button type="button" onClick={() => setModule('introduction')} className="rounded-2xl bg-violet-600 px-6 py-4 text-sm font-black text-white shadow-sm">Calibrer les 6 introductions</button>
+      </div>
+    </section>
+  );
+}
+
+const DNB_INTRO_DRAFT_KEY = 'condaweb-dnb-introduction-calibration-v1';
+const DNB_INTRO_CHOICES = [
+  { key: 'keywords', label: 'Il manque la définition des mots-clés' },
+  { key: 'spatial', label: 'Il manque les bornes spatiales' },
+  { key: 'temporal', label: 'Il manque les bornes temporelles' },
+  { key: 'complete', label: 'Rien ne manque' }
+];
+
+function DnbIntroductionCalibration({ onBack }) {
+  const [introductions, setIntroductions] = useState(() => {
+    let storedItems = [];
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(DNB_INTRO_DRAFT_KEY) || 'null');
+      if (Array.isArray(stored?.introductions)) storedItems = stored.introductions;
+    } catch (_) {}
+    return Array.from({ length: 6 }, (_, index) => ({ id: `introduction-${index + 1}`, subject: '', text: '', expected: '', ...(storedItems[index] || {}) }));
+  });
+  const [saved, setSaved] = useState(false);
+  const save = () => {
+    window.localStorage.setItem(DNB_INTRO_DRAFT_KEY, JSON.stringify({ introductions }));
+    setSaved(true);
+  };
+
+  return <section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-[11px] font-black uppercase text-violet-600">Méthodo · Calibrage</div><h3 className="m-0 text-2xl font-black text-slate-900">Analyser une introduction</h3></div>
+      <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
+    </div>
+    <div className="mt-4 rounded-2xl bg-violet-50 p-4 text-sm font-bold text-violet-900">Colle six introductions et sélectionne pour chacune l’unique réponse correcte. Les retours à la ligne du texte seront conservés.</div>
+    <div className="mt-5 space-y-4">{introductions.map((introduction, index) => <article key={introduction.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-black text-slate-900">Introduction {index + 1}</div>
+      <label className="mt-3 block">
+        <span className="mb-1 block text-[10px] font-black uppercase text-violet-600">Sujet demandé</span>
+        <input
+          value={introduction.subject || ''}
+          onChange={(event) => {
+            const subject = event.target.value;
+            setIntroductions((previous) => previous.map((item, itemIndex) => itemIndex === index ? { ...item, subject } : item));
+            setSaved(false);
+          }}
+          placeholder="Ex. Décrivez les transformations des espaces productifs français."
+          className="w-full rounded-2xl border-2 border-violet-100 bg-violet-50 px-4 py-3 text-sm font-black text-slate-900 outline-none focus:border-violet-400"
+        />
+      </label>
+      <textarea
+        value={introduction.text || ''}
+        onChange={(event) => {
+          const text = event.target.value;
+          setIntroductions((previous) => previous.map((item, itemIndex) => itemIndex === index ? { ...item, text } : item));
+          setSaved(false);
+        }}
+        placeholder="Colle ici l’introduction proposée à l’élève..."
+        className="mt-3 min-h-[120px] w-full resize-y rounded-2xl border-2 border-slate-200 bg-white p-4 text-sm font-bold leading-relaxed text-slate-800 outline-none focus:border-violet-400"
+      />
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{DNB_INTRO_CHOICES.map((choice) => <button
+        key={choice.key}
+        type="button"
+        onClick={() => {
+          setIntroductions((previous) => previous.map((item, itemIndex) => itemIndex === index ? { ...item, expected: choice.key } : item));
+          setSaved(false);
+        }}
+        className={`rounded-xl border-2 px-3 py-3 text-xs font-black leading-tight ${introduction.expected === choice.key ? 'border-violet-700 bg-violet-600 text-white' : 'border-violet-100 bg-white text-slate-700'}`}
+      >{choice.label}</button>)}</div>
+    </article>)}</div>
+    <div className="mt-5 flex flex-wrap items-center gap-3">
+      <button type="button" onClick={save} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">Valider et enregistrer le calibrage</button>
+      {saved && <span className="text-sm font-black text-emerald-600">✓ Les 6 introductions sont enregistrées</span>}
+    </div>
+  </section>;
+}
+
+const DNB_OFF_TOPIC_DRAFT_KEY = 'condaweb-dnb-off-topic-calibration-v1';
+
+const parseQuotedOffTopic = (source = '') => {
+  const text = String(source || '');
+  const quotePattern = /"([\s\S]*?)"|«([\s\S]*?)»|“([\s\S]*?)”/g;
+  const ranges = [];
+  let cleanText = '';
+  let sourceCursor = 0;
+  let match;
+  while ((match = quotePattern.exec(text)) !== null) {
+    cleanText += text.slice(sourceCursor, match.index);
+    const quotedText = match[1] ?? match[2] ?? match[3] ?? '';
+    const start = cleanText.length;
+    cleanText += quotedText;
+    ranges.push({ start, end: cleanText.length });
+    sourceCursor = match.index + match[0].length;
+  }
+  cleanText += text.slice(sourceCursor);
+  return { text: cleanText, offTopicRanges: ranges };
+};
+
+function DnbOffTopicCalibration({ onBack }) {
+  const [paragraphs, setParagraphs] = useState(() => {
+    let storedParagraphs = [];
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(DNB_OFF_TOPIC_DRAFT_KEY) || 'null');
+      if (Array.isArray(stored?.paragraphs)) storedParagraphs = stored.paragraphs;
+    } catch (_) {}
+    return [0, 1, 2, 3].map((index) => ({
+      id: `paragraph-${index + 1}`,
+      subject: '',
+      sourceText: '',
+      text: '',
+      offTopicRanges: [],
+      explanation: '',
+      ...(storedParagraphs[index] || {})
+    }));
+  });
+  const [saved, setSaved] = useState(false);
+
+  const preview = (paragraph) => {
+    if (!paragraph.text) return <span className="text-slate-400">Le texte calibré apparaîtra ici.</span>;
+    const parts = [];
+    let cursor = 0;
+    paragraph.offTopicRanges.forEach((range, index) => {
+      if (range.start > cursor) parts.push(<React.Fragment key={`normal-${index}`}>{paragraph.text.slice(cursor, range.start)}</React.Fragment>);
+      parts.push(<mark key={`off-${index}`} className="rounded bg-red-200 px-0.5 font-black text-red-800">{paragraph.text.slice(range.start, range.end)}</mark>);
+      cursor = range.end;
+    });
+    if (cursor < paragraph.text.length) parts.push(<React.Fragment key="normal-last">{paragraph.text.slice(cursor)}</React.Fragment>);
+    return parts;
+  };
+
+  const saveCalibration = () => {
+    window.localStorage.setItem(DNB_OFF_TOPIC_DRAFT_KEY, JSON.stringify({ paragraphs }));
+    setSaved(true);
+  };
+
+  return <section className="mx-4 rounded-3xl border border-amber-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-[11px] font-black uppercase text-amber-600">Méthodo · Calibrage</div><h3 className="m-0 text-2xl font-black text-slate-900">Détecter le hors-sujet</h3></div>
+      <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
+    </div>
+    <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900">Saisis quatre paragraphes argumentés et place chaque passage hors sujet entre guillemets. Ils apparaîtront automatiquement en rouge dans l’aperçu. Les retours et sauts de ligne seront conservés.</div>
+    <div className="mt-5 space-y-5">{paragraphs.map((paragraph, paragraphIndex) => <article key={paragraph.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-black text-slate-900">Paragraphe argumenté {paragraphIndex + 1}</div>
+      <label className="mt-3 block">
+        <span className="mb-1 block text-[10px] font-black uppercase text-amber-700">Sujet demandé</span>
+        <input
+          value={paragraph.subject || ''}
+          onChange={(event) => {
+            const subject = event.target.value;
+            setParagraphs((previous) => previous.map((item, index) => index === paragraphIndex ? { ...item, subject } : item));
+            setSaved(false);
+          }}
+          placeholder="Ex. Montrez comment les civils sont mobilisés pendant la Première Guerre mondiale."
+          className="w-full rounded-2xl border-2 border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black text-slate-900 outline-none focus:border-amber-400"
+        />
+      </label>
+      <textarea
+        value={paragraph.sourceText ?? paragraph.text}
+        onChange={(event) => {
+          const sourceText = event.target.value;
+          const parsed = parseQuotedOffTopic(sourceText);
+          setParagraphs((previous) => previous.map((item, index) => index === paragraphIndex ? { ...item, sourceText, ...parsed } : item));
+          setSaved(false);
+        }}
+        placeholder={'Écris ou colle le paragraphe. Exemple : Cet argument répond au sujet. "Cet argument est hors sujet."\n\nLe paragraphe peut continuer après une ligne vide.'}
+        className="mt-3 min-h-[150px] w-full resize-y rounded-2xl border-2 border-slate-200 bg-white p-4 text-sm font-bold leading-relaxed text-slate-800 outline-none focus:border-amber-400"
+      />
+      <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold leading-relaxed text-slate-700"><div className="mb-2 text-[10px] font-black uppercase text-slate-400">Aperçu du corrigé</div>{preview(paragraph)}</div>
+      <label className="mt-3 block">
+        <span className="mb-1 block text-[10px] font-black uppercase text-blue-600">Petite explication du corrigé</span>
+        <textarea
+          value={paragraph.explanation || ''}
+          onChange={(event) => {
+            const explanation = event.target.value;
+            setParagraphs((previous) => previous.map((item, index) => index === paragraphIndex ? { ...item, explanation } : item));
+            setSaved(false);
+          }}
+          placeholder="Explique brièvement pourquoi les passages rouges sont hors sujet et ce qu’il fallait traiter à la place."
+          className="min-h-[80px] w-full resize-y rounded-2xl border-2 border-blue-100 bg-blue-50 p-3 text-sm font-bold leading-relaxed text-slate-800 outline-none focus:border-blue-400"
+        />
+      </label>
+    </article>)}</div>
+    <div className="mt-5 flex items-center gap-3"><button type="button" onClick={saveCalibration} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">Valider et enregistrer le calibrage</button>{saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage enregistré</span>}</div>
+  </section>;
 }
 
 function DnbParagraphFillActivity({ activity, onBack }) {
@@ -3975,7 +4821,7 @@ function DnbParagraphFillActivity({ activity, onBack }) {
       </article>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setChecked(true)} className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white">
+        <button type="button" onClick={() => { setChecked(true); reportTrainingScore(`dnb-paragraph-${activity.id}`, score, activity.blanks.length); }} className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white">
           Valider
         </button>
         <button
@@ -4139,17 +4985,1097 @@ function DnbLocalParagraphActivities({ selectedActivity, onSelectActivity, user 
   );
 }
 
+const FIFTH_GRADE_WORLD_MARKERS = [
+  { id: 1, answer: 'Amérique', x: 19, y: 43, kind: 'continent' },
+  { id: 2, answer: 'Europe', x: 49, y: 32, kind: 'continent' },
+  { id: 3, answer: 'Afrique', x: 49, y: 55, kind: 'continent' },
+  { id: 4, answer: 'Asie', x: 67, y: 37, kind: 'continent' },
+  { id: 5, answer: 'Océanie', x: 81, y: 67, kind: 'continent' },
+  { id: 6, answer: 'Antarctique', x: 52, y: 88, kind: 'continent' },
+  { id: 7, answer: 'Océan Pacifique', x: 7, y: 58, kind: 'ocean' },
+  { id: 8, answer: 'Océan Atlantique', x: 36, y: 49, kind: 'ocean' },
+  { id: 9, answer: 'Océan Indien', x: 67, y: 66, kind: 'ocean' },
+  { id: 10, answer: 'Océan Arctique', x: 51, y: 9, kind: 'ocean' },
+  { id: 11, answer: 'Océan Austral', x: 52, y: 97, kind: 'ocean' }
+];
+
+const fifthGradeWorldAnswerMatches = (answer, expected) => {
+  const actual = normalizeAnswer(answer);
+  const target = normalizeAnswer(expected);
+  if (!actual || !target) return false;
+  if (actual === target) return true;
+  return target.startsWith('ocean') && actual === target.replace(/^ocean/, '');
+};
+
+const FIFTH_GRADE_SCALE_LEVELS = [
+  { id: 'mondiale', label: 'Mondiale', example: 'Le monde entier', icon: '🌍' },
+  { id: 'macro-regionale', label: 'Macro-régionale', example: 'Un continent ou un grand ensemble de pays', icon: '🌐' },
+  { id: 'nationale', label: 'Nationale', example: 'Un pays entier', icon: '🇫🇷' },
+  { id: 'regionale', label: 'Régionale', example: "Une région ou une partie d'un pays", icon: '🗺️' },
+  { id: 'locale', label: 'Locale', example: 'Une ville, un quartier ou un site', icon: '📍' }
+];
+
+const FIFTH_GRADE_SCALE_QUESTIONS = [
+  { id: 'world', title: 'Les grands climats du monde', detail: 'Tous les continents sont représentés.', answer: 'mondiale', icon: '🌍' },
+  { id: 'europe', title: "Les États de l'Union européenne", detail: "La carte représente une grande partie de l'Europe.", answer: 'macro-regionale', icon: '🌐' },
+  { id: 'france', title: 'La population en France', detail: 'Le territoire français entier est représenté.', answer: 'nationale', icon: '🇫🇷' },
+  { id: 'occitanie', title: "Les transports en Occitanie", detail: 'Une région française est représentée.', answer: 'regionale', icon: '🗺️' },
+  { id: 'town', title: 'Le centre-ville de Toulouse', detail: 'Les rues et les bâtiments sont visibles.', answer: 'locale', icon: '📍' }
+];
+
+const FIFTH_GRADE_DEMOGRAPHIC_CURVES = [
+  {
+    id: 'curve-trend', title: 'Population du pays A (en millions)', years: [1960, 1980, 2000, 2020], values: [18, 25, 39, 55],
+    question: 'Comment évolue globalement la population ?', choices: ['Elle augmente', 'Elle diminue', 'Elle reste stable'], answer: 'Elle augmente'
+  },
+  {
+    id: 'curve-value', title: 'Population du pays B (en millions)', years: [1960, 1980, 2000, 2020], values: [22, 31, 40, 48],
+    question: 'Combien d’habitants compte ce pays en 2000 ?', choices: ['31 millions', '40 millions', '48 millions'], answer: '40 millions'
+  },
+  {
+    id: 'curve-date', title: 'Population du pays C (en millions)', years: [1960, 1980, 2000, 2020], values: [12, 20, 29, 29],
+    question: 'À partir de quelle année la population devient-elle stable ?', choices: ['1980', '2000', '2020'], answer: '2000'
+  },
+  {
+    id: 'curve-decline', title: 'Population du pays D (en millions)', years: [1960, 1980, 2000, 2020], values: [46, 50, 47, 41],
+    question: 'Durant quelle période la population diminue-t-elle le plus ?', choices: ['1960–1980', '1980–2000', '2000–2020'], answer: '2000–2020'
+  }
+];
+
+function FifthGradeDemographicCurve({ item, compact = false }) {
+  const width = 520;
+  const height = compact ? 230 : 280;
+  const margin = { left: 52, right: 18, top: 26, bottom: 42 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const maxValue = Math.max(10, Math.ceil(Math.max(...item.values) / 10) * 10);
+  const points = item.values.map((value, index) => ({
+    x: margin.left + (index / Math.max(1, item.values.length - 1)) * plotWidth,
+    y: margin.top + plotHeight - (value / maxValue) * plotHeight
+  }));
+  const path = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
+  return <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-2">
+    <div className="px-2 pt-1 text-center text-sm font-black text-slate-800">{item.title}</div>
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label={item.title}>
+      {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+        const y = margin.top + plotHeight - ratio * plotHeight;
+        return <g key={ratio}><line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="#dbeafe" strokeWidth="2" /><text x={margin.left - 8} y={y + 5} textAnchor="end" fontSize="13" fontWeight="800" fill="#64748b">{Math.round(maxValue * ratio)}</text></g>;
+      })}
+      <line x1={margin.left} y1={margin.top} x2={margin.left} y2={margin.top + plotHeight} stroke="#0f172a" strokeWidth="3" />
+      <line x1={margin.left} y1={margin.top + plotHeight} x2={width - margin.right} y2={margin.top + plotHeight} stroke="#0f172a" strokeWidth="3" />
+      {item.years.map((year, index) => <text key={year} x={points[index].x} y={height - 14} textAnchor="middle" fontSize="13" fontWeight="800" fill="#475569">{year}</text>)}
+      <path d={path} fill="none" stroke="#7c3aed" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      {points.map((point, index) => <g key={item.years[index]}><circle cx={point.x} cy={point.y} r="7" fill="#fff" stroke="#7c3aed" strokeWidth="5" />{!item.approximate && <text x={point.x} y={Math.max(18, point.y - 13)} textAnchor="middle" fontSize="13" fontWeight="900" fill="#5b21b6" stroke="#fff" strokeWidth="4" paintOrder="stroke">{item.values[index]}</text>}<title>{item.years[index]} : {item.values[index]} millions</title></g>)}
+    </svg>
+    {item.approximate && <div className="pb-1 text-center text-[11px] font-black text-amber-700">Chiffres approximatifs — une marge de ±5 millions est acceptée.</div>}
+  </div>;
+}
+
+const FIFTH_GRADE_CURVE_FALLBACK = [
+  { ...FIFTH_GRADE_DEMOGRAPHIC_CURVES[0], type: 'evolution', expected: { startYear: '1960', endYear: '2020', trend: 'augmente', startValue: '18', endValue: '55' } }
+];
+
+const FIFTH_GRADE_EVOLUTION_CURVE_SUPPLEMENTS = [
+  {
+    id: 'curve-exact-decline', title: 'Population du pays B (en millions)', type: 'evolution',
+    years: [1960, 1980, 2000, 2020], values: [58, 52, 43, 34],
+    expected: { startYear: '1960', endYear: '2020', trend: 'diminue', startValue: '58', endValue: '34' }
+  },
+  {
+    id: 'curve-exact-stable', title: 'Population du pays C (en millions)', type: 'evolution',
+    years: [1960, 1980, 2000, 2020], values: [36, 36, 36, 36],
+    expected: { startYear: '1960', endYear: '2020', trend: 'stagne', startValue: '36', endValue: '36' }
+  },
+  {
+    id: 'curve-approx-growth', title: 'Population du pays D (en millions)', type: 'evolution', approximate: true, tolerance: 5,
+    years: [1960, 1980, 2000, 2020], values: [23, 31, 46, 67],
+    expected: { startYear: '1960', endYear: '2020', trend: 'augmente', startValue: '23', endValue: '67' }
+  },
+  {
+    id: 'curve-approx-decline', title: 'Population du pays E (en millions)', type: 'evolution', approximate: true, tolerance: 5,
+    years: [1960, 1980, 2000, 2020], values: [72, 63, 51, 38],
+    expected: { startYear: '1960', endYear: '2020', trend: 'diminue', startValue: '72', endValue: '38' }
+  }
+];
+
+const FIFTH_GRADE_NATURAL_BALANCE_CURVES = [
+  {
+    id: 'natural-balance-positive',
+    title: 'Natalité et mortalité du pays A',
+    type: 'natural-balance',
+    years: [1980, 1990, 2000, 2010, 2020],
+    natalityValues: [44, 42, 39, 36, 33],
+    mortalityValues: [20, 17, 14, 12, 10],
+    expected: { periodStart: '1980', relation: 'superieure', evolution: 'augmente', balance: 'positif' }
+  },
+  {
+    id: 'natural-balance-negative',
+    title: 'Natalité et mortalité du pays B',
+    type: 'natural-balance',
+    years: [1980, 1990, 2000, 2010, 2020],
+    natalityValues: [14, 12, 10, 8, 7],
+    mortalityValues: [8, 8, 9, 10, 12],
+    expected: { periodStart: '2010', relation: 'inferieure', evolution: 'diminue', balance: 'negatif' }
+  },
+  {
+    id: 'natural-balance-positive-two',
+    title: 'Natalité et mortalité du pays C',
+    type: 'natural-balance',
+    years: [1980, 1990, 2000, 2010, 2020],
+    natalityValues: [32, 29, 26, 23, 20],
+    mortalityValues: [12, 11, 10, 9, 8],
+    expected: { periodStart: '1980', relation: 'superieure', evolution: 'augmente', balance: 'positif' }
+  },
+  {
+    id: 'natural-balance-negative-two',
+    title: 'Natalité et mortalité du pays D',
+    type: 'natural-balance',
+    years: [1980, 1990, 2000, 2010, 2020],
+    natalityValues: [11, 10, 9, 8, 7],
+    mortalityValues: [15, 14, 13, 12, 11],
+    expected: { periodStart: '1980', relation: 'inferieure', evolution: 'diminue', balance: 'negatif' }
+  },
+  {
+    id: 'natural-balance-positive-three',
+    title: 'Natalité et mortalité du pays E',
+    type: 'natural-balance',
+    years: [1980, 1990, 2000, 2010, 2020],
+    natalityValues: [25, 24, 22, 20, 18],
+    mortalityValues: [9, 9, 8, 8, 7],
+    expected: { periodStart: '1980', relation: 'superieure', evolution: 'augmente', balance: 'positif' }
+  }
+];
+
+function FifthGradeNaturalBalanceCurve({ item }) {
+  const width = 520;
+  const height = 265;
+  const margin = { left: 50, right: 20, top: 55, bottom: 42 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const allValues = [...item.natalityValues, ...item.mortalityValues];
+  const maxValue = Math.max(10, Math.ceil(Math.max(...allValues) / 10) * 10);
+  const pointsFor = (values) => values.map((value, index) => ({
+    x: margin.left + (index / Math.max(1, values.length - 1)) * plotWidth,
+    y: margin.top + plotHeight - (value / maxValue) * plotHeight
+  }));
+  const natalityPoints = pointsFor(item.natalityValues);
+  const mortalityPoints = pointsFor(item.mortalityValues);
+  const pathFor = (points) => points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
+  return <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-2">
+    <div className="px-2 pt-1 text-center text-sm font-black text-slate-800">{item.title}</div>
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label={`${item.title} : taux de natalité et de mortalité`}>
+      <g transform="translate(112 35)">
+        <line x1="0" y1="0" x2="34" y2="0" stroke="#fb7185" strokeWidth="7" strokeLinecap="round" />
+        <text x="43" y="5" fontSize="14" fontWeight="900" fill="#be123c">Natalité</text>
+        <line x1="145" y1="0" x2="179" y2="0" stroke="#8b5cf6" strokeWidth="7" strokeLinecap="round" />
+        <text x="188" y="5" fontSize="14" fontWeight="900" fill="#6d28d9">Mortalité</text>
+      </g>
+      {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+        const y = margin.top + plotHeight - ratio * plotHeight;
+        return <g key={ratio}><line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="#e2e8f0" strokeWidth="2" /><text x={margin.left - 8} y={y + 5} textAnchor="end" fontSize="12" fontWeight="800" fill="#64748b">{Math.round(maxValue * ratio)}</text></g>;
+      })}
+      <text x="8" y="49" fontSize="11" fontWeight="900" fill="#475569">‰</text>
+      <line x1={margin.left} y1={margin.top} x2={margin.left} y2={margin.top + plotHeight} stroke="#0f172a" strokeWidth="3" />
+      <line x1={margin.left} y1={margin.top + plotHeight} x2={width - margin.right} y2={margin.top + plotHeight} stroke="#0f172a" strokeWidth="3" />
+      {item.years.map((year, index) => <text key={year} x={natalityPoints[index].x} y={height - 14} textAnchor="middle" fontSize="12" fontWeight="800" fill="#475569">{year}</text>)}
+      <path d={pathFor(natalityPoints)} fill="none" stroke="#fb7185" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={pathFor(mortalityPoints)} fill="none" stroke="#8b5cf6" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      {natalityPoints.map((point, index) => <circle key={`n-${item.years[index]}`} cx={point.x} cy={point.y} r="4" fill="#fff" stroke="#fb7185" strokeWidth="3" />)}
+      {mortalityPoints.map((point, index) => <circle key={`m-${item.years[index]}`} cx={point.x} cy={point.y} r="4" fill="#fff" stroke="#8b5cf6" strokeWidth="3" />)}
+    </svg>
+  </div>;
+}
+
+const curveTextMatches = (actual, expected, tolerance = 0) => {
+  const a = normalizeAnswer(actual).replace(/millions?|habitants?/g, '').trim();
+  const e = normalizeAnswer(expected).replace(/millions?|habitants?/g, '').trim();
+  const actualNumber = Number.parseFloat(a.replace(',', '.'));
+  const expectedNumber = Number.parseFloat(e.replace(',', '.'));
+  if (tolerance > 0 && Number.isFinite(actualNumber) && Number.isFinite(expectedNumber)) {
+    return Math.abs(actualNumber - expectedNumber) <= tolerance;
+  }
+  return Boolean(a && e && (a === e || a.split(/\s+/).includes(e)));
+};
+
+const demographicExerciseIsCorrect = (item, answer = {}) => {
+  const expected = item.expected || {};
+  if (item.type === 'natural-balance') {
+    return answer.relation === expected.relation && answer.evolution === expected.evolution && answer.balance === expected.balance;
+  }
+  const valueTolerance = item.approximate ? Number(item.tolerance || 5) : 0;
+  const common = curveTextMatches(answer.startYear, expected.startYear)
+    && curveTextMatches(answer.endYear, expected.endYear)
+    && answer.trend === expected.trend
+    && curveTextMatches(answer.startValue, expected.startValue, valueTolerance);
+  return common && (expected.trend === 'stagne' || curveTextMatches(answer.endValue, expected.endValue, valueTolerance));
+};
+
+const FIFTH_GRADE_MAP_QUESTIONS = [
+  { id: 'no-title', missing: 'titre', title: false, legend: true, scale: true },
+  { id: 'no-legend', missing: 'légende', title: true, legend: false, scale: true },
+  { id: 'no-scale', missing: 'échelle', title: true, legend: true, scale: false },
+  { id: 'no-orientation', missing: 'orientation', title: true, legend: true, scale: true, orientation: false },
+  { id: 'complete', missing: 'rien', title: true, legend: true, scale: true, orientation: true }
+];
+
+function FifthGradeWorldMap({ learning = false, imageUrl = '', markers = FIFTH_GRADE_WORLD_MARKERS, editable = false, onPlace }) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-3xl border-4 border-sky-200 bg-sky-100 shadow-inner ${editable ? 'cursor-crosshair' : ''}`}
+      style={{ aspectRatio: '2 / 1' }}
+      onClick={(event) => {
+        if (!editable || !onPlace) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        onPlace({
+          x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)),
+          y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100))
+        });
+      }}
+    >
+      {imageUrl ? <img src={imageUrl} alt="Carte du monde ajoutée pour l'entraînement" className="absolute inset-0 h-full w-full object-contain" /> : <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1000 500" aria-label="Planisphère simplifié">
+        <rect width="1000" height="500" fill="#dff5ff" />
+        <path d="M86 120 L175 70 260 105 240 165 275 210 230 258 190 230 150 285 112 250 128 190 78 165Z" fill="#86d39a" stroke="#fff" strokeWidth="5" />
+        <path d="M210 265 L265 282 280 350 245 425 210 390 190 320Z" fill="#69c884" stroke="#fff" strokeWidth="5" />
+        <path d="M440 125 L505 105 545 135 520 175 470 166Z" fill="#ffd66b" stroke="#fff" strokeWidth="5" />
+        <path d="M452 178 L525 170 558 252 520 352 465 322 438 240Z" fill="#f6b867" stroke="#fff" strokeWidth="5" />
+        <path d="M520 103 L670 68 835 120 882 212 810 270 700 230 632 172 545 160Z" fill="#f4ca55" stroke="#fff" strokeWidth="5" />
+        <path d="M755 300 L842 292 900 342 850 395 765 370Z" fill="#c6a4e8" stroke="#fff" strokeWidth="5" />
+        <path d="M155 442 Q500 402 850 444 L805 482 195 482Z" fill="#d8e4ee" stroke="#fff" strokeWidth="5" />
+      </svg>}
+      {markers.map((marker) => (
+        <div
+          key={marker.id}
+          className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md ${marker.kind === 'ocean' ? 'bg-blue-600 text-white' : 'bg-emerald-700 text-white'}`}
+          style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
+        >
+          <span className="flex h-7 min-w-7 items-center justify-center px-1 text-[11px] font-black">
+            {learning ? marker.answer.replace('Océan ', '') : marker.id}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FifthGradeCompass({ learning = false }) {
+  const labels = { top: 'Nord', right: 'Est', bottom: 'Sud', left: 'Ouest' };
+  return (
+    <div className="relative mx-auto aspect-square w-full max-w-[360px] rounded-full border-4 border-amber-200 bg-amber-50 shadow-inner">
+      <svg className="absolute inset-[15%] h-[70%] w-[70%]" viewBox="0 0 200 200" aria-label="Rose des vents">
+        <circle cx="100" cy="100" r="66" fill="white" stroke="#f59e0b" strokeWidth="4" />
+        <polygon points="100,8 119,89 100,75 81,89" fill="#ef4444" />
+        <polygon points="192,100 111,119 125,100 111,81" fill="#2563eb" />
+        <polygon points="100,192 81,111 100,125 119,111" fill="#2563eb" />
+        <polygon points="8,100 89,81 75,100 89,119" fill="#2563eb" />
+        <circle cx="100" cy="100" r="12" fill="#0f172a" />
+      </svg>
+      {Object.entries({ top: ['50%', '5%'], right: ['94%', '50%'], bottom: ['50%', '94%'], left: ['6%', '50%'] }).map(([position, coords]) => (
+        <div key={position} className="absolute -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white px-3 py-2 text-sm font-black text-slate-800 shadow" style={{ left: coords[0], top: coords[1] }}>
+          {learning ? labels[position] : '?'}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FifthGradeMiniMap({ title, legend, scale, orientation = true }) {
+  return (
+    <div className="rounded-2xl border-2 border-slate-200 bg-white p-3 shadow-sm">
+      <div className="h-8 text-center text-sm font-black text-slate-800">{title ? 'La population de mon territoire' : '\u00a0'}</div>
+      <div className="grid grid-cols-[1fr_88px] gap-2">
+        <svg className="h-32 w-full rounded-xl bg-sky-50" viewBox="0 0 180 120" aria-hidden="true">
+          <path d="M35 20 L120 12 155 48 138 100 62 105 24 70Z" fill="#86efac" stroke="#15803d" strokeWidth="3" />
+          <circle cx="75" cy="55" r="13" fill="#ef4444" />
+          <path d="M30 92 Q88 60 150 82" fill="none" stroke="#2563eb" strokeWidth="5" />
+          {orientation && <g><path d="M158 28 L158 8" stroke="#0f172a" strokeWidth="3" /><polygon points="158,4 152,14 164,14" fill="#0f172a" /><text x="154" y="40" fontSize="11" fontWeight="800">N</text></g>}
+        </svg>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-[10px] font-bold text-slate-600">
+          {legend ? <><div className="mb-2"><i className="mr-1 inline-block h-3 w-3 rounded-full bg-red-500" />Ville</div><div><i className="mr-1 inline-block h-2 w-5 bg-blue-600" />Fleuve</div></> : null}
+        </div>
+      </div>
+      <div className="mt-2 h-5 text-xs font-black text-slate-600">{scale ? '0 ━━━ 100 km' : '\u00a0'}</div>
+    </div>
+  );
+}
+
+function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = false }) {
+  const [view, setView] = useState('learn');
+  const [checked, setChecked] = useState(false);
+  const [worldAnswers, setWorldAnswers] = useState({});
+  const [compassAnswers, setCompassAnswers] = useState({});
+  const [attributeAnswers, setAttributeAnswers] = useState({});
+  const [scaleAnswers, setScaleAnswers] = useState({});
+  const [curveAnswers, setCurveAnswers] = useState({});
+  const canCalibrate = canCalibrateFromProf || user?.isDeveloper === true || user?.isTestAccount === true;
+  const worldMapImageKey = 'condaweb-fifth-grade-world-map-v1';
+  const worldMapModelKey = 'condaweb-fifth-grade-world-map-model-v1';
+  const customMapsModelKey = 'condaweb-fifth-grade-map-attributes-v1';
+  const scaleMapsModelKey = 'condaweb-fifth-grade-geographic-scales-v1';
+  const curveMapsModelKey = 'condaweb-fifth-grade-demographic-curves-v1';
+  const [worldMapPreview, setWorldMapPreview] = useState('');
+  const [worldMapName, setWorldMapName] = useState('');
+  const [selectedWorldMarker, setSelectedWorldMarker] = useState(null);
+  const [placingWorldMarkers, setPlacingWorldMarkers] = useState(false);
+  const [activeWorldMic, setActiveWorldMic] = useState(null);
+  const worldRecognitionRef = useRef(null);
+  const [worldMarkerPositions, setWorldMarkerPositions] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(worldMapModelKey) || 'null');
+      if (Array.isArray(saved?.markers) && saved.markers.length) return saved.markers;
+    } catch (_) {}
+    return FIFTH_GRADE_WORLD_MARKERS;
+  });
+  const [customMapQuestions, setCustomMapQuestions] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(customMapsModelKey) || 'null');
+      if (Array.isArray(saved?.questions)) return saved.questions;
+    } catch (_) {}
+    return [];
+  });
+  const [customMapPreviews, setCustomMapPreviews] = useState({});
+  const [maskingMapId, setMaskingMapId] = useState(null);
+  const [calibrationStatus, setCalibrationStatus] = useState('');
+  const [colorDetectionStatus, setColorDetectionStatus] = useState({});
+  const [scaleMapQuestions, setScaleMapQuestions] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(scaleMapsModelKey) || 'null');
+      if (Array.isArray(saved?.questions)) return saved.questions;
+    } catch (_) {}
+    return [];
+  });
+  const [scaleMapPreviews, setScaleMapPreviews] = useState({});
+  const [scaleQuestionOrder, setScaleQuestionOrder] = useState([]);
+  const [scaleCalibrationStatus, setScaleCalibrationStatus] = useState('');
+  const [curveQuestions, setCurveQuestions] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(curveMapsModelKey) || 'null');
+      if (Array.isArray(saved?.questions)) return saved.questions.map((question, index) => {
+        const isGermanTypeTwo = question.type === 'natural-balance'
+          && (index === 1 || normalizeAnswer(question.title).includes('allemagne'));
+        if (!isGermanTypeTwo || question.expected?.periodStart) return question;
+        return { ...question, expected: { ...(question.expected || {}), periodStart: '1970' } };
+      });
+    } catch (_) {}
+    return [];
+  });
+  const [curvePreviews, setCurvePreviews] = useState({});
+  const [curveCalibrationStatus, setCurveCalibrationStatus] = useState('');
+  const maskStartRef = useRef(null);
+  const maskResizeRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = '';
+    loadDnbMethodImage(worldMapImageKey).then((blob) => {
+      if (!blob || cancelled) return;
+      objectUrl = URL.createObjectURL(blob);
+      setWorldMapPreview(objectUrl);
+      setWorldMapName(blob.name || 'Carte monde enregistrée');
+    }).catch(() => {});
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(worldMapModelKey, JSON.stringify({ markers: worldMarkerPositions }));
+    } catch (_) {}
+  }, [worldMarkerPositions]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(customMapsModelKey, JSON.stringify({ questions: customMapQuestions }));
+    } catch (_) {}
+  }, [customMapQuestions]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(scaleMapsModelKey, JSON.stringify({ questions: scaleMapQuestions }));
+    } catch (_) {}
+  }, [scaleMapQuestions]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(curveMapsModelKey, JSON.stringify({ questions: curveQuestions }));
+    } catch (_) {}
+  }, [curveQuestions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/training-config/fifth-grade-map').then(async (response) => {
+      if (!response.ok) return null;
+      return response.json();
+    }).then((payload) => {
+      if (!payload?.model || cancelled || !Array.isArray(payload.model.questions)) return;
+      setCustomMapQuestions(payload.model.questions);
+      setCustomMapPreviews(payload.imageUrls || {});
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/training-config/fifth-grade-scales').then(async (response) => {
+      if (!response.ok) return null;
+      return response.json();
+    }).then((payload) => {
+      if (!payload?.model || cancelled || !Array.isArray(payload.model.questions)) return;
+      setScaleMapQuestions(payload.model.questions);
+      setScaleMapPreviews(payload.imageUrls || {});
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/training-config/fifth-grade-curves').then(async (response) => {
+      if (!response.ok) return null;
+      return response.json();
+    }).then((payload) => {
+      if (!payload?.model || cancelled || !Array.isArray(payload.model.questions)) return;
+      setCurveQuestions(payload.model.questions.map((question, index) => {
+        const isGermanTypeTwo = question.type === 'natural-balance'
+          && (index === 1 || normalizeAnswer(question.title).includes('allemagne'));
+        if (!isGermanTypeTwo || question.expected?.periodStart) return question;
+        return { ...question, expected: { ...(question.expected || {}), periodStart: '1970' } };
+      }));
+      setCurvePreviews(payload.imageUrls || {});
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const objectUrls = [];
+    Promise.all(customMapQuestions.map(async (question) => {
+      if (!question.imageKey || customMapPreviews[question.id]) return;
+      try {
+        const blob = await loadDnbMethodImage(question.imageKey);
+        if (!blob || cancelled) return;
+        const url = URL.createObjectURL(blob);
+        objectUrls.push(url);
+        setCustomMapPreviews((previous) => ({ ...previous, [question.id]: url }));
+      } catch (_) {}
+    }));
+    return () => { cancelled = true; objectUrls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, [customMapQuestions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const objectUrls = [];
+    Promise.all(scaleMapQuestions.map(async (question) => {
+      if (!question.imageKey || scaleMapPreviews[question.id]) return;
+      try {
+        const blob = await loadDnbMethodImage(question.imageKey);
+        if (!blob || cancelled) return;
+        const url = URL.createObjectURL(blob);
+        objectUrls.push(url);
+        setScaleMapPreviews((previous) => ({ ...previous, [question.id]: url }));
+      } catch (_) {}
+    }));
+    return () => { cancelled = true; objectUrls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, [scaleMapQuestions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const objectUrls = [];
+    Promise.all(curveQuestions.map(async (question) => {
+      if (!question.imageKey || curvePreviews[question.id]) return;
+      try {
+        const blob = await loadDnbMethodImage(question.imageKey);
+        if (!blob || cancelled) return;
+        const url = URL.createObjectURL(blob);
+        objectUrls.push(url);
+        setCurvePreviews((previous) => ({ ...previous, [question.id]: url }));
+      } catch (_) {}
+    }));
+    return () => { cancelled = true; objectUrls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, [curveQuestions]);
+
+  useEffect(() => {
+    if (view !== 'scales') return;
+    const source = scaleMapQuestions.length ? scaleMapQuestions : FIFTH_GRADE_SCALE_QUESTIONS;
+    setScaleQuestionOrder(source.map((item) => item.id).sort(() => Math.random() - 0.5));
+    setScaleAnswers({});
+    setChecked(false);
+  }, [view, scaleMapQuestions.length]);
+
+  const uploadWorldMap = async (file) => {
+    if (!file) return;
+    await saveDnbMethodImage(worldMapImageKey, file);
+    if (worldMapPreview) URL.revokeObjectURL(worldMapPreview);
+    setWorldMapPreview(URL.createObjectURL(file));
+    setWorldMapName(file.name);
+  };
+
+  const addCustomMap = async (file) => {
+    if (!file) return;
+    const id = `fifth-map-${Date.now()}`;
+    const imageKey = `${customMapsModelKey}:${id}`;
+    await saveDnbMethodImage(imageKey, file);
+    const previewUrl = URL.createObjectURL(file);
+    setCustomMapPreviews((previous) => ({ ...previous, [id]: previewUrl }));
+    const dimensions = await new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth || 4, height: image.naturalHeight || 3 });
+      image.onerror = () => resolve({ width: 4, height: 3 });
+      image.src = previewUrl;
+    });
+    setCustomMapQuestions((previous) => [...previous, { id, imageKey, name: file.name, missing: 'titre', mask: null, displayWidth: 100, aspectRatio: dimensions.width / dimensions.height }]);
+    setChecked(false);
+  };
+
+  const addScaleMaps = async (files) => {
+    for (const file of Array.from(files || [])) {
+      if (!file) continue;
+      const id = `fifth-scale-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const imageKey = `${scaleMapsModelKey}:${id}`;
+      await saveDnbMethodImage(imageKey, file);
+      const previewUrl = URL.createObjectURL(file);
+      setScaleMapPreviews((previous) => ({ ...previous, [id]: previewUrl }));
+      const dimensions = await new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve({ width: image.naturalWidth || 4, height: image.naturalHeight || 3 });
+        image.onerror = () => resolve({ width: 4, height: 3 });
+        image.src = previewUrl;
+      });
+      setScaleMapQuestions((previous) => [...previous, {
+        id, imageKey, name: file.name, title: file.name.replace(/\.[^.]+$/, ''), answer: 'mondiale', aspectRatio: dimensions.width / dimensions.height
+      }]);
+    }
+    setChecked(false);
+  };
+
+  const addCurveExercise = async (file, type) => {
+    if (!file) return;
+    const id = `fifth-curve-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const imageKey = `${curveMapsModelKey}:${id}`;
+    await saveDnbMethodImage(imageKey, file);
+    setCurvePreviews((previous) => ({ ...previous, [id]: URL.createObjectURL(file) }));
+    const expected = type === 'natural-balance'
+      ? { periodStart: '', relation: 'superieure', evolution: 'augmente', balance: 'positif' }
+      : { startYear: '', endYear: '', trend: 'augmente', startValue: '', endValue: '' };
+    setCurveQuestions((previous) => [...previous, { id, imageKey, name: file.name, title: file.name.replace(/\.[^.]+$/, ''), type, expected }]);
+    setChecked(false);
+  };
+
+  const updateCurveQuestion = (id, patch) => {
+    setCurveQuestions((previous) => previous.map((question) => question.id === id ? { ...question, ...patch } : question));
+    setChecked(false);
+  };
+
+  const updateCurveExpected = (item, field, value) => updateCurveQuestion(item.id, { expected: { ...(item.expected || {}), [field]: value } });
+
+  const saveCurveQuestionsToDatabase = async () => {
+    setCurveCalibrationStatus('Enregistrement…');
+    try {
+      const formData = new FormData();
+      formData.append('model', JSON.stringify({ questions: curveQuestions }));
+      for (const question of curveQuestions) {
+        let blob = null;
+        try { blob = await loadDnbMethodImage(question.imageKey); } catch (_) {}
+        if (!blob && curvePreviews[question.id]) {
+          const response = await fetch(curvePreviews[question.id]);
+          if (response.ok) blob = await response.blob();
+        }
+        if (blob) formData.append('images', blob, `${question.id}__${question.name || 'courbe.png'}`);
+      }
+      const response = await fetch('/api/training-config/fifth-grade-curves', { method: 'PUT', body: formData });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Enregistrement impossible');
+      setCurveCalibrationStatus(`✓ ${payload.questions} exercice(s) enregistré(s) en BDD`);
+    } catch (error) {
+      setCurveCalibrationStatus(`Échec : ${error.message}`);
+    }
+  };
+
+  const updateScaleMap = (id, patch) => {
+    setScaleMapQuestions((previous) => previous.map((question) => question.id === id ? { ...question, ...patch } : question));
+    setChecked(false);
+  };
+
+  const saveScaleMapsToDatabase = async () => {
+    setScaleCalibrationStatus('Enregistrement…');
+    try {
+      const formData = new FormData();
+      formData.append('model', JSON.stringify({ questions: scaleMapQuestions }));
+      for (const question of scaleMapQuestions) {
+        let blob = null;
+        try { blob = await loadDnbMethodImage(question.imageKey); } catch (_) {}
+        if (!blob && scaleMapPreviews[question.id]) {
+          const response = await fetch(scaleMapPreviews[question.id]);
+          if (response.ok) blob = await response.blob();
+        }
+        if (blob) formData.append('images', blob, `${question.id}__${question.name || 'carte.png'}`);
+      }
+      const response = await fetch('/api/training-config/fifth-grade-scales', { method: 'PUT', body: formData });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Enregistrement impossible');
+      setScaleCalibrationStatus(`✓ ${payload.questions} carte(s) enregistrée(s) en BDD`);
+    } catch (error) {
+      setScaleCalibrationStatus(`Échec : ${error.message}`);
+    }
+  };
+
+  const updateCustomMap = (id, patch) => {
+    setCustomMapQuestions((previous) => previous.map((question) => question.id === id ? { ...question, ...patch } : question));
+    setChecked(false);
+  };
+
+  const saveCustomMapsToDatabase = async () => {
+    setCalibrationStatus('Enregistrement…');
+    try {
+      const formData = new FormData();
+      formData.append('model', JSON.stringify({ questions: customMapQuestions }));
+      for (const question of customMapQuestions) {
+        let blob = null;
+        try { blob = await loadDnbMethodImage(question.imageKey); } catch (_) {}
+        if (!blob && customMapPreviews[question.id]) {
+          const response = await fetch(customMapPreviews[question.id]);
+          if (response.ok) blob = await response.blob();
+        }
+        if (blob) formData.append('images', blob, `${question.id}__${question.name || 'carte.png'}`);
+      }
+      const response = await fetch('/api/training-config/fifth-grade-map', { method: 'PUT', body: formData });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Enregistrement impossible');
+      setCalibrationStatus(`✓ Calibré en BDD : ${payload.questions} carte(s)`);
+    } catch (error) {
+      setCalibrationStatus(`Échec : ${error.message}`);
+    }
+  };
+
+  const pointInMap = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)),
+      y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100))
+    };
+  };
+
+  const beginMapMask = (event, id) => {
+    if (maskingMapId !== id) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    maskStartRef.current = pointInMap(event);
+  };
+
+  const finishMapMask = (event, id) => {
+    if (maskingMapId !== id || !maskStartRef.current) return;
+    const end = pointInMap(event);
+    const start = maskStartRef.current;
+    maskStartRef.current = null;
+    const mask = {
+        x: Math.min(start.x, end.x),
+        y: Math.min(start.y, end.y),
+        width: Math.max(3, Math.abs(end.x - start.x)),
+        height: Math.max(3, Math.abs(end.y - start.y)),
+        color: '#ffffff'
+      };
+    updateCustomMap(id, { mask });
+    setMaskingMapId(null);
+    const question = customMapQuestions.find((item) => item.id === id);
+    if (question) setTimeout(() => detectSurroundingMaskColor({ ...question, mask }), 0);
+  };
+
+  const detectSurroundingMaskColor = async (question) => {
+    const source = customMapPreviews[question.id];
+    if (!source || !question.mask) {
+      setColorDetectionStatus((previous) => ({ ...previous, [question.id]: 'Image ou cache indisponible' }));
+      return;
+    }
+    setColorDetectionStatus((previous) => ({ ...previous, [question.id]: 'Analyse…' }));
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = reject;
+        element.src = source;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.drawImage(image, 0, 0);
+      const mask = question.mask;
+      const left = Math.round((mask.x / 100) * canvas.width);
+      const top = Math.round((mask.y / 100) * canvas.height);
+      const right = Math.round(((mask.x + mask.width) / 100) * canvas.width);
+      const bottom = Math.round(((mask.y + mask.height) / 100) * canvas.height);
+      const thickness = Math.max(3, Math.round(Math.min(canvas.width, canvas.height) * 0.012));
+      const samples = [];
+      const addPixel = (x, y) => {
+        if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
+        const pixel = context.getImageData(x, y, 1, 1).data;
+        if (pixel[3] < 180) return;
+        const lightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+        if (lightness < 35) return;
+        samples.push([pixel[0], pixel[1], pixel[2]]);
+      };
+      const step = Math.max(1, Math.round(Math.max(canvas.width, canvas.height) / 650));
+      for (let x = left + thickness; x <= right - thickness; x += step) for (let offset = 1; offset <= thickness; offset += step) { addPixel(x, top - offset); addPixel(x, bottom + offset); }
+      for (let y = top + thickness; y <= bottom - thickness; y += step) for (let offset = 1; offset <= thickness; offset += step) { addPixel(left - offset, y); addPixel(right + offset, y); }
+      if (!samples.length) throw new Error('Aucun pixel lisible autour du cache');
+      const coloredSamples = samples.filter(([red, green, blue]) => {
+        const max = Math.max(red, green, blue);
+        const min = Math.min(red, green, blue);
+        return max - min > 10 && !(red > 246 && green > 246 && blue > 246);
+      });
+      const usefulSamples = coloredSamples.length >= Math.max(5, samples.length * 0.12) ? coloredSamples : samples;
+      const median = (channel) => {
+        const values = usefulSamples.map((sample) => sample[channel]).sort((a, b) => a - b);
+        return values[Math.floor(values.length / 2)];
+      };
+      const red = median(0);
+      const green = median(1);
+      const blue = median(2);
+      const color = `rgb(${red}, ${green}, ${blue})`;
+      updateCustomMap(question.id, { mask: { ...question.mask, color } });
+      setColorDetectionStatus((previous) => ({ ...previous, [question.id]: `Couleur détectée : ${color}` }));
+    } catch (error) {
+      setColorDetectionStatus((previous) => ({ ...previous, [question.id]: `Échec : ${error.message || 'couleur illisible'}` }));
+    }
+  };
+
+  const beginMaskResize = (event, question) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const board = event.currentTarget.closest('[data-custom-map-board]');
+    maskResizeRef.current = { id: question.id, startX: event.clientX, startY: event.clientY, boardRect: board?.getBoundingClientRect(), mask: { ...question.mask } };
+  };
+
+  const resizeMapMask = (event) => {
+    const current = maskResizeRef.current;
+    if (!current?.boardRect) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const width = Math.max(3, Math.min(100 - current.mask.x, current.mask.width + ((event.clientX - current.startX) / current.boardRect.width) * 100));
+    const height = Math.max(3, Math.min(100 - current.mask.y, current.mask.height + ((event.clientY - current.startY) / current.boardRect.height) * 100));
+    updateCustomMap(current.id, { mask: { ...current.mask, width, height } });
+  };
+
+  const finishMaskResize = (event) => {
+    const current = maskResizeRef.current;
+    if (!current) return;
+    resizeMapMask(event);
+    maskResizeRef.current = null;
+    const question = customMapQuestions.find((item) => item.id === current.id);
+    if (question) setTimeout(() => {
+      const latest = customMapQuestions.find((item) => item.id === current.id) || question;
+      detectSurroundingMaskColor(latest);
+    }, 0);
+  };
+
+  const detectWorldMarkers = () => {
+    setWorldMarkerPositions(FIFTH_GRADE_WORLD_MARKERS.map((marker) => ({ ...marker })));
+    setSelectedWorldMarker(null);
+    setPlacingWorldMarkers(false);
+  };
+
+  const placeSelectedWorldMarker = (position) => {
+    if (!selectedWorldMarker) return;
+    setWorldMarkerPositions((previous) => previous.map((marker) => marker.id === selectedWorldMarker ? { ...marker, ...position } : marker));
+    if (placingWorldMarkers) {
+      const currentIndex = worldMarkerPositions.findIndex((marker) => marker.id === selectedWorldMarker);
+      const nextMarker = worldMarkerPositions[currentIndex + 1];
+      if (nextMarker) setSelectedWorldMarker(nextMarker.id);
+      else {
+        setSelectedWorldMarker(null);
+        setPlacingWorldMarkers(false);
+      }
+    }
+  };
+
+  const startPlacingWorldMarkers = () => {
+    setPlacingWorldMarkers(true);
+    setSelectedWorldMarker(worldMarkerPositions[0]?.id || null);
+  };
+
+  const resetCheck = (nextView) => {
+    setView(nextView);
+    setChecked(false);
+  };
+  const startWorldDictation = (markerId) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      window.alert('Micro non disponible. Utilise Chrome ou écris la réponse au clavier.');
+      return;
+    }
+    try { worldRecognitionRef.current?.stop?.(); } catch (_) {}
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'fr-FR';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results || []).map((result) => result?.[0]?.transcript || '').join(' ').replace(/\s+/g, ' ').trim();
+      if (!transcript) return;
+      setWorldAnswers((previous) => ({ ...previous, [markerId]: transcript }));
+      setChecked(false);
+    };
+    recognition.onerror = () => {
+      setActiveWorldMic(null);
+      worldRecognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setActiveWorldMic(null);
+      worldRecognitionRef.current = null;
+    };
+    worldRecognitionRef.current = recognition;
+    setActiveWorldMic(markerId);
+    recognition.start();
+  };
+
+  const compassExpected = { top: 'Nord', right: 'Est', bottom: 'Sud', left: 'Ouest' };
+  const activeMapQuestions = customMapQuestions.length ? customMapQuestions : FIFTH_GRADE_MAP_QUESTIONS;
+  const activeScaleQuestions = scaleMapQuestions.length ? scaleMapQuestions : FIFTH_GRADE_SCALE_QUESTIONS;
+  const activeCurveQuestions = (() => {
+    const configured = curveQuestions.length
+      ? [...curveQuestions, ...(curveQuestions.some((item) => item.type === 'evolution') ? [] : FIFTH_GRADE_CURVE_FALLBACK)]
+      : FIFTH_GRADE_CURVE_FALLBACK;
+    const fillToFive = (type, supplements) => {
+      const selected = configured.filter((item) => item.type === type);
+      const selectedIds = new Set(selected.map((item) => item.id));
+      return [...selected, ...supplements.filter((item) => !selectedIds.has(item.id))].slice(0, 5);
+    };
+    return [
+      ...fillToFive('evolution', FIFTH_GRADE_EVOLUTION_CURVE_SUPPLEMENTS),
+      ...fillToFive('natural-balance', FIFTH_GRADE_NATURAL_BALANCE_CURVES)
+    ];
+  })();
+  const orderedScaleQuestions = scaleQuestionOrder.length
+    ? scaleQuestionOrder.map((id) => activeScaleQuestions.find((item) => item.id === id)).filter(Boolean)
+    : activeScaleQuestions;
+  const exerciseConfig = view === 'world'
+    ? { total: FIFTH_GRADE_WORLD_MARKERS.length, correct: FIFTH_GRADE_WORLD_MARKERS.filter((item) => fifthGradeWorldAnswerMatches(worldAnswers[item.id], item.answer)).length }
+    : view === 'compass'
+      ? { total: 4, correct: Object.entries(compassExpected).filter(([key, value]) => compassAnswers[key] === value).length }
+      : view === 'attributes'
+        ? { total: activeMapQuestions.length, correct: activeMapQuestions.filter((item) => attributeAnswers[item.id] === item.missing).length }
+        : view === 'scales'
+          ? { total: activeScaleQuestions.length, correct: activeScaleQuestions.filter((item) => scaleAnswers[item.id] === item.answer).length }
+          : view === 'curves'
+            ? { total: activeCurveQuestions.length, correct: activeCurveQuestions.filter((item) => demographicExerciseIsCorrect(item, curveAnswers[item.id])).length }
+          : null;
+
+  const answerClass = (isCorrect) => checked ? (isCorrect ? 'border-emerald-400 bg-emerald-50' : 'border-red-300 bg-red-50') : 'border-slate-200 bg-white';
+
+  const validateCurrentExercise = () => {
+    setChecked(true);
+    if (!exerciseConfig) return;
+    reportTrainingScore(`5e-geo-${view}`, exerciseConfig.correct, exerciseConfig.total);
+  };
+
+  return (
+    <section className="mx-3 flex flex-col gap-4 pb-10">
+      <TrainingPointsBadge user={user} />
+      <header className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-sky-50 p-5 shadow-sm">
+        <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600">5e · Géographie</div>
+        <h2 className="m-0 text-3xl font-black text-slate-900">Entraînement</h2>
+        <p className="mt-2 text-sm font-bold text-slate-600">Apprends à lire une carte, puis vérifie tes repères avec les quatre ateliers.</p>
+        <nav className="mt-4 flex flex-wrap gap-2">
+          {[
+            ['learn', '📖 Apprendre'], ['world', '🌍 Continents et océans'], ['compass', '🧭 Points cardinaux'],
+            ['attributes', '🗺️ Attributs de la carte'], ['scales', '🔎 Échelles géographiques'],
+            ['curves', '📈 Courbes démographiques']
+          ].map(([key, label]) => (
+            <button key={key} type="button" onClick={() => resetCheck(key)} className={`rounded-2xl border px-4 py-3 text-sm font-black ${view === key ? 'border-emerald-700 bg-emerald-600 text-white' : 'border-white bg-white text-slate-700 shadow-sm'}`}>{label}</button>
+          ))}
+        </nav>
+      </header>
+
+      {view === 'learn' && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <article className="rounded-3xl border border-sky-200 bg-white p-5">
+            <h3 className="m-0 text-xl font-black text-slate-900">1. Continents et océans</h3>
+            <p className="text-sm font-bold text-slate-500">Vert : les continents · Bleu : les océans.</p>
+            <FifthGradeWorldMap learning imageUrl={worldMapPreview} markers={worldMarkerPositions} />
+          </article>
+          <article className="rounded-3xl border border-amber-200 bg-white p-5">
+            <h3 className="m-0 text-xl font-black text-slate-900">2. Les points cardinaux</h3>
+            <p className="text-sm font-bold text-slate-500">Nord en haut, Est à droite, Sud en bas, Ouest à gauche.</p>
+            <FifthGradeCompass learning />
+          </article>
+          <article className="rounded-3xl border border-violet-200 bg-white p-5">
+            <h3 className="m-0 text-xl font-black text-slate-900">3. Les attributs indispensables</h3>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[['Titre', 'Il indique le sujet de la carte.'], ['Légende', 'Elle explique les couleurs et les symboles.'], ['Échelle', 'Elle relie la distance sur la carte à la distance réelle.'], ['Orientation', 'Elle indique le Nord et permet de se repérer.']].map(([title, text]) => <div key={title} className="rounded-2xl bg-violet-50 p-4"><div className="font-black text-violet-800">{title}</div><div className="mt-1 text-sm font-bold text-slate-600">{text}</div></div>)}
+            </div>
+          </article>
+          <article className="rounded-3xl border border-indigo-200 bg-white p-5">
+            <h3 className="m-0 text-xl font-black text-slate-900">4. Les échelles géographiques</h3>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-2">
+              {FIFTH_GRADE_SCALE_LEVELS.map((level) => <div key={level.id} className="rounded-2xl bg-indigo-50 p-3"><div className="text-xl">{level.icon}</div><div className="text-sm font-black text-indigo-900">{level.label}</div><div className="text-[11px] font-bold text-slate-500">{level.example}</div></div>)}
+            </div>
+          </article>
+          <article className="rounded-3xl border border-fuchsia-200 bg-white p-5 xl:col-span-2">
+            <h3 className="m-0 text-xl font-black text-slate-900">5. Lire une courbe démographique</h3>
+            <div className="mt-4 grid items-center gap-4 lg:grid-cols-[1fr_1.1fr]">
+              <FifthGradeDemographicCurve item={FIFTH_GRADE_DEMOGRAPHIC_CURVES[0]} compact />
+              <div className="grid gap-2 text-sm font-bold text-slate-600">
+                <div className="rounded-xl bg-fuchsia-50 p-3"><strong className="text-fuchsia-800">1.</strong> Lis le titre et l’unité : ici, la population est exprimée en millions.</div>
+                <div className="rounded-xl bg-fuchsia-50 p-3"><strong className="text-fuchsia-800">2.</strong> Repère l’année sur l’axe horizontal.</div>
+                <div className="rounded-xl bg-fuchsia-50 p-3"><strong className="text-fuchsia-800">3.</strong> Remonte jusqu’à la courbe puis lis la valeur sur l’axe vertical.</div>
+                <div className="rounded-xl bg-fuchsia-50 p-3"><strong className="text-fuchsia-800">4.</strong> Observe enfin si la courbe augmente, diminue ou reste stable.</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      )}
+
+      {view === 'world' && (
+        <article className="rounded-3xl border border-sky-200 bg-white p-5">
+          <h3 className="m-0 text-2xl font-black text-slate-900">Nomme les repères numérotés</h3>
+          {canCalibrate && <div className="mt-4 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><div className="text-[10px] font-black uppercase text-amber-700">Calibrage du repère</div><div className="text-sm font-black text-slate-800">{worldMapName || 'Le planisphère intégré est utilisé actuellement.'}</div></div>
+              <div className="flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-xl bg-sky-600 px-4 py-3 text-xs font-black text-white">+ Ajouter une carte monde<input type="file" accept="image/*" className="hidden" onChange={(event) => uploadWorldMap(event.target.files?.[0])} /></label>
+                <button type="button" onClick={detectWorldMarkers} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">✦ Détection automatique</button>
+                <button type="button" onClick={startPlacingWorldMarkers} className={`rounded-xl px-4 py-3 text-xs font-black text-white ${placingWorldMarkers ? 'bg-amber-600 ring-4 ring-amber-200' : 'bg-slate-900'}`}>📍 Placer les points</button>
+                {placingWorldMarkers && <button type="button" onClick={() => { setPlacingWorldMarkers(false); setSelectedWorldMarker(null); }} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-black text-slate-700">Terminer</button>}
+              </div>
+            </div>
+            <p className="mb-2 mt-3 text-xs font-bold text-amber-800">La détection place automatiquement les continents et océans. Pour corriger un repère, sélectionne son nom puis clique sur sa position dans la carte.</p>
+            <div className="flex flex-wrap gap-1.5">{worldMarkerPositions.map((marker) => <button key={`calibrate-${marker.id}`} type="button" onClick={() => { setPlacingWorldMarkers(false); setSelectedWorldMarker(marker.id); }} className={`rounded-lg border px-2.5 py-2 text-[10px] font-black ${selectedWorldMarker === marker.id ? 'border-amber-600 bg-amber-500 text-white' : 'border-amber-200 bg-white text-slate-700'}`}>{marker.id}. {marker.answer}</button>)}</div>
+          </div>}
+          <div className="mt-4 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+            <div>
+              <FifthGradeWorldMap imageUrl={worldMapPreview} markers={worldMarkerPositions} editable={canCalibrate && Boolean(selectedWorldMarker)} onPlace={placeSelectedWorldMarker} />
+              {canCalibrate && selectedWorldMarker && <div className="mt-2 rounded-xl bg-amber-100 p-2 text-center text-xs font-black text-amber-800">Clique maintenant sur la carte pour placer : {worldMarkerPositions.find((marker) => marker.id === selectedWorldMarker)?.answer}</div>}
+            </div>
+            <div className="grid max-h-[620px] grid-cols-1 gap-2 overflow-auto sm:grid-cols-2 xl:grid-cols-1">
+              {FIFTH_GRADE_WORLD_MARKERS.map((marker) => {
+                const isCorrect = fifthGradeWorldAnswerMatches(worldAnswers[marker.id], marker.answer);
+                return <div key={marker.id} className={`rounded-xl border p-2 ${answerClass(isCorrect)}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">{marker.id}</span>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      spellCheck="false"
+                      className="min-w-0 flex-1 bg-transparent px-1 text-sm font-black outline-none"
+                      value={worldAnswers[marker.id] || ''}
+                      placeholder={marker.kind === 'ocean' ? "Nom de l'océan" : 'Nom du continent'}
+                      onChange={(event) => { setWorldAnswers((old) => ({ ...old, [marker.id]: event.target.value })); setChecked(false); }}
+                    />
+                    <button type="button" onClick={() => startWorldDictation(marker.id)} title="Répondre avec le micro" aria-label={`Dicter la réponse ${marker.id}`} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${activeWorldMic === marker.id ? 'animate-pulse bg-red-500 text-white' : 'bg-sky-100 text-sky-700'}`}>{activeWorldMic === marker.id ? '■' : '🎙️'}</button>
+                  </div>
+                  {checked && !isCorrect && <div className="mt-1 pl-10 text-[10px] font-black text-red-600">Réponse attendue : {marker.answer}</div>}
+                </div>;
+              })}
+            </div>
+          </div>
+        </article>
+      )}
+
+      {view === 'compass' && (
+        <article className="rounded-3xl border border-amber-200 bg-white p-5">
+          <h3 className="m-0 text-2xl font-black text-slate-900">Place les quatre points cardinaux</h3>
+          <div className="mt-5 grid items-center gap-6 md:grid-cols-2"><FifthGradeCompass /><div className="grid gap-3">{Object.entries({ top: 'En haut', right: 'À droite', bottom: 'En bas', left: 'À gauche' }).map(([key, label]) => <label key={key} className={`rounded-2xl border p-3 ${answerClass(compassAnswers[key] === compassExpected[key])}`}><span className="mb-1 block text-xs font-black uppercase text-slate-500">{label}</span><select className="w-full bg-transparent font-black outline-none" value={compassAnswers[key] || ''} onChange={(e) => { setCompassAnswers((old) => ({ ...old, [key]: e.target.value })); setChecked(false); }}><option value="">Choisir…</option>{Object.values(compassExpected).map((value) => <option key={value}>{value}</option>)}</select></label>)}</div></div>
+        </article>
+      )}
+
+      {view === 'attributes' && (
+        <article className="rounded-3xl border border-violet-200 bg-white p-5">
+          <h3 className="m-0 text-2xl font-black text-slate-900">Quel attribut manque sur chaque carte ?</h3>
+          {canCalibrate && <div className="mt-4 rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase text-violet-600">Calibrage professeur</div><div className="text-sm font-black text-slate-800">Ajoute tes cartes, masque l’attribut et définis la réponse attendue.</div></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">+ Ajouter une carte<input type="file" accept="image/*" className="hidden" onChange={(event) => addCustomMap(event.target.files?.[0])} /></label></div>
+          </div>}
+          <div className="mt-5 flex flex-wrap items-start gap-4">{activeMapQuestions.map((item, index) => {
+            const isCustom = Boolean(item.imageKey);
+            const containerWidth = isCustom ? Math.max(34, Math.min(100, ((item.displayWidth || 100) / 160) * 100)) : 24;
+            return <div key={item.id} className={`min-w-[280px] rounded-2xl border p-3 ${answerClass(attributeAnswers[item.id] === item.missing)}`} style={{ flex: `0 0 calc(${containerWidth}% - 1rem)`, maxWidth: '100%' }}>
+              <div className="mb-2 flex items-center justify-between gap-2"><div className="text-xs font-black uppercase text-violet-600">Carte {index + 1}</div>{canCalibrate && isCustom && <button type="button" onClick={() => { setCustomMapQuestions((previous) => previous.filter((question) => question.id !== item.id)); setMaskingMapId(null); }} className="text-[10px] font-black text-red-500">Supprimer</button>}</div>
+              {isCustom ? <div className="flex w-full justify-center rounded-2xl bg-slate-100 p-2"><div
+                data-custom-map-board
+                className={`relative w-full touch-none overflow-hidden rounded-2xl border-2 bg-white ${maskingMapId === item.id ? 'cursor-crosshair border-violet-500' : 'border-slate-200'}`}
+                style={{ aspectRatio: item.aspectRatio || (4 / 3) }}
+                onPointerDown={(event) => beginMapMask(event, item.id)}
+                onPointerUp={(event) => finishMapMask(event, item.id)}
+              >
+                {customMapPreviews[item.id] ? <img src={customMapPreviews[item.id]} alt={`Carte personnalisée ${index + 1}`} className="h-full w-full object-fill" /> : <div className="flex h-full items-center justify-center text-xs font-bold text-slate-400">Chargement de la carte…</div>}
+                {item.mask && <div className="pointer-events-none absolute z-10 border border-slate-300 shadow-sm" style={{ left: `${item.mask.x}%`, top: `${item.mask.y}%`, width: `${item.mask.width}%`, height: `${item.mask.height}%`, backgroundColor: item.mask.color || '#ffffff' }} />}
+              </div></div> : <FifthGradeMiniMap {...item} />}
+              {canCalibrate && isCustom && <div className="mt-2 space-y-2 rounded-xl bg-violet-50 p-2">
+                <label className="block text-[10px] font-black text-violet-800">Taille de la carte : {Math.round(item.displayWidth || 100)} %<input type="range" min="45" max="160" step="1" value={item.displayWidth || 100} onChange={(event) => updateCustomMap(item.id, { displayWidth: Number(event.target.value) })} className="mt-1 w-full accent-violet-600" /></label>
+                <button type="button" onClick={() => setMaskingMapId(item.id)} className={`w-full rounded-lg px-3 py-2 text-[10px] font-black ${maskingMapId === item.id ? 'bg-violet-600 text-white' : 'bg-white text-violet-700'}`}>{maskingMapId === item.id ? 'Trace le cache sur la carte…' : '▭ Définir le cache'}</button>
+                {item.mask && <div className="grid grid-cols-2 gap-2"><label className="text-[9px] font-black text-violet-800">Largeur du cache<input type="range" min="3" max={Math.max(3, 100 - item.mask.x)} step="0.5" value={item.mask.width} onChange={(event) => updateCustomMap(item.id, { mask: { ...item.mask, width: Number(event.target.value) } })} className="mt-1 w-full accent-violet-600" /></label><label className="text-[9px] font-black text-violet-800">Hauteur du cache<input type="range" min="3" max={Math.max(3, 100 - item.mask.y)} step="0.5" value={item.mask.height} onChange={(event) => updateCustomMap(item.id, { mask: { ...item.mask, height: Number(event.target.value) } })} className="mt-1 w-full accent-violet-600" /></label></div>}
+                <select value={item.missing} onChange={(event) => updateCustomMap(item.id, { missing: event.target.value })} className="w-full rounded-lg border border-violet-200 bg-white p-2 text-[10px] font-black"><option value="titre">Réponse : titre</option><option value="légende">Réponse : légende</option><option value="échelle">Réponse : échelle</option><option value="orientation">Réponse : orientation</option><option value="rien">Réponse : rien</option></select>
+                {item.mask && <button type="button" onClick={() => detectSurroundingMaskColor(item)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-100 px-3 py-2 text-[10px] font-black text-sky-700"><span className="h-4 w-4 rounded border border-slate-300" style={{ backgroundColor: item.mask.color || '#ffffff' }} />🎨 Détecter la couleur autour</button>}
+                {item.mask && colorDetectionStatus[item.id] && <div className={`text-center text-[9px] font-black ${colorDetectionStatus[item.id].startsWith('Échec') ? 'text-red-600' : 'text-sky-700'}`}>{colorDetectionStatus[item.id]}</div>}
+                {item.mask && <button type="button" onClick={() => updateCustomMap(item.id, { mask: null })} className="w-full text-[10px] font-black text-red-500">Retirer le cache</button>}
+              </div>}
+              <select className="mt-3 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-black" value={attributeAnswers[item.id] || ''} onChange={(e) => { setAttributeAnswers((old) => ({ ...old, [item.id]: e.target.value })); setChecked(false); }}><option value="">Il manque…</option>{['titre', 'légende', 'échelle', 'orientation', 'rien'].map((value) => <option key={value} value={value}>{value === 'rien' ? 'Rien : la carte est complète' : value}</option>)}</select>
+            </div>;
+          })}</div>
+          {canCalibrate && customMapQuestions.length > 0 && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4"><button type="button" onClick={saveCustomMapsToDatabase} className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">✓ Calibré — enregistrer en BDD</button>{calibrationStatus && <span className={`text-sm font-black ${calibrationStatus.startsWith('Échec') ? 'text-red-600' : 'text-emerald-700'}`}>{calibrationStatus}</span>}</div>}
+        </article>
+      )}
+
+      {view === 'scales' && (
+        <article className="rounded-3xl border border-indigo-200 bg-white p-5">
+          <h3 className="m-0 text-2xl font-black text-slate-900">À quelle échelle travaille cette carte ?</h3>
+          <p className="mt-2 text-sm font-bold text-slate-500">Les cartes sont mélangées à chaque ouverture de cet atelier.</p>
+          {canCalibrate && <div className="mt-4 rounded-2xl border-2 border-dashed border-indigo-300 bg-indigo-50 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase text-indigo-600">Calibrage professeur</div><div className="text-sm font-black text-slate-800">Ajoute une ou plusieurs cartes, puis choisis leur échelle attendue.</div></div><label className="cursor-pointer rounded-xl bg-indigo-600 px-4 py-3 text-xs font-black text-white">+ Ajouter des cartes<input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { addScaleMaps(event.target.files); event.target.value = ''; }} /></label></div></div>}
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{orderedScaleQuestions.map((item, index) => {
+            const isCustom = Boolean(item.imageKey);
+            return <div key={item.id} className={`rounded-2xl border p-4 ${answerClass(scaleAnswers[item.id] === item.answer)}`}>
+              <div className="mb-2 flex items-center justify-between gap-2"><div className="text-xs font-black uppercase text-indigo-600">Carte {index + 1}</div>{canCalibrate && isCustom && <button type="button" onClick={() => setScaleMapQuestions((previous) => previous.filter((question) => question.id !== item.id))} className="text-[10px] font-black text-red-500">Supprimer</button>}</div>
+              {isCustom ? <div className="flex min-h-[180px] items-center justify-center overflow-hidden rounded-2xl bg-slate-100"><img src={scaleMapPreviews[item.id]} alt={item.title || `Carte ${index + 1}`} className="max-h-[330px] w-full object-contain" /></div> : <div className="text-5xl">{item.icon}</div>}
+              {canCalibrate && isCustom ? <input value={item.title || ''} onChange={(event) => updateScaleMap(item.id, { title: event.target.value })} placeholder="Nom facultatif de la carte" className="mt-3 w-full rounded-xl border border-indigo-200 bg-white p-3 text-sm font-black" /> : <div className="mt-3 min-h-[28px] font-black text-slate-900">{item.title}</div>}
+              {!isCustom && <div className="mt-1 min-h-[36px] text-xs font-bold text-slate-500">{item.detail}</div>}
+              {canCalibrate && isCustom && <label className="mt-3 block rounded-xl bg-indigo-50 p-2 text-[10px] font-black uppercase text-indigo-700">Réponse attendue<select value={item.answer} onChange={(event) => updateScaleMap(item.id, { answer: event.target.value })} className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-2 text-xs font-black normal-case text-slate-900">{FIFTH_GRADE_SCALE_LEVELS.map((level) => <option key={level.id} value={level.id}>{level.label}</option>)}</select></label>}
+              <select className="mt-3 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-black" value={scaleAnswers[item.id] || ''} onChange={(e) => { setScaleAnswers((old) => ({ ...old, [item.id]: e.target.value })); setChecked(false); }}><option value="">Choisir l’échelle…</option>{FIFTH_GRADE_SCALE_LEVELS.map((level) => <option key={level.id} value={level.id}>{level.label}</option>)}</select>
+              {checked && scaleAnswers[item.id] !== item.answer && <div className="mt-2 text-xs font-black text-red-600">Réponse attendue : {FIFTH_GRADE_SCALE_LEVELS.find((level) => level.id === item.answer)?.label}</div>}
+            </div>;
+          })}</div>
+          {canCalibrate && scaleMapQuestions.length > 0 && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4"><button type="button" onClick={saveScaleMapsToDatabase} className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">✓ Calibré — enregistrer en BDD</button>{scaleCalibrationStatus && <span className={`text-sm font-black ${scaleCalibrationStatus.startsWith('Échec') ? 'text-red-600' : 'text-emerald-700'}`}>{scaleCalibrationStatus}</span>}</div>}
+        </article>
+      )}
+
+      {view === 'curves' && (
+        <article className="rounded-3xl border border-fuchsia-200 bg-white p-5">
+          <h3 className="m-0 text-2xl font-black text-slate-900">Lis les courbes démographiques</h3>
+          <p className="mt-2 text-sm font-bold text-slate-500">Observe les axes, les dates et les valeurs, puis complète la phrase entière.</p>
+          {canCalibrate && <div className="mt-4 rounded-2xl border-2 border-dashed border-fuchsia-300 bg-fuchsia-50 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase text-fuchsia-700">Calibrage professeur</div><div className="text-sm font-black text-slate-800">Ajoute l’image puis renseigne toutes les réponses attendues.</div></div><div className="flex flex-wrap gap-2"><label className="cursor-pointer rounded-xl bg-fuchsia-600 px-4 py-3 text-xs font-black text-white">+ Courbe type 1<input type="file" accept="image/*" className="hidden" onChange={(event) => { addCurveExercise(event.target.files?.[0], 'evolution'); event.target.value = ''; }} /></label><label className="cursor-pointer rounded-xl bg-sky-600 px-4 py-3 text-xs font-black text-white">+ Courbe type 2<input type="file" accept="image/*" className="hidden" onChange={(event) => { addCurveExercise(event.target.files?.[0], 'natural-balance'); event.target.value = ''; }} /></label></div></div><div className="mt-2 text-[11px] font-bold text-slate-600"><strong>Type 1 :</strong> évolution entre deux dates · <strong>Type 2 :</strong> natalité, mortalité et solde naturel.</div></div>}
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">{activeCurveQuestions.map((item, index) => {
+            const answer = curveAnswers[item.id] || {};
+            const isCorrect = demographicExerciseIsCorrect(item, answer);
+            const setAnswer = (field, value) => { setCurveAnswers((previous) => ({ ...previous, [item.id]: { ...(previous[item.id] || {}), [field]: value } })); setChecked(false); };
+            const custom = Boolean(item.imageKey);
+            return <div key={item.id} className={`rounded-2xl border p-4 ${answerClass(isCorrect)}`}>
+              <div className="mb-3 flex items-center justify-between gap-2"><div className="text-xs font-black uppercase text-fuchsia-600">Exercice {index + 1} · Type {item.type === 'natural-balance' ? '2' : '1'}</div>{canCalibrate && custom && <button type="button" onClick={() => setCurveQuestions((previous) => previous.filter((question) => question.id !== item.id))} className="text-[10px] font-black text-red-500">Supprimer</button>}</div>
+              {custom ? <div className="flex min-h-[220px] items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><img src={curvePreviews[item.id]} alt={item.title || `Courbe ${index + 1}`} className="max-h-[440px] w-full object-contain" /></div> : item.type === 'natural-balance' ? <FifthGradeNaturalBalanceCurve item={item} /> : <FifthGradeDemographicCurve item={item} compact />}
+              {canCalibrate && custom && <div className="mt-3 rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-3"><input value={item.title || ''} onChange={(event) => updateCurveQuestion(item.id, { title: event.target.value })} placeholder="Titre de l’exercice" className="w-full rounded-xl border border-fuchsia-200 bg-white p-2 text-sm font-black" />{item.type === 'natural-balance' ? <div className="mt-3 grid gap-2 sm:grid-cols-4"><label className="text-[10px] font-black uppercase text-fuchsia-700">À partir de<input value={item.expected?.periodStart || ''} onChange={(event) => updateCurveExpected(item, 'periodStart', event.target.value)} placeholder="ex. 1970" className="mt-1 w-full rounded-lg border bg-white p-2 text-xs font-black normal-case" /></label><label className="text-[10px] font-black uppercase text-fuchsia-700">Natalité<select value={item.expected?.relation || 'superieure'} onChange={(event) => updateCurveExpected(item, 'relation', event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs font-black normal-case"><option value="superieure">supérieure</option><option value="inferieure">inférieure</option><option value="egale">égale</option></select></label><label className="text-[10px] font-black uppercase text-fuchsia-700">Population<select value={item.expected?.evolution || 'augmente'} onChange={(event) => updateCurveExpected(item, 'evolution', event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs font-black normal-case"><option value="augmente">a augmenté</option><option value="diminue">a diminué</option><option value="stagne">a stagné</option></select></label><label className="text-[10px] font-black uppercase text-fuchsia-700">Solde<select value={item.expected?.balance || 'positif'} onChange={(event) => updateCurveExpected(item, 'balance', event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs font-black normal-case"><option value="positif">positif</option><option value="negatif">négatif</option><option value="nul">nul</option></select></label></div> : <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3"><input value={item.expected?.startYear || ''} onChange={(event) => updateCurveExpected(item, 'startYear', event.target.value)} placeholder="Date de début" className="rounded-lg border bg-white p-2 text-xs font-black" /><input value={item.expected?.endYear || ''} onChange={(event) => updateCurveExpected(item, 'endYear', event.target.value)} placeholder="Date de fin" className="rounded-lg border bg-white p-2 text-xs font-black" /><select value={item.expected?.trend || 'augmente'} onChange={(event) => updateCurveExpected(item, 'trend', event.target.value)} className="rounded-lg border bg-white p-2 text-xs font-black"><option value="augmente">augmenté</option><option value="diminue">diminué</option><option value="stagne">stagné</option></select><input value={item.expected?.startValue || ''} onChange={(event) => updateCurveExpected(item, 'startValue', event.target.value)} placeholder={item.expected?.trend === 'stagne' ? 'Valeur stable' : 'Valeur de départ'} className="rounded-lg border bg-white p-2 text-xs font-black" />{item.expected?.trend !== 'stagne' && <input value={item.expected?.endValue || ''} onChange={(event) => updateCurveExpected(item, 'endValue', event.target.value)} placeholder="Valeur d’arrivée" className="rounded-lg border bg-white p-2 text-xs font-black" />}</div>}</div>}
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-bold leading-[2.8] text-slate-800">{item.type === 'natural-balance' ? <>{item.expected?.periodStart && <strong className="mr-1">À partir de {item.expected.periodStart},</strong>} la natalité est <select value={answer.relation || ''} onChange={(event) => setAnswer('relation', event.target.value)} className="mx-1 rounded-lg border bg-white p-2 font-black"><option value="">…</option><option value="superieure">supérieure</option><option value="inferieure">inférieure</option><option value="egale">égale</option></select> à la mortalité. La population a donc <select value={answer.evolution || ''} onChange={(event) => setAnswer('evolution', event.target.value)} className="mx-1 rounded-lg border bg-white p-2 font-black"><option value="">…</option><option value="augmente">augmenté</option><option value="diminue">diminué</option><option value="stagne">stagné</option></select> et le solde naturel est donc <select value={answer.balance || ''} onChange={(event) => setAnswer('balance', event.target.value)} className="mx-1 rounded-lg border bg-white p-2 font-black"><option value="">…</option><option value="positif">positif</option><option value="negatif">négatif</option><option value="nul">nul</option></select>.</> : <>Entre <input value={answer.startYear || ''} onChange={(event) => setAnswer('startYear', event.target.value)} className="mx-1 w-24 rounded-lg border bg-white p-2 text-center font-black" placeholder="date" /> et <input value={answer.endYear || ''} onChange={(event) => setAnswer('endYear', event.target.value)} className="mx-1 w-24 rounded-lg border bg-white p-2 text-center font-black" placeholder="date" />, la population a <select value={answer.trend || ''} onChange={(event) => setAnswer('trend', event.target.value)} className="mx-1 rounded-lg border bg-white p-2 font-black"><option value="">…</option><option value="augmente">augmenté</option><option value="diminue">diminué</option><option value="stagne">stagné</option></select>{answer.trend === 'stagne' ? <> à <input value={answer.startValue || ''} onChange={(event) => setAnswer('startValue', event.target.value)} className="mx-1 w-28 rounded-lg border bg-white p-2 text-center font-black" placeholder="valeur" /></> : <>, passant de <input value={answer.startValue || ''} onChange={(event) => setAnswer('startValue', event.target.value)} className="mx-1 w-28 rounded-lg border bg-white p-2 text-center font-black" placeholder="valeur" /> à <input value={answer.endValue || ''} onChange={(event) => setAnswer('endValue', event.target.value)} className="mx-1 w-28 rounded-lg border bg-white p-2 text-center font-black" placeholder="valeur" /></>}.</>}</div>
+              {checked && !isCorrect && <div className="mt-2 rounded-xl bg-red-100 p-2 text-xs font-black text-red-700">Relis la courbe : au moins un élément de la phrase est incorrect.</div>}
+            </div>;
+          })}</div>
+          {canCalibrate && curveQuestions.length > 0 && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4"><button type="button" onClick={saveCurveQuestionsToDatabase} className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">✓ Calibré — enregistrer en BDD</button>{curveCalibrationStatus && <span className={`text-sm font-black ${curveCalibrationStatus.startsWith('Échec') ? 'text-red-600' : 'text-emerald-700'}`}>{curveCalibrationStatus}</span>}</div>}
+        </article>
+      )}
+
+      {exerciseConfig && <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur"><div className="font-black text-slate-700">{checked ? `${exerciseConfig.correct} / ${exerciseConfig.total} bonnes réponses` : 'Complète toutes les réponses puis valide.'}</div><button type="button" onClick={validateCurrentExercise} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow">✓ Valider</button></div>}
+    </section>
+  );
+}
+
 const hasLocalDnbParagraphActivities = (chapter = {}) => (
   chapter.subject === 'histoire'
   && /premi[eè]re guerre mondiale/i.test(String(chapter.title || ''))
 );
 
-export default function ExamTrainingHub({ user }) {
+export default function ExamTrainingHub({ user, canCalibrate = false }) {
   const mode = getTrainingModeForStudent(user);
   const [section, setSection] = useState(mode === 'seconde' ? 'rqp' : 'full');
   const [dnbSubject, setDnbSubject] = useState('all');
   const [selectedDnbChapter, setSelectedDnbChapter] = useState(null);
   const [selectedLocalDnbActivity, setSelectedLocalDnbActivity] = useState('');
+
+  if (mode === 'cinquieme') {
+    return <FifthGradeGeoTraining user={user} canCalibrate={canCalibrate} />;
+  }
 
   if (mode === 'dnb') {
     const activeTab = DNB_TABS.find((tab) => tab.key === section) || DNB_TABS[0];
@@ -4171,6 +6097,7 @@ export default function ExamTrainingHub({ user }) {
 
     return (
       <section className="flex flex-col gap-4">
+        <TrainingPointsBadge user={user} />
         <div className="mx-4 rounded-3xl border border-violet-200 bg-violet-50 p-5">
           <div className="text-[11px] font-black uppercase text-violet-500">Brevet</div>
           <h2 className="text-3xl font-black text-slate-900 m-0">Entraînement DNB</h2>
@@ -4224,6 +6151,10 @@ export default function ExamTrainingHub({ user }) {
           <DnbHistoryReperesWorkspace onBack={() => setSelectedDnbChapter(null)} />
         ) : section === 'reperes' && selectedDnbChapter?.subject === 'geo' ? (
           <DnbGeoReperesWorkspace onBack={() => setSelectedDnbChapter(null)} />
+	        ) : section === 'paragraphe' && selectedDnbChapter?.subject === 'methodo' ? (
+	          <DnbParagraphMethodology onBack={() => setSelectedDnbChapter(null)} />
+	        ) : section === 'docs' && selectedDnbChapter?.subject === 'methodo-docs' ? (
+	          <DnbDocumentsMethodology user={user} onBack={() => setSelectedDnbChapter(null)} />
 	        ) : showChapterFolders && !selectedDnbChapter ? (
 	          <DnbChapterFolders user={user} sectionFilter={section} onOpenChapter={(chapter) => {
 	            setSelectedDnbChapter(chapter);
@@ -4269,6 +6200,7 @@ export default function ExamTrainingHub({ user }) {
     const isRqp = section === 'rqp';
     return (
       <section className="flex flex-col gap-4">
+        <TrainingPointsBadge user={user} />
         <div className="mx-4 rounded-3xl border border-blue-200 bg-blue-50 p-5">
           <div className="text-[11px] font-black uppercase text-blue-500">Seconde</div>
           <h2 className="text-3xl font-black text-slate-900 m-0">Entraînement</h2>

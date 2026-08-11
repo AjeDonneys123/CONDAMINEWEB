@@ -147,7 +147,17 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 levelFilter={globalLevel}
                 user={user}
                 onEditItem={(it, sectionContext) => setEditingItem({type: it.actType, data: it, section: sectionContext})}
-                onCreateActivity={(type, section) => setEditingItem({ type, section })}
+                onCreateActivity={(type, section, chapterId) => setEditingItem({
+                    type,
+                    section,
+                    data: {
+                        chapterId: String(chapterId || ''),
+                        subject: section || 'GÉNÉRAL',
+                        targetClassrooms: globalClass ? [globalClass] : [],
+                        assignedStudents: [],
+                        isAllClass: true
+                    }
+                })}
                 onDeleteItem={handleDeleteItem}
                 onRefresh={() => { loadData(); if(onRefreshRequest) onRefreshRequest(); }}
             />

@@ -31,6 +31,7 @@ const getEditUrl = (value = '') => {
 
 export default function CoursesManager({ globalClass, globalClassId = '', user = {} }) {
     const [courses, setCourses] = useState([]);
+    const [courseSections, setCourseSections] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -41,6 +42,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
     const [playerMode, setPlayerMode] = useState('presentation');
     const [liveClassroom, setLiveClassroom] = useState(null);
     const [progressSavingId, setProgressSavingId] = useState('');
+    const [draggedCourseId, setDraggedCourseId] = useState('');
+    const [openCourseSections, setOpenCourseSections] = useState({});
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
@@ -96,10 +99,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         setLoading(true);
         setError('');
         try {
-            const response = await fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}`);
-            const data = await response.json();
+            const [response, sectionsResponse] = await Promise.all([
+                fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}`),
+                fetch(`/api/courses/sections/list?classId=${encodeURIComponent(globalClassId)}`)
+            ]);
+            const [data, sectionsData] = await Promise.all([response.json(), sectionsResponse.json()]);
             if (!response.ok) throw new Error(data?.error || 'Chargement impossible');
+            if (!sectionsResponse.ok) throw new Error(sectionsData?.error || 'Chargement des sections impossible');
             setCourses(Array.isArray(data) ? data : []);
+            setCourseSections(Array.isArray(sectionsData) ? sectionsData : []);
         } catch (loadError) {
             setError(loadError.message);
         } finally {
@@ -167,7 +175,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     targetClassroomId: globalClassId,
                     targetClassroomName: globalClass,
                     publishedUntilSlide: previousCourse?.publishedUntilSlide || 0,
-                    overlays: previousCourse?.overlays || []
+                    overlays: previousCourse?.overlays || [],
+                    courseSectionId: previousCourse?.courseSectionId || '',
+                    order: previousCourse?.order || 0
                 })
             });
             const data = await response.json();
@@ -209,6 +219,68 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         }
     };
 
+    const updateCourseTitle = async (course, rawTitle) => {
+        const title = String(rawTitle || '').trim();
+        if (!title || title === String(course.title || '').trim()) return;
+        setError('');
+        try {
+            const response = await fetch(`/api/courses/${course._id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    description: course.description || '',
+                    slidesUrl: course.slidesUrl || '',
+                    isEnabled: course.isEnabled !== false,
+                    teacherId: course.teacherId || user.id || user._id || null,
+                    targetClassroomId: course.targetClassroomId || globalClassId,
+                    targetClassroomName: course.targetClassroomName || globalClass,
+                    publishedUntilSlide: course.publishedUntilSlide || 0,
+                    overlays: course.overlays || [],
+                    courseSectionId: course.courseSectionId || '',
+                    order: course.order || 0
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Modification du nom impossible');
+            setCourses((current) => current.map((item) => String(item._id) === String(data._id) ? data : item));
+        } catch (updateError) {
+            setError(updateError.message);
+            await loadCourses();
+        }
+    };
+
+    const updateCourseDescription = async (course, rawDescription) => {
+        const description = String(rawDescription || '').trim();
+        if (description === String(course.description || '').trim()) return;
+        setError('');
+        try {
+            const response = await fetch(`/api/courses/${course._id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: course.title || 'Cours',
+                    description,
+                    slidesUrl: course.slidesUrl || '',
+                    isEnabled: course.isEnabled !== false,
+                    teacherId: course.teacherId || user.id || user._id || null,
+                    targetClassroomId: course.targetClassroomId || globalClassId,
+                    targetClassroomName: course.targetClassroomName || globalClass,
+                    publishedUntilSlide: course.publishedUntilSlide || 0,
+                    overlays: course.overlays || [],
+                    courseSectionId: course.courseSectionId || '',
+                    order: course.order || 0
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Modification des informations impossible');
+            setCourses((current) => current.map((item) => String(item._id) === String(data._id) ? data : item));
+        } catch (updateError) {
+            setError(updateError.message);
+            await loadCourses();
+        }
+    };
+
     const updatePublishedUntilSlide = async (course, nextValue) => {
         const nextSlide = Math.max(0, Math.floor(Number(nextValue || 0)));
         const courseId = String(course?._id || '');
@@ -240,6 +312,42 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         }
     };
 
+    const openModification = (course) => {
+        setPlayerMode('edit');
+        setPlayingCourse(course);
+    };
+
+    const createCourseSection = async () => {
+        const name = window.prompt('Nom de la nouvelle section :', 'Nouvelle section');
+        if (!String(name || '').trim()) return;
+        try {
+            const response = await fetch('/api/courses/sections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: String(name).trim(), targetClassroomId: globalClassId }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Création impossible');
+            setCourseSections((current) => [...current, data]);
+            setOpenCourseSections((current) => ({ ...current, [String(data._id)]: true }));
+        } catch (sectionError) {
+            setError(sectionError.message);
+        }
+    };
+
+    const moveCourseToSection = async (courseId, courseSectionId) => {
+        const id = String(courseId || '');
+        if (!id) return;
+        const sectionCourses = courses.filter((course) => String(course.courseSectionId || '') === String(courseSectionId || ''));
+        try {
+            const response = await fetch(`/api/courses/${id}/placement`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ courseSectionId: courseSectionId || '', order: sectionCourses.length }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Déplacement impossible');
+            setCourses((current) => current.map((course) => String(course._id) === id ? data : course));
+            setOpenCourseSections((current) => ({ ...current, [String(courseSectionId || 'unsectioned')]: true }));
+        } catch (moveError) {
+            setError(moveError.message);
+        } finally {
+            setDraggedCourseId('');
+        }
+    };
+
     const askPublishedSlideFromMarker = () => {
         if (!playingCourse) return;
         const currentValue = Math.max(0, Number(playingCourse.publishedUntilSlide || 0));
@@ -255,9 +363,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     <span className="courses-kicker">{globalClass || 'CLASSE'}</span>
                     <h1>COURS</h1>
                 </div>
-                <button className="courses-primary-button" type="button" onClick={openNewCourse}>
-                    <span aria-hidden="true">＋</span> AJOUTER UN COURS
-                </button>
+                <div className="courses-heading-actions">
+                    <button className="courses-secondary-button" type="button" onClick={createCourseSection}>＋ SECTION</button>
+                    <button className="courses-primary-button" type="button" onClick={openNewCourse}>
+                        <span aria-hidden="true">＋</span> AJOUTER UN COURS
+                    </button>
+                </div>
             </header>
 
             {error && <div className="courses-error" role="alert">{error}</div>}
@@ -331,63 +442,55 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                         <strong>AUCUN COURS</strong>
                     </div>
                 ) : (
-                    <div className="courses-grid">
-                        {courses.map((course) => (
-                            <article className={`course-card ${course.isEnabled === false ? 'is-hidden' : ''}`} key={course._id}>
-                                <div className="course-slide-preview">
-                                    <iframe title={`Édition de ${course.title}`} src={getEditUrl(course.slidesUrl)} allowFullScreen />
+                    <div className="course-sections-stack">
+                        {[{ _id: '', name: 'SANS SECTION' }, ...[...courseSections].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true, sensitivity: 'base' }))].map((section) => {
+                            const sectionId = String(section._id || '');
+                            const rows = courses
+                                .filter((course) => String(course.courseSectionId || '') === sectionId)
+                                .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+                            const sectionStateKey = sectionId || 'unsectioned';
+                            const isOpen = openCourseSections[sectionStateKey] === true;
+                            if (!sectionId && rows.length === 0 && courseSections.length > 0) return null;
+                            return <section
+                                key={sectionId || 'unsectioned'}
+                                className={`course-drop-section ${draggedCourseId ? 'is-dragging' : ''}`}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={(event) => { event.preventDefault(); moveCourseToSection(draggedCourseId, sectionId); }}
+                            >
+                                <button type="button" className="course-section-heading" onClick={() => setOpenCourseSections((current) => ({ ...current, [sectionStateKey]: !isOpen }))} aria-expanded={isOpen}>
+                                    <span className="course-section-folder">{isOpen ? '📂' : '📁'}</span><strong>{section.name}</strong><small>{rows.length} présentation{rows.length > 1 ? 's' : ''}</small><span className="course-section-chevron">{isOpen ? '⌃' : '⌄'}</span>
+                                </button>
+                                {isOpen && <div className="courses-grid courses-grid-compact">{rows.map((course) => (
+                            <article className="course-compact-row" key={course._id}>
+                                <span className="course-drag-handle" draggable onDragStart={() => setDraggedCourseId(String(course._id))} onDragEnd={() => setDraggedCourseId('')} title="Glisser dans une section">⋮⋮</span>
+                                <div className="course-compact-copy">
+                                    <input
+                                        className="course-inline-title"
+                                        defaultValue={course.title}
+                                        key={`${course._id}-${course.title}`}
+                                        aria-label="Nom de la présentation"
+                                        onBlur={(event) => updateCourseTitle(course, event.target.value)}
+                                        onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                                    />
+                                    <textarea
+                                        className="course-inline-description"
+                                        defaultValue={course.description || ''}
+                                        key={`${course._id}-${course.description || 'empty'}`}
+                                        aria-label="Informations complémentaires"
+                                        placeholder="Ajoute ici quelques informations sur ce cours…"
+                                        rows="2"
+                                        onBlur={(event) => updateCourseDescription(course, event.target.value)}
+                                    />
                                 </div>
-                                <div className="course-card-content">
-                                    <div className="course-card-title-row">
-                                        <h2>{course.title}</h2>
-                                        <span className={course.isEnabled === false ? 'course-state hidden' : 'course-state'}>
-                                            {course.isEnabled === false ? 'MASQUÉ' : 'PUBLIÉ'}
-                                        </span>
-                                    </div>
-                                    {course.description && <p>{course.description}</p>}
-                                    <div className="course-progress-box">
-                                        <div>
-                                            <strong>Marqueur élèves</strong>
-                                            <span>Slides visibles : 1 → {Math.max(0, Number(course.publishedUntilSlide || 0)) || 'aucune'}</span>
-                                        </div>
-                                        <div className="course-progress-controls">
-                                            <button
-                                                type="button"
-                                                onClick={() => updatePublishedUntilSlide(course, Number(course.publishedUntilSlide || 0) - 1)}
-                                                disabled={progressSavingId === String(course._id)}
-                                            >−</button>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={Math.max(0, Number(course.publishedUntilSlide || 0))}
-                                                onChange={(event) => updatePublishedUntilSlide(course, event.target.value)}
-                                                disabled={progressSavingId === String(course._id)}
-                                                aria-label="Dernière slide visible par les élèves"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => updatePublishedUntilSlide(course, Number(course.publishedUntilSlide || 0) + 1)}
-                                                disabled={progressSavingId === String(course._id)}
-                                            >＋</button>
-                                        </div>
-                                    </div>
-                                    <div className="course-card-actions">
-                                        <button type="button" onClick={() => openPresentation(course)}>PRÉSENTER</button>
-                                        <a
-                                            className="course-google-edit-link"
-                                            href={getEditUrl(course.slidesUrl)}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                        >MODIFIER LES SLIDES</a>
-                                        <button type="button" onClick={() => openEditCourse(course)} aria-label={`Modifier ${course.title}`}>MODIFIER</button>
-                                        <button type="button" onClick={() => toggleCourse(course)}>
-                                            {course.isEnabled === false ? 'PUBLIER' : 'MASQUER'}
-                                        </button>
-                                        <button className="is-danger" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>SUPPRIMER</button>
-                                    </div>
+                                <div className="course-compact-actions">
+                                    <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>
+                                    <button type="button" onClick={() => openModification(course)}>MODIFIER</button>
+                                    <button className="course-delete-x" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>×</button>
                                 </div>
                             </article>
-                        ))}
+                                ))}{rows.length === 0 && <div className="course-section-empty">Glisse une présentation ici</div>}</div>}
+                            </section>;
+                        })}
                     </div>
                 )}
             </div>
@@ -396,27 +499,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                 <div className="course-player-backdrop" role="dialog" aria-modal="true" aria-label={playingCourse.title}>
                     <div className="course-player-toolbar">
                         <strong>{playingCourse.title}</strong>
-                        <div className="course-player-progress">
-                            <span>Élèves : slides 1 → {Math.max(0, Number(playingCourse.publishedUntilSlide || 0)) || 'aucune'}</span>
-                            <button
-                                type="button"
-                                onClick={() => updatePublishedUntilSlide(playingCourse, Number(playingCourse.publishedUntilSlide || 0) - 1)}
-                                disabled={progressSavingId === String(playingCourse._id)}
-                            >−</button>
-                            <input
-                                type="number"
-                                min="0"
-                                value={Math.max(0, Number(playingCourse.publishedUntilSlide || 0))}
-                                onChange={(event) => updatePublishedUntilSlide(playingCourse, event.target.value)}
-                                disabled={progressSavingId === String(playingCourse._id)}
-                                aria-label="Dernière slide visible par les élèves"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => updatePublishedUntilSlide(playingCourse, Number(playingCourse.publishedUntilSlide || 0) + 1)}
-                                disabled={progressSavingId === String(playingCourse._id)}
-                            >＋</button>
-                        </div>
                         <button type="button" onClick={() => setPlayingCourse(null)} aria-label="Fermer">×</button>
                     </div>
                     <div className="course-player-stage">
@@ -432,15 +514,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                         <div className="live-class-points">
                             🏆 Score Classe : {classPoints} pts
                         </div>
-
-                        <button
-                            type="button"
-                            className="course-student-progress-marker"
-                            onDoubleClick={askPublishedSlideFromMarker}
-                            title="Double-clique pour changer la dernière slide visible côté élève"
-                        >
-                            Élèves jusqu&apos;à la slide {Math.max(0, Number(playingCourse.publishedUntilSlide || 0)) || 'aucune'}
-                        </button>
 
                         {/* NOM DE L'ELEVE EN ROUGE DANS UN COIN (BAS GAUCHE) */}
                         {isHighlightActive && (
@@ -490,17 +563,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                             ))}
                         </div>}
                     </div>
-                    <div className="course-player-mode-switch" aria-label="Mode d'affichage">
+                    <div className="course-player-mode-switch" aria-label="Changer de mode">
                         <button
                             type="button"
-                            className={playerMode === 'edit' ? 'active' : ''}
-                            onClick={() => setPlayerMode('edit')}
-                        >ÉDITION</button>
-                        <button
-                            type="button"
-                            className={playerMode === 'presentation' ? 'active' : ''}
-                            onClick={() => setPlayerMode('presentation')}
-                        >PRÉSENTATION</button>
+                            className="active"
+                            onClick={() => setPlayerMode((current) => current === 'presentation' ? 'edit' : 'presentation')}
+                        >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
                     </div>
                 </div>
             )}

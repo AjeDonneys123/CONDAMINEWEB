@@ -318,7 +318,7 @@ const AIEngine = {
     },
 
     ask: async (prompt, systemInstruction = "", options = {}) => {
-        const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+        const provider = String(options?.provider || process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         if (provider === 'ollama_server') {
             return (await AIEngine.askOllamaServer(prompt, systemInstruction, options)) || "[]";
         }
@@ -351,6 +351,7 @@ const AIEngine = {
                 body: JSON.stringify({
                     contents: [{ role: "user", parts: parts }],
                     systemInstruction: { parts: [{ text: systemInstruction }] },
+                    ...(options?.googleSearch ? { tools: [{ google_search: {} }] } : {}),
                     generationConfig: {
                         temperature: Number(options?.temperature ?? 0.2),
                         maxOutputTokens: Number(options?.maxOutputTokens ?? options?.numPredict ?? 4096),
@@ -362,10 +363,37 @@ const AIEngine = {
             clearTimeout(timeout);
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
-            const text = (data.candidates?.[0]?.content?.parts || [])
+            let text = (data.candidates?.[0]?.content?.parts || [])
                 .map((part) => String(part?.text || ''))
                 .join('')
                 .trim() || "[]";
+            if (options?.googleSearch) {
+                const groundingChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+                const groundedSources = [];
+                const seenUris = new Set();
+                const seenTitles = new Set();
+                groundingChunks.forEach((chunk) => {
+                    const uri = String(chunk?.web?.uri || '').trim();
+                    const title = String(chunk?.web?.title || '').trim();
+                    const titleKey = title.toLowerCase().replace(/^www\./, '').trim();
+                    if (!/^https?:\/\//i.test(uri) || seenUris.has(uri) || (titleKey && seenTitles.has(titleKey))) return;
+                    seenUris.add(uri);
+                    if (titleKey) seenTitles.add(titleKey);
+                    groundedSources.push({ uri, title: title || 'Source consultée' });
+                });
+                if (groundedSources.length) {
+                    const orderedSources = groundedSources.sort((left, right) => {
+                        const leftWikipedia = /wikipedia/i.test(`${left.title} ${left.uri}`) ? 0 : 1;
+                        const rightWikipedia = /wikipedia/i.test(`${right.title} ${right.uri}`) ? 0 : 1;
+                        return leftWikipedia - rightWikipedia;
+                    });
+                    const sourceList = orderedSources
+                        .slice(0, Math.max(1, Number(options?.maxGroundedSources || 5)))
+                        .map((source, index) => `${index + 1}. ${source.title}\n${source.uri}`)
+                        .join('\n\n');
+                    text = `${text}\n\nSources réellement consultées par Gemini :\n${sourceList}`;
+                }
+            }
             await logGeminiUsage({
                 teacherId: String(options?.teacherId || '').trim(),
                 source: 'central',

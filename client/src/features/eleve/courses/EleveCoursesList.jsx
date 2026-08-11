@@ -14,6 +14,7 @@ export default function EleveCoursesList({ user }) {
   const [selectedId, setSelectedId] = useState('');
   const [slides, setSlides] = useState([]);
   const [activeSlideIdx, setActiveSlideIdx] = useState(0);
+  const [resolvedPresentationId, setResolvedPresentationId] = useState('');
   const [loading, setLoading] = useState(true);
   const [slidesLoading, setSlidesLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,28 +30,37 @@ export default function EleveCoursesList({ user }) {
     const studentId = user?._id || user?.id || '';
     if (!studentId) return;
     let cancelled = false;
-    const loadCourses = async () => {
-      setLoading(true);
+    const loadCourses = async (showLoader = false) => {
+      if (showLoader) setLoading(true);
       setError('');
       try {
         const res = await fetch(`/api/eleve/courses/list/${encodeURIComponent(studentId)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Chargement des cours impossible.');
         if (cancelled) return;
-        const rows = Array.isArray(data) ? data : [];
+        const rows = (Array.isArray(data) ? [...data] : []).sort((a, b) => String(a?.title || '').localeCompare(String(b?.title || ''), 'fr', { numeric: true, sensitivity: 'base' }));
         setCourses(rows);
-        setSelectedId((current) => current || String(rows[0]?._id || ''));
+        setSelectedId((current) => rows.some((row) => String(row?._id) === String(current)) ? current : String(rows[0]?._id || ''));
       } catch (loadError) {
         if (!cancelled) setError(loadError.message || 'Chargement des cours impossible.');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && showLoader) setLoading(false);
       }
     };
-    loadCourses();
-    return () => { cancelled = true; };
+    loadCourses(true);
+    const refresh = () => loadCourses(false);
+    const interval = window.setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh);
+    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
   }, [user?._id, user?.id]);
 
   useEffect(() => {
+    if (selectedCourse?.embedUrl) {
+      setSlides([]);
+      setSlidesError('');
+      setSlidesLoading(false);
+      return;
+    }
     if (!selectedCourse?.presentationId) {
       setSlides([]);
       return;
@@ -60,19 +70,23 @@ export default function EleveCoursesList({ user }) {
       setSlidesLoading(true);
       setSlidesError('');
       setActiveSlideIdx(0);
+      setResolvedPresentationId(String(selectedCourse.presentationId || ''));
       try {
         const limit = Math.max(0, Number(selectedCourse.publishedUntilSlide || 0));
         const res = await fetch('/api/learning/slides/manifest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            presentationId: selectedCourse.presentationId,
+            presentationUrl: selectedCourse.presentationId,
             slideSelection: limit > 0 ? `1-${limit}` : ''
           })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Chargement des slides impossible.');
-        if (!cancelled) setSlides(Array.isArray(data?.slides) ? data.slides : []);
+        if (!cancelled) {
+          setResolvedPresentationId(String(data?.presentationId || selectedCourse.presentationId || ''));
+          setSlides(Array.isArray(data?.slides) ? data.slides : []);
+        }
       } catch (loadError) {
         if (!cancelled) setSlidesError(loadError.message || 'Chargement des slides impossible.');
       } finally {
@@ -81,7 +95,7 @@ export default function EleveCoursesList({ user }) {
     };
     loadSlides();
     return () => { cancelled = true; };
-  }, [selectedCourse?._id, selectedCourse?.presentationId, selectedCourse?.publishedUntilSlide]);
+  }, [selectedCourse?._id, selectedCourse?.presentationId, selectedCourse?.embedUrl, selectedCourse?.publishedUntilSlide]);
 
   return (
     <section className="eleve-courses-page">
@@ -92,7 +106,7 @@ export default function EleveCoursesList({ user }) {
         </div>
         {selectedCourse && (
           <div className="eleve-courses-limit">
-            Disponible jusqu&apos;à la slide {selectedCourse.publishedUntilSlide}
+            Présentation disponible en lecture
           </div>
         )}
       </header>
@@ -117,7 +131,7 @@ export default function EleveCoursesList({ user }) {
                 onClick={() => setSelectedId(String(course._id))}
               >
                 <span>{course.title}</span>
-                <small>{course.description || `Slides 1 à ${course.publishedUntilSlide}`}</small>
+                <small>{course.description || 'Présentation du cours'}</small>
               </button>
             ))}
           </aside>
@@ -128,9 +142,19 @@ export default function EleveCoursesList({ user }) {
                 <h3>{selectedCourse?.title || 'Cours'}</h3>
                 {selectedCourse?.description && <p>{selectedCourse.description}</p>}
               </div>
-              <span>{slides.length} slide{slides.length > 1 ? 's' : ''}</span>
+              <span>{selectedCourse?.embedUrl ? 'Lecture' : `${slides.length} slide${slides.length > 1 ? 's' : ''}`}</span>
             </div>
 
+            {selectedCourse?.embedUrl && (
+              <div className="eleve-course-slide-frame" style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: '72vh' }}>
+                <iframe
+                  title={`Cours ${selectedCourse.title || ''}`}
+                  src={selectedCourse.embedUrl}
+                  allowFullScreen
+                  style={{ width: '100%', height: '100%', border: 0 }}
+                />
+              </div>
+            )}
             {slidesLoading && <div className="eleve-courses-empty">Chargement des slides...</div>}
             {!slidesLoading && slidesError && <div className="eleve-courses-error">{slidesError}</div>}
             {!slidesLoading && !slidesError && activeSlide && (
@@ -147,7 +171,7 @@ export default function EleveCoursesList({ user }) {
                   </button>
                   <div className="eleve-course-slide-frame">
                     <img
-                      src={buildSlidesThumbnailUrl(selectedCourse.presentationId, activeSlide.objectId, activeSlide.slideNumber)}
+                      src={buildSlidesThumbnailUrl(resolvedPresentationId || selectedCourse.presentationId, activeSlide.objectId, activeSlide.slideNumber)}
                       alt={`Slide ${activeSlide.slideNumber || activeSlideIdx + 1}`}
                     />
                   </div>
@@ -173,7 +197,7 @@ export default function EleveCoursesList({ user }) {
                       onClick={() => setActiveSlideIdx(idx)}
                     >
                       <img
-                        src={buildSlidesThumbnailUrl(selectedCourse.presentationId, slide.objectId, slide.slideNumber)}
+                        src={buildSlidesThumbnailUrl(resolvedPresentationId || selectedCourse.presentationId, slide.objectId, slide.slideNumber)}
                         alt={`Slide ${slide.slideNumber || idx + 1}`}
                       />
                       <span>{slide.slideNumber || idx + 1}</span>

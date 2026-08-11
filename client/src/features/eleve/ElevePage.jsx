@@ -22,6 +22,10 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
   const [nowMs, setNowMs] = useState(Date.now());
 
   useEffect(() => {
+      if (user?.isVisitorPreview === true) {
+          setFreshUser(user);
+          return undefined;
+      }
       const fetchFreshData = async () => {
           try {
               const id = user._id || user.id;
@@ -176,8 +180,8 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 onOpenHandled={() => clearPendingIfMatch('homework')}
               />
             )}
-            {tab === 'chat' && <EleveChatWorkspace user={freshUser} />}
-            {tab === 'training' && <ExamTrainingHub user={freshUser} />}
+            {tab === 'chat' && <EleveChatWorkspace user={freshUser} onQuit={() => setTab('status')} />}
+            {tab === 'training' && <ExamTrainingHub user={freshUser} canCalibrate={Boolean(onBackToProf) && freshUser?.isVisitorPreview !== true} />}
             {tab === 'jeux' && (
               <GamesGrid
                 user={freshUser}

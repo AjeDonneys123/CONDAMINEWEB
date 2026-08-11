@@ -11,9 +11,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const isHgTeacher = rawSections.some((section) => /HIST|GEO|EMC|HG/.test(String(section?.name || '').toUpperCase()));
     const ACTIVITY_OPTIONS = [
         { type: 'homework', label: 'Devoir', icon: '📝', tone: 'bg-orange-50 border-orange-200 text-orange-700' },
-        { type: 'game', label: 'Jeu', icon: '🎮', tone: 'bg-purple-50 border-purple-200 text-purple-700' },
         { type: 'learning', label: 'Apprentissage', icon: '🧠', tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-        { type: 'expose', label: 'Exposé', icon: '🗣️', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
         { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
         ...(isHgTeacher ? [{ type: 'comment', label: 'Commentaire', icon: '🧾', tone: 'bg-amber-50 border-amber-200 text-amber-700' }] : []),
         { type: 'production', label: 'Production', icon: '🏗️', tone: 'bg-lime-50 border-lime-200 text-lime-700' }
@@ -22,7 +20,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const [activeSection, setActiveSection] = useState("GÉNÉRAL"); 
     const [openChaps, setOpenChaps] = useState({}); 
     const [showArchived, setShowArchived] = useState(false); 
-    const [showActivityPicker, setShowActivityPicker] = useState(false);
+    const [activityPickerChapterId, setActivityPickerChapterId] = useState('');
     
     // MODALES DOSSIERS
     const [showChapterModal, setShowChapterModal] = useState(false);
@@ -180,7 +178,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     }
     useEffect(() => { fetchSections(); }, [user, classFilter, onRefresh]);
     useEffect(() => {
-        setShowActivityPicker(false);
+        setActivityPickerChapterId('');
     }, [activeSection, showArchived]);
 
     // --- LOGIQUE SECTIONS (CRUD) ---
@@ -470,54 +468,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                 >
                                     + Dossier
                                 </button>
-                                <button
-                                    onClick={() => setShowActivityPicker((prev) => !prev)}
-                                    className={`px-5 py-3 rounded-xl text-[11px] font-black uppercase shadow-lg border transition-colors ${
-                                        showActivityPicker
-                                            ? 'bg-indigo-600 text-white border-indigo-600'
-                                            : 'bg-white text-slate-900 border-slate-200'
-                                    }`}
-                                >
-                                    + Activités
-                                </button>
-                                <div className={`absolute right-0 top-full mt-3 w-[min(92vw,360px)] z-30 transition-all duration-150 ${showActivityPicker ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
-                                    <div className="rounded-[24px] border border-slate-200 bg-white/98 shadow-2xl p-4 backdrop-blur">
-                                        <div className="flex items-center justify-between gap-3 mb-3">
-                                            <div>
-                                                <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Créer une activité</div>
-                                                <div className="text-xs font-bold text-slate-600">Choisis un format pour {activeSection}.</div>
-                                            </div>
-                                            <button
-                                                onClick={() => setShowActivityPicker(false)}
-                                                className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50 text-slate-500 text-sm font-black"
-                                                title="Fermer"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {ACTIVITY_OPTIONS.map((option) => (
-                                                <button
-                                                    key={option.type}
-                                                    onClick={() => {
-                                                        onCreateActivity(option.type, activeSection);
-                                                        setShowActivityPicker(false);
-                                                    }}
-                                                    className={`w-full min-h-[68px] rounded-2xl border px-2.5 py-2.5 text-left transition-transform hover:-translate-y-0.5 ${option.tone}`}
-                                                >
-                                                    <div className="text-sm mb-1">{option.icon}</div>
-                                                    <div className="text-[9px] font-black uppercase leading-tight">{option.label}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 pb-20">
-                    {filteredChapters.sort((a,b) => a.title.localeCompare(b.title)).map(chap => {
+                    {filteredChapters.sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'fr', { numeric: true, sensitivity: 'base' })).map(chap => {
                         const normalizedClassFilter = normalizeClassKey(classFilter);
                         const chapItems = uniqueItems.filter((it) => {
                             if (String(it.chapterId) !== String(chap._id)) return false;
@@ -563,12 +519,64 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                             <span className="text-[8px] font-black text-slate-400 uppercase">{chapItems.length} ÉLÉMENTS</span>
                                         </div>
                                     </div>
-                                    <div className="flex gap-1">
+                                    <div className="flex items-center gap-1">
+                                        {!showArchived && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenChaps((prev) => ({ ...prev, [chap._id]: true }));
+                                                    setActivityPickerChapterId((prev) => prev === String(chap._id) ? '' : String(chap._id));
+                                                }}
+                                                className={`mr-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase border transition-colors ${
+                                                    activityPickerChapterId === String(chap._id)
+                                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                                }`}
+                                                title={`Créer une activité dans ${chap.title}`}
+                                            >
+                                                + Activité
+                                            </button>
+                                        )}
                                         <button onClick={(e) => handleRenameChapter(e, chap._id, chap.title)} title="Modifier" className="p-2 text-slate-300 hover:text-indigo-500 transition-colors">✏️</button>
                                         <button onClick={(e) => handleArchiveChapter(e, chap._id, !showArchived)} title={showArchived ? "Désarchiver" : "Archiver"} className="p-2 text-slate-300 hover:text-orange-500 transition-colors text-xl">{showArchived ? '♻️' : '📦'}</button>
                                         {!isLastSurvivor && <button onClick={(e) => prepareDelete(e, chap, 'chapter')} className="p-2 text-red-200 hover:text-red-500 transition-colors text-xl font-bold">✕</button>}
                                     </div>
                                 </div>
+
+                                {activityPickerChapterId === String(chap._id) && !showArchived && (
+                                    <div className="border-t border-indigo-100 bg-indigo-50/40 p-4" onClick={(e) => e.stopPropagation()}>
+                                        <div className="rounded-[22px] border border-indigo-100 bg-white shadow-lg p-4">
+                                            <div className="flex items-center justify-between gap-3 mb-3">
+                                                <div>
+                                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Créer dans ce chapitre</div>
+                                                    <div className="text-sm font-black text-slate-800">{chap.title}</div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setActivityPickerChapterId('')}
+                                                    className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50 text-slate-500 text-sm font-black"
+                                                    title="Fermer"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                                                {ACTIVITY_OPTIONS.map((option) => (
+                                                    <button
+                                                        key={option.type}
+                                                        onClick={() => {
+                                                            onCreateActivity(option.type, activeSection, String(chap._id));
+                                                            setActivityPickerChapterId('');
+                                                        }}
+                                                        className={`w-full min-h-[68px] rounded-2xl border px-3 py-2.5 text-left transition-transform hover:-translate-y-0.5 ${option.tone}`}
+                                                    >
+                                                        <div className="text-sm mb-1">{option.icon}</div>
+                                                        <div className="text-[9px] font-black uppercase leading-tight">{option.label}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 {isOpen && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">

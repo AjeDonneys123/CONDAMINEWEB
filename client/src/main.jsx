@@ -3,6 +3,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './index.css';
+import { installDevCompletionHorn } from './devCompletionHorn';
+
+installDevCompletionHorn();
 
 // 🛡️ AIRBAG DE SÉCURITÉ (Error Boundary)
 class SafetyNet extends React.Component {

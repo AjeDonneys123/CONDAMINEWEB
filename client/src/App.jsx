@@ -7,6 +7,24 @@ import SystemStatus from './features/prof/components/SystemStatus';
 import AutoConsoleBugReporter from './features/shared/AutoConsoleBugReporter';
 import './App.css';
 
+const VISITOR_LEVELS = ['6e', '5e', '4e', '3e', '2de', '1re', 'Terminale'];
+
+function VisitorLevelChooser({ user, onChoose, onLogout }) {
+  return (
+    <main className="min-h-screen bg-slate-50 px-6 py-12">
+      <section className="mx-auto max-w-5xl rounded-[32px] border border-slate-200 bg-white p-8 shadow-xl">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><div className="text-sm font-black uppercase tracking-widest text-emerald-600">Professeur visiteur</div><h1 className="mt-2 text-4xl font-black text-slate-900">Choisissez le niveau à prévisualiser</h1><p className="mt-3 font-bold text-slate-500">Vous verrez exactement l’interface élève de ce niveau, en lecture et sans compte élève réel.</p></div>
+          <button type="button" onClick={onLogout} className="rounded-2xl bg-slate-900 px-5 py-3 font-black text-white">Quitter</button>
+        </div>
+        <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-4">
+          {VISITOR_LEVELS.map((level) => <button key={level} type="button" onClick={() => onChoose(level)} className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 px-5 py-8 text-3xl font-black text-emerald-800 transition hover:-translate-y-1 hover:border-emerald-500 hover:bg-emerald-100">{level}</button>)}
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const recoveryMobileToken = String(urlParams.get('recoveryMobile') || '').trim();
@@ -110,6 +128,14 @@ export default function App() {
 
   const isTestAccount = user.isTestAccount === true;
 
+  if (user.isVisitorTeacher === true && !user.currentClass) {
+    return <VisitorLevelChooser user={user} onLogout={handleLogout} onChoose={(level) => {
+      const nextUser = { ...user, currentClass: String(level).toUpperCase(), role: 'visitor-prof', isVisitorPreview: true };
+      localStorage.setItem('player', JSON.stringify(nextUser));
+      setUser(nextUser);
+    }} />;
+  }
+
   return (
     <div className="app-wrapper">
       <SystemStatus />
@@ -127,7 +153,15 @@ export default function App() {
       {(user.isDeveloper || user.role === 'prof' || user.role === 'admin') ? (
           <ProfPage user={user} onLogout={handleLogout} />
       ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => {
+            if (user.isVisitorTeacher === true) {
+              const nextUser = { ...user, currentClass: '' };
+              localStorage.setItem('player', JSON.stringify(nextUser));
+              setUser(nextUser);
+              return;
+            }
+            setUser({ ...user, role: "prof" });
+          }} />
       )}
     </div>
   );
