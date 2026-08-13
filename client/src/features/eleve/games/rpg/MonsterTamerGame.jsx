@@ -109,18 +109,22 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   };
 
   const sendGameKey = useCallback((code, key) => {
+    frameRef.current?.focus({ preventScroll: true });
+    frameRef.current?.contentWindow?.postMessage({
+      source: 'condamine', type: 'mobile-activate'
+    }, '*');
     frameRef.current?.contentWindow?.postMessage({
       source: 'condamine', type: 'simulate-key', code, key
     }, '*');
     setStarted(true);
-    window.setTimeout(() => frameRef.current?.focus(), 20);
   }, []);
 
   const stopTouchKey = useCallback((event) => {
     event?.preventDefault();
     if (touchRepeatRef.current) window.clearInterval(touchRepeatRef.current);
     touchRepeatRef.current = null;
-    window.setTimeout(() => frameRef.current?.focus({ preventScroll: true }), 0);
+    frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'mobile-activate' }, '*');
+    frameRef.current?.focus({ preventScroll: true });
   }, []);
 
   const startTouchKey = (event, code, key, repeat = false) => {
