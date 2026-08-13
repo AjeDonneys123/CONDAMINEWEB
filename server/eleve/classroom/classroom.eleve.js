@@ -28,6 +28,15 @@ function matchesClassTargets(itemTargets, targetKeys) {
     return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
 }
 
+function academicLevel(value = '') {
+    const match = normalizeTargetKey(value).match(/^(6|5|4|3|2|1)/);
+    return match ? match[1] : '';
+}
+
+function matchesLevel(itemTargets, level) {
+    return Boolean(level) && (itemTargets || []).some((target) => academicLevel(target) === level);
+}
+
 async function buildStudentClassTargets(student) {
     const Classroom = mongoose.model('Classroom');
     const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
@@ -148,13 +157,22 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const GameProgress = mongoose.model('GameProgress');
         const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
 
-        const studentDoc = await Student.findById(req.params.studentId, '_id currentClass classId assignedGroups behaviorRecords');
-        if (!studentDoc) return res.json({ disciplines: [] });
-        if (applyCrossDecay(studentDoc.behaviorRecords || [])) {
+        const isVisitor = req.query?.visitor === '1';
+        const visitorLevel = academicLevel(req.query?.level);
+        const studentDoc = isVisitor
+            ? null
+            : await Student.findById(req.params.studentId, '_id currentClass classId assignedGroups behaviorRecords');
+        if (!studentDoc && !isVisitor) return res.json({ disciplines: [] });
+        if (studentDoc && applyCrossDecay(studentDoc.behaviorRecords || [])) {
             studentDoc.markModified('behaviorRecords');
             await studentDoc.save();
         }
-        const student = studentDoc.toObject();
+        const student = studentDoc ? studentDoc.toObject() : {
+            _id: null,
+            currentClass: String(req.query?.level || '').toUpperCase(),
+            assignedGroups: [],
+            behaviorRecords: []
+        };
         const StudioProject = mongoose.model('StudioProject');
         const tappingProject = await StudioProject.findOne({
             title: /tapping/i,
@@ -168,7 +186,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const totalBonuses = (student.behaviorRecords || [])
             .reduce((sum, record) => sum + Number(record?.bonuses || 0), 0);
 
-        const classTargets = await buildStudentClassTargets(studentDoc);
+        const classTargets = studentDoc ? await buildStudentClassTargets(studentDoc) : [student.currentClass];
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
         const classScopeIds = []
             .concat(student.classId ? [student.classId] : [])
@@ -181,7 +199,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         const teachers = await Teacher.find(
-            classScopeIds.length > 0 ? { assignedClasses: { $in: classScopeIds } } : { _id: null },
+            isVisitor ? {} : (classScopeIds.length > 0 ? { assignedClasses: { $in: classScopeIds } } : { _id: null }),
             '_id firstName lastName taughtSubjects subjectSections'
         ).lean();
 
@@ -278,41 +296,41 @@ router.get('/status-summary/:studentId', async (req, res) => {
             });
         }
 
-        const homeworks = [];
+        const activityQuery = isVisitor
+            ? { isEnabled: { $ne: false } }
+            : { isEnabled: { $ne: false }, $or: [{ isAllClass: true }, { assignedStudents: student._id }] };
+        const visibleActivity = (item) => {
+            if (isVisitor) return matchesLevel(item.targetClassrooms, visitorLevel);
+            const assigned = (item.assignedStudents || []).some(id => String(id) === String(student._id));
+            return assigned || (item.isAllClass && matchesClassTargets(item.targetClassrooms, classTargetKeys));
+        };
+
+        const homeworks = (await Homework.find({ ...activityQuery, isPunishment: { $ne: true } }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean()).filter(visibleActivity);
 
         const rawGames = await GameLevel.find({
-            isTestGame: { $ne: true },
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id },
-                { title: /tapping/i }
-            ]
+            ...activityQuery,
+            isTestGame: { $ne: true }
         }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean();
         const games = rawGames.filter(game => {
+            if (isVisitor) return matchesLevel(game.targetClassrooms, visitorLevel);
             const assigned = (game.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (/tapping/i.test(String(game?.title || ''))) return true;
             if (!game.isAllClass) return false;
             return matchesClassTargets(game.targetClassrooms, classTargetKeys);
         });
-        const rawLearningModules = await LearningModule.find({
-            isEnabled: { $ne: false },
-            $or: [
-                { isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions').lean();
-        const learningModules = rawLearningModules.filter(m => {
-            const assigned = (m.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (!m.isAllClass) return false;
-            return matchesClassTargets(m.targetClassrooms, classTargetKeys);
-        });
-        const exposes = [];
-        const lectures = [];
-        const comments = [];
-        const productions = [];
+        const rawLearningModules = await LearningModule.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions').lean();
+        const learningModules = rawLearningModules.filter(visibleActivity);
+        const [rawExposes, rawLectures, rawComments, rawProductions] = await Promise.all([
+            Expose.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass presentations').lean(),
+            Lecture.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions').lean(),
+            CommentActivity.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions').lean(),
+            Production.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions productionType').lean()
+        ]);
+        const exposes = rawExposes.filter(visibleActivity);
+        const lectures = rawLectures.filter(visibleActivity);
+        const comments = rawComments.filter(visibleActivity);
+        const productions = rawProductions.filter(visibleActivity);
 
         const chapterIds = [...new Set(
             [...homeworks, ...games, ...learningModules, ...exposes, ...lectures, ...comments, ...productions]
@@ -340,8 +358,8 @@ router.get('/status-summary/:studentId', async (req, res) => {
             return null;
         };
 
-        const submissions = await Submission.find({ studentId: student._id }, 'homeworkId').lean();
-        const progressRows = await GameProgress.find({ studentId: student._id }, 'gameId levelReached').lean();
+        const submissions = student._id ? await Submission.find({ studentId: student._id }, 'homeworkId').lean() : [];
+        const progressRows = student._id ? await GameProgress.find({ studentId: student._id }, 'gameId levelReached').lean() : [];
         const submittedHomeworkIds = new Set(submissions.map(s => String(s.homeworkId)));
         const progressByGameId = new Map(progressRows.map(p => [String(p.gameId), Number(p.levelReached || 0)]));
         for (const hw of homeworks) {

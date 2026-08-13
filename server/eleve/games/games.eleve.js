@@ -33,6 +33,7 @@ function normalizeTargetKey(value = '') {
 function matchesClassTargets(itemTargets, targetKeys) {
     return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
 }
+const academicLevel = (value = '') => (normalizeTargetKey(value).match(/^(6|5|4|3|2|1)/) || [])[1] || '';
 
 async function buildStudentClassTargets(student) {
     const Classroom = mongoose.model('Classroom');
@@ -89,7 +90,9 @@ router.get('/list/:studentId', async (req, res) => {
         // La prévisualisation professeur utilise un identifiant virtuel et non un ObjectId MongoDB.
         // Les jeux intégrés restent disponibles côté client ; il n'y a simplement aucune activité
         // individuelle à charger pour ce visiteur.
-        if (!mongoose.Types.ObjectId.isValid(String(req.params.studentId || ''))) {
+        const isVisitor = req.query?.visitor === '1';
+        const visitorLevel = academicLevel(req.query?.level);
+        if (!isVisitor && !mongoose.Types.ObjectId.isValid(String(req.params.studentId || ''))) {
             return res.json([]);
         }
         const Student = mongoose.model('Student');
@@ -98,7 +101,7 @@ router.get('/list/:studentId', async (req, res) => {
         const Teacher = mongoose.model('Teacher');
         const Subject = mongoose.model('Subject');
         
-        const student = await Student.findById(req.params.studentId).lean();
+        const student = isVisitor ? { _id: null, currentClass: req.query?.level || '' } : await Student.findById(req.params.studentId).lean();
         if (!student) return res.json([]);
 
         const classTargets = await buildStudentClassTargets(student);
@@ -108,13 +111,14 @@ router.get('/list/:studentId', async (req, res) => {
         const rawGames = await GameLevel.find({
             isTestGame: { $ne: true },
             isEnabled: { $ne: false }, // 🛡️ VERROU ANTI-BROUILLON
-            $or: [
+            ...(isVisitor ? {} : { $or: [
                 { isAllClass: true },
                 { assignedStudents: student._id },
                 { title: /tapping/i }
-            ]
+            ] })
         }).sort({ createdAt: -1 }).lean();
         const games = rawGames.filter(g => {
+            if (isVisitor) return (g.targetClassrooms || []).some((target) => academicLevel(target) === visitorLevel);
             if (/tapping/i.test(String(g?.title || ''))) return true;
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;

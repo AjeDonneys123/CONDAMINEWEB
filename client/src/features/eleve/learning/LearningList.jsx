@@ -11,7 +11,8 @@ export default function LearningList({ user, openItemId = '', onOpenHandled }) {
         setLoading(true);
         try {
             const id = String(user._id || user.id);
-            const res = await fetch(`/api/eleve/learning/list/${id}`);
+            const visitorQuery = user?.isVisitorPreview ? `?forGames=1&level=${encodeURIComponent(user.currentClass || '')}` : '';
+            const res = await fetch(`/api/eleve/learning/list/${id}${visitorQuery}`);
             const rows = res.ok ? await res.json() : [];
             setModules((rows || []).map(m => ({
                 ...m,

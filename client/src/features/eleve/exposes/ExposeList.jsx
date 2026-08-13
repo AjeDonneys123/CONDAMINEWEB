@@ -11,7 +11,7 @@ export default function ExposeList({ user, openItemId = '', onOpenHandled }) {
         setLoading(true);
         try {
             const id = String(user._id || user.id);
-            const res = await fetch(`/api/eleve/exposes/list/${id}`);
+            const res = await fetch(`/api/eleve/exposes/list/${id}${user?.isVisitorPreview ? `?visitor=1&level=${encodeURIComponent(user.currentClass || '')}` : ''}`);
             const rows = res.ok ? await res.json() : [];
             setExposes((rows || []).map((x) => ({
                 ...x,

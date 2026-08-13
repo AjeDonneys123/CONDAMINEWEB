@@ -94,7 +94,7 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
     try {
         const sId = user._id || user.id;
         const [actRes, skinRes, tappingRes, learningRes] = await Promise.all([
-            fetch(`/api/eleve/games/list/${sId}`).then(r => r.json()),
+            fetch(`/api/eleve/games/list/${sId}${user?.isVisitorPreview ? `?visitor=1&level=${encodeURIComponent(user.currentClass || '')}` : ''}`).then(r => r.json()),
             fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json()),
             fetch('/api/eleve/games/tapping-project').then(r => r.ok ? r.json() : null),
             fetch(`/api/eleve/learning/list/${sId}?forGames=1&level=${encodeURIComponent(user.currentClass || '')}`).then(r => r.ok ? r.json() : [])

@@ -34,7 +34,13 @@ export default function EleveCoursesList({ user }) {
       if (showLoader) setLoading(true);
       setError('');
       try {
-        const res = await fetch(`/api/eleve/courses/list/${encodeURIComponent(studentId)}`);
+        const params = new URLSearchParams();
+        if (user?.isVisitorPreview === true) {
+          params.set('visitor', '1');
+          params.set('level', String(user?.currentClass || ''));
+        }
+        const suffix = params.toString() ? `?${params.toString()}` : '';
+        const res = await fetch(`/api/eleve/courses/list/${encodeURIComponent(studentId)}${suffix}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Chargement des cours impossible.');
         if (cancelled) return;
@@ -52,7 +58,7 @@ export default function EleveCoursesList({ user }) {
     const interval = window.setInterval(refresh, 5000);
     window.addEventListener('focus', refresh);
     return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
-  }, [user?._id, user?.id]);
+  }, [user?._id, user?.id, user?.isVisitorPreview, user?.currentClass]);
 
   useEffect(() => {
     if (selectedCourse?.embedUrl) {

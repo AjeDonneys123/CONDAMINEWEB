@@ -12,6 +12,7 @@ function normalizeTargetKey(value = '') {
 function matchesClassTargets(itemTargets, targetKeys) {
     return (itemTargets || []).some((t) => targetKeys.has(normalizeTargetKey(t)));
 }
+const academicLevel = (value = '') => (normalizeTargetKey(value).match(/^(6|5|4|3|2|1)/) || [])[1] || '';
 async function buildStudentClassTargets(student) {
     const Classroom = mongoose.model('Classroom');
     const targets = new Set();
@@ -29,15 +30,18 @@ router.get('/list/:studentId', async (req, res) => {
         const Student = mongoose.model('Student');
         const Chapter = mongoose.model('Chapter');
         const CommentActivity = mongoose.model('CommentActivity');
-        const student = await Student.findById(req.params.studentId).lean();
+        const isVisitor = req.query?.visitor === '1';
+        const visitorLevel = academicLevel(req.query?.level);
+        const student = isVisitor ? { _id: null, currentClass: req.query?.level || '' } : await Student.findById(req.params.studentId).lean();
         if (!student) return res.json([]);
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
         const rawRows = await CommentActivity.find({
             isEnabled: { $ne: false },
-            $or: [{ isAllClass: true }, { assignedStudents: student._id }]
+            ...(isVisitor ? {} : { $or: [{ isAllClass: true }, { assignedStudents: student._id }] })
         }).sort({ date: -1 }).lean();
         const rows = rawRows.filter((x) => {
+            if (isVisitor) return (x.targetClassrooms || []).some((target) => academicLevel(target) === visitorLevel);
             const assigned = (x.assignedStudents || []).some((id) => String(id) === String(student._id));
             if (assigned) return true;
             if (!x.isAllClass) return false;

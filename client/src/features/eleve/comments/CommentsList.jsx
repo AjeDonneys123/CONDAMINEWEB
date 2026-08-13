@@ -11,7 +11,7 @@ export default function CommentsList({ user, openItemId = '', onOpenHandled }) {
         setLoading(true);
         try {
             const id = String(user._id || user.id);
-            const res = await fetch(`/api/eleve/comments/list/${id}`);
+            const res = await fetch(`/api/eleve/comments/list/${id}${user?.isVisitorPreview ? `?visitor=1&level=${encodeURIComponent(user.currentClass || '')}` : ''}`);
             const rows = res.ok ? await res.json() : [];
             setItems((rows || []).map((x) => ({ ...x, status: x.status || (x.studentSubmission?.completedAt ? 'done' : 'todo'), subject: x.chapterSection || x.subject || 'GÉNÉRAL' })));
         } catch (_) {

@@ -365,9 +365,11 @@ router.get('/list/:studentId', async (req, res) => {
         const Homework = mongoose.model('Homework');
         const Submission = mongoose.model('Submission');
 
-        const student = await Student.findById(req.params.studentId);
+        const isVisitor = req.query?.visitor === '1';
+        const visitorLevel = String(req.query?.level || '').match(/[1-6]/)?.[0] || '';
+        const student = isVisitor ? { _id: null, currentClass: req.query?.level || '' } : await Student.findById(req.params.studentId);
         if (!student) return res.json([]);
-        await ensurePunishmentState(student, Homework, Submission);
+        if (!isVisitor) await ensurePunishmentState(student, Homework, Submission);
 
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
@@ -375,12 +377,14 @@ router.get('/list/:studentId', async (req, res) => {
         // On cherche les devoirs pour toute la classe OU assignés à Julian
         const rawHomeworks = await Homework.find({
             isEnabled: { $ne: false },
-            $or: [
+            isPunishment: { $ne: true },
+            ...(isVisitor ? {} : { $or: [
                 { isAllClass: true, isPunishment: { $ne: true } },
                 { assignedStudents: student._id }
-            ]
+            ] })
         }).sort({ date: -1 }).lean();
         const homeworks = rawHomeworks.filter(hw => {
+            if (isVisitor) return (hw.targetClassrooms || []).some((target) => String(target || '').match(/[1-6]/)?.[0] === visitorLevel);
             const assigned = (hw.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!hw.isAllClass) return false;

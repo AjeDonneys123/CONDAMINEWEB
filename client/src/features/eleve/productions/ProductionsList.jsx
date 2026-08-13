@@ -11,7 +11,7 @@ export default function ProductionsList({ user, openItemId = '', onOpenHandled }
         setLoading(true);
         try {
             const id = String(user._id || user.id);
-            const res = await fetch(`/api/eleve/productions/list/${id}`);
+            const res = await fetch(`/api/eleve/productions/list/${id}${user?.isVisitorPreview ? `?visitor=1&level=${encodeURIComponent(user.currentClass || '')}` : ''}`);
             const rows = res.ok ? await res.json() : [];
             setItems((rows || []).map((x) => ({
                 ...x,

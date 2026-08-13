@@ -25,8 +25,8 @@ export default function HomeworkList({
     
     try {
         const [hwRes, subRes] = await Promise.all([
-          fetch(`/api/eleve/homework/list/${myId}`),
-          fetch(`/api/eleve/homework/submissions/${myId}`)
+          fetch(`/api/eleve/homework/list/${myId}${user?.isVisitorPreview ? `?visitor=1&level=${encodeURIComponent(user.currentClass || '')}` : ''}`),
+          user?.isVisitorPreview ? Promise.resolve({ ok: true, json: async () => [] }) : fetch(`/api/eleve/homework/submissions/${myId}`)
         ]);
         if (!hwRes.ok) throw new Error("404");
         const data = await hwRes.json();

@@ -11,13 +11,22 @@ const normalizeClassKey = (value = '') => String(value || '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 
+const academicLevel = (value = '') => {
+    const match = normalizeClassKey(value).match(/^(6|5|4|3|2|1)/);
+    return match ? match[1] : '';
+};
+
 router.get('/list/:studentId', async (req, res) => {
     try {
         const Student = mongoose.model('Student');
         const Classroom = mongoose.model('Classroom');
         const Course = mongoose.model('Course');
 
-        const student = await Student.findById(req.params.studentId, 'currentClass classId assignedGroups').lean();
+        const isVisitor = req.query?.visitor === '1';
+        const visitorLevel = academicLevel(req.query?.level);
+        const student = isVisitor
+            ? { currentClass: req.query?.level || '', assignedGroups: [] }
+            : await Student.findById(req.params.studentId, 'currentClass classId assignedGroups').lean();
         if (!student) return res.status(404).json({ error: 'Élève introuvable' });
 
         const classIds = new Set();
@@ -50,11 +59,23 @@ router.get('/list/:studentId', async (req, res) => {
             classrooms.forEach((cls) => addClassKey(cls?.name));
         }
 
+        // Certains anciens élèves n'ont pas classId, alors que currentClass est correct.
+        // On rattache aussi les identifiants des classes portant le même nom.
+        const allClasses = await Classroom.find({}, '_id name').lean();
+        const classNameById = new Map(allClasses.map((cls) => [String(cls._id), String(cls.name || '')]));
+        if (classKeys.size > 0) {
+            allClasses.forEach((cls) => {
+                if (classKeys.has(normalizeClassKey(cls?.name))) addClassId(cls?._id);
+            });
+        }
+
         const courses = await Course.find({ isEnabled: { $ne: false } }).sort({ date: -1, createdAt: -1 }).lean();
         const visible = courses
             .filter((course) => {
                 const targetId = String(course?.targetClassroomId || '').trim();
-                return classIds.has(targetId) || classKeys.has(normalizeClassKey(course?.targetClassroomName || targetId));
+                const targetName = course?.targetClassroomName || classNameById.get(targetId) || '';
+                if (isVisitor) return Boolean(visitorLevel) && academicLevel(targetName) === visitorLevel;
+                return classIds.has(targetId) || classKeys.has(normalizeClassKey(targetName));
             })
             .map((course) => ({
                 _id: String(course._id),

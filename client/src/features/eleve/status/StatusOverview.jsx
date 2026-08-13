@@ -16,7 +16,13 @@ export default function StatusOverview({ user, onOpenActivity }) {
           if (!hasLoadedOnceRef.current) setData({ disciplines: [] });
           return;
         }
-        const res = await fetch(`/api/eleve/classroom/status-summary/${userId}`);
+        const params = new URLSearchParams();
+        if (user?.isVisitorPreview === true) {
+          params.set('visitor', '1');
+          params.set('level', String(user?.currentClass || ''));
+        }
+        const suffix = params.toString() ? `?${params.toString()}` : '';
+        const res = await fetch(`/api/eleve/classroom/status-summary/${userId}${suffix}`);
         const json = await res.json();
         setData(json || { disciplines: [] });
         hasLoadedOnceRef.current = true;
@@ -29,7 +35,7 @@ export default function StatusOverview({ user, onOpenActivity }) {
       }
     };
     load();
-  }, [userId]);
+  }, [userId, user?.isVisitorPreview, user?.currentClass]);
 
   if (loading) {
     return <div className="status-page">Chargement du statut...</div>;
@@ -51,13 +57,6 @@ export default function StatusOverview({ user, onOpenActivity }) {
           <div key={d.subject} className="status-card">
             <div className="status-title">{d.subject}</div>
             <div className="status-teachers">{(d.teachers || []).join(' • ')}</div>
-
-            <div className="status-row">
-              <span className="label">Croix</span>
-              <span className="value cross">{d.crosses || 0}</span>
-              <span className="label">Bonus</span>
-              <span className="value bonus">{d.bonuses || 0}</span>
-            </div>
 
             <div className="status-row">
               <span className="label">Activités</span>
