@@ -78,6 +78,14 @@ function matchesClassTargets(itemTargets, targetKeys) {
     return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
 }
 
+function inferAcademicLevel(value = '') {
+    const normalized = normalizeTargetKey(value);
+    const match = normalized.match(/^([1-6])/);
+    if (match) return match[1];
+    if (/^(T|TERM|TERMINALE)/.test(normalized)) return 'T';
+    return '';
+}
+
 const compactRealtimeStepText = (step = {}) => {
     const parts = [
         step.sheetText,
@@ -828,21 +836,29 @@ router.get('/list/:studentId', async (req, res) => {
         const Chapter = mongoose.model('Chapter');
         const LearningModule = mongoose.model('LearningModule');
 
-        const student = await Student.findById(req.params.studentId).lean();
+        // Dans les jeux, l'élève peut réviser tout chapitre actif de son niveau,
+        // même si l'apprentissage n'a pas été affecté à sa classe précise.
+        const forGames = String(req.query.forGames || '') === '1';
+        const requestedStudentId = String(req.params.studentId || '');
+        const student = mongoose.Types.ObjectId.isValid(requestedStudentId)
+            ? await Student.findById(requestedStudentId).lean()
+            : (forGames ? { _id: null, currentClass: String(req.query.level || '') } : null);
         if (!student) return res.json([]);
 
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
 
-        const rawModules = await LearningModule.find({
-            isEnabled: { $ne: false },
-            $or: [
+        const moduleQuery = { isEnabled: { $ne: false } };
+        if (!forGames) {
+            moduleQuery.$or = [
                 { isAllClass: true },
                 { assignedStudents: student._id }
-            ]
-        }).sort({ createdAt: -1 }).lean();
+            ];
+        }
+        const rawModules = await LearningModule.find(moduleQuery).sort({ createdAt: -1 }).lean();
 
         const modules = rawModules.filter(m => {
+            if (forGames) return true;
             const assigned = (m.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!m.isAllClass) return false;
@@ -851,18 +867,31 @@ router.get('/list/:studentId', async (req, res) => {
 
         const chapterIds = [...new Set(modules.map(m => String(m.chapterId || '')).filter(Boolean))];
         const chapters = chapterIds.length > 0
-            ? await Chapter.find({ _id: { $in: chapterIds } }, '_id title section').lean()
+            ? await Chapter.find({ _id: { $in: chapterIds } }, '_id title section classroom sharedLevel isArchived').lean()
             : [];
         const chapterById = new Map(chapters.map(ch => [String(ch._id), ch]));
 
+        const studentLevel = inferAcademicLevel(student.currentClass);
+        const isChapterAvailableToStudent = (chapter) => {
+            if (!chapter || chapter.isArchived === true) return false;
+            const chapterLevel = inferAcademicLevel(chapter.sharedLevel || chapter.classroom);
+            if (chapterLevel && studentLevel && chapterLevel !== studentLevel) return false;
+            if (!forGames && chapter.classroom && !classTargetKeys.has(normalizeTargetKey(chapter.classroom))) return false;
+            return true;
+        };
+
         const withChapter = modules
+            .filter(m => isChapterAvailableToStudent(chapterById.get(String(m.chapterId))))
             .map(m => {
                 const chapter = chapterById.get(String(m.chapterId));
                 const completion = (m.completions || []).find(c => String(c.studentId) === String(student._id));
                 return {
                     ...m,
+                    chapterId: String(chapter?._id || m.chapterId || ''),
                     chapterTitle: chapter?.title || m.chapterTitle || m.title || 'APPRENTISSAGE',
                     chapterSection: chapter?.section || m.subject || 'GÉNÉRAL',
+                    chapterLevel: inferAcademicLevel(chapter?.sharedLevel || chapter?.classroom),
+                    chapterIsActive: chapter?.isArchived !== true,
                     completion: completion || null
                 };
             });

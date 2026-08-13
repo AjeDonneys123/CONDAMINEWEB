@@ -468,7 +468,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
 
     const updateBarLogic = (isCorrect) => {
         const idx = liveData.current.qIndex;
-        if (isCorrect) { liveData.current.qStates[idx] = Math.min(3, (liveData.current.qStates[idx] || 0) + 1); } 
+        if (isCorrect) { liveData.current.qStates[idx] = Math.min(2, (liveData.current.qStates[idx] || 0) + 1); }
         else { liveData.current.qStates[idx] = Math.max(0, (liveData.current.qStates[idx] || 0) - 1); }
         setQuestionStates([...liveData.current.qStates]);
     };
@@ -476,16 +476,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const changeQuestionLogic = () => {
         setFeedback(null); setUserInput("");
         const states = liveData.current.qStates;
-        const available = states.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+        const available = states.map((s, i) => s < 2 ? i : -1).filter(i => i !== -1);
         if (available.length > 0) {
             const currentIdx = liveData.current.qIndex;
-            if (states[currentIdx] === 2) { bridgeProxy.current('SET_BOSS', true); } 
+            if (states[currentIdx] === 1) { bridgeProxy.current('SET_BOSS', true); }
             else {
                 const others = available.filter(idx => idx !== currentIdx);
                 let nextIdx = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0];
                 liveData.current.qIndex = nextIdx;
                 setCurrentQIndex(nextIdx);
-                bridgeProxy.current('SET_BOSS', states[nextIdx] === 2);
+                bridgeProxy.current('SET_BOSS', states[nextIdx] === 1);
             }
         } else { triggerWinSequence(); }
     };
@@ -729,10 +729,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const handleBarClick = (idx) => {
         if (!isCheatMode()) return;
         const nextStates = [...liveData.current.qStates];
-        nextStates[idx] = Math.min(3, (nextStates[idx] || 0) + 1);
+        nextStates[idx] = Math.min(2, (nextStates[idx] || 0) + 1);
         liveData.current.qStates = nextStates;
         setQuestionStates(nextStates);
-        if (nextStates.every(s => s >= 3)) {
+        if (nextStates.every(s => s >= 2)) {
             triggerGlobalEvent("UPLEVEL");
             triggerWinSequence();
         }
@@ -1146,7 +1146,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                         <div className={"flex pointer-events-auto " + (isMobileViewport ? 'gap-1.5' : 'gap-2')}>
                             {questionStates.map((s, i) => (
                                 <div key={i} onClick={() => handleBarClick(i)} className={(isMobileViewport ? 'w-4 h-12' : 'w-6 h-16') + " rounded-lg border-2 cursor-pointer " + (currentQIndex === i ? 'border-white scale-110' : 'border-slate-600 opacity-60') + " bg-slate-800 overflow-hidden relative"}>
-                                    <div className={"absolute bottom-0 w-full transition-all duration-500 " + (s >= 3 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-yellow-500')} style={{height: (s/3*100) + "%" }}></div>
+                                    <div className={"absolute bottom-0 w-full transition-all duration-500 " + (s >= 2 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : s >= 1 ? 'bg-yellow-400 shadow-[0_0_10px_#facc15]' : 'bg-slate-700')} style={{height: (s/2*100) + "%" }}></div>
                                 </div>
                             ))}
                         </div>

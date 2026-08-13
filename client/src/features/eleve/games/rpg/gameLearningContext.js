@@ -24,6 +24,34 @@ const keywordsFromHtml = (html = '') => {
   return rows;
 };
 
+const nonBoldAttackCues = (html = '') => String(html || '')
+  .split(/<br\s*\/?>|<\/div>/i)
+  .filter((line) => /^\s*(?:<[^>]+>)*\d+\s*[-–—]/i.test(line))
+  .map((line, index) => {
+    const outsideBold = line
+      .replace(/<(?:strong|b)(?:\s[^>]*)?>[\s\S]*?<\/(?:strong|b)>/gi, '|')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/^\s*\d+\s*[-–—]\s*/, '');
+    const candidates = outsideBold.split('|').map((segment) => {
+      const words = segment.match(/[A-Za-zÀ-ÖØ-öø-ÿŒœ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿŒœ]+)*/g) || [];
+      while (words.length && /^(le|la|les|l|un|une|il|elle|est|se)$/i.test(words[0])) words.shift();
+      return words;
+    }).filter((words) => words.length >= 2 || (words.length === 1 && words[0].length >= 4 && !/^(dans|avec|pour|vers)$/i.test(words[0])));
+    if (!candidates.length) return `attaque ${index + 1}`;
+    const words = candidates[Math.floor(Math.random() * candidates.length)];
+    const size = Math.min(3, words.length);
+    const start = Math.floor(Math.random() * Math.max(1, words.length - size + 1));
+    return words.slice(start, start + size).join(' ');
+  });
+
+const lessonTitleFromSheet = (step = {}, fallback = 'Leçon') => {
+  const firstLine = String(step?.sheetText || '').replace(/\r/g, '').split('\n').map((line) => line.trim()).find(Boolean);
+  return String(firstLine || step?.title || fallback)
+    .replace(/^(?:partie\s+)?[IVXLCDM]+[.\s·:-]+/i, '')
+    .replace(/^fiche\s+(?:g[eé]n[eé]rale\s*)?[·:-]\s*/i, '')
+    .trim();
+};
+
 const parseLessonLines = (text = '', keywords = []) => {
   const mainPoints = [];
   let current = null;
@@ -69,13 +97,29 @@ const sanitizeQuiz = (step = {}) => (Array.isArray(step.quizQuestions) ? step.qu
 
 export function buildGameLearningContext(modules = [], student = {}) {
   const lessons = [];
-  (Array.isArray(modules) ? modules : []).forEach((module) => {
+  const resources = { generalSheets: [], lessonSheets: [], generalVideos: [], sequenceVideos: [] };
+  const activeModules = (Array.isArray(modules) ? modules : [])
+    .filter((module) => module?.chapterIsActive !== false);
+  activeModules.forEach((module) => {
     const sections = Array.isArray(module?.sections) ? module.sections : [];
     const sectionById = new Map(sections.map((section, index) => [
       String(section?.id || ''),
       { title: String(section?.title || section?.name || `Partie ${index + 1}`).trim(), order: index }
     ]));
     const steps = Array.isArray(module?.steps) ? module.steps : [];
+    steps.forEach((step, index) => {
+      const title = String(step?.title || `${step?.type === 'video' ? 'Vidéo' : 'Fiche'} ${index + 1}`).trim();
+      if (step?.type === 'sheet' && String(step?.sheetText || step?.sheetUrl || '').trim()) {
+        const row = { id: String(step?.id || index), title, text: String(step?.sheetText || ''), html: String(step?.sheetTextHtml || ''), url: String(step?.sheetUrl || '') };
+        (/introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(title) ? resources.generalSheets : resources.lessonSheets).push(row);
+      }
+      if (step?.type === 'video') {
+        const url = String(step?.videoUrl || step?.url || step?.sourceUrl || step?.presentationUrl || '').trim();
+        if (!url) return;
+        const row = { id: String(step?.id || index), title, url };
+        (/introduction|g[eé]n[eé]ral/i.test(title) ? resources.generalVideos : resources.sequenceVideos).push(row);
+      }
+    });
     const quizzesBySection = new Map();
     steps.filter((step) => step?.type === 'quiz').forEach((step) => {
       const key = String(step?.sectionId || 'module');
@@ -85,6 +129,8 @@ export function buildGameLearningContext(modules = [], student = {}) {
     steps.filter((step) => step?.type === 'sheet' && String(step?.sheetText || '').trim()).forEach((step, index) => {
       const sectionId = String(step?.sectionId || 'module');
       const section = sectionById.get(sectionId);
+      const sectionLabel = String(section?.title || step?.title || '').trim();
+      if (/introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(sectionLabel) || /introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(String(step?.title || ''))) return;
       const text = String(step.sheetText || '').replace(/\r/g, '').trim();
       const keywords = [
         ...keywordsFromHtml(step?.sheetTextHtml),
@@ -92,16 +138,40 @@ export function buildGameLearningContext(modules = [], student = {}) {
       ].filter(Boolean);
       const mainPoints = parseLessonLines(text, keywords);
       if (!mainPoints.length) return;
+      const attackCues = nonBoldAttackCues(step?.sheetTextHtml);
+      mainPoints.forEach((point, pointIndex) => { point.attackCue = attackCues[pointIndex] || point.text; });
       lessons.push({
         id: `${module?._id || 'module'}:${step?.id || index}`,
         moduleId: String(module?._id || ''),
+        chapterId: String(module?.chapterId || module?._id || ''),
         sectionId,
-        title: section?.title || String(step?.title || module?.title || module?.chapterTitle || 'Leçon'),
+        title: lessonTitleFromSheet(step, section?.title || module?.title || 'Leçon'),
         chapterTitle: String(module?.chapterTitle || module?.title || ''),
         mainPoints,
         quiz: quizzesBySection.get(sectionId) || []
       });
     });
+  });
+
+  const chapterMap = new Map(activeModules.map((module) => {
+    const chapterId = String(module?.chapterId || module?._id || '');
+    return [chapterId, {
+      id: chapterId,
+      title: String(module?.chapterTitle || module?.title || 'Chapitre'),
+      section: String(module?.chapterSection || module?.subject || 'GÉNÉRAL'),
+      lessons: []
+    }];
+  }));
+  lessons.forEach((lesson) => {
+    const chapterId = String(lesson.chapterId || lesson.moduleId || '');
+    if (!chapterMap.has(chapterId)) {
+      chapterMap.set(chapterId, {
+        id: chapterId,
+        title: lesson.chapterTitle || lesson.title || 'Chapitre',
+        lessons: []
+      });
+    }
+    chapterMap.get(chapterId).lessons.push(lesson);
   });
 
   return {
@@ -110,6 +180,8 @@ export function buildGameLearningContext(modules = [], student = {}) {
       id: String(student?._id || student?.id || ''),
       level: String(student?.level || student?.classLevel || student?.className || '')
     },
-    lessons
+    chapters: [...chapterMap.values()],
+    lessons,
+    resources
   };
 }

@@ -7,7 +7,7 @@ import SystemStatus from './features/prof/components/SystemStatus';
 import AutoConsoleBugReporter from './features/shared/AutoConsoleBugReporter';
 import './App.css';
 
-const VISITOR_LEVELS = ['6e', '5e', '4e', '3e', '2de', '1re', 'Terminale'];
+const VISITOR_LEVELS = ['5e', '3e', '2de'];
 
 function VisitorLevelChooser({ user, onChoose, onLogout }) {
   return (

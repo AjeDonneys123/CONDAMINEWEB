@@ -25,6 +25,69 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   const [playingMonsterTamer, setPlayingMonsterTamer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [learningModules, setLearningModules] = useState([]);
+  const [pendingLaunch, setPendingLaunch] = useState(null);
+  const [selectedLearningContext, setSelectedLearningContext] = useState(null);
+
+  const learningContext = useMemo(
+      () => buildGameLearningContext(learningModules, user),
+      [learningModules, user]
+  );
+
+  const chapterGroups = useMemo(() => {
+      const groups = { HISTOIRE: [], GEOGRAPHIE: [], EMC: [] };
+      const normalize = (value = '') => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+      (learningContext.chapters || []).forEach((chapter) => {
+          const section = normalize(chapter.section);
+          const key = section.includes('GEO') ? 'GEOGRAPHIE' : section.includes('EMC') || section.includes('CIVIQUE') ? 'EMC' : section.includes('HIST') ? 'HISTOIRE' : '';
+          if (key) groups[key].push(chapter);
+      });
+      return groups;
+  }, [learningContext]);
+
+  const requestLaunch = (type, payload = null) => setPendingLaunch({ type, payload });
+
+  const buildLearningLevels = (chapter) => (chapter?.lessons || []).map((lesson, index) => ({
+      name: `Partie ${['I', 'II', 'III', 'IV', 'V', 'VI'][index] || index + 1} · ${lesson.title}`,
+      lessonId: lesson.id,
+      intro: {},
+      questions: (lesson.quiz || []).map((question) => ({
+          q: question.question,
+          options: question.choices,
+          a: question.correctIndex
+      }))
+  })).filter((level) => level.questions.length > 0);
+
+  const buildLearningGame = (skin, chapter, family) => ({
+      ...skin,
+      _id: `learning-${family}-${chapter.id}`,
+      title: family === 'starship' ? 'Starship' : 'Zombie',
+      type: family,
+      isLearningGame: true,
+      selectedChapter: chapter,
+      levels: buildLearningLevels(chapter),
+      globalIntro: {}
+  });
+
+  const launchWithChapter = (chapter) => {
+      const context = {
+          ...learningContext,
+          activeChapterId: chapter.id,
+          activeChapterTitle: chapter.title,
+          chapters: [chapter],
+          lessons: Array.isArray(chapter.lessons) ? chapter.lessons : []
+      };
+      setSelectedLearningContext(context);
+      const launch = pendingLaunch;
+      setPendingLaunch(null);
+      if (launch?.type === 'monster') setPlayingMonsterTamer(true);
+      if (launch?.type === 'wispguard') setPlayingWispguard(true);
+      if (launch?.type === 'multiplication') setPlayingMultiplicationRpg(true);
+      if (launch?.type === 'game') setPlayingGame({ ...launch.payload, learningContext: context, selectedChapter: chapter });
+      if (launch?.type === 'learning-game') {
+          const skin = (skins || []).find((item) => String(item?.title || '').toLowerCase().includes(launch.payload));
+          setPlayingGame({ ...buildLearningGame(skin || {}, chapter, launch.payload), learningContext: context });
+      }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -34,7 +97,7 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
             fetch(`/api/eleve/games/list/${sId}`).then(r => r.json()),
             fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json()),
             fetch('/api/eleve/games/tapping-project').then(r => r.ok ? r.json() : null),
-            fetch(`/api/eleve/learning/list/${sId}`).then(r => r.ok ? r.json() : [])
+            fetch(`/api/eleve/learning/list/${sId}?forGames=1&level=${encodeURIComponent(user.currentClass || '')}`).then(r => r.ok ? r.json() : [])
         ]);
         
         setActivities((actRes || []).map(a => ({ ...a, actType: 'game' })));
@@ -82,13 +145,13 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
       const targetId = String(openItemId || '').trim();
       if (!targetId || selectedActivity || showSkinSelector || playingGame) return;
       if (tappingProject && (targetId === '__tapping__' || targetId === String(tappingProject._id || ''))) {
-          setPlayingGame(buildTappingProjectData(tappingProject));
+          requestLaunch('game', buildTappingProjectData(tappingProject));
           if (onOpenHandled) onOpenHandled();
           return;
       }
       const target = (activities || []).find((a) => String(a?._id || '') === targetId);
       if (!target) return;
-      setPlayingGame(buildGameData(target, target));
+      requestLaunch('game', buildGameData(target, target));
       if (onOpenHandled) onOpenHandled();
   }, [openItemId, activities, tappingProject, selectedActivity, showSkinSelector, playingGame, onOpenHandled]);
 
@@ -98,7 +161,7 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   };
 
   const handleStartGame = (skin) => {
-      setPlayingGame(buildGameData(selectedActivity, skin));
+      requestLaunch('game', buildGameData(selectedActivity, skin));
       setShowSkinSelector(false);
   };
 
@@ -107,10 +170,10 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
       setSelectedActivity(null);
       setShowSkinSelector(false);
       if (tappingProject) {
-          setPlayingGame(buildTappingProjectData(tappingProject));
+          requestLaunch('game', buildTappingProjectData(tappingProject));
           return;
       }
-      setPlayingGame(buildGameData(tappingActivity, tappingActivity));
+      requestLaunch('game', buildGameData(tappingActivity, tappingActivity));
   };
 
   if (playingGame) {
@@ -124,18 +187,18 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   }
 
   if (playingMultiplicationRpg) {
-      return <MultiplicationRpg onExit={() => setPlayingMultiplicationRpg(false)} />;
+      return <MultiplicationRpg onExit={() => setPlayingMultiplicationRpg(false)} learningContext={selectedLearningContext} />;
   }
 
   if (playingWispguard) {
-      return <WispguardGame onExit={() => setPlayingWispguard(false)} />;
+      return <WispguardGame onExit={() => setPlayingWispguard(false)} learningContext={selectedLearningContext} />;
   }
 
   if (playingMonsterTamer) {
       return (
           <MonsterTamerGame
             onExit={() => setPlayingMonsterTamer(false)}
-            learningContext={buildGameLearningContext(learningModules, user)}
+            learningContext={selectedLearningContext || learningContext}
           />
       );
   }
@@ -143,9 +206,17 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   return (
     <div className="flex flex-col gap-4 animate-in">
         <h2 className="text-base md:text-xl font-black text-slate-800 uppercase px-1 md:px-4">Mes Jeux Assignés</h2>
+        <div className="mx-1 grid gap-4 md:mx-4 md:grid-cols-2">
+            <button type="button" onClick={() => requestLaunch('learning-game', 'zombie')} className="rounded-[26px] border-4 border-lime-500 bg-gradient-to-br from-slate-950 via-emerald-950 to-lime-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
+                <div className="text-5xl">🧟</div><div className="mt-3 text-3xl font-black uppercase">Zombie</div><div className="mt-2 font-bold text-lime-100">Les parties de la fiche deviennent les niveaux du jeu.</div>
+            </button>
+            <button type="button" onClick={() => requestLaunch('learning-game', 'starship')} className="rounded-[26px] border-4 border-cyan-400 bg-gradient-to-br from-slate-950 via-indigo-950 to-cyan-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
+                <div className="text-5xl">🚀</div><div className="mt-3 text-3xl font-black uppercase">Starship</div><div className="mt-2 font-bold text-cyan-100">Révise les QCM de chaque partie dans l’espace.</div>
+            </button>
+        </div>
         <button
             type="button"
-            onClick={() => setPlayingMonsterTamer(true)}
+            onClick={() => requestLaunch('monster')}
             className="mx-1 md:mx-4 overflow-hidden rounded-[26px] border-4 border-blue-800 bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-800 px-6 py-6 text-left shadow-xl shadow-blue-200/60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
         >
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -162,7 +233,7 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
         </button>
         <button
             type="button"
-            onClick={() => setPlayingWispguard(true)}
+            onClick={() => requestLaunch('wispguard')}
             className="mx-1 md:mx-4 overflow-hidden rounded-[26px] border-4 border-amber-700 bg-gradient-to-br from-slate-950 via-emerald-950 to-amber-900 px-6 py-6 text-left shadow-xl shadow-amber-200/60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
         >
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -179,7 +250,7 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
         </button>
         <button
             type="button"
-            onClick={() => setPlayingMultiplicationRpg(true)}
+            onClick={() => requestLaunch('multiplication')}
             className="mx-1 md:mx-4 overflow-hidden rounded-[26px] border-4 border-emerald-800 bg-gradient-to-br from-emerald-700 via-emerald-600 to-lime-600 px-6 py-6 text-left shadow-xl shadow-emerald-200/70 transition-transform hover:scale-[1.01] active:scale-[0.99]"
         >
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -212,6 +283,44 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
             </button>
         )}
         <DashboardFolder items={activities} type="game" onSelect={handleSelectActivity} />
+
+        {pendingLaunch && (
+            <div className="fixed inset-0 z-[11000] grid place-items-center bg-slate-950/90 p-4 backdrop-blur-md">
+                <section className="w-full max-w-5xl rounded-[30px] bg-white p-5 shadow-2xl md:p-8">
+                    <div className="mb-6 flex items-start justify-between gap-4">
+                        <div>
+                            <div className="text-xs font-black uppercase tracking-[.2em] text-indigo-600">Révision du jeu</div>
+                            <h3 className="mt-1 text-2xl font-black text-slate-900 md:text-3xl">Choisis une matière puis un chapitre</h3>
+                            <p className="mt-2 font-bold text-slate-500">Uniquement les chapitres actifs de ton niveau qui contiennent un apprentissage.</p>
+                        </div>
+                        <button type="button" onClick={() => setPendingLaunch(null)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate-100 text-xl font-black">✕</button>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                        {[
+                            ['HISTOIRE', '🏰', 'from-amber-500 to-orange-600'],
+                            ['GEOGRAPHIE', '🌍', 'from-emerald-500 to-cyan-600'],
+                            ['EMC', '⚖️', 'from-indigo-500 to-violet-600']
+                        ].map(([key, icon, colors]) => (
+                            <div key={key} className="overflow-hidden rounded-3xl border-2 border-slate-100 bg-slate-50">
+                                <div className={`bg-gradient-to-br ${colors} p-5 text-white`}>
+                                    <div className="text-4xl">{icon}</div>
+                                    <div className="mt-2 text-xl font-black">{key === 'GEOGRAPHIE' ? 'GÉOGRAPHIE' : key}</div>
+                                    <div className="text-xs font-bold opacity-80">{chapterGroups[key].length} chapitre{chapterGroups[key].length > 1 ? 's' : ''}</div>
+                                </div>
+                                <div className="grid max-h-72 gap-2 overflow-y-auto p-3">
+                                    {chapterGroups[key].map((chapter) => (
+                                        <button key={chapter.id} type="button" onClick={() => launchWithChapter(chapter)} className="rounded-2xl border-2 border-white bg-white p-3 text-left text-sm font-black text-slate-800 shadow-sm transition hover:border-indigo-400 hover:text-indigo-700">
+                                            {chapter.title}
+                                        </button>
+                                    ))}
+                                    {!chapterGroups[key].length && <div className="p-4 text-center text-sm font-bold text-slate-400">Aucun chapitre disponible</div>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            </div>
+        )}
 
         {showSkinSelector && (
             <div className="fixed inset-0 z-[10000] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6">
