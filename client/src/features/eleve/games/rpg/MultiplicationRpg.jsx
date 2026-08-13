@@ -9,6 +9,7 @@ const POINTS_PER_ENEMY = 20;
 
 export default function MultiplicationRpg({ onExit, learningContext = { lessons: [] } }) {
   const canvasHostRef = useRef(null);
+  const screenShieldRef = useRef(null);
   const gameRef = useRef(null);
   const sceneRef = useRef(null);
   const questionOpenRef = useRef(false);
@@ -28,16 +29,16 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   useEffect(() => { scoreRef.current = score; }, [score]);
 
   useEffect(() => {
-    const shell = canvasHostRef.current?.closest('.edu-rpg-shell');
-    if (!shell) return undefined;
+    const shield = screenShieldRef.current;
+    if (!shield) return undefined;
     const block = (event) => event.preventDefault();
     const captureOptions = { capture: true };
     const touchOptions = { capture: true, passive: false };
-    ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.addEventListener(type, block, captureOptions));
-    ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shell.addEventListener(type, block, touchOptions));
+    ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shield.addEventListener(type, block, captureOptions));
+    ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shield.addEventListener(type, block, touchOptions));
     return () => {
-      ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.removeEventListener(type, block, captureOptions));
-      ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shell.removeEventListener(type, block, touchOptions));
+      ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shield.removeEventListener(type, block, captureOptions));
+      ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shield.removeEventListener(type, block, touchOptions));
     };
   }, []);
 
@@ -409,7 +410,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   };
 
   return (
-    <div className="edu-rpg-shell" onContextMenu={blockGameGesture} onSelectStart={blockGameGesture}>
+    <div className="edu-rpg-shell">
       <header className="edu-rpg-header">
         <div>
           <div className="edu-rpg-kicker">Aventure éducative · QCM du chapitre</div>
@@ -423,9 +424,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <button type="button" className="edu-rpg-exit" onClick={onExit}>✕ Quitter</button>
       </header>
 
-      <main className="edu-rpg-stage" onContextMenu={(event) => event.preventDefault()}>
+      <main className="edu-rpg-stage">
         <div ref={canvasHostRef} className="edu-rpg-canvas" />
-        <div className="edu-rpg-screen-shield" aria-hidden="true" onPointerDown={blockGameGesture} onPointerMove={blockGameGesture} onPointerUp={blockGameGesture} onContextMenu={blockGameGesture} />
+        <div ref={screenShieldRef} className="edu-rpg-screen-shield" aria-hidden="true" />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
         <div className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
