@@ -7,6 +7,25 @@ import { installDevCompletionHorn } from './devCompletionHorn';
 
 installDevCompletionHorn();
 
+const versionBadge = document.createElement('div');
+versionBadge.textContent = `VERSION ${__APP_COMMIT__}`;
+versionBadge.setAttribute('aria-label', `Version déployée ${__APP_COMMIT__}`);
+Object.assign(versionBadge.style, {
+  position: 'fixed',
+  top: '0',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  zIndex: '2147483647',
+  padding: '3px 9px',
+  borderRadius: '0 0 8px 8px',
+  background: '#020617',
+  color: '#facc15',
+  font: '800 10px/1.2 monospace',
+  letterSpacing: '.06em',
+  pointerEvents: 'none'
+});
+document.body.appendChild(versionBadge);
+
 // 🛡️ AIRBAG DE SÉCURITÉ (Error Boundary)
 class SafetyNet extends React.Component {
   constructor(props) {

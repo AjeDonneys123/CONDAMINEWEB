@@ -10,6 +10,10 @@
   padding: 14px;
   color: #fff;
   background: radial-gradient(circle at 50% 0, #225f91 0, #142b50 46%, #081427 100%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .monster-tamer-header,
@@ -35,7 +39,7 @@
 .monster-tamer-actions .is-exit { color: #fff; background: #dc2626; }
 .monster-tamer-help { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-bottom: 10px; }
 .monster-tamer-help span { padding: 7px 12px; border: 1px solid #ffffff24; border-radius: 999px; color: #dbeafe; background: #02061799; font-size: 12px; }
-.monster-tamer-stage { position: relative; width: min(1500px, 100%); min-height: 0; height: 100%; margin: auto; overflow: hidden; border: 4px solid #fde047; border-radius: 20px; background: #000; box-shadow: 0 20px 70px #000a; }
+.monster-tamer-stage { position: relative; width: min(1500px, 100%); min-height: 0; height: 100%; margin: auto; overflow: hidden; border: 4px solid #fde047; border-radius: 20px; background: #000; box-shadow: 0 20px 70px #000a; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 .monster-tamer-stage iframe { display: block; width: 100%; height: 100%; border: 0; background: #000; }
 .monster-tamer-start { position: absolute; inset: 50% auto auto 50%; display: grid; justify-items: center; gap: 5px; min-width: 260px; transform: translate(-50%, -50%); font-size: 20px; }
 .monster-tamer-start span { font-size: 42px; }

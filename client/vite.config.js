@@ -3,9 +3,14 @@ import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execSync } from 'node:child_process'
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url))
 const gamesRoot = path.resolve(clientDir, '../../CONDAMINE-GAMES')
+const appCommit = String(process.env.VERCEL_GIT_COMMIT_SHA || (() => {
+  try { return execSync('git rev-parse --short HEAD', { cwd: path.resolve(clientDir, '..') }).toString().trim() }
+  catch { return 'local' }
+})()).slice(0, 8)
 const localGameFiles = () => ({
   name: 'condamine-local-games',
   configureServer(server) {
@@ -38,6 +43,9 @@ const localGameFiles = () => ({
 })
 
 export default defineConfig({
+  define: {
+    __APP_COMMIT__: JSON.stringify(appCommit)
+  },
   envDir: '..',
   plugins: [localGameFiles(), react()],
   server: {
