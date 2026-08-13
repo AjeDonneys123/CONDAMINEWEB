@@ -1,5 +1,6 @@
 // @signatures: ProfAuth, login, config, finder, googleLogin, googleCallback, toggleTestMode
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { Teacher, Admin, Student, Classroom } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
@@ -8,6 +9,26 @@ const fetch = require('node-fetch');
 const { encryptApiKey, getTeacherAiConfig, isCentralAiAccount } = require('../core/profAiKeys');
 const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
+const visitorPassword = () => String(process.env.VISITOR_PROF_PASSWORD || 'spartacus');
+const visitorSecret = () => String(process.env.VISITOR_SESSION_SECRET || process.env.JWT_SECRET || process.env.SESSION_SECRET || visitorPassword()).trim();
+const signVisitorSession = () => {
+    const secret = visitorSecret();
+    if (!secret) throw new Error('VISITOR_SESSION_SECRET manquant');
+    const payload = Buffer.from(JSON.stringify({ kind: 'visitor-prof', exp: Date.now() + 12 * 60 * 60 * 1000 })).toString('base64url');
+    const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+};
+const verifyVisitorSession = (token = '') => {
+    const secret = visitorSecret();
+    const [payload, signature] = String(token || '').split('.');
+    if (!secret || !payload || !signature) return false;
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return false;
+    try {
+        const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+        return data.kind === 'visitor-prof' && Number(data.exp || 0) > Date.now();
+    } catch (_) { return false; }
+};
 const isNamedJpVuillet = (user) => {
     if (!user) return false;
     const first = String(user.firstName || '').trim().toLowerCase();
@@ -135,6 +156,23 @@ router.post('/login', async (req, res) => {
         }
     }
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });
+});
+
+router.post('/visitor-login', (req, res) => {
+    const entered = Buffer.from(String(req.body?.password || ''));
+    const expected = Buffer.from(visitorPassword());
+    const valid = entered.length === expected.length && crypto.timingSafeEqual(entered, expected);
+    if (!valid) return res.status(401).json({ ok: false, message: 'Mot de passe visiteur incorrect.' });
+    try {
+        return res.json({ ok: true, token: signVisitorSession() });
+    } catch (error) {
+        return res.status(503).json({ ok: false, message: 'Accès visiteur non configuré côté serveur.' });
+    }
+});
+
+router.post('/visitor-validate', (req, res) => {
+    const ok = verifyVisitorSession(req.body?.token);
+    return res.status(ok ? 200 : 401).json({ ok });
 });
 
 router.post('/password/reset-self', async (req, res) => {

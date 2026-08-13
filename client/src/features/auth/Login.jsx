@@ -171,10 +171,14 @@ export default function Login({ onLoginSuccess }) {
     e.preventDefault();
     const visitorTyped = clean(inputLast) === 'prof' && !clean(inputFirst);
     if (selectedProfile?.type === 'visitor-teacher' || visitorTyped) {
-      if (password !== 'spartacus') {
-        alert('Mot de passe visiteur incorrect.');
-        return;
-      }
+      if (!password.trim()) return alert('Saisissez le mot de passe visiteur.');
+      setLoading(true);
+      const response = await fetch('/api/auth/visitor-login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password })
+      }).catch(() => null);
+      const result = await response?.json().catch(() => ({}));
+      setLoading(false);
+      if (!response?.ok || !result?.token) return alert(result?.message || 'Mot de passe visiteur incorrect.');
       const visitorUser = {
         id: 'visitor-prof-preview',
         _id: 'visitor-prof-preview',
@@ -183,6 +187,7 @@ export default function Login({ onLoginSuccess }) {
         role: 'visitor-prof',
         isVisitorTeacher: true,
         isVisitorPreview: true,
+        visitorSessionToken: result.token,
         currentClass: '',
         behaviorRecords: [],
         assignedGroups: []

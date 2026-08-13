@@ -68,6 +68,16 @@ export default function App() {
     const saved = localStorage.getItem('player');
     if (saved) {
         const parsed = JSON.parse(saved);
+        if (parsed?.isVisitorTeacher === true) {
+          fetch('/api/auth/visitor-validate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: parsed.visitorSessionToken || '' })
+          }).then((res) => {
+            if (!res.ok) throw new Error('Session visiteur invalide');
+            setUser({ ...parsed, id: parsed._id || parsed.id });
+          }).catch(() => localStorage.removeItem('player'));
+          return;
+        }
         setUser({ ...parsed, id: parsed._id || parsed.id });
     }
   }, []);
