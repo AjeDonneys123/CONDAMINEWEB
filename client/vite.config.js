@@ -44,7 +44,7 @@ const localGameFiles = () => ({
 
 export default defineConfig({
   define: {
-    __APP_COMMIT__: JSON.stringify(appCommit)
+    'import.meta.env.VITE_APP_COMMIT': JSON.stringify(appCommit)
   },
   envDir: '..',
   plugins: [localGameFiles(), react()],

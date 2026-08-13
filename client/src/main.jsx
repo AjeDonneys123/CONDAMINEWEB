@@ -8,8 +8,9 @@ import { installDevCompletionHorn } from './devCompletionHorn';
 installDevCompletionHorn();
 
 const versionBadge = document.createElement('div');
-versionBadge.textContent = `VERSION ${__APP_COMMIT__}`;
-versionBadge.setAttribute('aria-label', `Version déployée ${__APP_COMMIT__}`);
+const appCommit = import.meta.env.VITE_APP_COMMIT || 'inconnue';
+versionBadge.textContent = `VERSION ${appCommit}`;
+versionBadge.setAttribute('aria-label', `Version déployée ${appCommit}`);
 Object.assign(versionBadge.style, {
   position: 'fixed',
   top: '0',
