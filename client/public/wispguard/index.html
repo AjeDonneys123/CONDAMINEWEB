@@ -12,11 +12,12 @@
         width: 100vw;
         overflow: hidden;
         background: #d7d7d7;
+        -webkit-touch-callout: none;
       }
       .mobile-game-controls { display: none; }
       @media (pointer: coarse), (max-width: 900px) {
         .mobile-game-controls { position: fixed; z-index: 9999; inset: 0; display: block; pointer-events: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-        .mobile-dpad, .mobile-actions { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); display: grid; gap: 5px; padding: 5px; pointer-events: auto; }
+        .mobile-dpad, .mobile-actions { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); display: grid; gap: 5px; padding: 5px; pointer-events: auto; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
         .mobile-dpad { left: max(8px, env(safe-area-inset-left)); grid-template: repeat(2, 46px) / repeat(3, 46px); }
         .mobile-dpad button:nth-child(1) { grid-column: 2; }
         .mobile-dpad button:nth-child(2) { grid-area: 2 / 1; }
@@ -32,7 +33,7 @@
         .mobile-game-controls button:active { background: rgba(255,255,255,.34); transform: scale(.94); }
       }
     </style>
-		<script type="module" crossorigin src="/wispguard/assets/js/index-ZzCEqrhG.js"></script>
+		<script type="module" crossorigin src="/wispguard/assets/js/index-BoH4-B0X.js"></script>
 	</head>
 	<body>
 		<div class="container" id="game-container"></div>
