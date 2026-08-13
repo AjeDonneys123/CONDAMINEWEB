@@ -377,8 +377,19 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     else virtualKeysRef.current.delete(code);
   };
 
+  const blockGameGesture = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const pressControl = (event, code) => {
+    blockGameGesture(event);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setVirtualKey(code, true);
+  };
+
   return (
-    <div className="edu-rpg-shell" onContextMenu={(event) => event.preventDefault()} onSelect={(event) => event.preventDefault()}>
+    <div className="edu-rpg-shell" onContextMenu={blockGameGesture} onSelectStart={blockGameGesture}>
       <header className="edu-rpg-header">
         <div>
           <div className="edu-rpg-kicker">Aventure éducative · QCM du chapitre</div>
@@ -398,11 +409,11 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
         <div className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
-            {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <button key={code} type="button" onPointerDown={(event) => { event.preventDefault(); setVirtualKey(code, true); }} onPointerUp={() => setVirtualKey(code, false)} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</button>)}
+            {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <div key={code} role="button" aria-label={code} className="edu-rpg-control" onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey(code, false); }} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</div>)}
           </div>
           <div className="edu-rpg-actions">
-            <button type="button" className="shoot" onPointerDown={(event) => { event.preventDefault(); setVirtualKey('Space', true); }} onPointerUp={() => setVirtualKey('Space', false)} onPointerCancel={() => setVirtualKey('Space', false)}>🏹<small>TIRER</small></button>
-            <button type="button" className="reload" onClick={openQuestion}>↻<small>RECHARGER</small></button>
+            <div role="button" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey('Space', false); }} onPointerCancel={() => setVirtualKey('Space', false)}><span aria-hidden="true">➤</span><small>TIRER</small></div>
+            <div role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); openQuestion(); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
           </div>
         </div>
 
