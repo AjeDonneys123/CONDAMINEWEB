@@ -10,6 +10,8 @@ const POINTS_PER_ENEMY = 20;
 export default function MultiplicationRpg({ onExit, learningContext = { lessons: [] } }) {
   const canvasHostRef = useRef(null);
   const screenShieldRef = useRef(null);
+  const mobileControlsRef = useRef(null);
+  const quizRef = useRef(null);
   const gameRef = useRef(null);
   const sceneRef = useRef(null);
   const questionOpenRef = useRef(false);
@@ -41,6 +43,41 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shield.removeEventListener(type, block, touchOptions));
     };
   }, []);
+
+  useEffect(() => {
+    const targets = [mobileControlsRef.current, quizRef.current].filter(Boolean);
+    if (!targets.length) return undefined;
+    const block = (event) => event.preventDefault();
+    const handleControlTouchStart = (event) => {
+      event.preventDefault();
+      const control = event.target.closest?.('[data-game-code]');
+      if (!control) return;
+      const code = control.dataset.gameCode;
+      if (code === 'Reload') openQuestion();
+      else setVirtualKey(code, true);
+    };
+    const handleControlTouchEnd = (event) => {
+      event.preventDefault();
+      virtualKeysRef.current.clear();
+    };
+    const touchOptions = { passive: false };
+    targets.forEach((target) => {
+      target.addEventListener('touchstart', target === mobileControlsRef.current ? handleControlTouchStart : block, touchOptions);
+      if (target === mobileControlsRef.current) target.addEventListener('touchend', handleControlTouchEnd, touchOptions);
+      target.addEventListener('touchmove', block, touchOptions);
+      target.addEventListener('contextmenu', block);
+      target.addEventListener('selectstart', block);
+      target.addEventListener('dragstart', block);
+    });
+    return () => targets.forEach((target) => {
+      target.removeEventListener('touchstart', target === mobileControlsRef.current ? handleControlTouchStart : block, touchOptions);
+      if (target === mobileControlsRef.current) target.removeEventListener('touchend', handleControlTouchEnd, touchOptions);
+      target.removeEventListener('touchmove', block, touchOptions);
+      target.removeEventListener('contextmenu', block);
+      target.removeEventListener('selectstart', block);
+      target.removeEventListener('dragstart', block);
+    });
+  }, [question]);
 
   const quizQuestions = useMemo(() => (learningContext?.lessons || []).flatMap((lesson) =>
     (lesson?.quiz || []).map((row) => ({ ...row, lessonTitle: lesson.title }))
@@ -429,22 +466,22 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <div ref={screenShieldRef} className="edu-rpg-screen-shield" aria-hidden="true" />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
-        <div className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
+        <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
-            {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <div key={code} role="button" aria-label={code} className="edu-rpg-control" onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey(code, false); }} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</div>)}
+            {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <div key={code} data-game-code={code} role="button" aria-label={code} className="edu-rpg-control" onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey(code, false); }} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</div>)}
           </div>
           <div className="edu-rpg-actions">
-            <div role="button" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey('Space', false); }} onPointerCancel={() => setVirtualKey('Space', false)}><span aria-hidden="true">➤</span><small>TIRER</small></div>
-            <div role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); openQuestion(); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
+            <div data-game-code="Space" role="button" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey('Space', false); }} onPointerCancel={() => setVirtualKey('Space', false)}><span aria-hidden="true">➤</span><small>TIRER</small></div>
+            <div data-game-code="Reload" role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); openQuestion(); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
           </div>
         </div>
 
         {question && !gameOver && (
           <div className="edu-rpg-quiz-backdrop">
-            <div className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
+            <div ref={quizRef} className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
               <div className="edu-rpg-quiz-label">Recharge · question {quizStepRef.current + 1}/4</div>
               <h2>{question.question}</h2>
-              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onClick={() => validateAnswer(index)}>{choice}</button>)}</div>
+              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onPointerUp={(event) => { event.preventDefault(); validateAnswer(index); }}>{choice}</button>)}</div>
               {feedback && <p>{feedback.message}</p>}
             </div>
           </div>
