@@ -42,6 +42,7 @@ router.get('/list/:studentId', async (req, res) => {
 
         addClassKey(student.currentClass);
         addClassId(student.classId);
+        const studentLevel = academicLevel(student.currentClass);
 
         const lookupIds = [];
         if (student.classId && mongoose.Types.ObjectId.isValid(String(student.classId))) {
@@ -75,7 +76,9 @@ router.get('/list/:studentId', async (req, res) => {
                 const targetId = String(course?.targetClassroomId || '').trim();
                 const targetName = course?.targetClassroomName || classNameById.get(targetId) || '';
                 if (isVisitor) return Boolean(visitorLevel) && academicLevel(targetName) === visitorLevel;
-                return classIds.has(targetId) || classKeys.has(normalizeClassKey(targetName));
+                const exactClassMatch = classIds.has(targetId) || classKeys.has(normalizeClassKey(targetName));
+                const sameAcademicLevel = Boolean(studentLevel) && academicLevel(targetName) === studentLevel;
+                return exactClassMatch || sameAcademicLevel;
             })
             .map((course) => ({
                 _id: String(course._id),
