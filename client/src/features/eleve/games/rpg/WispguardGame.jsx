@@ -85,7 +85,9 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'key-state', code, key, pressed }, '*');
     if (pressed) focusGame();
   };
-  const startTouchKey = (code, key, repeat = false) => {
+  const startTouchKey = (event, code, key, repeat = false) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     const previous = touchRepeatRef.current;
     if (previous?.code) setGameKeyState(previous.code, previous.key, false);
     if (repeat) {
@@ -93,7 +95,8 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
       setGameKeyState(code, key, true);
     } else pressGameKey(code, key);
   };
-  const stopTouchKey = () => {
+  const stopTouchKey = (event) => {
+    event?.preventDefault();
     const held = touchRepeatRef.current;
     if (held?.code) setGameKeyState(held.code, held.key, false);
     touchRepeatRef.current = null;
@@ -307,7 +310,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   };
 
   return (
-    <div className="wispguard-shell">
+    <div className="wispguard-shell" onContextMenu={(event) => event.preventDefault()}>
       <main className="wispguard-stage" onClick={focusGame}>
         <button type="button" className="wispguard-exit-simple" onClick={(event) => { event.stopPropagation(); onExit(); }}>✕</button>
         {spriteNotice && <div className="wispguard-sprite-notice">{spriteNotice}</div>}
@@ -329,16 +332,16 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
 
       <div className="wispguard-mobile-controls" aria-label="Commandes tactiles">
         <div className="wispguard-dpad">
-          <button onPointerDown={() => startTouchKey('ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>▲</button>
-          <button onPointerDown={() => startTouchKey('ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>◀</button>
-          <button onPointerDown={() => startTouchKey('ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>▼</button>
-          <button onPointerDown={() => startTouchKey('ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>▶</button>
+          <button onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
+          <button onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
+          <button onPointerDown={(event) => startTouchKey(event, 'ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▼</button>
+          <button onPointerDown={(event) => startTouchKey(event, 'ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▶</button>
         </div>
         <div className="wispguard-touch-actions">
-          <button className="attack" onPointerDown={() => pressGameKey('KeyZ', 'z')}>Z<small>ÉPÉE</small></button>
-          <button className="lift" onPointerDown={() => pressGameKey('KeyX', 'x')}>X<small>PRENDRE</small></button>
-          <button className="interact" onPointerDown={() => pressGameKey('Enter', 'Enter')}>OK<small>VALIDER</small></button>
-          <button className="help" onPointerDown={() => pressGameKey('Space', ' ')}>★<small>QUESTION</small></button>
+          <button className="attack" onPointerDown={(event) => startTouchKey(event, 'KeyZ', 'z')}>Z<small>ÉPÉE</small></button>
+          <button className="lift" onPointerDown={(event) => startTouchKey(event, 'KeyX', 'x')}>X<small>PRENDRE</small></button>
+          <button className="interact" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')}>OK<small>VALIDER</small></button>
+          <button className="help" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')}>★<small>QUESTION</small></button>
         </div>
       </div>
 
