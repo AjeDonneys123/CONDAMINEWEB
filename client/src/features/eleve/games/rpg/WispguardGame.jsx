@@ -2,12 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import './WispguardGame.css';
 import { gameUrl } from './gameHosting';
 
-const createQuestion = () => {
-  const left = 2 + Math.floor(Math.random() * 10);
-  const right = 2 + Math.floor(Math.random() * 10);
-  return { left, right, expected: left * right };
-};
-
 const MAGE_POSE_LABELS = [
   'Bas · préparation', 'Bas · énergie', 'Bas · tir',
   'Haut · préparation', 'Haut · énergie', 'Haut · tir',
@@ -15,7 +9,7 @@ const MAGE_POSE_LABELS = [
   'Gauche · préparation', 'Gauche · énergie', 'Gauche · tir',
 ];
 
-export default function WispguardGame({ onExit }) {
+export default function WispguardGame({ onExit, learningContext = { lessons: [] } }) {
   const frameRef = useRef(null);
   const spriteInputRef = useRef(null);
   const spriteSheetInputRef = useRef(null);
@@ -81,7 +75,11 @@ export default function WispguardGame({ onExit }) {
   };
 
   const openBonusQuestion = () => {
-    setQuestion(createQuestion());
+    const questions = (learningContext?.lessons || []).flatMap((lesson) => lesson?.quiz || []);
+    const nextQuestion = questions.length
+      ? questions[Math.floor(Math.random() * questions.length)]
+      : { unavailable: true, question: 'Ce chapitre ne contient pas encore de QCM.' };
+    setQuestion(nextQuestion);
     setAnswer('');
     setQuestionState('answer');
     sendToGame('quiz-open');
@@ -96,7 +94,7 @@ export default function WispguardGame({ onExit }) {
 
   const checkAnswer = (event) => {
     event.preventDefault();
-    if (Number(answer) === question?.expected) {
+    if (Number(answer) === Number(question?.correctIndex)) {
       setQuestionState('choose');
       return;
     }
@@ -474,23 +472,30 @@ export default function WispguardGame({ onExit }) {
             {questionState === 'answer' && (
               <form onSubmit={checkAnswer}>
                 <div className="wispguard-quiz-icon">🧙‍♂️</div>
-                <div className="wispguard-quiz-kicker">Le sage peut t’aider</div>
-                <h2>{question.left} × {question.right} = ?</h2>
-                <input
-                  autoFocus
-                  inputMode="numeric"
-                  value={answer}
-                  onChange={(event) => setAnswer(event.target.value.replace(/[^0-9-]/g, ''))}
-                  aria-label="Ta réponse"
-                />
-                <button type="submit" disabled={!answer}>Valider</button>
+                <div className="wispguard-quiz-kicker">QCM · {learningContext?.activeChapterTitle || 'Chapitre choisi'}</div>
+                <h2>{question.question}</h2>
+                {question.unavailable ? (
+                  <button type="button" onClick={closeBonusQuestion}>Retour au donjon</button>
+                ) : (
+                  <div className="grid gap-3">
+                    {(question.choices || []).map((choice, index) => (
+                      <button
+                        key={`${choice}-${index}`}
+                        type="button"
+                        onClick={() => setAnswer(String(index))}
+                        className={`rounded-xl border-2 px-4 py-3 text-left font-black transition ${answer === String(index) ? 'border-amber-400 bg-amber-100 text-amber-950' : 'border-slate-200 bg-white text-slate-800 hover:border-amber-300'}`}
+                      >{String.fromCharCode(65 + index)}. {choice}</button>
+                    ))}
+                    <button type="submit" disabled={answer === ''} className="rounded-xl bg-emerald-600 px-5 py-3 font-black text-white disabled:opacity-40">Valider</button>
+                  </div>
+                )}
               </form>
             )}
             {questionState === 'wrong' && (
               <div className="wispguard-quiz-result">
                 <div className="wispguard-quiz-icon">🕸️</div>
                 <h2>Pas de bonus cette fois</h2>
-                <p>La réponse était {question.expected}. Tu pourras redemander de l’aide.</p>
+                <p>La bonne réponse était « {question.choices?.[question.correctIndex]} ». Tu pourras redemander de l’aide.</p>
                 <button type="button" onClick={closeBonusQuestion}>Retour au donjon</button>
               </div>
             )}

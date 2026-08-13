@@ -36,8 +36,11 @@ export default function ClassroomManager({ globalClassId, user }) {
     const lastVoiceValueRef = useRef({ PLAN: '', LIST: '' });
     const actionHoldTimerRef = useRef(null);
     const actionHoldModeRef = useRef('idle');
+    const behaviorRepeatDelayRef = useRef(null);
     const behaviorRepeatIntervalRef = useRef(null);
     const behaviorRepeatStudentRef = useRef(null);
+    const behaviorRepeatDidRepeatRef = useRef(false);
+    const behaviorRepeatBusyRef = useRef(false);
     
     const myId = user ? (user._id || user.id) : null;
     const isPunishmentLate = (student) => {
@@ -68,7 +71,12 @@ export default function ClassroomManager({ globalClassId, user }) {
             
             if (res.ok) {
                 const data = await res.json();
-                setStudents(Array.isArray(data) ? data : []);
+                const nextStudents = Array.isArray(data) ? data : [];
+                setStudents(nextStudents);
+                setSelectedStudent((current) => {
+                    if (!current?._id) return current;
+                    return nextStudents.find((student) => String(student._id) === String(current._id)) || current;
+                });
             }
         } catch(e) { console.error(e); }
         setLoading(false);
@@ -209,16 +217,24 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDragOver = (e, x, y) => { e.preventDefault(); setDragOverCell(`${x}-${y}`); };
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
-    const getMyStats = (stu) => { if (!stu.behaviorRecords) return { baseScore: 15, crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { baseScore: 15, crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
+    const getMyStats = (stu) => { if (!stu.behaviorRecords) return { scores: [] }; return stu.behaviorRecords.find(r => String(r.teacherId) === String(myId)) || { scores: [] }; };
+    const getStudentGrades = (stu) => {
+        const stats = getMyStats(stu);
+        if (Array.isArray(stats.scores) && stats.scores.length) return stats.scores;
+        return [{ id: 'legacy', value: Number(stats.baseScore ?? 15) + (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0) }];
+    };
+    const getSelectedGrade = (stu) => {
+        const grades = getStudentGrades(stu);
+        const selected = grades.find(g => String(g.id) === String(getMyStats(stu).selectedScoreId || ''));
+        return selected || grades[grades.length - 1];
+    };
     const getStudentScore = (stu) => {
         const stats = getMyStats(stu);
-        return Number(stats.baseScore ?? 15) + (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0);
+        return Number(getSelectedGrade(stu)?.value ?? 15);
     };
     const formatScore = (value) => {
         const n = Number(value || 0);
-        if (n > 0) return `+${Number.isInteger(n) ? n : n.toFixed(1)}`;
-        if (Number.isInteger(n)) return String(n);
-        return n.toFixed(1);
+        return Number.isInteger(n) ? String(n) : n.toFixed(1);
     };
     const showScoreEvolutionOnBoard = async (student, delta) => {
         if (!globalClassId || !student?._id) return;
@@ -283,8 +299,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const addClassScorePoint = async () => {
         const visibleStudents = students.filter((s) => s?._id);
         for (const student of visibleStudents) {
-            await addBehavior(student._id, 'BONUS', { suppressLiveAlert: true }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
-            await addBehavior(student._id, 'BONUS', { suppressLiveAlert: true }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
+            await addBehavior(student._id, 'ADJUST_SCORE', { delta: 1 }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
         }
         await updateClassPoints(1);
         try {
@@ -448,11 +463,16 @@ export default function ClassroomManager({ globalClassId, user }) {
         return keepOpen;
     };
 
-    const stopBehaviorRepeat = (closeDrawer = true) => {
+    const stopBehaviorRepeat = (closeDrawer = false) => {
         const hadActiveRepeat = Boolean(
-            behaviorRepeatIntervalRef.current
+            behaviorRepeatDelayRef.current
+            || behaviorRepeatIntervalRef.current
             || behaviorRepeatStudentRef.current
         );
+        if (behaviorRepeatDelayRef.current) {
+            clearTimeout(behaviorRepeatDelayRef.current);
+            behaviorRepeatDelayRef.current = null;
+        }
         if (behaviorRepeatIntervalRef.current) {
             clearInterval(behaviorRepeatIntervalRef.current);
             behaviorRepeatIntervalRef.current = null;
@@ -461,16 +481,61 @@ export default function ClassroomManager({ globalClassId, user }) {
         if (closeDrawer && hadActiveRepeat) setSelectedStudent(null);
     };
 
-    const startBehaviorRepeat = (studentId, type) => {
-        if (!studentId) return;
+    const startBehaviorRepeat = (studentId, scoreId, delta) => {
+        if (!studentId || !scoreId) return;
         stopBehaviorRepeat(false);
-        behaviorRepeatStudentRef.current = studentId;
-        addBehavior(studentId, type, null, { keepDrawerOpen: true });
-        behaviorRepeatIntervalRef.current = setInterval(() => {
+        behaviorRepeatDidRepeatRef.current = false;
+        behaviorRepeatStudentRef.current = { studentId, scoreId, delta };
+        const adjust = async () => {
+            if (!behaviorRepeatStudentRef.current || behaviorRepeatBusyRef.current) return;
+            behaviorRepeatBusyRef.current = true;
+            try {
+                await addBehavior(
+                    studentId,
+                    'ADJUST_SCORE',
+                    { scoreId, delta },
+                    { keepDrawerOpen: true, silentReload: true, skipFlash: true }
+                );
+            } finally {
+                behaviorRepeatBusyRef.current = false;
+            }
+        };
+        // Un clic bref est traite par onClick. La repetition ne commence que
+        // lorsque le bouton est reellement maintenu.
+        behaviorRepeatDelayRef.current = setTimeout(() => {
+            behaviorRepeatDelayRef.current = null;
             if (!behaviorRepeatStudentRef.current) return;
-            addBehavior(studentId, type, null, { keepDrawerOpen: true });
-        }, 1000);
+            behaviorRepeatDidRepeatRef.current = true;
+            adjust();
+            behaviorRepeatIntervalRef.current = setInterval(adjust, 550);
+        }, 450);
     };
+
+    const scoreHoldProps = (student, delta) => ({
+        onPointerDown: (event) => {
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            startBehaviorRepeat(student?._id, getSelectedGrade(student)?.id, delta);
+        },
+        onPointerUp: () => stopBehaviorRepeat(false),
+        onPointerCancel: () => stopBehaviorRepeat(false),
+        onLostPointerCapture: () => stopBehaviorRepeat(false),
+        onClick: (event) => {
+            event.preventDefault();
+            if (behaviorRepeatDidRepeatRef.current) {
+                behaviorRepeatDidRepeatRef.current = false;
+                return;
+            }
+            const scoreId = getSelectedGrade(student)?.id;
+            if (!student?._id || !scoreId) return;
+            addBehavior(
+                student._id,
+                'ADJUST_SCORE',
+                { scoreId, delta },
+                { keepDrawerOpen: true }
+            );
+        },
+        onContextMenu: (event) => event.preventDefault()
+    });
 
     const saveNicknameInline = () => {
         if (!selectedStudent?._id) return;
@@ -493,24 +558,52 @@ export default function ClassroomManager({ globalClassId, user }) {
         const skipFlash = Boolean(options.skipFlash);
         const silentReload = Boolean(options.silentReload);
         const targetStudent = students.find((s) => String(s._id) === String(sid));
-        if (!skipFlash && targetStudent && ['CROSS', 'BONUS', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type)) {
-            const deltaByType = { CROSS: -1, BONUS: 0.5, REMOVE_CROSS: 1, REMOVE_BONUS: -0.5 };
-            showScoreEvolutionOnBoard(targetStudent, deltaByType[type] || 0);
-            if (type === 'CROSS') trackPenaltyWarning(sid, targetStudent);
+        if (!skipFlash && targetStudent && type === 'ADJUST_SCORE') {
+            showScoreEvolutionOnBoard(targetStudent, Number(extra?.delta || 0));
         }
 
-        // Optimistic UI Update
-        setStudents(prev => prev.map(s => {
-            if (s._id !== sid) return s;
+        const optimisticScoreId = type === 'ADD_SCORE'
+            ? `score-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+            : '';
+        const updateStudentLocally = (s) => {
+            if (!s || String(s._id) !== String(sid)) return s;
             const newS = { ...s, behaviorRecords: [...(s.behaviorRecords || [])] };
-            let rIdx = newS.behaviorRecords.findIndex(r => r.teacherId === myId);
-            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, baseScore: 15, crosses: 0, bonuses: 0, weeksToRedemption: 3 }); rIdx = newS.behaviorRecords.length - 1; }
+            let rIdx = newS.behaviorRecords.findIndex(r => String(r.teacherId) === String(myId));
+            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, scores: [] }); rIdx = newS.behaviorRecords.length - 1; }
             
             const r = { ...newS.behaviorRecords[rIdx] };
-            if (type === 'CROSS') r.crosses++;
-            if (type === 'BONUS') r.bonuses++;
-            if (type === 'REMOVE_CROSS') r.crosses = Math.max(0, r.crosses - 1);
-            if (type === 'REMOVE_BONUS') r.bonuses = Math.max(0, r.bonuses - 1);
+            let scores = Array.isArray(r.scores) && r.scores.length
+                ? r.scores.map(g => ({ ...g }))
+                : [{ id: 'legacy', value: Number(r.baseScore ?? 15) + Number(r.bonuses || 0) * .5 - Number(r.crosses || 0) }];
+            if (type === 'ADD_SCORE') {
+                const g = { id: optimisticScoreId, value: 15 };
+                scores.push(g);
+                r.selectedScoreId = g.id;
+            }
+            if (type === 'SELECT_SCORE') {
+                const selected = scores.find(g => String(g.id) === String(extra?.scoreId));
+                r.selectedScoreId = selected?.id || scores[scores.length - 1].id;
+            }
+            if (type === 'ADJUST_SCORE') {
+                const requestedId = extra?.scoreId || r.selectedScoreId || scores[scores.length - 1].id;
+                const selected = scores.find(g => String(g.id) === String(requestedId)) || scores[scores.length - 1];
+                scores = scores.map(g => String(g.id) === String(selected.id)
+                    ? { ...g, value: Math.max(0, Math.min(20, Number(g.value || 0) + Number(extra?.delta || 0))) }
+                    : g
+                );
+                r.selectedScoreId = selected.id;
+            }
+            if (type === 'DELETE_SCORE' && scores.length > 1) {
+                const requestedId = extra?.scoreId || r.selectedScoreId || scores[scores.length - 1].id;
+                const remaining = scores.filter(g => String(g.id) !== String(requestedId));
+                if (remaining.length) {
+                    scores = remaining;
+                    r.selectedScoreId = remaining[remaining.length - 1].id;
+                }
+            }
+            if (type === 'TOGGLE_FORCED_SIX') r.forcedSix = !r.forcedSix;
+            if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !r.workIncomplete;
+            r.scores = scores;
             if (type === 'SAVE_NICKNAME') newS.nickname = String(extra || '').trim();
             
             // Mise à jour visuelle immédiate pour la punition supprimée
@@ -520,16 +613,14 @@ export default function ClassroomManager({ globalClassId, user }) {
 
             newS.behaviorRecords[rIdx] = r;
             return newS;
-        }));
-        if (type === 'SAVE_NICKNAME') {
-            setSelectedStudent(prev => prev && String(prev._id) === String(sid)
-                ? { ...prev, nickname: String(extra || '').trim() }
-                : prev
-            );
-        }
+        };
+
+        // Le plan et le tiroir utilisent deux états distincts : les deux doivent
+        // être mis à jour pour que la note sélectionnée réagisse immédiatement.
+        setStudents(prev => prev.map(updateStudentLocally));
+        setSelectedStudent(prev => updateStudentLocally(prev));
         if (selectedStudent && String(selectedStudent._id) === String(sid)) {
-            if (type === 'CROSS') setActionFlash('cross');
-            if (type === 'BONUS') setActionFlash('bonus');
+            if (type === 'ADJUST_SCORE') setActionFlash(Number(extra?.delta || 0) < 0 ? 'cross' : 'bonus');
         }
 
         try {
@@ -541,8 +632,11 @@ export default function ClassroomManager({ globalClassId, user }) {
 
             if (res.ok) {
                 if (!silentReload) await loadData();
-                const shouldCloseDrawer = ['SAVE_NOTE', 'REMOVE_PUNISHMENT', 'CROSS', 'BONUS', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type) && !keepDrawerOpen;
+                const shouldCloseDrawer = ['SAVE_NOTE', 'REMOVE_PUNISHMENT'].includes(type) && !keepDrawerOpen;
                 if (shouldCloseDrawer) setSelectedStudent(null);
+            } else {
+                const payload = await res.json().catch(() => ({}));
+                throw new Error(payload?.error || `Erreur serveur (${res.status})`);
             }
         } catch(e) { console.error("Erreur API", e); loadData(); }
     };
@@ -588,7 +682,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
                                 <div className="sc-realizations sc-realizations-inline">
@@ -598,10 +692,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 </div>
                                 <div className="sc-avatar-row">
                                     <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
-                                    {getMyStats(student).crosses > 0 && <div className="sc-badge sc-badge-inline">⏳ {getCrossCountdownLabel(student)}</div>}
                                 </div>
-                                <div className="sc-name">{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
-                                <div className={`sc-score ${getStudentScore(student) >= 0 ? 'positive' : 'negative'}`}>{formatScore(getStudentScore(student))}</div>
+                                <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
+                                <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className="sc-score positive">{formatScore(g.value)}</span>)}{getMyStats(student).forcedSix && <span className="sc-score forced">6</span>}</div>
                             </div>
                         ) : ( <div className={`grid-cell-empty ${isOver ? 'drag-over' : ''}`}>+</div> )}
                     </div>
@@ -681,7 +774,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     style={{ gridColumn: col + 1, gridRow: row + 1 }}
                                 >
                                     <div
-                                        className={`student-card-drag alpha-grid-card ${student.myNote ? 'has-note' : ''} ${stats.crosses >= 3 ? 'punished' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`}
+                                        className={`student-card-drag alpha-grid-card ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`}
                                         onClick={() => handleOpenStudent(student)}
                                     >
                                         <div className="alpha-grid-topline">
@@ -690,8 +783,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                                             {aTotals.learning > 0 && <span className="alpha-mini-stat learning">{aStats.learning}</span>}
                                         </div>
                                         <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
-                                        <div className="sc-name">{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
-                                        <div className={`sc-score ${getStudentScore(student) >= 0 ? 'positive' : 'negative'}`}>{formatScore(getStudentScore(student))}</div>
+                                        <div className={`sc-name ${stats.workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
+                                        <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className="sc-score positive">{formatScore(g.value)}</span>)}{stats.forcedSix && <span className="sc-score forced">6</span>}</div>
                                     </div>
                                 </div>
                             );
@@ -737,8 +830,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 >
                                     {isPlacementActive ? 'OK' : 'Placer'}
                                 </button>
-                                <button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>-1</button>
-                                <button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>+0.5</button>
+                                <button className="btn-list-action btn-x" {...scoreHoldProps(s, -0.5)}>-0.5</button>
+                                <button className="btn-list-action btn-v" {...scoreHoldProps(s, 0.5)}>+0.5</button>
                                 <button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button>
                             </div>
                         </div>
@@ -861,7 +954,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     autoFocus
                                 />
                             ) : (
-                                <span className="drawer-name">{getDisplayName(selectedStudent)} {selectedStudent.lastName}</span>
+                                <span className={`drawer-name ${getMyStats(selectedStudent).workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(selectedStudent)} {selectedStudent.lastName}</span>
                             )}
                             <div className="drawer-header-actions">
                                 <button className="act-btn btn-pen" onClick={() => setIsEditingNickname(true)} title="Modifier surnom">✏️</button>
@@ -873,46 +966,19 @@ export default function ClassroomManager({ globalClassId, user }) {
                             <strong>{getStudentGptCode(selectedStudent)}</strong>
                         </div>
                         <div className="drawer-grid-complex">
+                            <div className="drawer-grade-list">
+                                {getStudentGrades(selectedStudent).map(g => <button key={g.id} className={`drawer-grade-chip ${String(getSelectedGrade(selectedStudent)?.id) === String(g.id) ? 'selected' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'SELECT_SCORE', {scoreId:g.id}, {keepDrawerOpen:true})}>{formatScore(g.value)}</button>)}
+                                {getMyStats(selectedStudent).forcedSix && <span className="drawer-grade-chip forced">6</span>}
+                            </div>
+                            <button className="act-btn btn-note" onClick={() => addBehavior(selectedStudent._id, 'ADD_SCORE', null, {keepDrawerOpen:true})}>+ AJOUTER NOTE</button>
                             <button
-                                className="act-btn btn-cross"
-                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'CROSS')}
-                                onPointerUp={() => stopBehaviorRepeat(true)}
-                                onPointerLeave={() => stopBehaviorRepeat(true)}
-                                onPointerCancel={() => stopBehaviorRepeat(true)}
-                                onClick={(e) => e.preventDefault()}
-                            >
-                                -1
-                            </button>
-                            <button
-                                className="act-btn btn-bonus"
-                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'BONUS')}
-                                onPointerUp={() => stopBehaviorRepeat(true)}
-                                onPointerLeave={() => stopBehaviorRepeat(true)}
-                                onPointerCancel={() => stopBehaviorRepeat(true)}
-                                onClick={(e) => e.preventDefault()}
-                            >
-                                +0.5
-                            </button>
-                            <button
-                                className="act-btn btn-rem-cross"
-                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'REMOVE_CROSS')}
-                                onPointerUp={() => stopBehaviorRepeat(true)}
-                                onPointerLeave={() => stopBehaviorRepeat(true)}
-                                onPointerCancel={() => stopBehaviorRepeat(true)}
-                                onClick={(e) => e.preventDefault()}
-                            >
-                                ANNULER -1
-                            </button>
-                            <button
-                                className="act-btn btn-rem-bonus"
-                                onPointerDown={() => startBehaviorRepeat(selectedStudent._id, 'REMOVE_BONUS')}
-                                onPointerUp={() => stopBehaviorRepeat(true)}
-                                onPointerLeave={() => stopBehaviorRepeat(true)}
-                                onPointerCancel={() => stopBehaviorRepeat(true)}
-                                onClick={(e) => e.preventDefault()}
-                            >
-                                ANNULER +0.5
-                            </button>
+                                className="act-btn btn-note"
+                                disabled={getStudentGrades(selectedStudent).length <= 1}
+                                onClick={() => addBehavior(selectedStudent._id, 'DELETE_SCORE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}
+                            >SUPPRIMER NOTE</button>
+                            {[-0.5,0.5].map(delta => <button key={delta} className={`act-btn ${delta < 0 ? 'btn-cross' : 'btn-bonus'}`} {...scoreHoldProps(selectedStudent, delta)}>{delta > 0 ? '+' : ''}{delta}</button>)}
+                            <button className={`act-btn ${getMyStats(selectedStudent).forcedSix ? 'grade-toggle active' : 'grade-toggle'}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_FORCED_SIX', null, {keepDrawerOpen:true})}>{getMyStats(selectedStudent).forcedSix ? 'SUPPRIMER' : 'METTRE 6'}</button>
+                            <button className={`act-btn ${getMyStats(selectedStudent).workIncomplete ? 'grade-toggle active' : 'grade-toggle'}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_INCOMPLETE', null, {keepDrawerOpen:true})}>{getMyStats(selectedStudent).workIncomplete ? 'TRAVAIL COMPLET' : 'TRAVAIL INCOMPLET'}</button>
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
                             
                             {/* BOUTON REMPLACÉ : SUPPRIMER PUNITION */}

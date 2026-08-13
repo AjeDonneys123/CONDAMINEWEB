@@ -44,7 +44,7 @@
 .bt-title.red { color: #ef4444; }
 .bt-title.green { color: #10b981; }
 
-/* CROIX ET ÉTOILES VISUELLES */
+/* EMPLACEMENTS VISUELS */
 .bt-icons-container {
     display: flex;
     gap: 10px;
@@ -63,13 +63,6 @@
     justify-content: center;
     font-size: 1.2rem;
     transition: all 0.3s;
-}
-
-.bt-icon-slot.filled-cross {
-    background: #fee2e2;
-    border-color: #ef4444;
-    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .bt-icon-slot.filled-star {

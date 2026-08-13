@@ -258,7 +258,7 @@ export default function StudioDistributionSidebar({
 
                     <div className="text-[10px] font-black text-slate-500 uppercase leading-5 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-2">
                         Classes ciblées automatiquement : {availableClasses.map(c => c.name).join(', ') || 'Aucune'}.
-                        Élèves assignés automatiquement quand ils atteignent 3 croix.
+                        Élèves assignés automatiquement lorsqu’une punition leur est attribuée.
                     </div>
                 </div>
 

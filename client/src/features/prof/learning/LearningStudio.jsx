@@ -690,6 +690,31 @@ const splitGeneralSheetIntoParts = (plainText = '', richHtml = '') => {
     };
 };
 
+// La fiche générale reste un véritable élément de l'apprentissage. Les parties
+// générées gardent un lien vers elle afin qu'une correction dans une petite
+// fiche soit immédiatement répercutée dans la fiche complète.
+const rebuildGeneralSheetMaster = (master = {}, steps = []) => {
+    const children = (Array.isArray(steps) ? steps : [])
+        .filter((step) => step?.type === 'sheet'
+            && String(step?.generalSheetParentId || '') === String(master?.id || ''))
+        .sort((a, b) => Number(a?.generalSheetPartIndex || 0) - Number(b?.generalSheetPartIndex || 0));
+    if (!children.length) return master;
+    const documentTitle = String(master?.generalSheetDocumentTitle || master?.title || 'Fiche générale').trim();
+    const lessonText = children.map((step) => String(step?.sheetText || '').trim()).filter(Boolean).join('\n');
+    const lessonHtml = children.map((step) => String(step?.sheetTextHtml || '').trim()
+        || `<div>${escapeGeneralSheetHtml(step?.sheetText || '')}</div>`).join('');
+    const quizText = String(master?.generalSheetQuizText || '').trim();
+    const quizHtml = String(master?.generalSheetQuizHtml || '').trim();
+    return {
+        ...master,
+        sheetText: [documentTitle, lessonText, quizText].filter(Boolean).join('\n'),
+        sheetTextHtml: `<div>${escapeGeneralSheetHtml(documentTitle)}</div>${lessonHtml}${quizHtml}`,
+        // Force l'éditeur de la fiche générale à refléter immédiatement les
+        // changements faits dans une sous-fiche, même s'il a déjà été monté.
+        generalSheetSyncVersion: Number(master?.generalSheetSyncVersion || 0) + 1
+    };
+};
+
 const sheetToRevisionQuestion = (sheet = null, requestedKind = 'full') => {
     const fullRevisionText = sheetToFillBlankText(sheet);
     const sourceText = String(sheet?.sheetText || fullRevisionText || '').replace(/\r/g, '');
@@ -1090,6 +1115,23 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         }]
                     };
                 });
+
+                // Une sous-fiche issue d'une Superfiche ne remplace jamais sa
+                // source. Elle met à jour la partie correspondante de la fiche
+                // générale, laquelle reste visible dans l'introduction.
+                const parentId = String(steps[idx]?.generalSheetParentId || '');
+                if (parentId) {
+                    const masterIndex = steps.findIndex((candidate) => candidate?.type === 'sheet'
+                        && candidate?.isGeneralSheetMaster === true
+                        && String(candidate?.id || '') === parentId);
+                    if (masterIndex >= 0) {
+                        steps[masterIndex] = rebuildGeneralSheetMaster(steps[masterIndex], steps);
+                        sheetDraftsRef.current.set(parentId, {
+                            text: steps[masterIndex].sheetText,
+                            html: steps[masterIndex].sheetTextHtml
+                        });
+                    }
+                }
             }
             return { ...prev, steps };
         });
@@ -4806,6 +4848,22 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
         const planSectionId = uid();
         sections.push({ id: planSectionId, name: 'Introduction', order: 0, visible: true });
+        const allGeneralBlocks = generalSheetHtmlToBlocks(generalSheetHtml);
+        const qcmBlockIndex = allGeneralBlocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block?.text || '').trim()));
+        const generalQuizBlocks = qcmBlockIndex >= 0 ? allGeneralBlocks.slice(qcmBlockIndex) : [];
+        const masterSheet = {
+            ...emptyStep('sheet'),
+            sectionId: planSectionId,
+            title: `Fiche générale · ${parsed.documentTitle}`,
+            sheetText: String(generalSheetText || '').trim(),
+            sheetTextHtml: String(generalSheetHtml || '').trim(),
+            generalSheetGenerated: true,
+            isGeneralSheetMaster: true,
+            generalSheetDocumentTitle: parsed.documentTitle,
+            generalSheetQuizText: generalQuizBlocks.map((block) => block.text).join('\n').trim(),
+            generalSheetQuizHtml: generalQuizBlocks.map((block) => block.html).join('')
+        };
+        steps.push(masterSheet);
         const planLines = parsed.parts.map((part, index) => `${toRomanPartNumber(index + 1)} ${part.title}`);
         const planSheet = {
             ...emptyStep('sheet'),
@@ -4828,7 +4886,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 title: `Partie ${romanPart} · ${part.title}`,
                 sheetText: part.text,
                 sheetTextHtml: part.html,
-                generalSheetGenerated: true
+                generalSheetGenerated: true,
+                generalSheetParentId: masterSheet.id,
+                generalSheetPartIndex: index
             };
             steps.push(partSheet);
             addLinkedQuestion(partSheet, 'full');
@@ -5877,13 +5937,16 @@ Ne rien écrire après la dernière réponse du dernier QCM.`;
                                                 type="button"
                                                 className="rounded-xl border-2 border-red-300 bg-red-50 px-5 py-3 text-sm font-black uppercase text-red-700 shadow-sm transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                                                 onClick={confirmClearSheetStep}
-                                                disabled={!String(step.sheetUrl || '').trim() && !String(step.sheetText || '').trim()}
+                                                disabled={step.isGeneralSheetMaster === true
+                                                    || (!String(step.sheetUrl || '').trim() && !String(step.sheetText || '').trim())}
                                             >
-                                                🗑️ Supprimer la fiche
+                                                {step.isGeneralSheetMaster === true
+                                                    ? '🔒 Fiche générale conservée'
+                                                    : '🗑️ Supprimer la fiche'}
                                             </button>
                                         </div>
                                         <SheetRichTextEditor
-                                            key={step.id}
+                                            key={`${step.id}:${step.generalSheetSyncVersion || 0}`}
                                             html={step.sheetTextHtml || ''}
                                             plainText={step.sheetText || ''}
                                             onChange={({ html, text }) => {

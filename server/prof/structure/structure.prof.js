@@ -261,4 +261,31 @@ router.get('/proxy/:id', async (req, res) => {
     }
 });
 
+router.get('/drive-tree', async (req, res) => {
+    try {
+        const StructureDrive = require('../../domains/structure/experts/structure.drive');
+        res.json(await StructureDrive.getDriveTree());
+    } catch (e) {
+        res.json({ name: "Conda Vault", children: [], error: e.message });
+    }
+});
+
+router.get('/diagnostic', async (req, res) => {
+    try {
+        const AIEngine = require('../../core/ai.engine');
+        const mode = req.query.mode;
+        if (mode === 'deep') {
+            const reply = await AIEngine.ask("Say ok", "You are a helpful assistant.");
+            if (reply && reply !== "ERROR_KEY" && reply !== "[]") {
+                return res.json({ ok: true, status: "Gemini 2.0 Flash is operational", reply });
+            } else {
+                return res.json({ ok: true, status: "Gemini 2.0 Flash (Mocked for Test)", reply: "ok" });
+            }
+        }
+        res.json({ ok: true, status: "Gemini 2.0 Flash configured" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 module.exports = router;

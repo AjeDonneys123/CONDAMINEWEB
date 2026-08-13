@@ -346,6 +346,40 @@ router.post('/behavior', async (req, res) => {
         applyCrossDecay(s.behaviorRecords || []);
         let r = s.behaviorRecords.find(x => x.teacherId && String(x.teacherId) === String(teacherId));
         if (!r) { s.behaviorRecords.push({ teacherId, baseScore: 15, crosses: 0, bonuses: 0, nextCrossRemovalAt: null }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
+        const ensureScores = () => {
+            if (!Array.isArray(r.scores) || r.scores.length === 0) {
+                const legacy = Math.max(0, Math.min(20, Number(r.baseScore ?? 15) + Number(r.bonuses || 0) * 0.5 - Number(r.crosses || 0)));
+                r.scores = [{ id: `note-${Date.now()}`, value: legacy, createdAt: new Date() }];
+                r.selectedScoreId = r.scores[0].id;
+            }
+            return r.scores;
+        };
+        if (type === 'ADD_SCORE') {
+            const scores = ensureScores();
+            const score = { id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, value: Math.max(0, Math.min(20, Number(extraData?.value ?? 15))), createdAt: new Date() };
+            scores.push(score); r.selectedScoreId = score.id;
+        }
+        if (type === 'SELECT_SCORE') { ensureScores(); r.selectedScoreId = String(extraData?.scoreId || extraData || ''); }
+        if (type === 'ADJUST_SCORE') {
+            const scores = ensureScores();
+            const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
+            const score = scores.find(x => String(x.id) === scoreId) || scores[scores.length - 1];
+            score.value = Math.max(0, Math.min(20, Number(score.value || 0) + Number(extraData?.delta || 0)));
+            r.selectedScoreId = score.id;
+        }
+        if (type === 'DELETE_SCORE') {
+            const scores = ensureScores();
+            if (scores.length > 1) {
+                const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
+                const remaining = scores.filter(x => String(x.id) !== scoreId);
+                if (remaining.length > 0 && remaining.length < scores.length) {
+                    r.scores = remaining;
+                    r.selectedScoreId = remaining[remaining.length - 1].id;
+                }
+            }
+        }
+        if (type === 'TOGGLE_FORCED_SIX') r.forcedSix = !Boolean(r.forcedSix);
+        if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !Boolean(r.workIncomplete);
         if (type === 'CROSS') {
             const hadNoCross = Number(r.crosses || 0) <= 0;
             r.crosses = Number(r.crosses || 0) + 1;

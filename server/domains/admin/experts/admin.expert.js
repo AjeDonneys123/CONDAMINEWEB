@@ -19,7 +19,8 @@ const AdminExpert = {
             'AcademicYear', 'Admin', 'Classroom', 'Subject', 
             'Teacher', 'Student', 'Enrollment', 'Chapter', 
             'Homework', 'Submission', 'GameLevel', 'GameProgress', 
-            'ScanSession', 'StudioProject'
+            'ScanSession', 'StudioProject', 'LearningModule',
+            'Fiche', 'ControlRecovery'
         ];
         
         const dump = {};

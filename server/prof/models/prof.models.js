@@ -85,6 +85,10 @@ const StudentSchema = new mongoose.Schema({
         bonuses: { type: Number, default: 0 },
         weeksToRedemption: { type: Number, default: 3 },
         nextCrossRemovalAt: { type: Date, default: null }
+        ,scores: { type: [{ id: String, value: { type: Number, default: 15 }, createdAt: { type: Date, default: Date.now } }], default: [] }
+        ,selectedScoreId: { type: String, default: '' }
+        ,forcedSix: { type: Boolean, default: false }
+        ,workIncomplete: { type: Boolean, default: false }
     }],
     teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
     punishmentStatus: { type: String, default: 'NONE' },

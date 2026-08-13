@@ -23,54 +23,22 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 
   // --- LOGIQUE STATS ---
   const behaviorRecords = Array.isArray(user.behaviorRecords) ? user.behaviorRecords : [];
-  const primaryRecord = behaviorRecords
-    .map((r) => ({
-      ...r,
-      _crosses: Number(r?.crosses || 0),
-      _bonuses: Number(r?.bonuses || 0),
-      _nextTs: r?.nextCrossRemovalAt ? new Date(r.nextCrossRemovalAt).getTime() : null
-    }))
-    .sort((a, b) => {
-      // Priorité au même affichage que la carte prof: croix d'abord, puis bonus.
-      if (b._crosses !== a._crosses) return b._crosses - a._crosses;
-      if (b._bonuses !== a._bonuses) return b._bonuses - a._bonuses;
-      const aTs = Number.isFinite(a._nextTs) ? a._nextTs : Number.MAX_SAFE_INTEGER;
-      const bTs = Number.isFinite(b._nextTs) ? b._nextTs : Number.MAX_SAFE_INTEGER;
-      return aTs - bTs;
-    })[0] || { _crosses: 0, _bonuses: 0, weeksToRedemption: 3, _nextTs: null };
-
-  const crosses = Math.max(0, Math.min(3, Number.isFinite(primaryRecord._crosses) ? primaryRecord._crosses : 0));
-  const weeksLeft = Number(primaryRecord.weeksToRedemption || 3);
-  const nextCrossRemovalAt = Number.isFinite(primaryRecord._nextTs) ? primaryRecord._nextTs : null;
-  
-  const totalBonuses = Math.max(0, Number.isFinite(primaryRecord._bonuses) ? primaryRecord._bonuses : 0);
-  const currentBonuses = totalBonuses % 4; // 0, 1, 2, 3
-  const nextAPlus = 4 - currentBonuses;
-
-  const crossVisual = "❌".repeat(crosses) + ".".repeat(3 - crosses);
-  const bonusVisual = "🌟".repeat(currentBonuses) + ".".repeat(4 - currentBonuses);
+  const primaryRecord = [...behaviorRecords].reverse().find((r) => Array.isArray(r?.scores) && r.scores.length)
+    || behaviorRecords[behaviorRecords.length - 1]
+    || {};
+  const grades = Array.isArray(primaryRecord.scores) && primaryRecord.scores.length
+    ? primaryRecord.scores
+    : [{ id: 'legacy', value: Number(primaryRecord.baseScore ?? 15) + Number(primaryRecord.bonuses || 0) * 0.5 - Number(primaryRecord.crosses || 0) }];
+  const visibleGrades = primaryRecord.forcedSix
+    ? [...grades, { id: 'forced-six', value: 6, forced: true }]
+    : grades;
 
   useEffect(() => {
-    const needsCrossTimer = crosses > 0 && nextCrossRemovalAt;
     const needsPunishTimer = user.punishmentStatus === 'PENDING' && user.punishmentDueDate;
-    if (!needsCrossTimer && !needsPunishTimer) return;
+    if (!needsPunishTimer) return;
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [crosses, nextCrossRemovalAt, user.punishmentStatus, user.punishmentDueDate]);
-
-  const crossCountdown = useMemo(() => {
-    if (!(crosses > 0 && nextCrossRemovalAt)) return null;
-    const target = nextCrossRemovalAt;
-    if (!target || Number.isNaN(target)) return null;
-    const diff = Math.max(0, target - nowMs);
-    const totalSec = Math.floor(diff / 1000);
-    const days = Math.floor(totalSec / 86400);
-    const hours = Math.floor((totalSec % 86400) / 3600);
-    const mins = Math.floor((totalSec % 3600) / 60);
-    const secs = totalSec % 60;
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${pad(days)}j:${pad(hours)}h:${pad(mins)}:${pad(secs)}`;
-  }, [crosses, nextCrossRemovalAt, nowMs]);
+  }, [user.punishmentStatus, user.punishmentDueDate]);
 
   const punishmentCountdown = useMemo(() => {
     if (!(user.punishmentStatus === 'PENDING' && user.punishmentDueDate)) return null;
@@ -180,20 +148,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 
         {/* Stats à Droite (Simple et discret) */}
         <div className="mini-stats-box">
-            {/* LIGNE CROIX */}
-            <div className="mini-stat-row row-cross">
-                <span className="ms-label">CROIX:</span>
-                <span className="ms-visual">{crosses > 0 ? crossVisual : "..."}</span>
-                {crosses > 0 && crossCountdown && <span className="ms-countdown">{crossCountdown}</span>}
-                {crosses > 0 && !crossCountdown && <span className="ms-info">(Annul. {weeksLeft} sem.)</span>}
+            <div className="mini-stat-row row-grades">
+                <span className="ms-label">NOTES :</span>
+                <span className="student-grade-list">{visibleGrades.map((grade) => <span key={grade.id} className={`student-grade-chip ${grade.forced ? 'forced' : ''}`}>{Number(grade.value).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}</span>)}</span>
             </div>
-            
-            {/* LIGNE BONUS */}
-            <div className="mini-stat-row row-bonus">
-                <span className="ms-label">BONUS:</span>
-                <span className="ms-visual">{currentBonuses > 0 ? bonusVisual : "...."}</span>
-                <span className="ms-info">({nextAPlus} avant A+)</span>
-            </div>
+            {primaryRecord.workIncomplete && <div className="student-incomplete">TRAVAIL INCOMPLET</div>}
         </div>
       </div>
     </div>

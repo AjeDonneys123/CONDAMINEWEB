@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 
-// Schéma pour les croix/bonus
+// Ancien historique comportemental conservé uniquement pour compatibilité des données.
 const BehaviorRecordSchema = new mongoose.Schema({
     teacherId: { type: String, required: true },
     baseScore: { type: Number, default: 15 },
@@ -9,7 +9,11 @@ const BehaviorRecordSchema = new mongoose.Schema({
     bonuses: { type: Number, default: 0 },
     lastCrossDate: { type: Date, default: null },
     weeksToRedemption: { type: Number, default: 3 },
-    nextCrossRemovalAt: { type: Date, default: null }
+    nextCrossRemovalAt: { type: Date, default: null },
+    scores: { type: [{ id: String, value: { type: Number, default: 15 }, createdAt: { type: Date, default: Date.now } }], default: [] },
+    selectedScoreId: { type: String, default: '' },
+    forcedSix: { type: Boolean, default: false },
+    workIncomplete: { type: Boolean, default: false }
 }, { _id: false });
 
 // Schéma pour les notes prof
