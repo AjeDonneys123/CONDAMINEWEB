@@ -90,6 +90,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
         create(data = {}) {
           sceneRef.current = this;
+          this.isQuizPaused = false;
+          this.isChangingMap = false;
+          this.physics.resume();
           this.currentMapKey = data.mapKey === 'forest-map-2' ? 'forest-map-2' : 'forest-map';
           this.ammo = Number.isFinite(data.ammo) ? data.ammo : MAX_ARROWS;
           setArrows(this.ammo);
@@ -373,6 +376,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   };
 
   const restart = () => {
+    virtualKeysRef.current.clear();
     setHearts(3);
     setScore(0);
     scoreRef.current = 0;
@@ -415,6 +419,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
       <main className="edu-rpg-stage" onContextMenu={(event) => event.preventDefault()}>
         <div ref={canvasHostRef} className="edu-rpg-canvas" />
+        <div className="edu-rpg-screen-shield" aria-hidden="true" onPointerDown={blockGameGesture} onPointerMove={blockGameGesture} onPointerUp={blockGameGesture} onContextMenu={blockGameGesture} />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
         <div className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
