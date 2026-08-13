@@ -378,7 +378,18 @@ router.post('/behavior', async (req, res) => {
                 }
             }
         }
-        if (type === 'TOGGLE_FORCED_SIX') r.forcedSix = !Boolean(r.forcedSix);
+        if (type === 'TOGGLE_FORCED_SIX') {
+            r.forcedSix = !Boolean(r.forcedSix);
+            r.forcedSixCount = r.forcedSix ? Math.max(1, Number(r.forcedSixCount || 0)) : 0;
+        }
+        if (type === 'ADD_FORCED_SIX') {
+            r.forcedSixCount = Math.max(0, Number(r.forcedSixCount || (r.forcedSix ? 1 : 0))) + 1;
+            r.forcedSix = r.forcedSixCount > 0;
+        }
+        if (type === 'REMOVE_FORCED_SIX') {
+            r.forcedSixCount = Math.max(0, Number(r.forcedSixCount || (r.forcedSix ? 1 : 0)) - 1);
+            r.forcedSix = r.forcedSixCount > 0;
+        }
         if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !Boolean(r.workIncomplete);
         if (type === 'CROSS') {
             const hadNoCross = Number(r.crosses || 0) <= 0;
@@ -423,6 +434,14 @@ router.post('/behavior', async (req, res) => {
             s.punishmentStatus = 'NONE';
             s.punishmentDueDate = null;
             resetLateMailState(s);
+        }
+        if (type === 'ADD_PUNISHMENT') {
+            const assigned = await assignPunishmentTemplate(s, teacherId);
+            if (!assigned) {
+                s.punishmentStatus = 'PENDING';
+                s.punishmentDueDate = new Date(Date.now() + PUNISHMENT_DUE_MS);
+                resetLateMailState(s);
+            }
         }
 
         if ((s.punishmentStatus === 'PENDING' || s.punishmentStatus === 'LATE') && s.punishmentDueDate) {
