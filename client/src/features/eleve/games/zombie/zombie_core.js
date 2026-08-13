@@ -1,4 +1,6 @@
 // @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
+import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
+
 export function initZombieGame(root, api, onExit) {
     const scenes = Array.isArray(api.gameData?.scenes) ? api.gameData.scenes : [];
     const scene = scenes.find((item) => Array.isArray(item?.actors) && item.actors.length) || scenes[0] || {};
@@ -91,6 +93,14 @@ export function initZombieGame(root, api, onExit) {
     };
     installSprite('.z-hero-sprite', '.z-hero-fallback', sprites.hero);
     installSprite('.z-zombie-sprite', '.z-zombie-fallback', sprites.zombie);
+    const heroImage = root.querySelector('.z-hero-sprite');
+    const zombieImage = root.querySelector('.z-zombie-sprite');
+    const heroAnimator = createStudioSpriteAnimator(heroImage, heroActor);
+    const zombieAnimator = createStudioSpriteAnimator(zombieImage, zombieActor);
+    const playHeroIdle = () => heroAnimator.play(['IDLE', 'MARCHER', 'WALK']);
+    const playZombieWalk = () => zombieAnimator.play(['AVANCER', 'MARCHER', 'WALK', 'IDLE']);
+    playHeroIdle();
+    playZombieWalk();
     const backdrop = scene?.backdrops?.[scene.currentBackdropIdx || 0]?.url || scene?.backdrops?.[0]?.url || '';
     if (backdrop) root.querySelector('#arena').style.backgroundImage = `url("${String(backdrop).replace(/["\\]/g, '\\$&')}")`;
 
@@ -167,8 +177,7 @@ export function initZombieGame(root, api, onExit) {
             // TRANSFORMATION VISUELLE BOSS
             els.zombieEmoji.innerText = "👹";
             els.zombieEmoji.style.fontSize = "7.5rem"; // +50% taille
-            const zombieImage = root.querySelector('.z-zombie-sprite');
-            if (zombieImage && sprites.boss) zombieImage.src = sprites.boss;
+            playZombieWalk();
             els.zombie.classList.add('is-boss');
             
             // RALENTISSEMENT
@@ -181,8 +190,7 @@ export function initZombieGame(root, api, onExit) {
             // RESET VISUEL
             els.zombieEmoji.innerText = "🧟";
             els.zombieEmoji.style.fontSize = "5rem";
-            const zombieImage = root.querySelector('.z-zombie-sprite');
-            if (zombieImage && sprites.zombie) zombieImage.src = sprites.zombie;
+            playZombieWalk();
             els.zombie.classList.remove('is-boss');
             
             // VITESSE NORMALE
@@ -225,12 +233,14 @@ export function initZombieGame(root, api, onExit) {
 
     const failAction = () => {
         showFeedback("RATÉ !", false);
+        zombieAnimator.play(['TAPER', 'ATTACK'], { loop: false, onComplete: playZombieWalk });
         zombiePos += 15; // Le zombie avance d'un coup
         updatePositions();
     };
 
     const fireProjectile = (isHit) => {
         isPaused = true;
+        heroAnimator.play(['TIRER', 'SHOOT', 'ATTACK'], { loop: false, onComplete: playHeroIdle });
         els.projectile.style.display = 'block';
         let projX = 10;
         const targetX = 100 - zombiePos - 10; 
@@ -243,6 +253,7 @@ export function initZombieGame(root, api, onExit) {
                 clearInterval(anim);
                 els.projectile.style.display = 'none';
                 if (isHit) {
+                    zombieAnimator.play(['TOUCHE', 'HIT', 'HURT'], { loop: false, onComplete: playZombieWalk });
                     questionStates[currentQIndex]++;
                     zombiePos = 0; 
                     updatePositions();
@@ -274,6 +285,8 @@ export function initZombieGame(root, api, onExit) {
 
             // COLLISION DU ZOMBIE
             if (zombiePos >= 85) {
+                zombieAnimator.play(['TAPER', 'ATTACK'], { loop: false, onComplete: playZombieWalk });
+                heroAnimator.play(['TOUCHE', 'HIT', 'HURT'], { loop: false, onComplete: playHeroIdle });
                 lives--;
                 els.lives.innerText = "❤️".repeat(lives);
                 
@@ -308,5 +321,5 @@ export function initZombieGame(root, api, onExit) {
     loadRound();
     loop();
 
-    return { destroy: () => cancelAnimationFrame(frameId) };
+    return { destroy: () => { cancelAnimationFrame(frameId); heroAnimator.stop(); zombieAnimator.stop(); } };
 }

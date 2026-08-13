@@ -1,5 +1,6 @@
 // @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
 import { GameProgression } from '../mainGames';
+import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
 
 export function initStarshipGame(root, api, onExit) {
     const scenes = Array.isArray(api.gameData?.scenes) ? api.gameData.scenes : [];
@@ -136,6 +137,9 @@ export function initStarshipGame(root, api, onExit) {
         shipImage.onerror = () => { shipImage.classList.remove('is-loaded'); shipFallback.style.display = ''; };
         shipImage.src = sprites.ship;
     }
+    const shipAnimator = createStudioSpriteAnimator(shipImage, playerActor);
+    const playShipFlight = () => shipAnimator.play(['FLY', 'VOLER', 'MARCHER', 'IDLE']);
+    playShipFlight();
     const backdrop = scene?.backdrops?.[scene.currentBackdropIdx || 0]?.url || scene?.backdrops?.[0]?.url || '';
     if (backdrop) {
         const stars = root.querySelector('.s-stars');
@@ -207,6 +211,7 @@ export function initStarshipGame(root, api, onExit) {
 
     const fire = () => {
         if (isPaused || questionStates[currentQIndex] >= 2) return;
+        shipAnimator.play(['SHOOT', 'TIRER', 'ATTACK'], { loop: false, onComplete: playShipFlight });
         const p = document.createElement('div');
         p.className = 's-projectile';
         p.style.left = shipX + '%';
@@ -384,5 +389,5 @@ export function initStarshipGame(root, api, onExit) {
     loadRound();
     update();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); document.removeEventListener('keydown', handleKey); } };
+    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); shipAnimator.stop(); document.removeEventListener('keydown', handleKey); } };
 }
