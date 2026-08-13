@@ -5,6 +5,7 @@ import GameLearningGuide from './GameLearningGuide';
 
 export default function MonsterTamerGame({ onExit, learningContext = { lessons: [] } }) {
   const frameRef = useRef(null);
+  const touchRepeatRef = useRef(null);
   const [started, setStarted] = useState(false);
   const [activeChapterId, setActiveChapterId] = useState('');
   const [quizQuestion, setQuizQuestion] = useState(null);
@@ -107,6 +108,32 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
     }, 80);
   };
 
+  const sendGameKey = useCallback((code, key) => {
+    frameRef.current?.contentWindow?.postMessage({
+      source: 'condamine', type: 'simulate-key', code, key
+    }, '*');
+    setStarted(true);
+    window.setTimeout(() => frameRef.current?.focus(), 20);
+  }, []);
+
+  const stopTouchKey = useCallback((event) => {
+    event?.preventDefault();
+    if (touchRepeatRef.current) window.clearInterval(touchRepeatRef.current);
+    touchRepeatRef.current = null;
+  }, []);
+
+  const startTouchKey = (event, code, key, repeat = false) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    stopTouchKey();
+    sendGameKey(code, key);
+    if (repeat) {
+      touchRepeatRef.current = window.setInterval(() => sendGameKey(code, key), 125);
+    }
+  };
+
+  useEffect(() => () => stopTouchKey(), [stopTouchKey]);
+
   // Keyboard controls key forwarding
   useEffect(() => {
     const forwardKey = (event) => {
@@ -157,7 +184,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   };
 
   return (
-    <div className="monster-tamer-shell">
+    <div className="monster-tamer-shell" onContextMenu={(event) => event.preventDefault()}>
       <header className="monster-tamer-header">
         <div>
           <div className="monster-tamer-kicker">Prototype importé · Monster Tamer</div>
@@ -253,6 +280,20 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
           </div>
         )}
       </main>
+
+      <div className="monster-tamer-mobile-controls" aria-label="Commandes tactiles">
+        <div className="monster-tamer-dpad">
+          <button type="button" aria-label="Haut" onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
+          <button type="button" aria-label="Gauche" onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
+          <button type="button" aria-label="Bas" onPointerDown={(event) => startTouchKey(event, 'ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▼</button>
+          <button type="button" aria-label="Droite" onPointerDown={(event) => startTouchKey(event, 'ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▶</button>
+        </div>
+        <div className="monster-tamer-touch-actions">
+          <button type="button" className="is-back" onPointerDown={(event) => startTouchKey(event, 'ShiftLeft', 'Shift')}>B<small>RETOUR</small></button>
+          <button type="button" className="is-action" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')}>A<small>VALIDER</small></button>
+          <button type="button" className="is-menu" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')}>MENU</button>
+        </div>
+      </div>
 
       <footer className="monster-tamer-credit">
         « Monster Tamer » par Dev Share Academy — code MIT, ressources créditées par leurs auteurs.
