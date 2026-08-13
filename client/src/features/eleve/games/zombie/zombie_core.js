@@ -97,7 +97,7 @@ export function initZombieGame(root, api, onExit) {
     const zombieImage = root.querySelector('.z-zombie-sprite');
     const heroAnimator = createStudioSpriteAnimator(heroImage, heroActor);
     const zombieAnimator = createStudioSpriteAnimator(zombieImage, zombieActor);
-    const playHeroIdle = () => heroAnimator.play(['IDLE', 'MARCHER', 'WALK']);
+    const playHeroIdle = () => heroAnimator.play(['IDLE']);
     const playZombieWalk = () => zombieAnimator.play(['AVANCER', 'MARCHER', 'WALK', 'IDLE']);
     playHeroIdle();
     playZombieWalk();
