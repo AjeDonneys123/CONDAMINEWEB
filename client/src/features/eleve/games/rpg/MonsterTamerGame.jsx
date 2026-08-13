@@ -120,6 +120,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
     event?.preventDefault();
     if (touchRepeatRef.current) window.clearInterval(touchRepeatRef.current);
     touchRepeatRef.current = null;
+    window.setTimeout(() => frameRef.current?.focus({ preventScroll: true }), 0);
   }, []);
 
   const startTouchKey = (event, code, key, repeat = false) => {
@@ -283,15 +284,15 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
 
       <div className="monster-tamer-mobile-controls" aria-label="Commandes tactiles" onContextMenu={(event) => event.preventDefault()}>
         <div className="monster-tamer-dpad">
-          <button type="button" aria-label="Haut" onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
-          <button type="button" aria-label="Gauche" onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
-          <button type="button" aria-label="Bas" onPointerDown={(event) => startTouchKey(event, 'ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▼</button>
-          <button type="button" aria-label="Droite" onPointerDown={(event) => startTouchKey(event, 'ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▶</button>
+          <button type="button" tabIndex="-1" aria-label="Haut" onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
+          <button type="button" tabIndex="-1" aria-label="Gauche" onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
+          <button type="button" tabIndex="-1" aria-label="Bas" onPointerDown={(event) => startTouchKey(event, 'ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▼</button>
+          <button type="button" tabIndex="-1" aria-label="Droite" onPointerDown={(event) => startTouchKey(event, 'ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▶</button>
         </div>
         <div className="monster-tamer-touch-actions">
-          <button type="button" className="is-back" onPointerDown={(event) => startTouchKey(event, 'ShiftLeft', 'Shift')}>B<small>RETOUR</small></button>
-          <button type="button" className="is-action" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')}>A<small>VALIDER</small></button>
-          <button type="button" className="is-menu" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')}>MENU</button>
+          <button type="button" tabIndex="-1" className="is-back" onPointerDown={(event) => startTouchKey(event, 'ShiftLeft', 'Shift')}>B<small>RETOUR</small></button>
+          <button type="button" tabIndex="-1" className="is-action" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')}>A<small>VALIDER</small></button>
+          <button type="button" tabIndex="-1" className="is-menu" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')}>MENU</button>
         </div>
       </div>
 
