@@ -310,8 +310,8 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   };
 
   return (
-    <div className="wispguard-shell" onContextMenu={(event) => event.preventDefault()}>
-      <main className="wispguard-stage" onClick={focusGame}>
+    <div className="wispguard-shell">
+      <main className="wispguard-stage" onClick={focusGame} onContextMenu={(event) => event.preventDefault()}>
         <button type="button" className="wispguard-exit-simple" onClick={(event) => { event.stopPropagation(); onExit(); }}>✕</button>
         {spriteNotice && <div className="wispguard-sprite-notice">{spriteNotice}</div>}
         <iframe
@@ -330,7 +330,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
         )}
       </main>
 
-      <div className="wispguard-mobile-controls" aria-label="Commandes tactiles">
+      <div className="wispguard-mobile-controls" aria-label="Commandes tactiles" onContextMenu={(event) => event.preventDefault()}>
         <div className="wispguard-dpad">
           <button onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
           <button onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>

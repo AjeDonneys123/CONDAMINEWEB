@@ -184,7 +184,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   };
 
   return (
-    <div className="monster-tamer-shell" onContextMenu={(event) => event.preventDefault()}>
+    <div className="monster-tamer-shell">
       <header className="monster-tamer-header">
         <div>
           <div className="monster-tamer-kicker">Prototype importé · Monster Tamer</div>
@@ -221,7 +221,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         <span><b>Maj</b> : revenir en arrière</span>
       </div>
 
-      <main className="monster-tamer-stage" onClick={focusGame}>
+      <main className="monster-tamer-stage" onClick={focusGame} onContextMenu={(event) => event.preventDefault()}>
         <iframe
           ref={frameRef}
           title="Monster Tamer"
@@ -281,7 +281,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         )}
       </main>
 
-      <div className="monster-tamer-mobile-controls" aria-label="Commandes tactiles">
+      <div className="monster-tamer-mobile-controls" aria-label="Commandes tactiles" onContextMenu={(event) => event.preventDefault()}>
         <div className="monster-tamer-dpad">
           <button type="button" aria-label="Haut" onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
           <button type="button" aria-label="Gauche" onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
