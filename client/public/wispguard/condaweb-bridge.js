@@ -19,6 +19,13 @@
 
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent || event.data?.source !== 'condamine') return;
+    if (event.data.type === 'key-state') {
+      const code = String(event.data.code || 'Space');
+      const key = String(event.data.key || (code === 'Space' ? ' ' : code.replace(/^Key/, '')));
+      const eventType = event.data.pressed === false ? 'keyup' : 'keydown';
+      window.dispatchEvent(new KeyboardEvent(eventType, { key, code, bubbles: true, cancelable: true }));
+      return;
+    }
     if (event.data.type === 'simulate-key') {
       const code = String(event.data.code || 'Space');
       const key = String(event.data.key || (code === 'Space' ? ' ' : code.replace(/^Key/, '')));

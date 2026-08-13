@@ -65,7 +65,12 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     return () => window.removeEventListener('keydown', handleSpace);
   }, [question]);
 
-  useEffect(() => () => window.clearInterval(touchRepeatRef.current), []);
+  useEffect(() => () => {
+    const held = touchRepeatRef.current;
+    if (held?.code) frameRef.current?.contentWindow?.postMessage({
+      source: 'condamine', type: 'key-state', code: held.code, key: held.key, pressed: false
+    }, '*');
+  }, []);
 
   const focusGame = () => {
     setStarted(true);
@@ -76,13 +81,21 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'simulate-key', code, key }, '*');
     focusGame();
   };
+  const setGameKeyState = (code, key, pressed) => {
+    frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'key-state', code, key, pressed }, '*');
+    if (pressed) focusGame();
+  };
   const startTouchKey = (code, key, repeat = false) => {
-    window.clearInterval(touchRepeatRef.current);
-    pressGameKey(code, key);
-    if (repeat) touchRepeatRef.current = window.setInterval(() => pressGameKey(code, key), 90);
+    const previous = touchRepeatRef.current;
+    if (previous?.code) setGameKeyState(previous.code, previous.key, false);
+    if (repeat) {
+      touchRepeatRef.current = { code, key };
+      setGameKeyState(code, key, true);
+    } else pressGameKey(code, key);
   };
   const stopTouchKey = () => {
-    window.clearInterval(touchRepeatRef.current);
+    const held = touchRepeatRef.current;
+    if (held?.code) setGameKeyState(held.code, held.key, false);
     touchRepeatRef.current = null;
   };
 
