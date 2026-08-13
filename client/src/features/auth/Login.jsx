@@ -167,18 +167,12 @@ export default function Login({ onLoginSuccess }) {
     setStudentResetNotice('');
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    const visitorTyped = clean(inputLast) === 'prof' && !clean(inputFirst);
-    if (selectedProfile?.type === 'visitor-teacher' || visitorTyped) {
-      if (!password.trim()) return alert('Saisissez le mot de passe visiteur.');
+  const handleVisitorLogin = async () => {
       setLoading(true);
-      const response = await fetch('/api/auth/visitor-login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password })
-      }).catch(() => null);
+      const response = await fetch('/api/auth/visitor-login', { method: 'POST' }).catch(() => null);
       const result = await response?.json().catch(() => ({}));
       setLoading(false);
-      if (!response?.ok || !result?.token) return alert(result?.message || 'Mot de passe visiteur incorrect.');
+      if (!response?.ok || !result?.token) return alert(result?.message || 'Accès visiteur indisponible.');
       const visitorUser = {
         id: 'visitor-prof-preview',
         _id: 'visitor-prof-preview',
@@ -194,6 +188,13 @@ export default function Login({ onLoginSuccess }) {
       };
       localStorage.setItem('player', JSON.stringify(visitorUser));
       onLoginSuccess(visitorUser);
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const visitorTyped = clean(inputLast) === 'prof' && !clean(inputFirst);
+    if (selectedProfile?.type === 'visitor-teacher' || visitorTyped) {
+      await handleVisitorLogin();
       return;
     }
     if (!selectedProfile) {
@@ -443,7 +444,7 @@ export default function Login({ onLoginSuccess }) {
             )}
           </div>
 
-          {(isTeacherProfile || selectedProfile?.type === 'visitor-teacher' || (clean(inputLast) === 'prof' && !clean(inputFirst)) || (isStudentProfile && !devFinderEnabled)) && (
+          {(isTeacherProfile || (isStudentProfile && !devFinderEnabled)) && (
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -568,15 +569,10 @@ export default function Login({ onLoginSuccess }) {
           <button
             type="button"
             className="student-password-btn"
-            onClick={() => {
-              setInputClass('');
-              setInputLast('prof');
-              setInputFirst('');
-              setSelectedProfile({ type: 'visitor-teacher', id: 'visitor-prof-preview', lastName: 'prof', firstName: '' });
-              setPassword('');
-            }}
+            onClick={handleVisitorLogin}
+            disabled={loading}
           >
-            👀 ACCÈS PROFESSEUR VISITEUR
+            {loading ? 'Ouverture...' : '👀 ACCÈS PROFESSEUR VISITEUR'}
           </button>
           {googleClientId && (
             <div className="login-google-section">

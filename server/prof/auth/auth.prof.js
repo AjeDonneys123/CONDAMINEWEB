@@ -158,11 +158,7 @@ router.post('/login', async (req, res) => {
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });
 });
 
-router.post('/visitor-login', (req, res) => {
-    const entered = Buffer.from(String(req.body?.password || ''));
-    const expected = Buffer.from(visitorPassword());
-    const valid = entered.length === expected.length && crypto.timingSafeEqual(entered, expected);
-    if (!valid) return res.status(401).json({ ok: false, message: 'Mot de passe visiteur incorrect.' });
+router.post('/visitor-login', (_req, res) => {
     try {
         return res.json({ ok: true, token: signVisitorSession() });
     } catch (error) {
