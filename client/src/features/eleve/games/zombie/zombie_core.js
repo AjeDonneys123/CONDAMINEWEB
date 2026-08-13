@@ -113,7 +113,11 @@ export function initZombieGame(root, api, onExit) {
     
     // GESTION INPUT BOSS
     els.validateBtn.onclick = () => handleInputAnswer();
-    els.input.onkeydown = (e) => { if(e.key === 'Enter') handleInputAnswer(); };
+    els.input.onkeydown = (e) => {
+        // Empêche les commandes globales des jeux de capturer la barre d'espace.
+        e.stopPropagation();
+        if(e.key === 'Enter') handleInputAnswer();
+    };
 
     const renderBars = () => {
         els.bars.innerHTML = '';
@@ -132,13 +136,11 @@ export function initZombieGame(root, api, onExit) {
     };
 
     const getNextQuestion = () => {
-        // Si la question en cours n'est pas finie (3 points), on reste dessus (ou on la remet dans le pool)
-        if (currentQIndex !== -1 && questionStates[currentQIndex] < 3) return currentQIndex;
-        
-        // Sinon on cherche une autre question non finie
         const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         if (available.length === 0) return null;
-        return available[Math.floor(Math.random() * available.length)];
+        const withoutPrevious = available.filter((index) => index !== currentQIndex);
+        const pool = withoutPrevious.length > 0 ? withoutPrevious : available;
+        return pool[Math.floor(Math.random() * pool.length)];
     };
 
     // Nettoyage pour tolérance maximale (Accents, Casse, Espaces, Ponctuation)

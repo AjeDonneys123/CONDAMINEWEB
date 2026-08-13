@@ -301,7 +301,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
         <iframe
           ref={frameRef}
           title="La légende du Gardien"
-          src="/wispguard/?v=embedded-3"
+          src="/wispguard/?v=embedded-clean-4"
           allow="autoplay; fullscreen"
           tabIndex="0"
         />

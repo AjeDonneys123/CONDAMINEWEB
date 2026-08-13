@@ -43,7 +43,7 @@
 }
 
 .wispguard-actions {
-  display: flex;
+  display: none !important;
   gap: 8px;
 }
 

@@ -285,10 +285,11 @@ export function initStarshipGame(root, api, onExit) {
     };
 
     const getNextQuestion = () => {
-        if (currentQIndex !== -1 && questionStates[currentQIndex] < 3) return currentQIndex;
         const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         if (available.length === 0) return null;
-        return available[Math.floor(Math.random() * available.length)];
+        const withoutPrevious = available.filter((index) => index !== currentQIndex);
+        const pool = withoutPrevious.length > 0 ? withoutPrevious : available;
+        return pool[Math.floor(Math.random() * pool.length)];
     };
 
     const loadRound = () => {
@@ -356,7 +357,13 @@ export function initStarshipGame(root, api, onExit) {
     };
 
     root.querySelector('.s-quit-btn').onclick = onExit;
-    const handleKey = (e) => { if (e.key === 'ArrowLeft') moveShip(-5); if (e.key === 'ArrowRight') moveShip(5); if (e.code === 'Space') { e.preventDefault(); fire(); } };
+    const handleKey = (e) => {
+        const tag = String(e.target?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+        if (e.key === 'ArrowLeft') moveShip(-5);
+        if (e.key === 'ArrowRight') moveShip(5);
+        if (e.code === 'Space') { e.preventDefault(); fire(); }
+    };
     document.addEventListener('keydown', handleKey);
     const bindHold = (id, onPress, onRelease = null) => {
         const btn = root.querySelector(id);
@@ -383,7 +390,10 @@ export function initStarshipGame(root, api, onExit) {
     bindHold('#s-mobile-right', () => moveShip(3));
     bindHold('#s-mobile-fire', () => fire());
     bindHold('#s-mobile-jump', () => fire());
-    els.bossInput.onkeydown = (e) => { if(e.key === 'Enter') handleBossInput(); };
+    els.bossInput.onkeydown = (e) => {
+        e.stopPropagation();
+        if(e.key === 'Enter') handleBossInput();
+    };
     els.nukeBtn.onclick = handleBossInput;
 
     loadRound();
