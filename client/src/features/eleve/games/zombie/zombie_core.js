@@ -321,5 +321,5 @@ export function initZombieGame(root, api, onExit) {
     loadRound();
     loop();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); heroAnimator.stop(); zombieAnimator.stop(); } };
+    return { destroy: () => { cancelAnimationFrame(frameId); heroAnimator.destroy(); zombieAnimator.destroy(); } };
 }

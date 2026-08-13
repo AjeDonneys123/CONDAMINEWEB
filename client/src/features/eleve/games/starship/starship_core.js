@@ -389,5 +389,5 @@ export function initStarshipGame(root, api, onExit) {
     loadRound();
     update();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); shipAnimator.stop(); document.removeEventListener('keydown', handleKey); } };
+    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey); } };
 }
