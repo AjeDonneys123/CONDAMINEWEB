@@ -330,21 +330,6 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
         )}
       </main>
 
-      <div className="wispguard-mobile-controls" aria-label="Commandes tactiles" onContextMenu={(event) => event.preventDefault()}>
-        <div className="wispguard-dpad">
-          <button onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
-          <button onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
-          <button onPointerDown={(event) => startTouchKey(event, 'ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▼</button>
-          <button onPointerDown={(event) => startTouchKey(event, 'ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▶</button>
-        </div>
-        <div className="wispguard-touch-actions">
-          <button className="attack" onPointerDown={(event) => startTouchKey(event, 'KeyZ', 'z')}>Z<small>ÉPÉE</small></button>
-          <button className="lift" onPointerDown={(event) => startTouchKey(event, 'KeyX', 'x')}>X<small>PRENDRE</small></button>
-          <button className="interact" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')}>OK<small>VALIDER</small></button>
-          <button className="help" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')}>★<small>QUESTION</small></button>
-        </div>
-      </div>
-
       {sheetCalibration && (
         <div className="wispguard-calibration-backdrop">
           <section className="wispguard-calibration" aria-modal="true" role="dialog">

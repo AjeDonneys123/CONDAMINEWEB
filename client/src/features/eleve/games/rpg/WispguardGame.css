@@ -175,11 +175,10 @@
 
 @media (pointer: coarse), (max-width: 900px) {
   .wispguard-shell {
-    grid-template-rows: minmax(0, 1fr) 116px;
+    grid-template-rows: minmax(0, 1fr);
     padding: max(3px, env(safe-area-inset-top)) 3px 0;
   }
   .wispguard-stage { border-width: 2px; border-radius: 12px; }
-  .wispguard-mobile-controls { display: flex; }
   .wispguard-start { min-width: 210px; font-size: 17px; }
   .wispguard-exit-simple { top: 6px; right: 6px; width: 42px; height: 42px; }
 }
