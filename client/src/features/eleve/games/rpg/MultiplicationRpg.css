@@ -1,4 +1,4 @@
-.edu-rpg-shell, .edu-rpg-shell * { -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; }
+.edu-rpg-shell, .edu-rpg-shell * { -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent !important; }
 .edu-rpg-shell { position: fixed; inset: 0; z-index: 12000; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(circle at top, #164e3c 0, #082f23 48%, #041d17 100%); color: white; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
 .edu-rpg-header { min-height: 88px; display: grid; grid-template-columns: minmax(270px, 1fr) auto auto; gap: 24px; align-items: center; padding: 14px 28px; border-bottom: 1px solid rgba(255,255,255,.16); background: rgba(4,29,23,.88); }
 .edu-rpg-header h1 { margin: 2px 0 0; font-size: clamp(1.45rem, 2.4vw, 2.35rem); line-height: 1; font-weight: 950; }
@@ -13,7 +13,7 @@
 .edu-rpg-canvas { width: min(100%, 1180px); height: 100%; max-height: 720px; min-height: 380px; overflow: hidden; border: 5px solid #bbf7d0; border-radius: 26px; background: #173d2b; box-shadow: 0 24px 70px rgba(0,0,0,.42); }
 .edu-rpg-canvas, .edu-rpg-canvas canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
 .edu-rpg-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
-.edu-rpg-screen-shield { position: absolute; z-index: 12; inset: 18px 24px 10px; border-radius: 26px; background: transparent; pointer-events: auto; touch-action: none; -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; }
+.edu-rpg-screen-shield { position: absolute; z-index: 12; inset: 18px 24px 10px; border-radius: 26px; background: rgba(0,0,0,.001); pointer-events: auto; touch-action: none !important; -ms-touch-action: none; -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; }
 .edu-rpg-help { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: calc(100% - 80px); padding: 9px 17px; border-radius: 999px; background: rgba(4,29,23,.9); color: #dcfce7; font-size: .76rem; font-weight: 800; text-align: center; pointer-events: none; }
 .edu-rpg-score-pop { position: absolute; z-index: 15; top: 18%; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 999px; color: #fff; background: #16a34add; font-size: clamp(1.2rem,4vw,2.2rem); font-weight: 950; pointer-events: none; animation: score-pop .9s ease both; }
 .edu-rpg-mobile-controls { display: none; }

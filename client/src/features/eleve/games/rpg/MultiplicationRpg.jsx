@@ -31,8 +31,14 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     const shell = canvasHostRef.current?.closest('.edu-rpg-shell');
     if (!shell) return undefined;
     const block = (event) => event.preventDefault();
-    ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.addEventListener(type, block, { capture: true }));
-    return () => ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.removeEventListener(type, block, { capture: true }));
+    const captureOptions = { capture: true };
+    const touchOptions = { capture: true, passive: false };
+    ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.addEventListener(type, block, captureOptions));
+    ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shell.addEventListener(type, block, touchOptions));
+    return () => {
+      ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.removeEventListener(type, block, captureOptions));
+      ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((type) => shell.removeEventListener(type, block, touchOptions));
+    };
   }, []);
 
   const quizQuestions = useMemo(() => (learningContext?.lessons || []).flatMap((lesson) =>
