@@ -5,6 +5,7 @@ import { gameUrl } from './gameHosting';
 const ASSET_ROOT = gameUrl('simple-rpg/assets');
 const TARGET_SCORE = 400;
 const MAX_ARROWS = 10;
+const POINTS_PER_ENEMY = 20;
 
 export default function MultiplicationRpg({ onExit, learningContext = { lessons: [] } }) {
   const canvasHostRef = useRef(null);
@@ -126,12 +127,13 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           const monsterLayer = map.getObjectLayer('monsters');
           (monsterLayer?.objects || []).forEach((obj, index) => {
             const key = String(obj.name || '').toLowerCase().includes('mole') ? 'mole' : 'treant';
-            [0, 1].forEach((copy) => {
-              const spawnX = Phaser.Math.Clamp(obj.x + copy * 42, 24, map.widthInPixels - 24);
-              const spawnY = Phaser.Math.Clamp(obj.y + copy * 26, 24, map.heightInPixels - 24);
+            [0, 1, 2, 3].forEach((copy) => {
+              const angle = (Math.PI * 2 * copy) / 4;
+              const spawnX = Phaser.Math.Clamp(obj.x + Math.cos(angle) * 52, 24, map.widthInPixels - 24);
+              const spawnY = Phaser.Math.Clamp(obj.y + Math.sin(angle) * 52, 24, map.heightInPixels - 24);
               const monster = this.monsters.create(spawnX, spawnY, key).setDepth(8);
-              monster.hp = key === 'treant' ? 3 : 2;
-              monster.speed = key === 'treant' ? 27 : 36;
+              monster.hp = 1;
+              monster.speed = key === 'treant' ? 38 : 48;
               monster.setData('spawnX', spawnX).setData('spawnY', spawnY).setCollideWorldBounds(true);
               monster.setData('kind', key);
               monster.play(key === 'treant' ? 'treant-walk' : 'mole-walk');
@@ -251,8 +253,8 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.monsters.children.iterate((monster) => {
             if (!monster?.active) return;
             const distance = Phaser.Math.Distance.Between(monster.x, monster.y, this.player.x, this.player.y);
-            if (distance < 180) this.physics.moveToObject(monster, this.player, monster.speed);
-            else if (distance > 240) this.physics.moveTo(monster, monster.getData('spawnX'), monster.getData('spawnY'), monster.speed * 0.5);
+            if (distance < 280) this.physics.moveToObject(monster, this.player, monster.speed);
+            else this.physics.moveTo(monster, monster.getData('spawnX'), monster.getData('spawnY'), monster.speed * 0.6);
           });
         }
 
@@ -282,13 +284,13 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             const spawnY = monster.getData('spawnY');
             const kind = monster.getData('kind');
             monster.destroy();
-            setScore((value) => value + 100);
-            setScorePop('+100 points');
+            setScore((value) => value + POINTS_PER_ENEMY);
+            setScorePop(`+${POINTS_PER_ENEMY} points`);
             window.setTimeout(() => setScorePop(null), 900);
-            this.time.delayedCall(5000, () => {
+            this.time.delayedCall(2500, () => {
               const revived = this.monsters.create(spawnX, spawnY, kind).setDepth(8).setCollideWorldBounds(true);
-              revived.hp = kind === 'treant' ? 3 : 2;
-              revived.speed = kind === 'treant' ? 27 : 36;
+              revived.hp = 1;
+              revived.speed = kind === 'treant' ? 38 : 48;
               revived.setData('spawnX', spawnX).setData('spawnY', spawnY).setData('kind', kind);
               revived.play(kind === 'treant' ? 'treant-walk' : 'mole-walk');
             });
@@ -405,7 +407,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
       <main className="edu-rpg-stage" onContextMenu={(event) => event.preventDefault()}>
         <div ref={canvasHostRef} className="edu-rpg-canvas" />
-        <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte 100 points.</div>
+        <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
         <div className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
