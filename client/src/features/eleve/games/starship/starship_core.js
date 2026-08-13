@@ -1,8 +1,10 @@
 // @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
 import { GameProgression } from '../mainGames';
 import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
+import { protectGameSurface, protectNativeTouchZone } from '../protectedGameTouch';
 
 export function initStarshipGame(root, api, onExit) {
+    const removeSurfaceProtection = protectGameSurface(root);
     const scenes = Array.isArray(api.gameData?.scenes) ? api.gameData.scenes : [];
     const scene = scenes.find((item) => Array.isArray(item?.actors) && item.actors.length) || scenes[0] || {};
     const findActor = (names) => (scene.actors || []).find((actor) => names.includes(String(actor?.name || '').trim().toUpperCase()));
@@ -207,7 +209,14 @@ export function initStarshipGame(root, api, onExit) {
         }
     };
 
-    const moveShip = (delta) => { if (!isPaused) { shipX = Math.max(5, Math.min(95, shipX + delta)); els.ship.style.left = shipX + '%'; } };
+    const clampShip = () => {
+        const areaWidth = Math.max(1, els.area.clientWidth);
+        const halfShip = Math.max(24, els.ship.getBoundingClientRect().width / 2);
+        const marginPct = Math.min(45, ((halfShip + 6) / areaWidth) * 100);
+        shipX = Math.max(marginPct, Math.min(100 - marginPct, shipX));
+        els.ship.style.left = `${shipX}%`;
+    };
+    const moveShip = (delta) => { if (!isPaused) { shipX += delta; clampShip(); } };
 
     const fire = () => {
         if (isPaused || questionStates[currentQIndex] >= 2) return;
@@ -385,6 +394,7 @@ export function initStarshipGame(root, api, onExit) {
         btn.addEventListener('touchstart', start, { passive: false });
         btn.addEventListener('touchend', stop, { passive: false });
         btn.addEventListener('touchcancel', stop, { passive: false });
+        protectNativeTouchZone(btn);
     };
     bindHold('#s-mobile-left', () => moveShip(-3));
     bindHold('#s-mobile-right', () => moveShip(3));
@@ -395,9 +405,12 @@ export function initStarshipGame(root, api, onExit) {
         if(e.key === 'Enter') handleBossInput();
     };
     els.nukeBtn.onclick = handleBossInput;
+    const resizeObserver = new ResizeObserver(clampShip);
+    resizeObserver.observe(els.area);
+    clampShip();
 
     loadRound();
     update();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey); } };
+    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey); } };
 }

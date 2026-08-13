@@ -4,6 +4,9 @@
     background: #f0f9ff;
     font-family: 'Segoe UI', sans-serif;
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
     overflow: hidden; /* Empêche le scroll */
 }
 
@@ -125,6 +128,7 @@
     transition: transform 0.1s;
     padding: 5px;
     white-space: normal; line-height: 1.2;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .z-btn:active { transform: translateY(4px); box-shadow: none; }
 .z-btn:hover { border-color: #3b82f6; background: #eff6ff; }

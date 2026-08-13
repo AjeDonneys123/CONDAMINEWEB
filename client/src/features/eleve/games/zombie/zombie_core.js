@@ -1,7 +1,9 @@
 // @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
 import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
+import { protectGameSurface, protectNativeTouchZone } from '../protectedGameTouch';
 
 export function initZombieGame(root, api, onExit) {
+    const removeSurfaceProtection = protectGameSurface(root);
     const scenes = Array.isArray(api.gameData?.scenes) ? api.gameData.scenes : [];
     const scene = scenes.find((item) => Array.isArray(item?.actors) && item.actors.length) || scenes[0] || {};
     const findActor = (names) => (scene.actors || []).find((actor) => names.includes(String(actor?.name || '').trim().toUpperCase()));
@@ -210,10 +212,14 @@ export function initZombieGame(root, api, onExit) {
                 btn.className = 'z-btn';
                 btn.style.color = "#000"; 
                 btn.innerText = o.txt;
-                btn.onclick = () => {
+                const choose = () => {
                     if (o.idx === qData.a) fireProjectile(true);
                     else failAction();
                 };
+                btn.addEventListener('pointerup', (event) => { if (event.pointerType === 'touch') return; event.preventDefault(); choose(); });
+                const onTouchEnd = (event) => { event.preventDefault(); choose(); };
+                btn.addEventListener('touchend', onTouchEnd, { passive: false });
+                protectNativeTouchZone(btn);
                 els.choices.appendChild(btn);
             });
         }
@@ -323,5 +329,6 @@ export function initZombieGame(root, api, onExit) {
     loadRound();
     loop();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); heroAnimator.destroy(); zombieAnimator.destroy(); } };
+    protectNativeTouchZone(root.querySelector('.z-interaction-zone'));
+    return { destroy: () => { cancelAnimationFrame(frameId); removeSurfaceProtection(); heroAnimator.destroy(); zombieAnimator.destroy(); } };
 }
