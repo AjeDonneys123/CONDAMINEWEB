@@ -19,19 +19,42 @@
 
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent || event.data?.source !== 'condamine') return;
+    const dispatchGameKey = (eventType, code, key) => {
+      const keyCodes = {
+        ArrowLeft: 37,
+        ArrowUp: 38,
+        ArrowRight: 39,
+        ArrowDown: 40,
+        Enter: 13,
+        Space: 32,
+        KeyZ: 90,
+        KeyX: 88,
+      };
+      const keyCode = keyCodes[code] || 0;
+      const keyboardEvent = new KeyboardEvent(eventType, { key, code, bubbles: true, cancelable: true });
+      // Phaser 3 identifie les touches par event.keyCode. Sur Chrome mobile,
+      // un KeyboardEvent synthétique laisse cette valeur à 0 par défaut.
+      try {
+        Object.defineProperties(keyboardEvent, {
+          keyCode: { get: () => keyCode },
+          which: { get: () => keyCode },
+          charCode: { get: () => keyCode },
+        });
+      } catch (_) { /* Le code moderne reste disponible en secours. */ }
+      window.dispatchEvent(keyboardEvent);
+    };
     if (event.data.type === 'key-state') {
       const code = String(event.data.code || 'Space');
       const key = String(event.data.key || (code === 'Space' ? ' ' : code.replace(/^Key/, '')));
       const eventType = event.data.pressed === false ? 'keyup' : 'keydown';
-      window.dispatchEvent(new KeyboardEvent(eventType, { key, code, bubbles: true, cancelable: true }));
+      dispatchGameKey(eventType, code, key);
       return;
     }
     if (event.data.type === 'simulate-key') {
       const code = String(event.data.code || 'Space');
       const key = String(event.data.key || (code === 'Space' ? ' ' : code.replace(/^Key/, '')));
-      const init = { key, code, bubbles: true, cancelable: true };
-      window.dispatchEvent(new KeyboardEvent('keydown', init));
-      setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', init)), 50);
+      dispatchGameKey('keydown', code, key);
+      setTimeout(() => dispatchGameKey('keyup', code, key), 80);
       return;
     }
     if (event.data.type === 'game-context') context = event.data.context || null;
