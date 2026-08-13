@@ -3,11 +3,11 @@
   inset: 0;
   z-index: 12000;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   width: 100vw;
   height: 100dvh;
   box-sizing: border-box;
-  padding: 14px;
+  padding: 8px;
   color: #fff;
   background: radial-gradient(circle at 50% 0, #31543d 0, #13281d 46%, #07130d 100%);
 }
@@ -116,6 +116,41 @@
   border-radius: 20px;
   background: #000;
   box-shadow: 0 20px 70px #000a;
+}
+
+.wispguard-exit-simple {
+  position: absolute; top: 10px; right: 10px; z-index: 20;
+  width: 48px; height: 48px; border: 3px solid #ffffff66; border-radius: 50%;
+  color: white; background: #991b1be8; font-size: 22px; font-weight: 950;
+}
+
+.wispguard-mobile-controls { display: none; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 4px 0; touch-action: none; }
+.wispguard-dpad { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); gap: 4px; }
+.wispguard-dpad button:nth-child(1) { grid-column: 2; }
+.wispguard-dpad button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.wispguard-dpad button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.wispguard-dpad button:nth-child(4) { grid-column: 3; grid-row: 2; }
+.wispguard-mobile-controls button { border: 2px solid #ffffff55; border-radius: 14px; color: white; background: #1e293be8; font-size: 22px; font-weight: 950; box-shadow: 0 5px 0 #020617; user-select: none; -webkit-user-select: none; }
+.wispguard-mobile-controls button:active { transform: translateY(3px); box-shadow: 0 2px 0 #020617; }
+.wispguard-touch-actions { display: grid; grid-template-columns: repeat(2, 66px); gap: 7px; }
+.wispguard-touch-actions button { height: 54px; display: grid; place-content: center; line-height: 1; }
+.wispguard-touch-actions small { margin-top: 4px; font-size: 8px; }
+.wispguard-touch-actions .attack { background: #dc2626e8; }
+.wispguard-touch-actions .lift { background: #2563ebe8; }
+.wispguard-touch-actions .interact { background: #059669e8; }
+.wispguard-touch-actions .help { background: #7c3aede8; }
+
+@media (pointer: coarse), (max-width: 900px) {
+  .wispguard-shell { padding: 4px; }
+  .wispguard-stage { border-width: 2px; border-radius: 12px; }
+  .wispguard-mobile-controls { display: flex; }
+  .wispguard-start { min-width: 210px; font-size: 17px; }
+}
+
+@media (max-width: 430px) {
+  .wispguard-dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 46px); }
+  .wispguard-touch-actions { grid-template-columns: repeat(2, 58px); }
+  .wispguard-touch-actions button { height: 46px; }
 }
 
 .wispguard-stage iframe {

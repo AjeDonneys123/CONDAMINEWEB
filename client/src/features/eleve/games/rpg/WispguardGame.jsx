@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './WispguardGame.css';
-import { gameUrl } from './gameHosting';
 
 const MAGE_POSE_LABELS = [
   'Bas · préparation', 'Bas · énergie', 'Bas · tir',
@@ -14,6 +13,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   const spriteInputRef = useRef(null);
   const spriteSheetInputRef = useRef(null);
   const spriteImportPendingRef = useRef(false);
+  const touchRepeatRef = useRef(null);
   const [started, setStarted] = useState(false);
   const [placingSprite, setPlacingSprite] = useState(false);
   const [spriteNotice, setSpriteNotice] = useState('');
@@ -65,9 +65,25 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     return () => window.removeEventListener('keydown', handleSpace);
   }, [question]);
 
+  useEffect(() => () => window.clearInterval(touchRepeatRef.current), []);
+
   const focusGame = () => {
     setStarted(true);
     window.setTimeout(() => frameRef.current?.focus(), 30);
+  };
+
+  const pressGameKey = (code, key) => {
+    frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'simulate-key', code, key }, '*');
+    focusGame();
+  };
+  const startTouchKey = (code, key, repeat = false) => {
+    window.clearInterval(touchRepeatRef.current);
+    pressGameKey(code, key);
+    if (repeat) touchRepeatRef.current = window.setInterval(() => pressGameKey(code, key), 90);
+  };
+  const stopTouchKey = () => {
+    window.clearInterval(touchRepeatRef.current);
+    touchRepeatRef.current = null;
   };
 
   const sendToGame = (type, payload = {}) => {
@@ -279,71 +295,13 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
 
   return (
     <div className="wispguard-shell">
-      <header className="wispguard-header">
-        <div>
-          <div className="wispguard-kicker">Aventure éducative · version test</div>
-          <h1>La légende du Gardien</h1>
-        </div>
-        <div className="wispguard-actions">
-          <input
-            ref={spriteInputRef}
-            className="wispguard-sprite-input"
-            type="file"
-            accept="image/png,image/webp,image/jpeg"
-            onChange={importBlockingSprite}
-          />
-          <input
-            ref={spriteSheetInputRef}
-            className="wispguard-sprite-input"
-            type="file"
-            accept="image/png,image/webp,image/jpeg"
-            onChange={importAnimatedSpriteSheet}
-          />
-          <button
-            type="button"
-            className="wispguard-sprite-button"
-            onClick={() => spriteInputRef.current?.click()}
-          >{placingSprite ? '📍 Clique pour placer' : '🧱 Importer un sprite'}</button>
-          <button
-            type="button"
-            className="wispguard-sheet-button"
-            onClick={() => spriteSheetInputRef.current?.click()}
-          >🧙 Importer une fiche animée</button>
-          <button
-            type="button"
-            className="wispguard-mage-button"
-            onClick={() => {
-              sendToGame('grant-bonus', { bonus: 'mage-form' });
-              focusGame();
-            }}
-          >🧙 Devenir le mage</button>
-          <button
-            type="button"
-            className="wispguard-bonus-button"
-            onClick={() => {
-              sendToGame('grant-bonus', { bonus: 'invincible' });
-              focusGame();
-            }}
-          >🛡️ Mode invincible</button>
-          <button type="button" className="wispguard-resume-button" onClick={focusGame}>Reprendre le jeu</button>
-          <button type="button" className="wispguard-exit" onClick={onExit}>✕ Quitter</button>
-        </div>
-      </header>
-
-      <div className="wispguard-help">
-        <span><b>Flèches</b> : se déplacer</span>
-        <span><b>Z</b> : attaquer à l’épée</span>
-        <span><b>X</b> : soulever / lancer</span>
-        <span><b>Espace</b> : demander un bonus / tirer</span>
-        <span><b>Entrée</b> : choisir dans un menu</span>
-      </div>
-
       <main className="wispguard-stage" onClick={focusGame}>
+        <button type="button" className="wispguard-exit-simple" onClick={(event) => { event.stopPropagation(); onExit(); }}>✕</button>
         {spriteNotice && <div className="wispguard-sprite-notice">{spriteNotice}</div>}
         <iframe
           ref={frameRef}
           title="La légende du Gardien"
-          src={gameUrl('wispguard/?v=bridge-2')}
+          src="/wispguard/?v=embedded-3"
           allow="autoplay; fullscreen"
           tabIndex="0"
         />
@@ -356,9 +314,20 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
         )}
       </main>
 
-      <footer className="wispguard-credit">
-        Base libre MIT « Legend of the Wispguard » — intégration de test avant ajout des pouvoirs pédagogiques.
-      </footer>
+      <div className="wispguard-mobile-controls" aria-label="Commandes tactiles">
+        <div className="wispguard-dpad">
+          <button onPointerDown={() => startTouchKey('ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>▲</button>
+          <button onPointerDown={() => startTouchKey('ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>◀</button>
+          <button onPointerDown={() => startTouchKey('ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>▼</button>
+          <button onPointerDown={() => startTouchKey('ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey} onPointerLeave={stopTouchKey}>▶</button>
+        </div>
+        <div className="wispguard-touch-actions">
+          <button className="attack" onPointerDown={() => pressGameKey('KeyZ', 'z')}>Z<small>ÉPÉE</small></button>
+          <button className="lift" onPointerDown={() => pressGameKey('KeyX', 'x')}>X<small>PRENDRE</small></button>
+          <button className="interact" onPointerDown={() => pressGameKey('Enter', 'Enter')}>OK<small>VALIDER</small></button>
+          <button className="help" onPointerDown={() => pressGameKey('Space', ' ')}>★<small>QUESTION</small></button>
+        </div>
+      </div>
 
       {sheetCalibration && (
         <div className="wispguard-calibration-backdrop">

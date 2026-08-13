@@ -16,6 +16,9 @@ const localGameFiles = () => ({
       if (pathname.startsWith('/monster-tamer')) {
         root = path.join(gamesRoot, 'games', 'monster-tamer')
         relative = pathname.slice('/monster-tamer'.length)
+      } else if (pathname.startsWith('/wispguard')) {
+        root = path.join(gamesRoot, 'dist', 'wispguard')
+        relative = pathname.slice('/wispguard'.length)
       } else if (pathname.startsWith('/shared')) {
         root = path.join(gamesRoot, 'public', 'shared')
         relative = pathname.slice('/shared'.length)
