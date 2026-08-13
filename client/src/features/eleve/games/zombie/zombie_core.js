@@ -28,11 +28,9 @@ export function initZombieGame(root, api, onExit) {
             <div id="arena">
                 <div id="hero-container" class="z-char-box" style="left: 5%;">
                     <div class="z-emoji">🧙‍♂️</div>
-                    <img src="/images/hero.png" class="z-img-layer" onload="this.style.opacity=1" onerror="this.style.display='none'"/>
                 </div>
                 <div id="zombie-container" class="z-char-box" style="right: 0%;">
                     <div class="z-emoji">🧟</div>
-                    <img src="/images/zombi.png" class="z-img-layer" onload="this.style.opacity=1" onerror="this.style.display='none'"/>
                 </div>
                 <div id="projectile">🔥</div>
                 <div id="feedback-msg" class="z-feedback"></div>
@@ -55,7 +53,6 @@ export function initZombieGame(root, api, onExit) {
     const els = {
         hero: root.querySelector('#hero-container'),
         zombie: root.querySelector('#zombie-container'),
-        zombieImg: root.querySelector('#zombie-container .z-img-layer'),
         zombieEmoji: root.querySelector('#zombie-container .z-emoji'),
         projectile: root.querySelector('#projectile'),
         lives: root.querySelector('.z-lives'),
@@ -141,8 +138,6 @@ export function initZombieGame(root, api, onExit) {
             // TRANSFORMATION VISUELLE BOSS
             els.zombieEmoji.innerText = "👹"; 
             els.zombieEmoji.style.fontSize = "7.5rem"; // +50% taille
-            els.zombieImg.style.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
-            els.zombieImg.style.transform = "scale(1.5)"; // +50% taille image
             
             // RALENTISSEMENT
             zombieSpeed = baseSpeed * 0.5; // 50% moins vite
@@ -154,8 +149,6 @@ export function initZombieGame(root, api, onExit) {
             // RESET VISUEL
             els.zombieEmoji.innerText = "🧟";
             els.zombieEmoji.style.fontSize = "5rem";
-            els.zombieImg.style.filter = "none";
-            els.zombieImg.style.transform = "scale(1)";
             
             // VITESSE NORMALE
             zombieSpeed = baseSpeed;

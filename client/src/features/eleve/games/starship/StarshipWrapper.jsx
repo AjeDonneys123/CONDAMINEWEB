@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { initStarshipGame } from './starship_core';
 import './starship_style.css';
 
-export default function StarshipWrapper({ user, level, onClose }) {
+export default function StarshipWrapper({ user, level, onClose, onFinish }) {
     const boxRef = useRef(null);
 
     const saveProgress = async (score, lvl) => {
@@ -24,7 +24,8 @@ export default function StarshipWrapper({ user, level, onClose }) {
 
     const handleGameFinish = (score, success) => {
         saveProgress(score, success ? 1 : 0);
-        onClose();
+        if (onFinish) onFinish(success, score);
+        else onClose();
     };
 
     useEffect(() => {

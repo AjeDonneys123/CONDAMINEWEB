@@ -101,23 +101,30 @@ export function buildGameLearningContext(modules = [], student = {}) {
   const activeModules = (Array.isArray(modules) ? modules : [])
     .filter((module) => module?.chapterIsActive !== false);
   activeModules.forEach((module) => {
+    const chapterId = String(module?.chapterId || module?._id || '');
     const sections = Array.isArray(module?.sections) ? module.sections : [];
     const sectionById = new Map(sections.map((section, index) => [
       String(section?.id || ''),
       { title: String(section?.title || section?.name || `Partie ${index + 1}`).trim(), order: index }
     ]));
     const steps = Array.isArray(module?.steps) ? module.steps : [];
+    const firstSectionId = String(sections[0]?.id || 'sec_1');
+    let hasGeneralVideo = false;
     steps.forEach((step, index) => {
       const title = String(step?.title || `${step?.type === 'video' ? 'Vidéo' : 'Fiche'} ${index + 1}`).trim();
       if (step?.type === 'sheet' && String(step?.sheetText || step?.sheetUrl || '').trim()) {
-        const row = { id: String(step?.id || index), title, text: String(step?.sheetText || ''), html: String(step?.sheetTextHtml || ''), url: String(step?.sheetUrl || '') };
-        (/introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(title) ? resources.generalSheets : resources.lessonSheets).push(row);
+        const row = { id: String(step?.id || index), chapterId, sectionId: String(step?.sectionId || ''), title, text: String(step?.sheetText || ''), html: String(step?.sheetTextHtml || ''), url: String(step?.sheetUrl || '') };
+        const isGeneralSheet = /introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(title)
+          || (String(step?.sectionId || '') === firstSectionId && !resources.generalSheets.some((item) => item.chapterId === chapterId));
+        (isGeneralSheet ? resources.generalSheets : resources.lessonSheets).push(row);
       }
       if (step?.type === 'video') {
         const url = String(step?.videoUrl || step?.url || step?.sourceUrl || step?.presentationUrl || '').trim();
         if (!url) return;
-        const row = { id: String(step?.id || index), title, url };
-        (/introduction|g[eé]n[eé]ral/i.test(title) ? resources.generalVideos : resources.sequenceVideos).push(row);
+        const row = { id: String(step?.id || index), chapterId, sectionId: String(step?.sectionId || ''), title, url };
+        const isGeneralVideo = !hasGeneralVideo || /introduction|g[eé]n[eé]ral/i.test(title);
+        if (isGeneralVideo) hasGeneralVideo = true;
+        (isGeneralVideo ? resources.generalVideos : resources.sequenceVideos).push(row);
       }
     });
     const quizzesBySection = new Map();

@@ -49,7 +49,11 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   const buildLearningLevels = (chapter) => (chapter?.lessons || []).map((lesson, index) => ({
       name: `Partie ${['I', 'II', 'III', 'IV', 'V', 'VI'][index] || index + 1} · ${lesson.title}`,
       lessonId: lesson.id,
-      intro: {},
+      intro: (() => {
+          const sheets = (learningContext.resources?.lessonSheets || []).filter((row) => row.chapterId === chapter.id && (!row.sectionId || row.sectionId === lesson.sectionId));
+          const videos = (learningContext.resources?.sequenceVideos || []).filter((row) => row.chapterId === chapter.id && (!row.sectionId || row.sectionId === lesson.sectionId));
+          return { sheetUrl: sheets[0]?.url || '', sheetText: sheets[0]?.text || '', videoUrl: videos[0]?.url || '' };
+      })(),
       questions: (lesson.quiz || []).map((question) => ({
           q: question.question,
           options: question.choices,
@@ -57,7 +61,11 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
       }))
   })).filter((level) => level.questions.length > 0);
 
-  const buildLearningGame = (skin, chapter, family) => ({
+  const buildLearningGame = (skin, chapter, family) => {
+    const generalSheet = (learningContext.resources?.generalSheets || []).find((row) => row.chapterId === chapter.id);
+    const generalVideo = (learningContext.resources?.generalVideos || []).find((row) => row.chapterId === chapter.id)
+      || (learningContext.resources?.sequenceVideos || []).find((row) => row.chapterId === chapter.id);
+    return ({
       ...skin,
       _id: `learning-${family}-${chapter.id}`,
       title: family === 'starship' ? 'Starship' : 'Zombie',
@@ -65,8 +73,9 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
       isLearningGame: true,
       selectedChapter: chapter,
       levels: buildLearningLevels(chapter),
-      globalIntro: {}
-  });
+      globalIntro: { sheetUrl: generalSheet?.url || '', sheetText: generalSheet?.text || '', sheetHtml: generalSheet?.html || '', videoUrl: generalVideo?.url || '' }
+    });
+  };
 
   const launchWithChapter = (chapter) => {
       const context = {
@@ -74,7 +83,8 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
           activeChapterId: chapter.id,
           activeChapterTitle: chapter.title,
           chapters: [chapter],
-          lessons: Array.isArray(chapter.lessons) ? chapter.lessons : []
+          lessons: Array.isArray(chapter.lessons) ? chapter.lessons : [],
+          resources: Object.fromEntries(Object.entries(learningContext.resources || {}).map(([key, rows]) => [key, (rows || []).filter((row) => row.chapterId === chapter.id)]))
       };
       setSelectedLearningContext(context);
       const launch = pendingLaunch;

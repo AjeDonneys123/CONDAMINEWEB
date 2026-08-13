@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { initZombieGame } from './zombie_core';
 import './zombie_style.css';
 
-export default function ZombieWrapper({ user, level, onClose }) {
+export default function ZombieWrapper({ user, level, onClose, onFinish }) {
     const boxRef = useRef(null);
     
     // Fonction générique pour sauvegarder
@@ -26,7 +26,8 @@ export default function ZombieWrapper({ user, level, onClose }) {
     // Callback Fin de jeu (Win/Lose)
     const handleGameFinish = (score, success) => {
         saveProgress(score, success ? 1 : 0); // 1 = Violet, 0 = Bleu
-        onClose();
+        if (onFinish) onFinish(success, score);
+        else onClose();
     };
 
     useEffect(() => {
