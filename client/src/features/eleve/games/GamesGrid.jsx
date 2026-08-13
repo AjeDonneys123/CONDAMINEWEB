@@ -268,7 +268,7 @@ export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
                     <div className="grid h-20 w-20 place-items-center rounded-2xl bg-emerald-950/40 text-5xl shadow-inner">🏹</div>
                     <div>
                         <div className="text-[11px] font-black uppercase tracking-[0.22em] text-lime-100">Ancien prototype · conservé pour comparaison</div>
-                        <div className="mt-1 text-3xl md:text-5xl font-black leading-none text-white drop-shadow-lg">La forêt des multiplications</div>
+                        <div className="mt-1 text-3xl md:text-5xl font-black leading-none text-white drop-shadow-lg">La forêt des savoirs</div>
                         <div className="mt-2 font-bold text-emerald-50">Explore, combats les monstres et gagne des pouvoirs grâce au calcul mental.</div>
                     </div>
                 </div>

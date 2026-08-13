@@ -378,7 +378,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   };
 
   return (
-    <div className="edu-rpg-shell">
+    <div className="edu-rpg-shell" onContextMenu={(event) => event.preventDefault()} onSelect={(event) => event.preventDefault()}>
       <header className="edu-rpg-header">
         <div>
           <div className="edu-rpg-kicker">Aventure éducative · QCM du chapitre</div>
@@ -392,7 +392,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <button type="button" className="edu-rpg-exit" onClick={onExit}>✕ Quitter</button>
       </header>
 
-      <main className="edu-rpg-stage">
+      <main className="edu-rpg-stage" onContextMenu={(event) => event.preventDefault()}>
         <div ref={canvasHostRef} className="edu-rpg-canvas" />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte 100 points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
