@@ -286,20 +286,6 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         )}
       </main>
 
-      <div className="monster-tamer-mobile-controls" aria-label="Commandes tactiles" onContextMenu={(event) => event.preventDefault()}>
-        <div className="monster-tamer-dpad">
-          <button type="button" tabIndex="-1" aria-label="Haut" onPointerDown={(event) => startTouchKey(event, 'ArrowUp', 'ArrowUp', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▲</button>
-          <button type="button" tabIndex="-1" aria-label="Gauche" onPointerDown={(event) => startTouchKey(event, 'ArrowLeft', 'ArrowLeft', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>◀</button>
-          <button type="button" tabIndex="-1" aria-label="Bas" onPointerDown={(event) => startTouchKey(event, 'ArrowDown', 'ArrowDown', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▼</button>
-          <button type="button" tabIndex="-1" aria-label="Droite" onPointerDown={(event) => startTouchKey(event, 'ArrowRight', 'ArrowRight', true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>▶</button>
-        </div>
-        <div className="monster-tamer-touch-actions">
-          <button type="button" tabIndex="-1" className="is-back" onPointerDown={(event) => startTouchKey(event, 'ShiftLeft', 'Shift')}>B<small>RETOUR</small></button>
-          <button type="button" tabIndex="-1" className="is-action" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')}>A<small>VALIDER</small></button>
-          <button type="button" tabIndex="-1" className="is-menu" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')}>MENU</button>
-        </div>
-      </div>
-
       <footer className="monster-tamer-credit">
         « Monster Tamer » par Dev Share Academy — code MIT, ressources créditées par leurs auteurs.
       </footer>

@@ -85,7 +85,7 @@
 .monster-tamer-touch-actions .is-back { background: #2563ebe8; }
 
 @media (max-width: 700px) {
-  .monster-tamer-shell { grid-template-rows: auto minmax(0, 1fr) 108px; padding: 5px; }
+  .monster-tamer-shell { grid-template-rows: auto minmax(0, 1fr); padding: 5px; }
   .monster-tamer-header { gap: 6px; padding: 2px 2px 5px; }
   .monster-tamer-header > div:first-child, .monster-tamer-help, .monster-tamer-credit { display: none; }
   .monster-tamer-revision-select { min-width: 0; flex: 1; padding: 5px 8px; }
@@ -96,7 +96,6 @@
   .monster-tamer-actions .is-exit { display: block; padding: 9px 11px; font-size: 0; }
   .monster-tamer-actions .is-exit::first-letter { font-size: 18px; }
   .monster-tamer-stage { border-width: 2px; border-radius: 12px; }
-  .monster-tamer-mobile-controls { display: flex; }
   .monster-tamer-start { min-width: 190px; max-width: calc(100% - 24px); padding: 11px; font-size: 16px; }
   .monster-tamer-start span { font-size: 30px; }
   .monster-tamer-quiz-overlay { padding: 8px; }
