@@ -7,13 +7,14 @@ export default function StarshipWrapper({ user, level, gameData, onClose, onFini
     const boxRef = useRef(null);
 
     const saveProgress = async (score, lvl) => {
-        if (!user || !level) return;
+        const studentId = user?._id || user?.id;
+        if (!/^[a-f\d]{24}$/i.test(String(studentId || '')) || !/^[a-f\d]{24}$/i.test(String(level?._id || ''))) return;
         try {
             await fetch('/api/games/save-progress', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    studentId: user._id || user.id,
+                    studentId,
                     gameId: level._id,
                     score: score,
                     levelReached: lvl

@@ -202,14 +202,31 @@ router.get('/tapping-project', async (req, res) => {
 router.get('/skins', async (req, res) => {
     try {
         const studentId = (req.query.studentId || "").toString();
-        if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json([]);
+        const StudioProject = mongoose.model('StudioProject');
+
+        // ZOMBIE et Starship sont les habillages officiels des jeux pédagogiques.
+        // Ils doivent rester accessibles aux élèves comme au professeur visiteur,
+        // même lorsqu'aucun GameLevel classique ne leur est directement assigné.
+        const arcadeSkins = await StudioProject.find({
+            title: { $regex: /^(ZOMBIE|Starship)$/i },
+            isTrashed: { $ne: true }
+        }, 'title scenes generatedCode')
+            .sort({ updatedAt: -1, createdAt: -1 })
+            .lean();
+        const canonicalByTitle = new Map();
+        arcadeSkins.forEach((skin) => {
+            const key = String(skin?.title || '').trim().toLowerCase();
+            if (key && !canonicalByTitle.has(key)) canonicalByTitle.set(key, skin);
+        });
+        const canonicalSkins = [...canonicalByTitle.values()];
+
+        if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json(canonicalSkins);
 
         const Student = mongoose.model('Student');
         const GameLevel = mongoose.model('GameLevel');
-        const StudioProject = mongoose.model('StudioProject');
 
         const student = await Student.findById(studentId).lean();
-        if (!student) return res.json([]);
+        if (!student) return res.json(canonicalSkins);
 
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
@@ -233,7 +250,7 @@ router.get('/skins', async (req, res) => {
         const teacherIds = [...new Set(
             assignedGames.map(g => g.teacherId ? String(g.teacherId) : null).filter(Boolean)
         )];
-        if (teacherIds.length === 0) return res.json([]);
+        if (teacherIds.length === 0) return res.json(canonicalSkins);
 
         const skins = await StudioProject.find({ 
             generatedCode: { $exists: true, $ne: "" },
@@ -241,7 +258,9 @@ router.get('/skins', async (req, res) => {
             isTrashed: { $ne: true },
             teacherId: { $in: teacherIds }
         }, 'title scenes generatedCode').sort({ updatedAt: -1 }).lean();
-        res.json(skins);
+        const merged = new Map(canonicalSkins.map((skin) => [String(skin._id), skin]));
+        skins.forEach((skin) => merged.set(String(skin._id), skin));
+        res.json([...merged.values()]);
     } catch (e) { res.status(500).json([]); }
 });
 
