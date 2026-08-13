@@ -19,6 +19,15 @@
   margin-inline: auto;
 }
 
+/* Ancienne interface expérimentale : supprimée même si un ancien composant
+   React est encore présent dans le cache du navigateur. */
+.wispguard-header,
+.wispguard-help,
+.wispguard-credit,
+.wispguard-actions {
+  display: none !important;
+}
+
 .wispguard-header {
   display: flex;
   align-items: center;
@@ -124,7 +133,17 @@
   color: white; background: #991b1be8; font-size: 22px; font-weight: 950;
 }
 
-.wispguard-mobile-controls { display: none; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 4px 0; touch-action: none; }
+.wispguard-mobile-controls {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: min(100%, 560px);
+  margin-inline: auto;
+  padding: 7px max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+  box-sizing: border-box;
+  touch-action: none;
+}
 .wispguard-dpad { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); gap: 4px; }
 .wispguard-dpad button:nth-child(1) { grid-column: 2; }
 .wispguard-dpad button:nth-child(2) { grid-column: 1; grid-row: 2; }
@@ -141,16 +160,40 @@
 .wispguard-touch-actions .help { background: #7c3aede8; }
 
 @media (pointer: coarse), (max-width: 900px) {
-  .wispguard-shell { padding: 4px; }
+  .wispguard-shell {
+    grid-template-rows: minmax(0, 1fr) 116px;
+    padding: max(3px, env(safe-area-inset-top)) 3px 0;
+  }
   .wispguard-stage { border-width: 2px; border-radius: 12px; }
   .wispguard-mobile-controls { display: flex; }
   .wispguard-start { min-width: 210px; font-size: 17px; }
+  .wispguard-exit-simple { top: 6px; right: 6px; width: 42px; height: 42px; }
 }
 
 @media (max-width: 430px) {
-  .wispguard-dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 46px); }
-  .wispguard-touch-actions { grid-template-columns: repeat(2, 58px); }
-  .wispguard-touch-actions button { height: 46px; }
+  .wispguard-shell { grid-template-rows: minmax(0, 1fr) 104px; }
+  .wispguard-dpad { grid-template-columns: repeat(3, 43px); grid-template-rows: repeat(2, 43px); gap: 3px; }
+  .wispguard-touch-actions { grid-template-columns: repeat(2, minmax(48px, 56px)); gap: 5px; }
+  .wispguard-touch-actions button { height: 43px; font-size: 18px; }
+  .wispguard-touch-actions small { font-size: 7px; }
+  .wispguard-start { min-width: 180px; max-width: calc(100% - 30px); padding: 10px; }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  .wispguard-shell {
+    grid-template-columns: minmax(0, 1fr) 190px;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .wispguard-mobile-controls {
+    height: 100%;
+    padding: 4px;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .wispguard-dpad { grid-template-columns: repeat(3, 43px); grid-template-rows: repeat(2, 43px); }
+  .wispguard-touch-actions { grid-template-columns: repeat(2, 54px); }
+  .wispguard-touch-actions button { height: 42px; }
 }
 
 .wispguard-stage iframe {
