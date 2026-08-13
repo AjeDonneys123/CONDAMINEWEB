@@ -12,6 +12,11 @@
 .edu-rpg-canvas { width: min(100%, 1180px); height: 100%; max-height: 720px; min-height: 380px; overflow: hidden; border: 5px solid #bbf7d0; border-radius: 26px; background: #173d2b; box-shadow: 0 24px 70px rgba(0,0,0,.42); }
 .edu-rpg-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
 .edu-rpg-help { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: calc(100% - 80px); padding: 9px 17px; border-radius: 999px; background: rgba(4,29,23,.9); color: #dcfce7; font-size: .76rem; font-weight: 800; text-align: center; pointer-events: none; }
+.edu-rpg-score-pop { position: absolute; z-index: 15; top: 18%; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 999px; color: #fff; background: #16a34add; font-size: clamp(1.2rem,4vw,2.2rem); font-weight: 950; pointer-events: none; animation: score-pop .9s ease both; }
+.edu-rpg-mobile-controls { display: none; }
+.edu-rpg-qcm-options { display: grid; gap: 9px; }
+.edu-rpg-qcm-options button { width: 100%; }
+@keyframes score-pop { 0% { opacity: 0; transform: translate(-50%,20px) scale(.8); } 25% { opacity: 1; transform: translate(-50%,0) scale(1.08); } 100% { opacity: 0; transform: translate(-50%,-30px); } }
 .edu-rpg-credit { padding: 4px 20px 8px; color: #82a99c; font-size: .62rem; text-align: center; }
 .edu-rpg-quiz-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(3,20,16,.74); backdrop-filter: blur(7px); }
 .edu-rpg-quiz, .edu-rpg-game-over { width: min(92vw, 560px); padding: 34px; border: 5px solid #facc15; border-radius: 34px; background: #fffdf4; color: #10231d; text-align: center; box-shadow: 0 30px 90px rgba(0,0,0,.55); }
@@ -33,4 +38,34 @@
   .edu-rpg-exit { grid-column: 2; grid-row: 1; }
   .edu-rpg-stage { padding: 8px; }
   .edu-rpg-help { bottom: 14px; font-size: .6rem; }
+  .edu-rpg-mobile-controls { position: absolute; z-index: 18; inset: 0; display: block; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .edu-rpg-dpad, .edu-rpg-actions { position: absolute; bottom: max(10px,env(safe-area-inset-bottom)); display: grid; gap: 4px; padding: 5px; pointer-events: auto; }
+  .edu-rpg-dpad { left: max(8px,env(safe-area-inset-left)); grid-template: repeat(2,44px) / repeat(3,44px); }
+  .edu-rpg-dpad button:nth-child(1) { grid-column: 2; }
+  .edu-rpg-dpad button:nth-child(2) { grid-area: 2/1; }
+  .edu-rpg-dpad button:nth-child(3) { grid-area: 2/2; }
+  .edu-rpg-dpad button:nth-child(4) { grid-area: 2/3; }
+  .edu-rpg-actions { right: max(8px,env(safe-area-inset-right)); grid-template-columns: repeat(2,58px); }
+  .edu-rpg-mobile-controls button { width: 44px; height: 44px; padding: 0; border: 2px solid #ffffff55; border-radius: 50%; color: #fff; background: #0f172a38; font-weight: 950; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .edu-rpg-actions button { display: grid; place-content: center; width: 58px; height: 58px; font-size: 19px; }
+  .edu-rpg-actions small { font-size: 7px; }
+  .edu-rpg-actions .shoot { background: #dc262640; }
+  .edu-rpg-actions .reload { background: #16a34a45; }
+  .edu-rpg-canvas { min-height: 0; }
+  .edu-rpg-help { display: none; }
+  .edu-rpg-quiz-backdrop { padding: 8px; }
+  .edu-rpg-quiz { max-height: 94%; overflow-y: auto; padding: 16px; border-width: 3px; border-radius: 18px; }
+  .edu-rpg-quiz h2 { margin: 8px 0 14px; font-size: 1.15rem; line-height: 1.25; }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  .edu-rpg-header { position: absolute; z-index: 30; top: 5px; left: 50%; width: auto; min-height: 0; transform: translateX(-50%); display: flex; padding: 4px 7px; border: 0; border-radius: 12px; background: #041d1788; }
+  .edu-rpg-header > div:first-child { display: none; }
+  .edu-rpg-hud { display: flex; gap: 8px; padding: 4px 7px; background: transparent; }
+  .edu-rpg-hearts { display: none; }
+  .edu-rpg-hud > span { font-size: .65rem; }
+  .edu-rpg-exit { position: fixed; top: max(5px,env(safe-area-inset-top)); right: max(5px,env(safe-area-inset-right)); padding: 8px; font-size: 0; }
+  .edu-rpg-exit::first-letter { font-size: 18px; }
+  .edu-rpg-stage { height: 100%; padding: 2px; }
+  .edu-rpg-canvas { width: 100%; max-width: none; height: 100%; max-height: none; border-width: 2px; border-radius: 10px; }
+  .edu-rpg-credit { display: none; }
 }

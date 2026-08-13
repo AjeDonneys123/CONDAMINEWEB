@@ -1,40 +1,44 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './MultiplicationRpg.css';
 import { gameUrl } from './gameHosting';
 
 const ASSET_ROOT = gameUrl('simple-rpg/assets');
-const QUESTION_DELAY_MS = 20000;
-// Phase de test libre : les questions seront réactivées après validation du jeu.
-const ENABLE_MULTIPLICATION_QUESTIONS = false;
+const TARGET_SCORE = 400;
+const MAX_ARROWS = 10;
 
-const makeQuestion = () => {
-  const left = 2 + Math.floor(Math.random() * 9);
-  const right = 2 + Math.floor(Math.random() * 9);
-  return { left, right, expected: left * right };
-};
-
-export default function MultiplicationRpg({ onExit }) {
+export default function MultiplicationRpg({ onExit, learningContext = { lessons: [] } }) {
   const canvasHostRef = useRef(null);
   const gameRef = useRef(null);
   const sceneRef = useRef(null);
-  const inputRef = useRef(null);
   const questionOpenRef = useRef(false);
+  const virtualKeysRef = useRef(new Set());
+  const quizPoolRef = useRef([]);
+  const quizStepRef = useRef(0);
+  const scoreRef = useRef(0);
   const [question, setQuestion] = useState(null);
-  const [answer, setAnswer] = useState('');
   const [feedback, setFeedback] = useState(null);
   const [hearts, setHearts] = useState(3);
   const [score, setScore] = useState(0);
-  const [bonus, setBonus] = useState('Aucun bonus');
+  const [arrows, setArrows] = useState(MAX_ARROWS);
+  const [scorePop, setScorePop] = useState(null);
   const [gameOver, setGameOver] = useState(false);
+  const [won, setWon] = useState(false);
+
+  useEffect(() => { scoreRef.current = score; }, [score]);
+
+  const quizQuestions = useMemo(() => (learningContext?.lessons || []).flatMap((lesson) =>
+    (lesson?.quiz || []).map((row) => ({ ...row, lessonTitle: lesson.title }))
+  ), [learningContext]);
 
   const openQuestion = () => {
     if (questionOpenRef.current || gameOver) return;
     questionOpenRef.current = true;
     sceneRef.current?.setQuizPaused(true);
-    setQuestion(makeQuestion());
-    setAnswer('');
+    const shuffled = [...quizQuestions].sort(() => Math.random() - 0.5);
+    quizPoolRef.current = Array.from({ length: 4 }, (_, index) => shuffled[index % Math.max(1, shuffled.length)]).filter(Boolean);
+    quizStepRef.current = 0;
+    setQuestion(quizPoolRef.current[0] || { unavailable: true, question: 'Aucun QCM disponible pour cette leçon.', choices: ['Fermer'], correctIndex: -1 });
     setFeedback(null);
-    window.setTimeout(() => inputRef.current?.focus(), 40);
   };
 
   useEffect(() => {
@@ -53,7 +57,7 @@ export default function MultiplicationRpg({ onExit }) {
           this.playerSpeed = 125;
           this.isQuizPaused = false;
           this.invulnerableUntil = 0;
-          this.slowUntil = 0;
+          this.ammo = MAX_ARROWS;
         }
 
         preload() {
@@ -78,6 +82,8 @@ export default function MultiplicationRpg({ onExit }) {
         create(data = {}) {
           sceneRef.current = this;
           this.currentMapKey = data.mapKey === 'forest-map-2' ? 'forest-map-2' : 'forest-map';
+          this.ammo = Number.isFinite(data.ammo) ? data.ammo : MAX_ARROWS;
+          setArrows(this.ammo);
           const map = this.make.tilemap({ key: this.currentMapKey });
           const tiles = map.addTilesetImage('tileset', 'forest-tiles', 16, 16, 0, 0);
           const terrain = map.createLayer('terrain', tiles, 0, 0);
@@ -120,12 +126,17 @@ export default function MultiplicationRpg({ onExit }) {
           const monsterLayer = map.getObjectLayer('monsters');
           (monsterLayer?.objects || []).forEach((obj, index) => {
             const key = String(obj.name || '').toLowerCase().includes('mole') ? 'mole' : 'treant';
-            const monster = this.monsters.create(obj.x, obj.y, key).setDepth(8);
-            monster.hp = key === 'treant' ? 3 : 2;
-            monster.speed = key === 'treant' ? 27 : 36;
-            monster.setData('spawnX', obj.x).setData('spawnY', obj.y).setCollideWorldBounds(true);
-            monster.play(key === 'treant' ? 'treant-walk' : 'mole-walk');
-            monster.setTint(index % 2 ? 0xffffff : 0xfff3cf);
+            [0, 1].forEach((copy) => {
+              const spawnX = Phaser.Math.Clamp(obj.x + copy * 42, 24, map.widthInPixels - 24);
+              const spawnY = Phaser.Math.Clamp(obj.y + copy * 26, 24, map.heightInPixels - 24);
+              const monster = this.monsters.create(spawnX, spawnY, key).setDepth(8);
+              monster.hp = key === 'treant' ? 3 : 2;
+              monster.speed = key === 'treant' ? 27 : 36;
+              monster.setData('spawnX', spawnX).setData('spawnY', spawnY).setCollideWorldBounds(true);
+              monster.setData('kind', key);
+              monster.play(key === 'treant' ? 'treant-walk' : 'mole-walk');
+              monster.setTint((index + copy) % 2 ? 0xffffff : 0xfff3cf);
+            });
           });
           if (terrain) this.physics.add.collider(this.monsters, terrain);
           if (deco) this.physics.add.collider(this.monsters, deco);
@@ -150,11 +161,21 @@ export default function MultiplicationRpg({ onExit }) {
             this.physics.add.existing(zone, true);
             this.physics.add.overlap(this.player, zone, () => {
               if (this.isChangingMap) return;
+              if (this.currentMapKey === 'forest-map-2') {
+                if (scoreRef.current < TARGET_SCORE) {
+                  setScorePop(`Encore ${TARGET_SCORE - scoreRef.current} points`);
+                  window.setTimeout(() => setScorePop(null), 1200);
+                  return;
+                }
+                this.setQuizPaused(true);
+                setWon(true);
+                return;
+              }
               this.isChangingMap = true;
               const nextMapKey = this.currentMapKey === 'forest-map' ? 'forest-map-2' : 'forest-map';
               const nextSpawn = nextMapKey === 'forest-map-2' ? { x: 60, y: 303 } : { x: 412, y: 430 };
               this.cameras.main.fadeOut(220, 8, 47, 35);
-              this.time.delayedCall(230, () => this.scene.restart({ mapKey: nextMapKey, spawn: nextSpawn }));
+              this.time.delayedCall(230, () => this.scene.restart({ mapKey: nextMapKey, spawn: nextSpawn, ammo: this.ammo }));
             });
           });
 
@@ -163,7 +184,7 @@ export default function MultiplicationRpg({ onExit }) {
           this.cameras.main.setZoom(2.15);
           this.cameras.main.setBackgroundColor('#173d2b');
 
-          this.add.text(10, 10, `${this.currentMapKey === 'forest-map' ? 'Clairière' : 'Bois profond'}   •   Flèches/ZQSD : bouger   •   ESPACE : tirer`, {
+          this.add.text(10, 10, `${this.currentMapKey === 'forest-map' ? 'Clairière' : 'Bois profond'}   •   Forêt des savoirs`, {
             fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold', color: '#ffffff',
             backgroundColor: '#082f2399', padding: { x: 8, y: 5 }
           }).setScrollFactor(0).setDepth(100);
@@ -193,36 +214,20 @@ export default function MultiplicationRpg({ onExit }) {
           }
         }
 
-        grantBonus() {
-          this.reloadMs = 155;
-          this.playerSpeed = 175;
-          this.boostUntil = this.time.now + 12000;
-          this.invulnerableUntil = this.boostUntil;
-          this.player?.setScale(1.36).setTint(0xff5a42);
-          this.powerAura?.setVisible(true);
-          this.cameras.main.flash(220, 255, 75, 35, false);
-          this.cameras.main.shake(180, 0.006);
-          this.time.delayedCall(12000, () => {
-            if (this.time.now + 30 < this.boostUntil) return;
-            this.reloadMs = 520;
-            this.playerSpeed = 125;
-            this.player?.setScale(1).clearTint();
-            this.powerAura?.setVisible(false);
-            setBonus('Aucun bonus');
-          });
-        }
-
-        grantPenalty() {
-          this.slowUntil = this.time.now + 7000;
+        reloadArrows() {
+          this.ammo = MAX_ARROWS;
+          setArrows(MAX_ARROWS);
+          this.cameras.main.flash(180, 134, 239, 172, false);
         }
 
         update(time) {
           if (!this.player || this.isQuizPaused || !this.player.active) return;
-          const left = this.cursors.left.isDown || this.wasd.A.isDown || this.wasd.Q.isDown;
-          const right = this.cursors.right.isDown || this.wasd.D.isDown;
-          const up = this.cursors.up.isDown || this.wasd.W.isDown || this.wasd.Z.isDown;
-          const down = this.cursors.down.isDown || this.wasd.S.isDown;
-          const speed = time < this.slowUntil ? 62 : this.playerSpeed;
+          const virtual = virtualKeysRef.current;
+          const left = virtual.has('ArrowLeft') || this.cursors.left.isDown || this.wasd.A.isDown || this.wasd.Q.isDown;
+          const right = virtual.has('ArrowRight') || this.cursors.right.isDown || this.wasd.D.isDown;
+          const up = virtual.has('ArrowUp') || this.cursors.up.isDown || this.wasd.W.isDown || this.wasd.Z.isDown;
+          const down = virtual.has('ArrowDown') || this.cursors.down.isDown || this.wasd.S.isDown;
+          const speed = this.playerSpeed;
           if (this.powerAura) this.powerAura.setPosition(this.player.x, this.player.y + 2);
           this.player.setVelocity(0);
           if (left) { this.player.setVelocityX(-speed); this.orientation = 'left'; }
@@ -242,7 +247,7 @@ export default function MultiplicationRpg({ onExit }) {
             this.player.setTexture(idleKey, 0).setFlipX(this.orientation === 'left');
           }
 
-          if (this.space.isDown && time - this.lastShot >= this.reloadMs) this.shoot(time);
+          if ((virtual.has('Space') || this.space.isDown) && time - this.lastShot >= this.reloadMs) this.shoot(time);
           this.monsters.children.iterate((monster) => {
             if (!monster?.active) return;
             const distance = Phaser.Math.Distance.Between(monster.x, monster.y, this.player.x, this.player.y);
@@ -252,6 +257,9 @@ export default function MultiplicationRpg({ onExit }) {
         }
 
         shoot(time) {
+          if (this.ammo <= 0) return;
+          this.ammo -= 1;
+          setArrows(this.ammo);
           this.lastShot = time;
           // Le sprite original de la flèche est vertical : sa rotation doit
           // suivre la convention du projet source.
@@ -270,8 +278,20 @@ export default function MultiplicationRpg({ onExit }) {
           monster.setTint(0xff3b30);
           this.time.delayedCall(100, () => monster?.active && monster.clearTint());
           if (monster.hp <= 0) {
+            const spawnX = monster.getData('spawnX');
+            const spawnY = monster.getData('spawnY');
+            const kind = monster.getData('kind');
             monster.destroy();
             setScore((value) => value + 100);
+            setScorePop('+100 points');
+            window.setTimeout(() => setScorePop(null), 900);
+            this.time.delayedCall(5000, () => {
+              const revived = this.monsters.create(spawnX, spawnY, kind).setDepth(8).setCollideWorldBounds(true);
+              revived.hp = kind === 'treant' ? 3 : 2;
+              revived.speed = kind === 'treant' ? 27 : 36;
+              revived.setData('spawnX', spawnX).setData('spawnY', spawnY).setData('kind', kind);
+              revived.play(kind === 'treant' ? 'treant-walk' : 'mole-walk');
+            });
           }
         }
 
@@ -313,76 +333,87 @@ export default function MultiplicationRpg({ onExit }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!ENABLE_MULTIPLICATION_QUESTIONS) return undefined;
-    const first = window.setTimeout(openQuestion, 12000);
-    const interval = window.setInterval(openQuestion, QUESTION_DELAY_MS);
-    return () => { window.clearTimeout(first); window.clearInterval(interval); };
-  }, [gameOver]);
-
-  const validateAnswer = (event) => {
-    event.preventDefault();
+  const validateAnswer = (index) => {
     if (!question || feedback) return;
-    const isCorrect = Number(answer) === question.expected;
+    const isCorrect = index === Number(question.correctIndex);
     if (isCorrect) {
-      setFeedback({ ok: true, message: 'Bravo ! Tir rapide, vitesse et bouclier pendant 12 secondes.' });
-      setScore((value) => value + 250);
-      setHearts((value) => Math.min(5, value + 1));
-      setBonus('⚡ Archer renforcé · 12 s');
-      sceneRef.current?.grantBonus();
+      const nextStep = quizStepRef.current + 1;
+      setFeedback({ ok: true, message: `Bonne réponse ${nextStep}/4` });
+      window.setTimeout(() => {
+        quizStepRef.current = nextStep;
+        setFeedback(null);
+        if (nextStep >= 4) {
+          sceneRef.current?.reloadArrows();
+          sceneRef.current?.setQuizPaused(false);
+          questionOpenRef.current = false;
+          setQuestion(null);
+        } else setQuestion(quizPoolRef.current[nextStep]);
+      }, 650);
     } else {
-      setFeedback({ ok: false, message: `La réponse était ${question.expected}. Tu perds un cœur et ralentis pendant 7 secondes.` });
-      setHearts((value) => {
-        const next = Math.max(0, value - 1);
-        if (next === 0) setGameOver(true);
-        return next;
-      });
-      sceneRef.current?.grantPenalty();
+      setFeedback({ ok: false, message: 'Mauvaise réponse : aucune flèche. Il faut recommencer la recharge.' });
+      setArrows(0);
+      if (sceneRef.current) sceneRef.current.ammo = 0;
+      window.setTimeout(() => {
+        sceneRef.current?.setQuizPaused(false);
+        questionOpenRef.current = false;
+        setQuestion(null);
+        setFeedback(null);
+      }, 1200);
     }
-    window.setTimeout(() => {
-      if (!gameOver) sceneRef.current?.setQuizPaused(false);
-      questionOpenRef.current = false;
-      setQuestion(null);
-      setFeedback(null);
-    }, 1600);
   };
 
   const restart = () => {
     setHearts(3);
     setScore(0);
-    setBonus('Aucun bonus');
+    scoreRef.current = 0;
+    setArrows(MAX_ARROWS);
     setGameOver(false);
     questionOpenRef.current = false;
     sceneRef.current?.scene.restart();
+  };
+
+  const setVirtualKey = (code, pressed) => {
+    if (pressed) virtualKeysRef.current.add(code);
+    else virtualKeysRef.current.delete(code);
   };
 
   return (
     <div className="edu-rpg-shell">
       <header className="edu-rpg-header">
         <div>
-          <div className="edu-rpg-kicker">{ENABLE_MULTIPLICATION_QUESTIONS ? 'Calcul mental · aventure' : 'Mode test libre · sans questions'}</div>
-          <h1>La forêt des multiplications</h1>
+          <div className="edu-rpg-kicker">Aventure éducative · QCM du chapitre</div>
+          <h1>La forêt des savoirs</h1>
         </div>
         <div className="edu-rpg-hud">
           <div className="edu-rpg-hearts" aria-label={`${hearts} cœurs`}>{Array.from({ length: 5 }, (_, i) => <span key={i} className={i < hearts ? 'active' : ''}>♥</span>)}</div>
-          <strong>{score} pts</strong>
-          <span>{bonus}</span>
+          <strong>{score}/{TARGET_SCORE}</strong>
+          <span>🏹 {arrows}/{MAX_ARROWS} flèches</span>
         </div>
         <button type="button" className="edu-rpg-exit" onClick={onExit}>✕ Quitter</button>
       </header>
 
       <main className="edu-rpg-stage">
         <div ref={canvasHostRef} className="edu-rpg-canvas" />
-        <div className="edu-rpg-help">Déplace-toi avec les flèches ou ZQSD · Tire avec ESPACE · Les portes relient les deux cartes.</div>
+        <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte 100 points.</div>
+        {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
+        <div className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
+          <div className="edu-rpg-dpad">
+            {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <button key={code} type="button" onPointerDown={(event) => { event.preventDefault(); setVirtualKey(code, true); }} onPointerUp={() => setVirtualKey(code, false)} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</button>)}
+          </div>
+          <div className="edu-rpg-actions">
+            <button type="button" className="shoot" onPointerDown={(event) => { event.preventDefault(); setVirtualKey('Space', true); }} onPointerUp={() => setVirtualKey('Space', false)} onPointerCancel={() => setVirtualKey('Space', false)}>🏹<small>TIRER</small></button>
+            <button type="button" className="reload" onClick={openQuestion}>↻<small>RECHARGER</small></button>
+          </div>
+        </div>
 
         {question && !gameOver && (
           <div className="edu-rpg-quiz-backdrop">
-            <form className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`} onSubmit={validateAnswer}>
-              <div className="edu-rpg-quiz-label">Le temps est suspendu</div>
-              <h2>{question.left} × {question.right} = ?</h2>
-              <input ref={inputRef} inputMode="numeric" pattern="[0-9]*" value={answer} onChange={(event) => setAnswer(event.target.value.replace(/\D/g, ''))} disabled={Boolean(feedback)} aria-label="Ta réponse" />
-              {feedback ? <p>{feedback.message}</p> : <button type="submit" disabled={!answer}>Valider</button>}
-            </form>
+            <div className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
+              <div className="edu-rpg-quiz-label">Recharge · question {quizStepRef.current + 1}/4</div>
+              <h2>{question.question}</h2>
+              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onClick={() => validateAnswer(index)}>{choice}</button>)}</div>
+              {feedback && <p>{feedback.message}</p>}
+            </div>
           </div>
         )}
 
@@ -397,6 +428,7 @@ export default function MultiplicationRpg({ onExit }) {
             </div>
           </div>
         )}
+        {won && <div className="edu-rpg-quiz-backdrop"><div className="edu-rpg-game-over"><div className="edu-rpg-quiz-label">Mission réussie</div><h2>Forêt maîtrisée !</h2><p>Tu as atteint la dernière porte avec {score} points.</p><button type="button" onClick={restart}>Rejouer</button><button type="button" className="secondary" onClick={onExit}>Retour aux jeux</button></div></div>}
       </main>
       <footer className="edu-rpg-credit">Code adapté de Phaser3 Simple RPG (MIT) · graphismes Tiny RPG Forest par Ansimuz (CC0).</footer>
     </div>
