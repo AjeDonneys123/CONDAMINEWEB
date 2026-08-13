@@ -79,6 +79,14 @@
     transition: left 0.05s linear;
     z-index: 20;
 }
+.s-ship-sprite {
+    display: none;
+    width: 92px;
+    height: 92px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 18px #3b82f6);
+}
+.s-ship-sprite.is-loaded { display: block; }
 
 /* ENNEMIS (Réponses) */
 .s-enemy {
@@ -93,7 +101,9 @@
     word-break: break-word;
     text-align: center;
     line-height: 1.15;
-    width: clamp(130px, 30vw, 320px);
+    box-sizing: border-box;
+    width: calc((100vw / var(--lane-count, 4)) - 18px);
+    max-width: 260px;
     min-height: 56px;
     overflow: visible;
     z-index: 15;
@@ -113,6 +123,7 @@
     transform: translateX(-50%);
     text-shadow: 0 0 30px #a855f7; z-index: 25;
 }
+.s-boss img { width: 130px; height: 130px; object-fit: contain; filter: drop-shadow(0 0 24px #a855f7); }
 
 /* BOSS INPUT UI */
 .s-boss-interface {
@@ -199,4 +210,10 @@
         width: 60%;
         font-size: 1rem;
     }
+    .s-enemy {
+        padding: 5px 4px;
+        min-height: 48px;
+        width: calc((100vw / var(--lane-count, 4)) - 8px);
+    }
+    .s-ship-sprite { width: 72px; height: 72px; }
 }

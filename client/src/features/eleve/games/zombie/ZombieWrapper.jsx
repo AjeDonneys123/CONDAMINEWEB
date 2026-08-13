@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { initZombieGame } from './zombie_core';
 import './zombie_style.css';
 
-export default function ZombieWrapper({ user, level, onClose, onFinish }) {
+export default function ZombieWrapper({ user, level, gameData, onClose, onFinish }) {
     const boxRef = useRef(null);
     
     // Fonction générique pour sauvegarder
@@ -38,10 +38,10 @@ export default function ZombieWrapper({ user, level, onClose, onFinish }) {
         saveProgress(0, 0);
 
         // 2. Lancement du jeu
-        const engine = initZombieGame(boxRef.current, { level, user, onFinish: handleGameFinish }, onClose);
+        const engine = initZombieGame(boxRef.current, { level, user, gameData, onFinish: handleGameFinish }, onClose);
         
         return () => engine.destroy();
-    }, [level]);
+    }, [level, gameData]);
 
     return (
         <div className="fixed inset-0 bg-black z-[9999] flex flex-col">

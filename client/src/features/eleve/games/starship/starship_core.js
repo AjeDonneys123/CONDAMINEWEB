@@ -2,6 +2,19 @@
 import { GameProgression } from '../mainGames';
 
 export function initStarshipGame(root, api, onExit) {
+    const scenes = Array.isArray(api.gameData?.scenes) ? api.gameData.scenes : [];
+    const scene = scenes.find((item) => Array.isArray(item?.actors) && item.actors.length) || scenes[0] || {};
+    const findActor = (names) => (scene.actors || []).find((actor) => names.includes(String(actor?.name || '').trim().toUpperCase()));
+    const frameUrl = (actor, actions) => {
+        const action = (actor?.actions || []).find((item) => actions.includes(String(item?.name || '').trim().toUpperCase()));
+        return action?.frames?.find((frame) => frame?.url)?.url || actor?.actions?.flatMap((item) => item?.frames || []).find((frame) => frame?.url)?.url || '';
+    };
+    const playerActor = findActor(['P1', 'PLAYER', 'VAISSEAU', 'SHIP', 'HEROS', 'HÉROS']);
+    const enemyActor = findActor(['P2', 'ENNEMI', 'ENEMY', 'BOSS']);
+    const sprites = {
+        ship: frameUrl(playerActor, ['IDLE', 'FLY', 'VOLER']),
+        boss: frameUrl(enemyActor, ['IDLE', 'FLY', 'VOLER'])
+    };
     const STARSHIP_FALL_SPEED_MULTIPLIER = 0.5; // Demande UX: diviser par 2 la descente.
     const fitTextInBox = (el, {
         maxFont = 22,
@@ -83,7 +96,7 @@ export function initStarshipGame(root, api, onExit) {
             </div>
             <div id="s-q-banner" class="s-question-banner">Prêt ?</div>
             <div class="s-play-area" id="s-area">
-                <div id="s-ship" class="s-ship">🚀</div>
+                <div id="s-ship" class="s-ship"><img class="s-ship-sprite" alt="Vaisseau" /><span class="s-ship-fallback">🚀</span></div>
                 <div id="s-projectiles-layer"></div>
                 <div id="s-enemies-layer"></div>
             </div>
@@ -116,6 +129,21 @@ export function initStarshipGame(root, api, onExit) {
         bossInput: root.querySelector('#s-boss-input'),
         nukeBtn: root.querySelector('#s-nuke-btn')
     };
+    const shipImage = root.querySelector('.s-ship-sprite');
+    const shipFallback = root.querySelector('.s-ship-fallback');
+    if (sprites.ship) {
+        shipImage.onload = () => { shipImage.classList.add('is-loaded'); shipFallback.style.display = 'none'; };
+        shipImage.onerror = () => { shipImage.classList.remove('is-loaded'); shipFallback.style.display = ''; };
+        shipImage.src = sprites.ship;
+    }
+    const backdrop = scene?.backdrops?.[scene.currentBackdropIdx || 0]?.url || scene?.backdrops?.[0]?.url || '';
+    if (backdrop) {
+        const stars = root.querySelector('.s-stars');
+        stars.style.backgroundImage = `linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)), url("${String(backdrop).replace(/["\\]/g, '\\$&')}")`;
+        stars.style.backgroundSize = 'cover';
+        stars.style.backgroundPosition = 'center';
+        stars.style.opacity = '1';
+    }
 
     const renderBars = () => {
         els.bars.innerHTML = '';
@@ -190,7 +218,13 @@ export function initStarshipGame(root, api, onExit) {
     const startBossPhase = () => {
         const boss = document.createElement('div');
         boss.className = 's-boss';
-        boss.innerText = "🛸"; 
+        if (sprites.boss) {
+            const image = document.createElement('img');
+            image.src = sprites.boss;
+            image.alt = 'Boss';
+            image.onerror = () => { image.remove(); boss.innerText = '🛸'; };
+            boss.appendChild(image);
+        } else boss.innerText = "🛸";
         boss.style.left = '50%';
         boss.style.top = '10%';
         els.eLayer.appendChild(boss);
@@ -199,25 +233,39 @@ export function initStarshipGame(root, api, onExit) {
 
     const startInvaderPhase = () => {
         const qData = questionsList[currentQIndex];
+        const opts = qData.options;
+        const laneCount = Math.max(1, opts.length);
+        let nextLane = 0;
         spawnInterval = setInterval(() => {
-            if (isPaused || enemies.length > 6) return;
-            const opts = qData.options;
-            const rIdx = Math.floor(Math.random() * opts.length);
+            if (isPaused || enemies.length >= laneCount) return;
+            let laneIndex = nextLane % laneCount;
+            nextLane++;
+            for (let offset = 0; offset < laneCount; offset++) {
+                const candidate = (laneIndex + offset) % laneCount;
+                if (!enemies.some((enemy) => enemy.type === 'invader' && enemy.laneIndex === candidate)) {
+                    laneIndex = candidate;
+                    break;
+                }
+            }
+            if (enemies.some((enemy) => enemy.type === 'invader' && enemy.laneIndex === laneIndex)) return;
+            const rIdx = laneIndex;
             const isCorrect = (rIdx === qData.a);
             const el = document.createElement('div');
             el.className = isCorrect ? 's-enemy s-correct-target' : 's-enemy';
             const fullLabel = String(opts[rIdx] || '');
             el.innerText = formatOptionLabel(fullLabel, 10, 3);
             el.title = fullLabel;
-            const startX = 12 + Math.random() * 76;
+            const startX = ((laneIndex + 0.5) / laneCount) * 100;
             el.style.left = startX + '%';
-            el.style.top = '110px';
+            el.style.top = '150px';
+            el.style.setProperty('--lane-count', String(laneCount));
             els.eLayer.appendChild(el);
             fitTextInBox(el, { maxFont: 18, minFont: 8, lineHeight: 1.1 });
             enemies.push({
                 div: el,
                 xPct: startX,
-                y: 110,
+                y: 150,
+                laneIndex,
                 speed: (1.5 + (Math.random() * 1)) * STARSHIP_FALL_SPEED_MULTIPLIER,
                 isCorrect: isCorrect,
                 type: 'invader'

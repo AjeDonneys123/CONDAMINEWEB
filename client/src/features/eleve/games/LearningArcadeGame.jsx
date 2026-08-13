@@ -38,6 +38,7 @@ export default function LearningArcadeGame({ user, gameData, onExit }) {
     const common = {
       user,
       level,
+      gameData,
       onClose: onExit,
       onFinish: (success) => {
         if (success && levelIndex < levels.length - 1) {

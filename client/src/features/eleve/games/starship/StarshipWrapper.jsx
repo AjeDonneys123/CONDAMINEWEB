@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { initStarshipGame } from './starship_core';
 import './starship_style.css';
 
-export default function StarshipWrapper({ user, level, onClose, onFinish }) {
+export default function StarshipWrapper({ user, level, gameData, onClose, onFinish }) {
     const boxRef = useRef(null);
 
     const saveProgress = async (score, lvl) => {
@@ -34,10 +34,10 @@ export default function StarshipWrapper({ user, level, onClose, onFinish }) {
             saveProgress(0, 0);
 
             // 2. Moteur
-            const engine = initStarshipGame(boxRef.current, { level, user, onFinish: handleGameFinish }, onClose);
+            const engine = initStarshipGame(boxRef.current, { level, user, gameData, onFinish: handleGameFinish }, onClose);
             return () => engine.destroy();
         }
-    }, [level]);
+    }, [level, gameData]);
 
     return (
         <div className="fixed inset-0 bg-black z-[9999] flex flex-col w-full h-full">

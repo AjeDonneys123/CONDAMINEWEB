@@ -1,5 +1,19 @@
 // @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
 export function initZombieGame(root, api, onExit) {
+    const scenes = Array.isArray(api.gameData?.scenes) ? api.gameData.scenes : [];
+    const scene = scenes.find((item) => Array.isArray(item?.actors) && item.actors.length) || scenes[0] || {};
+    const findActor = (names) => (scene.actors || []).find((actor) => names.includes(String(actor?.name || '').trim().toUpperCase()));
+    const frameUrl = (actor, actions) => {
+        const action = (actor?.actions || []).find((item) => actions.includes(String(item?.name || '').trim().toUpperCase()));
+        return action?.frames?.find((frame) => frame?.url)?.url || actor?.actions?.flatMap((item) => item?.frames || []).find((frame) => frame?.url)?.url || '';
+    };
+    const heroActor = findActor(['HEROS', 'HÉROS', 'HERO', 'PLAYER', 'P1']);
+    const zombieActor = findActor(['ZOMBIE', 'ENNEMI', 'ENEMY', 'P2']);
+    const sprites = {
+        hero: frameUrl(heroActor, ['IDLE', 'MARCHER', 'WALK']),
+        zombie: frameUrl(zombieActor, ['IDLE', 'AVANCER', 'WALK']),
+        boss: frameUrl(zombieActor, ['TAPER', 'ATTACK', 'IDLE'])
+    };
     // --- 1. DONNÉES & ÉTAT ---
     let questionsList = api.level.questions;
     if (!questionsList || !Array.isArray(questionsList) || questionsList.length === 0) {
@@ -27,10 +41,12 @@ export function initZombieGame(root, api, onExit) {
             </div>
             <div id="arena">
                 <div id="hero-container" class="z-char-box" style="left: 5%;">
-                    <div class="z-emoji">🧙‍♂️</div>
+                    <img class="z-sprite z-hero-sprite" alt="Héros" />
+                    <div class="z-emoji z-hero-fallback">🧙‍♂️</div>
                 </div>
                 <div id="zombie-container" class="z-char-box" style="right: 0%;">
-                    <div class="z-emoji">🧟</div>
+                    <img class="z-sprite z-zombie-sprite" alt="Zombie" />
+                    <div class="z-emoji z-zombie-fallback">🧟</div>
                 </div>
                 <div id="projectile">🔥</div>
                 <div id="feedback-msg" class="z-feedback"></div>
@@ -64,6 +80,19 @@ export function initZombieGame(root, api, onExit) {
         validateBtn: root.querySelector('#validate-btn'),
         feedback: root.querySelector('#feedback-msg')
     };
+
+    const installSprite = (selector, fallbackSelector, url) => {
+        const image = root.querySelector(selector);
+        const fallback = root.querySelector(fallbackSelector);
+        if (!image || !url) return;
+        image.onload = () => { image.classList.add('is-loaded'); if (fallback) fallback.style.display = 'none'; };
+        image.onerror = () => { image.classList.remove('is-loaded'); if (fallback) fallback.style.display = ''; };
+        image.src = url;
+    };
+    installSprite('.z-hero-sprite', '.z-hero-fallback', sprites.hero);
+    installSprite('.z-zombie-sprite', '.z-zombie-fallback', sprites.zombie);
+    const backdrop = scene?.backdrops?.[scene.currentBackdropIdx || 0]?.url || scene?.backdrops?.[0]?.url || '';
+    if (backdrop) root.querySelector('#arena').style.backgroundImage = `url("${String(backdrop).replace(/["\\]/g, '\\$&')}")`;
 
     const updatePositions = () => {
         els.zombie.style.right = zombiePos + '%';
@@ -136,8 +165,11 @@ export function initZombieGame(root, api, onExit) {
             setTimeout(() => els.input.focus(), 50);
             
             // TRANSFORMATION VISUELLE BOSS
-            els.zombieEmoji.innerText = "👹"; 
+            els.zombieEmoji.innerText = "👹";
             els.zombieEmoji.style.fontSize = "7.5rem"; // +50% taille
+            const zombieImage = root.querySelector('.z-zombie-sprite');
+            if (zombieImage && sprites.boss) zombieImage.src = sprites.boss;
+            els.zombie.classList.add('is-boss');
             
             // RALENTISSEMENT
             zombieSpeed = baseSpeed * 0.5; // 50% moins vite
@@ -149,6 +181,9 @@ export function initZombieGame(root, api, onExit) {
             // RESET VISUEL
             els.zombieEmoji.innerText = "🧟";
             els.zombieEmoji.style.fontSize = "5rem";
+            const zombieImage = root.querySelector('.z-zombie-sprite');
+            if (zombieImage && sprites.zombie) zombieImage.src = sprites.zombie;
+            els.zombie.classList.remove('is-boss');
             
             // VITESSE NORMALE
             zombieSpeed = baseSpeed;
