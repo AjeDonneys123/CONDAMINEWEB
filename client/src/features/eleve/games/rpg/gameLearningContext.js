@@ -128,9 +128,12 @@ export function buildGameLearningContext(modules = [], student = {}) {
       }
     });
     const quizzesBySection = new Map();
+    const chapterQuiz = [];
     steps.filter((step) => step?.type === 'quiz').forEach((step) => {
       const key = String(step?.sectionId || 'module');
-      quizzesBySection.set(key, [...(quizzesBySection.get(key) || []), ...sanitizeQuiz(step)]);
+      const questions = sanitizeQuiz(step);
+      quizzesBySection.set(key, [...(quizzesBySection.get(key) || []), ...questions]);
+      chapterQuiz.push(...questions);
     });
 
     steps.filter((step) => step?.type === 'sheet' && String(step?.sheetText || '').trim()).forEach((step, index) => {
@@ -155,7 +158,13 @@ export function buildGameLearningContext(modules = [], student = {}) {
         title: lessonTitleFromSheet(step, section?.title || module?.title || 'Leçon'),
         chapterTitle: String(module?.chapterTitle || module?.title || ''),
         mainPoints,
-        quiz: quizzesBySection.get(sectionId) || []
+        // Certains anciens chapitres ont leurs QCM enregistrés au niveau du
+        // module (ou avec un ancien sectionId). On conserve la spécialisation
+        // par leçon lorsqu'elle existe, puis on replie sur la banque du chapitre
+        // afin qu'un combat ne puisse jamais perdre ses QCM.
+        quiz: quizzesBySection.get(sectionId)?.length
+          ? quizzesBySection.get(sectionId)
+          : chapterQuiz
       });
     });
   });

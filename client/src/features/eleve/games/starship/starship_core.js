@@ -271,14 +271,15 @@ export function initStarshipGame(root, api, onExit) {
             el.title = fullLabel;
             const startX = ((laneIndex + 0.5) / laneCount) * 100;
             el.style.left = startX + '%';
-            el.style.top = '150px';
+            const startY = Math.max(34, Math.min(110, els.area.clientHeight * 0.16));
+            el.style.top = `${startY}px`;
             el.style.setProperty('--lane-count', String(laneCount));
             els.eLayer.appendChild(el);
             fitTextInBox(el, { maxFont: 18, minFont: 8, lineHeight: 1.1 });
             enemies.push({
                 div: el,
                 xPct: startX,
-                y: 150,
+                y: startY,
                 laneIndex,
                 speed: (1.5 + (Math.random() * 1)) * STARSHIP_FALL_SPEED_MULTIPLIER,
                 isCorrect: isCorrect,
@@ -334,7 +335,7 @@ export function initStarshipGame(root, api, onExit) {
                 const p = projectiles[i];
                 p.y += 8;
                 p.div.style.bottom = p.y + 'px';
-                if (p.y > window.innerHeight) { p.div.remove(); projectiles.splice(i, 1); }
+                if (p.y > els.area.clientHeight + 30) { p.div.remove(); projectiles.splice(i, 1); }
             }
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const e = enemies[i];
@@ -359,7 +360,7 @@ export function initStarshipGame(root, api, onExit) {
                 if (!(hitbox.right < eRect.left || hitbox.left > eRect.right || hitbox.bottom < eRect.top || hitbox.top > eRect.bottom)) {
                     failAction("COLLISION !"); return;
                 }
-                if (e.y > window.innerHeight - 50) { e.div.remove(); enemies.splice(i, 1); }
+                if (e.y > els.area.clientHeight - 20) { e.div.remove(); enemies.splice(i, 1); }
             }
         }
         frameId = requestAnimationFrame(update);

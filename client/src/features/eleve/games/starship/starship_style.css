@@ -71,12 +71,17 @@
 
 /* PLAY AREA */
 .s-play-area {
-    position: absolute; inset: 0;
+    position: absolute;
+    inset: 60px 0 86px;
+    overflow: hidden;
+    min-height: 120px;
 }
 
 /* VAISSEAU */
 .s-ship {
-    position: absolute; bottom: 30px; 
+    position: absolute; bottom: 8px;
+    width: 92px;
+    height: 92px;
     font-size: 3rem; transform: translateX(-50%);
     text-shadow: 0 0 20px #3b82f6;
     transition: left 0.05s linear;
@@ -209,9 +214,8 @@
     .s-mobile-controls {
         display: flex;
     }
-    .s-ship {
-        bottom: 90px;
-    }
+    .s-play-area { inset: 60px 0 86px; }
+    .s-ship { bottom: 8px; }
     .s-boss-interface {
         bottom: 170px;
         padding-inline: 12px;
@@ -225,5 +229,19 @@
         min-height: 48px;
         width: calc((100vw / var(--lane-count, 4)) - 8px);
     }
-    .s-ship-sprite { width: 72px; height: 72px; }
+    .s-ship, .s-ship-sprite { width: 72px; height: 72px; }
+}
+@media (pointer: coarse) and (orientation: portrait) {
+    .s-play-area { inset: 60px 0 82px; }
+    .s-question-banner { top: 66px; width: 94%; }
+    .s-mobile-controls { inset-inline: 6px; bottom: 7px; }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+    .s-hud { height: 46px; padding-inline: 10px; }
+    .s-play-area { inset: 46px 0 6px; }
+    .s-question-banner { top: 50px; width: min(62%, 700px); padding: 3px 8px; }
+    .s-mobile-controls { inset-inline: 7px; bottom: 7px; }
+    .s-mobile-btn { width: 50px; height: 50px; opacity: .72; }
+    .s-ship, .s-ship-sprite { width: 62px; height: 62px; }
+    .s-boss-interface { bottom: 68px; }
 }
