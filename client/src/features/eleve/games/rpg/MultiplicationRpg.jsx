@@ -27,6 +27,14 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
   useEffect(() => { scoreRef.current = score; }, [score]);
 
+  useEffect(() => {
+    const shell = canvasHostRef.current?.closest('.edu-rpg-shell');
+    if (!shell) return undefined;
+    const block = (event) => event.preventDefault();
+    ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.addEventListener(type, block, { capture: true }));
+    return () => ['contextmenu', 'selectstart', 'dragstart'].forEach((type) => shell.removeEventListener(type, block, { capture: true }));
+  }, []);
+
   const quizQuestions = useMemo(() => (learningContext?.lessons || []).flatMap((lesson) =>
     (lesson?.quiz || []).map((row) => ({ ...row, lessonTitle: lesson.title }))
   ), [learningContext]);

@@ -13,7 +13,10 @@
         overflow: hidden;
         background: #d7d7d7;
         -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
       }
+      canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none; touch-action: none; }
       .mobile-game-controls { display: none; }
       @media (pointer: coarse), (max-width: 900px) {
         .mobile-game-controls { position: fixed; z-index: 9999; inset: 0; display: block; pointer-events: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -33,7 +36,7 @@
         .mobile-game-controls button:active { background: rgba(255,255,255,.34); transform: scale(.94); }
       }
     </style>
-		<script type="module" crossorigin src="/wispguard/assets/js/index-BoH4-B0X.js"></script>
+		<script type="module" crossorigin src="/wispguard/assets/js/index-D7Qi-dG8.js"></script>
 	</head>
 	<body>
 		<div class="container" id="game-container"></div>
