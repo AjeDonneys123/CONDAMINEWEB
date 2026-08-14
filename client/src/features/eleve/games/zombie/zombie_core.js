@@ -1,6 +1,6 @@
 // @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
 import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
-import { protectGameSurface, protectNativeTouchZone } from '../protectedGameTouch';
+import { installCoordinateTouchRouter, protectGameSurface, protectNativeTouchZone } from '../protectedGameTouch';
 
 export function initZombieGame(root, api, onExit) {
     const removeSurfaceProtection = protectGameSurface(root);
@@ -151,7 +151,9 @@ export function initZombieGame(root, api, onExit) {
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève accents
         .replace(/[^a-z0-9]/g, ""); // Enlève tout sauf chiffres et lettres
 
+    let removeChoicesRouter = () => {};
     const loadRound = () => {
+        removeChoicesRouter();
         const nextIdx = getNextQuestion();
         
         // --- VICTOIRE ---
@@ -210,6 +212,7 @@ export function initZombieGame(root, api, onExit) {
             opts.forEach(o => {
                 const btn = document.createElement('button');
                 btn.className = 'z-btn';
+                btn.dataset.gameCode = String(o.idx);
                 btn.style.color = "#000"; 
                 btn.innerText = o.txt;
                 const choose = () => {
@@ -217,10 +220,16 @@ export function initZombieGame(root, api, onExit) {
                     else failAction();
                 };
                 btn.addEventListener('pointerup', (event) => { if (event.pointerType === 'touch') return; event.preventDefault(); choose(); });
-                const onTouchEnd = (event) => { event.preventDefault(); choose(); };
-                btn.addEventListener('touchend', onTouchEnd, { passive: false });
                 protectNativeTouchZone(btn);
                 els.choices.appendChild(btn);
+            });
+            removeChoicesRouter = installCoordinateTouchRouter(els.choices, {
+                onPress: (code) => {
+                    const selected = opts.find((option) => String(option.idx) === code);
+                    if (!selected) return;
+                    if (selected.idx === qData.a) fireProjectile(true);
+                    else failAction();
+                }
             });
         }
     };
@@ -330,5 +339,5 @@ export function initZombieGame(root, api, onExit) {
     loop();
 
     protectNativeTouchZone(root.querySelector('.z-interaction-zone'));
-    return { destroy: () => { cancelAnimationFrame(frameId); removeSurfaceProtection(); heroAnimator.destroy(); zombieAnimator.destroy(); } };
+    return { destroy: () => { cancelAnimationFrame(frameId); removeChoicesRouter(); removeSurfaceProtection(); heroAnimator.destroy(); zombieAnimator.destroy(); } };
 }

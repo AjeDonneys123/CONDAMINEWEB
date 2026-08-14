@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './WispguardGame.css';
 import ProtectedGameSurface from '../ProtectedGameSurface';
+import useCoordinateTouchControls from '../useCoordinateTouchControls';
 
 const MAGE_POSE_LABELS = [
   'Bas · préparation', 'Bas · énergie', 'Bas · tir',
@@ -15,6 +16,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   const spriteSheetInputRef = useRef(null);
   const spriteImportPendingRef = useRef(false);
   const touchRepeatRef = useRef(null);
+  const mobileControlsRef = useRef(null);
   const [started, setStarted] = useState(false);
   const [placingSprite, setPlacingSprite] = useState(false);
   const [spriteNotice, setSpriteNotice] = useState('');
@@ -87,6 +89,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     if (pressed) focusGame();
   };
   const startTouchKey = (event, code, key, repeat = false) => {
+    if (event.pointerType === 'touch') return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const previous = touchRepeatRef.current;
@@ -102,6 +105,24 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     if (held?.code) setGameKeyState(held.code, held.key, false);
     touchRepeatRef.current = null;
   };
+
+  const controlKeys = {
+    ArrowUp: ['ArrowUp', 'ArrowUp', true], ArrowDown: ['ArrowDown', 'ArrowDown', true],
+    ArrowLeft: ['ArrowLeft', 'ArrowLeft', true], ArrowRight: ['ArrowRight', 'ArrowRight', true],
+    KeyZ: ['KeyZ', 'z', false], KeyX: ['KeyX', 'x', false], Enter: ['Enter', 'Enter', false], Space: ['Space', ' ', false],
+  };
+  useCoordinateTouchControls(mobileControlsRef, {
+    directionalCodes: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+    onPress: (name) => {
+      const [code, key, repeat] = controlKeys[name] || [];
+      if (!code) return;
+      if (repeat) {
+        touchRepeatRef.current = { code, key };
+        setGameKeyState(code, key, true);
+      } else pressGameKey(code, key);
+    },
+    onRelease: () => stopTouchKey(),
+  });
 
   const sendToGame = (type, payload = {}) => {
     frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type, ...payload }, '*');
@@ -330,6 +351,20 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
           </button>
         )}
       </main>
+
+      <div ref={mobileControlsRef} className="wispguard-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
+        <div className="wispguard-dpad">
+          {[["ArrowUp", "▲"], ["ArrowLeft", "◀"], ["ArrowDown", "▼"], ["ArrowRight", "▶"]].map(([code, label]) => (
+            <button type="button" key={code} data-game-code={code} onPointerDown={(event) => startTouchKey(event, code, code, true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>{label}</button>
+          ))}
+        </div>
+        <div className="wispguard-touch-actions">
+          <button type="button" data-game-code="KeyZ" className="attack" onPointerDown={(event) => startTouchKey(event, 'KeyZ', 'z')} onPointerUp={stopTouchKey}>Z<small>ÉPÉE</small></button>
+          <button type="button" data-game-code="KeyX" className="lift" onPointerDown={(event) => startTouchKey(event, 'KeyX', 'x')} onPointerUp={stopTouchKey}>X<small>PRENDRE</small></button>
+          <button type="button" data-game-code="Enter" className="interact" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')} onPointerUp={stopTouchKey}>OK<small>VALIDER</small></button>
+          <button type="button" data-game-code="Space" className="help" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')} onPointerUp={stopTouchKey}>★<small>QUESTION</small></button>
+        </div>
+      </div>
 
       {sheetCalibration && (
         <div className="wispguard-calibration-backdrop">

@@ -89,7 +89,7 @@
 .monster-tamer-touch-actions .is-back { background: #2563ebe8; }
 
 @media (max-width: 700px) {
-  .monster-tamer-shell { grid-template-rows: auto minmax(0, 1fr); padding: 5px; }
+  .monster-tamer-shell { grid-template-rows: auto minmax(0, 1fr) 108px; padding: 5px; }
   .monster-tamer-header { gap: 6px; padding: 2px 2px 5px; }
   .monster-tamer-header > div:first-child, .monster-tamer-help, .monster-tamer-credit { display: none; }
   .monster-tamer-revision-select { min-width: 0; flex: 1; padding: 5px 8px; }
@@ -109,6 +109,12 @@
   .quiz-options-grid { gap: 7px; }
   .quiz-option-btn { gap: 8px; padding: 9px; font-size: 13px; }
   .quiz-feedback { margin-top: 8px; padding: 8px; }
+}
+
+@media (pointer: coarse) {
+  .monster-tamer-mobile-controls { display: flex; }
+  .monster-tamer-mobile-controls,
+  .monster-tamer-mobile-controls * { touch-action: none !important; }
 }
 
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {

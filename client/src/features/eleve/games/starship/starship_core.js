@@ -1,7 +1,7 @@
 // @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
 import { GameProgression } from '../mainGames';
 import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
-import { protectGameSurface, protectNativeTouchZone } from '../protectedGameTouch';
+import { installCoordinateTouchRouter, protectGameSurface } from '../protectedGameTouch';
 
 export function initStarshipGame(root, api, onExit) {
     const removeSurfaceProtection = protectGameSurface(root);
@@ -109,12 +109,12 @@ export function initStarshipGame(root, api, onExit) {
             </div>
             <div class="s-mobile-controls">
                 <div class="s-mobile-move">
-                    <button class="s-mobile-btn" id="s-mobile-left">◀</button>
-                    <button class="s-mobile-btn" id="s-mobile-right">▶</button>
+                    <button class="s-mobile-btn" id="s-mobile-left" data-game-code="left">◀</button>
+                    <button class="s-mobile-btn" id="s-mobile-right" data-game-code="right">▶</button>
                 </div>
                 <div class="s-mobile-actions">
-                    <button class="s-mobile-btn s-mobile-fire" id="s-mobile-fire">TIR</button>
-                    <button class="s-mobile-btn s-mobile-jump" id="s-mobile-jump">SAUT</button>
+                    <button class="s-mobile-btn s-mobile-fire" id="s-mobile-fire" data-game-code="fire">TIR</button>
+                    <button class="s-mobile-btn s-mobile-jump" id="s-mobile-jump" data-game-code="jump">SAUT</button>
                 </div>
             </div>
         </div>
@@ -375,32 +375,23 @@ export function initStarshipGame(root, api, onExit) {
         if (e.code === 'Space') { e.preventDefault(); fire(); }
     };
     document.addEventListener('keydown', handleKey);
-    const bindHold = (id, onPress, onRelease = null) => {
-        const btn = root.querySelector(id);
-        if (!btn) return;
-        let t = null;
-        const start = (e) => {
-            e.preventDefault();
-            onPress();
-            if (!t) t = setInterval(onPress, 70);
-        };
-        const stop = (e) => {
-            if (e) e.preventDefault();
-            if (t) { clearInterval(t); t = null; }
-            if (onRelease) onRelease();
-        };
-        btn.addEventListener('mousedown', start);
-        btn.addEventListener('mouseup', stop);
-        btn.addEventListener('mouseleave', stop);
-        btn.addEventListener('touchstart', start, { passive: false });
-        btn.addEventListener('touchend', stop, { passive: false });
-        btn.addEventListener('touchcancel', stop, { passive: false });
-        protectNativeTouchZone(btn);
-    };
-    bindHold('#s-mobile-left', () => moveShip(-3));
-    bindHold('#s-mobile-right', () => moveShip(3));
-    bindHold('#s-mobile-fire', () => fire());
-    bindHold('#s-mobile-jump', () => fire());
+    let mobileHold = null;
+    const mobileActions = { left: () => moveShip(-3), right: () => moveShip(3), fire, jump: fire };
+    const stopMobileHold = () => { if (mobileHold) clearInterval(mobileHold); mobileHold = null; };
+    const removeMobileRouter = installCoordinateTouchRouter(root.querySelector('.s-mobile-controls'), {
+        continuousCodes: ['left', 'right'],
+        onPress: (code) => {
+            stopMobileHold();
+            mobileActions[code]?.();
+            if (code === 'left' || code === 'right') mobileHold = setInterval(mobileActions[code], 70);
+        },
+        onRelease: stopMobileHold,
+    });
+    root.querySelectorAll('.s-mobile-btn').forEach((button) => button.addEventListener('pointerdown', (event) => {
+        if (event.pointerType === 'touch') return;
+        event.preventDefault();
+        mobileActions[button.dataset.gameCode]?.();
+    }));
     els.bossInput.onkeydown = (e) => {
         e.stopPropagation();
         if(e.key === 'Enter') handleBossInput();
@@ -413,5 +404,5 @@ export function initStarshipGame(root, api, onExit) {
     loadRound();
     update();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey); } };
+    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); stopMobileHold(); removeMobileRouter(); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey); } };
 }
