@@ -22,7 +22,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   const quizPoolRef = useRef([]);
   const quizStepRef = useRef(0);
   const questionRewardRef = useRef('arrows');
-  const activeTouchControlRef = useRef('');
+  const activeTouchControlsRef = useRef(new Map());
   const wrongQuestionsRef = useRef([]);
   const scoreRef = useRef(0);
   const arrowTimeRef = useRef(0);
@@ -97,33 +97,47 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       });
       return nearest || '';
     };
-    const releaseActiveTouchControl = () => {
-      const active = activeTouchControlRef.current;
+    const releaseTouch = (identifier) => {
+      const active = activeTouchControlsRef.current.get(identifier);
       if (active && !['Reload', 'Heal'].includes(active)) setVirtualKey(active, false);
-      activeTouchControlRef.current = '';
+      activeTouchControlsRef.current.delete(identifier);
+    };
+    const releaseAllTouches = () => {
+      [...activeTouchControlsRef.current.keys()].forEach(releaseTouch);
+      directionCodes.forEach((code) => setVirtualKey(code, false));
     };
     const handleControlsTouchStart = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      releaseActiveTouchControl();
-      directionCodes.forEach((code) => setVirtualKey(code, false));
-      const code = resolveControl(event.changedTouches?.[0] || event.touches?.[0]);
-      activeTouchControlRef.current = code;
-      if (code === 'Reload') openQuestion('arrows');
-      else if (code === 'Heal') openQuestion('hearts');
-      else if (code) setVirtualKey(code, true);
+      [...(event.changedTouches || [])].forEach((touch) => {
+        releaseTouch(touch.identifier);
+        const code = resolveControl(touch);
+        if (!code) return;
+        activeTouchControlsRef.current.set(touch.identifier, code);
+        if (code === 'Reload') openQuestion('arrows');
+        else if (code === 'Heal') openQuestion('hearts');
+        else setVirtualKey(code, true);
+      });
     };
     const handleControlsTouchMove = (event) => {
       event.preventDefault();
-      if (!directionCodes.includes(activeTouchControlRef.current)) return;
-      const code = resolveControl(event.touches?.[0], '.edu-rpg-dpad [data-game-code]');
-      directionCodes.forEach((direction) => setVirtualKey(direction, direction === code));
-      activeTouchControlRef.current = code;
+      event.stopPropagation();
+      [...(event.changedTouches || event.touches || [])].forEach((touch) => {
+        const previous = activeTouchControlsRef.current.get(touch.identifier);
+        if (!directionCodes.includes(previous)) return;
+        const code = resolveControl(touch, '.edu-rpg-dpad [data-game-code]');
+        if (!code || code === previous) return;
+        setVirtualKey(previous, false);
+        activeTouchControlsRef.current.set(touch.identifier, code);
+        setVirtualKey(code, true);
+      });
     };
     const handleControlsTouchEnd = (event) => {
       event.preventDefault();
-      releaseActiveTouchControl();
-      directionCodes.forEach((code) => setVirtualKey(code, false));
+      event.stopPropagation();
+      const changed = [...(event.changedTouches || [])];
+      if (changed.length) changed.forEach((touch) => releaseTouch(touch.identifier));
+      else releaseAllTouches();
     };
     const touchOptions = { passive: false };
     targets.forEach((target) => {
@@ -136,7 +150,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     controlsRoot?.addEventListener('touchmove', handleControlsTouchMove, touchOptions);
     controlsRoot?.addEventListener('touchend', handleControlsTouchEnd, touchOptions);
     controlsRoot?.addEventListener('touchcancel', handleControlsTouchEnd, touchOptions);
+    window.addEventListener('orientationchange', releaseAllTouches);
+    window.addEventListener('blur', releaseAllTouches);
     return () => {
+      releaseAllTouches();
       targets.forEach((target) => {
         target.removeEventListener('touchmove', block, touchOptions);
         target.removeEventListener('contextmenu', block);
@@ -147,6 +164,8 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       controlsRoot?.removeEventListener('touchmove', handleControlsTouchMove, touchOptions);
       controlsRoot?.removeEventListener('touchend', handleControlsTouchEnd, touchOptions);
       controlsRoot?.removeEventListener('touchcancel', handleControlsTouchEnd, touchOptions);
+      window.removeEventListener('orientationchange', releaseAllTouches);
+      window.removeEventListener('blur', releaseAllTouches);
     };
   }, [question]);
 
