@@ -5,7 +5,8 @@ import ProtectedGameSurface from '../ProtectedGameSurface';
 
 const ASSET_ROOT = gameUrl('simple-rpg/assets');
 const TARGET_SCORE = 400;
-const MAX_ARROW_SECONDS = 20;
+const MAX_ARROW_SECONDS = 80;
+const ARROW_SECONDS_PER_CORRECT = 20;
 const POINTS_PER_ENEMY = 20;
 const MAX_HEARTS = 6;
 
@@ -22,6 +23,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   const quizStepRef = useRef(0);
   const questionRewardRef = useRef('arrows');
   const activeTouchControlRef = useRef('');
+  const wrongQuestionsRef = useRef([]);
   const scoreRef = useRef(0);
   const arrowTimeRef = useRef(0);
   const [question, setQuestion] = useState(null);
@@ -35,13 +37,27 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
   useEffect(() => { scoreRef.current = score; }, [score]);
 
+  const wrongStorageKey = `condaweb-forest-wrong-v1:${String(learningContext?.activeChapterId || 'chapter')}`;
+  const questionKey = (row = {}) => String(row?.id || row?._id || row?.question || '').trim();
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(wrongStorageKey) || '[]');
+      wrongQuestionsRef.current = Array.isArray(saved) ? saved.filter((row) => questionKey(row)) : [];
+    } catch (_) { wrongQuestionsRef.current = []; }
+  }, [wrongStorageKey]);
+
+  const saveWrongQuestions = (rows) => {
+    wrongQuestionsRef.current = rows;
+    try { window.localStorage.setItem(wrongStorageKey, JSON.stringify(rows)); } catch (_) {}
+  };
+
   const setArrowTime = (seconds) => {
     const next = Math.max(0, Math.min(MAX_ARROW_SECONDS, Number(seconds) || 0));
     arrowTimeRef.current = next;
     setArrowSeconds(next);
   };
 
-  const grantArrowSeconds = (seconds = 5) => setArrowTime(arrowTimeRef.current + seconds);
+  const grantArrowSeconds = (seconds = ARROW_SECONDS_PER_CORRECT) => setArrowTime(arrowTimeRef.current + seconds);
 
   useEffect(() => {
     const shield = screenShieldRef.current;
@@ -143,8 +159,11 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     questionRewardRef.current = reward;
     questionOpenRef.current = true;
     sceneRef.current?.setQuizPaused(true);
-    const shuffled = [...quizQuestions].sort(() => Math.random() - 0.5);
-    quizPoolRef.current = Array.from({ length: 4 }, (_, index) => shuffled[index % Math.max(1, shuffled.length)]).filter(Boolean);
+    const pending = [...wrongQuestionsRef.current];
+    const pendingKeys = new Set(pending.map(questionKey));
+    const shuffled = quizQuestions.filter((row) => !pendingKeys.has(questionKey(row))).sort(() => Math.random() - 0.5);
+    const ordered = [...pending, ...shuffled];
+    quizPoolRef.current = Array.from({ length: 4 }, (_, index) => ordered[index % Math.max(1, ordered.length)]).filter(Boolean);
     quizStepRef.current = 0;
     setQuestion(quizPoolRef.current[0] || { unavailable: true, question: 'Aucun QCM disponible pour cette leçon.', choices: ['Fermer'], correctIndex: -1 });
     setFeedback(null);
@@ -454,8 +473,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     const isCorrect = index === Number(question.correctIndex);
     if (isCorrect) {
       const nextStep = quizStepRef.current + 1;
-      grantArrowSeconds(5);
-      setFeedback({ ok: true, message: `Bonne réponse ${nextStep}/4 · +5 secondes de flèches infinies` });
+      grantArrowSeconds();
+      const currentKey = questionKey(question);
+      saveWrongQuestions(wrongQuestionsRef.current.filter((row) => questionKey(row) !== currentKey));
+      setFeedback({ ok: true, selectedIndex: index, correctIndex: Number(question.correctIndex), message: `Bonne réponse ${nextStep}/4 · +${ARROW_SECONDS_PER_CORRECT} secondes de flèches infinies` });
       window.setTimeout(() => {
         quizStepRef.current = nextStep;
         setFeedback(null);
@@ -467,7 +488,16 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         } else setQuestion(quizPoolRef.current[nextStep]);
       }, 650);
     } else {
-      setFeedback({ ok: false, message: questionRewardRef.current === 'hearts' ? 'Mauvaise réponse : aucun cœur gagné. Les secondes déjà gagnées restent disponibles.' : 'Mauvaise réponse : recharge interrompue. Les secondes déjà gagnées restent disponibles.' });
+      const currentKey = questionKey(question);
+      if (!wrongQuestionsRef.current.some((row) => questionKey(row) === currentKey)) saveWrongQuestions([...wrongQuestionsRef.current, question]);
+      const correctIndex = Number(question.correctIndex);
+      const correctAnswer = String(question.choices?.[correctIndex] || 'Réponse indisponible');
+      setFeedback({
+        ok: false,
+        selectedIndex: index,
+        correctIndex,
+        message: `Mauvaise réponse. La bonne réponse est : « ${correctAnswer} ». Cette question reviendra au prochain QCM.`
+      });
       window.setTimeout(() => {
         sceneRef.current?.setQuizPaused(false);
         questionOpenRef.current = false;
@@ -553,9 +583,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         {question && !gameOver && (
           <div className="edu-rpg-quiz-backdrop">
             <div ref={quizRef} className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
-              <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches infinies'} · question {quizStepRef.current + 1}/4 · +5 s si juste</div>
+              <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches infinies'} · question {quizStepRef.current + 1}/4 · +{ARROW_SECONDS_PER_CORRECT} s si juste</div>
               <h2>{question.question}</h2>
-              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onClick={() => validateAnswer(index)}>{choice}</button>)}</div>
+              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} className={feedback ? (index === feedback.correctIndex ? 'is-answer-correct' : index === feedback.selectedIndex ? 'is-answer-wrong' : '') : ''} onClick={() => validateAnswer(index)}>{choice}</button>)}</div>
               {feedback && <p>{feedback.message}</p>}
             </div>
           </div>

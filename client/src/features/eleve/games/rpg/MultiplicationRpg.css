@@ -24,10 +24,16 @@
 .edu-rpg-mobile-controls { display: none; }
 .edu-rpg-qcm-options { display: grid; gap: 9px; }
 .edu-rpg-qcm-options button { width: 100%; min-width: 0; min-height: 50px; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+.edu-rpg-qcm-options button.is-answer-correct,
+.edu-rpg-qcm-options button.is-answer-correct:disabled { opacity: 1; color: #fff; background: #16a34a; box-shadow: 0 0 0 4px #bbf7d0, 0 0 24px #22c55e; animation: answer-glow-green .7s ease-in-out infinite alternate; }
+.edu-rpg-qcm-options button.is-answer-wrong,
+.edu-rpg-qcm-options button.is-answer-wrong:disabled { opacity: 1; color: #fff; background: #dc2626; box-shadow: 0 0 0 4px #fecaca, 0 0 24px #ef4444; animation: answer-glow-red .45s ease-in-out 2 alternate; }
 .edu-rpg-mobile-controls, .edu-rpg-mobile-controls *, .edu-rpg-quiz, .edu-rpg-quiz * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; -webkit-user-drag: none !important; -webkit-tap-highlight-color: transparent !important; }
 .edu-rpg-mobile-controls, .edu-rpg-mobile-controls * { touch-action: none !important; }
 .edu-rpg-quiz button { touch-action: manipulation; }
 @keyframes score-pop { 0% { opacity: 0; transform: translate(-50%,20px) scale(.8); } 25% { opacity: 1; transform: translate(-50%,0) scale(1.08); } 100% { opacity: 0; transform: translate(-50%,-30px); } }
+@keyframes answer-glow-green { from { filter: brightness(1); transform: scale(1); } to { filter: brightness(1.2); transform: scale(1.015); } }
+@keyframes answer-glow-red { from { filter: brightness(1); transform: translateX(0); } to { filter: brightness(1.15); transform: translateX(3px); } }
 .edu-rpg-credit { padding: 4px 20px 8px; color: #82a99c; font-size: .62rem; text-align: center; }
 .edu-rpg-quiz-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(3,20,16,.74); backdrop-filter: blur(7px); }
 .edu-rpg-quiz, .edu-rpg-game-over { width: min(92vw, 560px); padding: 34px; border: 5px solid #facc15; border-radius: 34px; background: #fffdf4; color: #10231d; text-align: center; box-shadow: 0 30px 90px rgba(0,0,0,.55); }
