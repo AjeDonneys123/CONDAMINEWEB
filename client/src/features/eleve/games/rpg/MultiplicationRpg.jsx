@@ -45,38 +45,50 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   }, []);
 
   useEffect(() => {
-    const targets = [mobileControlsRef.current, quizRef.current].filter(Boolean);
+    const controlsRoot = mobileControlsRef.current;
+    const quiz = quizRef.current;
+    const targets = [controlsRoot, quiz].filter(Boolean);
     if (!targets.length) return undefined;
     const block = (event) => event.preventDefault();
+    const controlNodes = controlsRoot ? [...controlsRoot.querySelectorAll('[data-game-code]')] : [];
     const handleControlTouchStart = (event) => {
       event.preventDefault();
-      const control = event.target.closest?.('[data-game-code]');
-      if (!control) return;
-      const code = control.dataset.gameCode;
+      event.stopPropagation();
+      const code = event.currentTarget.dataset.gameCode;
       if (code === 'Reload') openQuestion();
       else setVirtualKey(code, true);
     };
     const handleControlTouchEnd = (event) => {
       event.preventDefault();
-      virtualKeysRef.current.clear();
+      event.stopPropagation();
+      const code = event.currentTarget.dataset.gameCode;
+      if (code && code !== 'Reload') setVirtualKey(code, false);
     };
     const touchOptions = { passive: false };
     targets.forEach((target) => {
-      target.addEventListener('touchstart', target === mobileControlsRef.current ? handleControlTouchStart : block, touchOptions);
-      if (target === mobileControlsRef.current) target.addEventListener('touchend', handleControlTouchEnd, touchOptions);
       target.addEventListener('touchmove', block, touchOptions);
       target.addEventListener('contextmenu', block);
       target.addEventListener('selectstart', block);
       target.addEventListener('dragstart', block);
     });
-    return () => targets.forEach((target) => {
-      target.removeEventListener('touchstart', target === mobileControlsRef.current ? handleControlTouchStart : block, touchOptions);
-      if (target === mobileControlsRef.current) target.removeEventListener('touchend', handleControlTouchEnd, touchOptions);
-      target.removeEventListener('touchmove', block, touchOptions);
-      target.removeEventListener('contextmenu', block);
-      target.removeEventListener('selectstart', block);
-      target.removeEventListener('dragstart', block);
+    controlNodes.forEach((control) => {
+      control.addEventListener('touchstart', handleControlTouchStart, touchOptions);
+      control.addEventListener('touchend', handleControlTouchEnd, touchOptions);
+      control.addEventListener('touchcancel', handleControlTouchEnd, touchOptions);
     });
+    return () => {
+      targets.forEach((target) => {
+        target.removeEventListener('touchmove', block, touchOptions);
+        target.removeEventListener('contextmenu', block);
+        target.removeEventListener('selectstart', block);
+        target.removeEventListener('dragstart', block);
+      });
+      controlNodes.forEach((control) => {
+        control.removeEventListener('touchstart', handleControlTouchStart, touchOptions);
+        control.removeEventListener('touchend', handleControlTouchEnd, touchOptions);
+        control.removeEventListener('touchcancel', handleControlTouchEnd, touchOptions);
+      });
+    };
   }, [question]);
 
   const quizQuestions = useMemo(() => (learningContext?.lessons || []).flatMap((lesson) =>
@@ -442,6 +454,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
   const pressControl = (event, code) => {
     blockGameGesture(event);
+    // Sur écran tactile, les gestionnaires natifs non-passifs ci-dessus portent
+    // chaque direction séparément. Évite un second appui PointerEvent ambigu.
+    if (event.pointerType === 'touch') return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setVirtualKey(code, true);
   };
@@ -472,7 +487,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           </div>
           <div className="edu-rpg-actions">
             <div data-game-code="Space" role="button" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey('Space', false); }} onPointerCancel={() => setVirtualKey('Space', false)}><span aria-hidden="true">➤</span><small>TIRER</small></div>
-            <div data-game-code="Reload" role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); openQuestion(); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
+            <div data-game-code="Reload" role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); if (event.pointerType !== 'touch') openQuestion(); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
           </div>
         </div>
 
