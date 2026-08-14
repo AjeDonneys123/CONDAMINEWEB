@@ -53,21 +53,6 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     const targets = [controlsRoot, quiz].filter(Boolean);
     if (!targets.length) return undefined;
     const block = (event) => event.preventDefault();
-    const controlNodes = controlsRoot ? [...controlsRoot.querySelectorAll('[data-game-code]')] : [];
-    const handleControlTouchStart = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const code = event.currentTarget.dataset.gameCode;
-      if (code === 'Reload') openQuestion('arrows');
-      else if (code === 'Heal') openQuestion('hearts');
-      else setVirtualKey(code, true);
-    };
-    const handleControlTouchEnd = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const code = event.currentTarget.dataset.gameCode;
-      if (code && !['Reload', 'Heal'].includes(code)) setVirtualKey(code, false);
-    };
     const touchOptions = { passive: false };
     targets.forEach((target) => {
       target.addEventListener('touchmove', block, touchOptions);
@@ -75,22 +60,12 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       target.addEventListener('selectstart', block);
       target.addEventListener('dragstart', block);
     });
-    controlNodes.forEach((control) => {
-      control.addEventListener('touchstart', handleControlTouchStart, touchOptions);
-      control.addEventListener('touchend', handleControlTouchEnd, touchOptions);
-      control.addEventListener('touchcancel', handleControlTouchEnd, touchOptions);
-    });
     return () => {
       targets.forEach((target) => {
         target.removeEventListener('touchmove', block, touchOptions);
         target.removeEventListener('contextmenu', block);
         target.removeEventListener('selectstart', block);
         target.removeEventListener('dragstart', block);
-      });
-      controlNodes.forEach((control) => {
-        control.removeEventListener('touchstart', handleControlTouchStart, touchOptions);
-        control.removeEventListener('touchend', handleControlTouchEnd, touchOptions);
-        control.removeEventListener('touchcancel', handleControlTouchEnd, touchOptions);
       });
     };
   }, [question]);
@@ -462,11 +437,14 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
   const pressControl = (event, code) => {
     blockGameGesture(event);
-    // Sur écran tactile, les gestionnaires natifs non-passifs ci-dessus portent
-    // chaque direction séparément. Évite un second appui PointerEvent ambigu.
-    if (event.pointerType === 'touch') return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setVirtualKey(code, true);
+  };
+
+  const releaseControl = (event, code) => {
+    blockGameGesture(event);
+    setVirtualKey(code, false);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   return (
@@ -492,12 +470,17 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         {arrows === 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onPointerUp={(event) => { event.preventDefault(); openQuestion('arrows'); }}>🏹 Plus de flèches · RECHARGER</button>}
         <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
-            {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <div key={code} data-game-code={code} role="button" aria-label={code} className="edu-rpg-control" onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey(code, false); }} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</div>)}
+            {[
+              ['ArrowUp', 'up', '▲'],
+              ['ArrowLeft', 'left', '◀'],
+              ['ArrowDown', 'down', '▼'],
+              ['ArrowRight', 'right', '▶']
+            ].map(([code, direction, label]) => <button type="button" key={code} data-game-code={code} aria-label={code} className={`edu-rpg-control dir-${direction}`} onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => releaseControl(event, code)} onPointerCancel={(event) => releaseControl(event, code)}>{label}</button>)}
           </div>
           <div className="edu-rpg-actions">
-            <div data-game-code="Space" role="button" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey('Space', false); }} onPointerCancel={() => setVirtualKey('Space', false)}><span aria-hidden="true">➤</span><small>TIRER</small></div>
-            <div data-game-code="Reload" role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); if (event.pointerType !== 'touch') openQuestion('arrows'); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
-            <div data-game-code="Heal" role="button" aria-label="Guérir" className="edu-rpg-control heal" onPointerDown={(event) => { blockGameGesture(event); if (event.pointerType !== 'touch') openQuestion('hearts'); }}><span aria-hidden="true">♥</span><small>GUÉRIR +3</small></div>
+            <button type="button" data-game-code="Space" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => releaseControl(event, 'Space')} onPointerCancel={(event) => releaseControl(event, 'Space')}><span aria-hidden="true">➤</span><small>TIRER</small></button>
+            <button type="button" data-game-code="Reload" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); openQuestion('arrows'); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></button>
+            <button type="button" data-game-code="Heal" aria-label="Guérir" className="edu-rpg-control heal" onPointerDown={(event) => { blockGameGesture(event); openQuestion('hearts'); }}><span aria-hidden="true">♥</span><small>GUÉRIR +3</small></button>
           </div>
         </div>
 
