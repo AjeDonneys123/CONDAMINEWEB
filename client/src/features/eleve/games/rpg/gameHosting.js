@@ -1,10 +1,8 @@
 const configuredBaseUrl = String(import.meta.env.VITE_GAMES_BASE_URL || '').trim();
 
-const developmentBaseUrl = import.meta.env.DEV && typeof window !== 'undefined' ? window.location.origin : '';
-
-// Les ressources des jeux vivent dans CONDAMINE-GAMES, y compris lorsque
-// CondaWeb tourne sur localhost. L'origine locale ne doit servir de repli que
-// si aucune URL de jeux n'est configurée.
-export const GAMES_BASE_URL = (configuredBaseUrl || developmentBaseUrl || 'https://condamine-games.vercel.app').replace(/\/$/, '');
+// Les ressources vivent toujours dans CONDAMINE-GAMES. Utiliser l'origine de
+// CondaWeb en développement rechargeait l'application dans l'iframe et
+// affichait un écran gris à la place du jeu.
+export const GAMES_BASE_URL = (configuredBaseUrl || 'https://condamine-games.vercel.app').replace(/\/$/, '');
 
 export const gameUrl = (path) => `${GAMES_BASE_URL}/${String(path || '').replace(/^\//, '')}`;
