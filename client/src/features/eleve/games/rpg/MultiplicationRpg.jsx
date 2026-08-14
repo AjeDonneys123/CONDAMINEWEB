@@ -53,6 +53,41 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     const targets = [controlsRoot, quiz].filter(Boolean);
     if (!targets.length) return undefined;
     const block = (event) => event.preventDefault();
+    const dpad = controlsRoot?.querySelector('.edu-rpg-dpad');
+    const directionCodes = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    const resolveDirection = (touch) => {
+      if (!dpad || !touch) return '';
+      const buttons = [...dpad.querySelectorAll('[data-game-code]')];
+      let nearest = null;
+      let nearestDistance = Infinity;
+      buttons.forEach((button) => {
+        const rect = button.getBoundingClientRect();
+        const dx = touch.clientX - (rect.left + rect.width / 2);
+        const dy = touch.clientY - (rect.top + rect.height / 2);
+        const distance = dx * dx + dy * dy;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = button.dataset.gameCode;
+        }
+      });
+      return nearest || '';
+    };
+    const handleDpadTouchStart = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      directionCodes.forEach((code) => setVirtualKey(code, false));
+      const code = resolveDirection(event.changedTouches?.[0] || event.touches?.[0]);
+      if (code) setVirtualKey(code, true);
+    };
+    const handleDpadTouchMove = (event) => {
+      event.preventDefault();
+      const code = resolveDirection(event.touches?.[0]);
+      directionCodes.forEach((direction) => setVirtualKey(direction, direction === code));
+    };
+    const handleDpadTouchEnd = (event) => {
+      event.preventDefault();
+      directionCodes.forEach((code) => setVirtualKey(code, false));
+    };
     const touchOptions = { passive: false };
     targets.forEach((target) => {
       target.addEventListener('touchmove', block, touchOptions);
@@ -60,6 +95,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       target.addEventListener('selectstart', block);
       target.addEventListener('dragstart', block);
     });
+    dpad?.addEventListener('touchstart', handleDpadTouchStart, touchOptions);
+    dpad?.addEventListener('touchmove', handleDpadTouchMove, touchOptions);
+    dpad?.addEventListener('touchend', handleDpadTouchEnd, touchOptions);
+    dpad?.addEventListener('touchcancel', handleDpadTouchEnd, touchOptions);
     return () => {
       targets.forEach((target) => {
         target.removeEventListener('touchmove', block, touchOptions);
@@ -67,6 +106,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         target.removeEventListener('selectstart', block);
         target.removeEventListener('dragstart', block);
       });
+      dpad?.removeEventListener('touchstart', handleDpadTouchStart, touchOptions);
+      dpad?.removeEventListener('touchmove', handleDpadTouchMove, touchOptions);
+      dpad?.removeEventListener('touchend', handleDpadTouchEnd, touchOptions);
+      dpad?.removeEventListener('touchcancel', handleDpadTouchEnd, touchOptions);
     };
   }, [question]);
 
@@ -437,6 +480,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
   const pressControl = (event, code) => {
     blockGameGesture(event);
+    // Sur Safari iOS, la direction est résolue depuis les coordonnées du doigt
+    // par le gestionnaire TouchEvent natif du pavé.
+    if (event.pointerType === 'touch' && code.startsWith('Arrow')) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setVirtualKey(code, true);
   };
