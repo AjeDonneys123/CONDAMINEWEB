@@ -146,7 +146,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const Teacher = mongoose.model('Teacher');
         const Subject = mongoose.model('Subject');
         const Homework = mongoose.model('Homework');
-        const GameLevel = mongoose.model('GameLevel');
         const LearningModule = mongoose.model('LearningModule');
         const Expose = mongoose.model('Expose');
         const Lecture = mongoose.model('Lecture');
@@ -154,7 +153,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const Production = mongoose.model('Production');
         const Chapter = mongoose.model('Chapter');
         const Submission = mongoose.model('Submission');
-        const GameProgress = mongoose.model('GameProgress');
         const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
 
         const isVisitor = req.query?.visitor === '1';
@@ -173,19 +171,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
             assignedGroups: [],
             behaviorRecords: []
         };
-        const StudioProject = mongoose.model('StudioProject');
-        const tappingProject = await StudioProject.findOne({
-            title: /tapping/i,
-            isTrashed: { $ne: true }
-        }, '_id title')
-            .sort({ isProduction: -1, updatedAt: -1, createdAt: -1 })
-            .lean();
-
-        const totalCrosses = (student.behaviorRecords || [])
-            .reduce((sum, record) => sum + Number(record?.crosses || 0), 0);
-        const totalBonuses = (student.behaviorRecords || [])
-            .reduce((sum, record) => sum + Number(record?.bonuses || 0), 0);
-
         const classTargets = studentDoc ? await buildStudentClassTargets(studentDoc) : [student.currentClass];
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
         const classScopeIds = []
@@ -278,24 +263,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
             entry.bonuses += Number(record.bonuses || 0);
         }
 
-        if (tappingProject) {
-            const entry = ensureDiscipline('JEUX');
-            entry.crosses = Math.max(Number(entry.crosses || 0), totalCrosses);
-            entry.bonuses = Math.max(Number(entry.bonuses || 0), totalBonuses);
-            entry.games.total += 1;
-            entry.games.todo += 1;
-            entry.games.todoTitles.push('Tapping');
-            entry.activities.total += 1;
-            entry.activities.todo += 1;
-            entry.activities.todoTitles.push('🎮 Tapping');
-            entry.activities.todoItems.push({
-                id: String(tappingProject._id),
-                type: 'game',
-                title: 'Tapping',
-                label: '🎮 Tapping'
-            });
-        }
-
         const activityQuery = isVisitor
             ? { isEnabled: { $ne: false } }
             : { isEnabled: { $ne: false }, $or: [{ isAllClass: true }, { assignedStudents: student._id }] };
@@ -307,18 +274,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
 
         const homeworks = (await Homework.find({ ...activityQuery, isPunishment: { $ne: true } }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean()).filter(visibleActivity);
 
-        const rawGames = await GameLevel.find({
-            ...activityQuery,
-            isTestGame: { $ne: true }
-        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean();
-        const games = rawGames.filter(game => {
-            if (isVisitor) return matchesLevel(game.targetClassrooms, visitorLevel);
-            const assigned = (game.assignedStudents || []).some(id => String(id) === String(student._id));
-            if (assigned) return true;
-            if (/tapping/i.test(String(game?.title || ''))) return true;
-            if (!game.isAllClass) return false;
-            return matchesClassTargets(game.targetClassrooms, classTargetKeys);
-        });
         const rawLearningModules = await LearningModule.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions').lean();
         const learningModules = rawLearningModules.filter(visibleActivity);
         const [rawExposes, rawLectures, rawComments, rawProductions] = await Promise.all([
@@ -333,7 +288,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const productions = rawProductions.filter(visibleActivity);
 
         const chapterIds = [...new Set(
-            [...homeworks, ...games, ...learningModules, ...exposes, ...lectures, ...comments, ...productions]
+            [...homeworks, ...learningModules, ...exposes, ...lectures, ...comments, ...productions]
                 .map(it => it.chapterId ? String(it.chapterId) : null)
                 .filter(Boolean)
         )];
@@ -359,9 +314,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         };
 
         const submissions = student._id ? await Submission.find({ studentId: student._id }, 'homeworkId').lean() : [];
-        const progressRows = student._id ? await GameProgress.find({ studentId: student._id }, 'gameId levelReached').lean() : [];
         const submittedHomeworkIds = new Set(submissions.map(s => String(s.homeworkId)));
-        const progressByGameId = new Map(progressRows.map(p => [String(p.gameId), Number(p.levelReached || 0)]));
         for (const hw of homeworks) {
             const fallbackSubject = mapToParentDiscipline(hw.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(hw) || fallbackSubject || 'GÉNÉRAL';
@@ -391,45 +344,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     type: 'homework',
                     title: hw.title || 'Devoir',
                     label: `📚 ${hw.title || 'Devoir'}`
-                });
-            }
-        }
-
-        for (const game of games) {
-            const fallbackSubject = mapToParentDiscipline(game.subject || 'GÉNÉRAL');
-            const subject = resolveItemSubject(game) || fallbackSubject || 'GÉNÉRAL';
-            const entry = ensureDiscipline(subject);
-            const levelReached = progressByGameId.get(String(game._id));
-            entry.games.total += 1;
-            entry.activities.total += 1;
-            if (levelReached === undefined) {
-                entry.games.todo += 1;
-                entry.games.todoTitles.push(game.title || 'Jeu');
-                entry.activities.todo += 1;
-                entry.activities.todoTitles.push(`🎮 ${game.title || 'Jeu'}`);
-                entry.activities.todoItems.push({
-                    id: String(game._id),
-                    type: 'game',
-                    title: game.title || 'Jeu',
-                    label: `🎮 ${game.title || 'Jeu'}`
-                });
-            } else if (levelReached >= 1) {
-                entry.games.done += 1;
-                entry.activities.done += 1;
-                entry.activities.savedItems.push({
-                    id: String(game._id),
-                    type: 'game',
-                    title: game.title || 'Jeu',
-                    label: `🎮 Refaire ${game.title || 'Jeu'}`
-                });
-            } else {
-                entry.games.started += 1;
-                entry.activities.done += 1;
-                entry.activities.savedItems.push({
-                    id: String(game._id),
-                    type: 'game',
-                    title: game.title || 'Jeu',
-                    label: `🎮 Reprendre ${game.title || 'Jeu'}`
                 });
             }
         }

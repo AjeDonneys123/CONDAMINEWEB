@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import HomeworkList from '../homework/HomeworkList';
+import './ExamTrainingHub.css';
 
 const TRAINING_SCORE_EVENT = 'condaweb:training-score';
 
@@ -5867,7 +5868,7 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
   };
 
   return (
-    <section className="mx-3 flex flex-col gap-4 pb-10">
+    <section className="training-responsive mx-3 flex flex-col gap-4 pb-10">
       <TrainingPointsBadge user={user} />
       <header className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-sky-50 p-5 shadow-sm">
         <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600">5e · Géographie</div>
@@ -6096,7 +6097,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
       : null;
 
     return (
-      <section className="flex flex-col gap-4">
+      <section className="training-responsive flex flex-col gap-4">
         <TrainingPointsBadge user={user} />
         <div className="mx-4 rounded-3xl border border-violet-200 bg-violet-50 p-5">
           <div className="text-[11px] font-black uppercase text-violet-500">Brevet</div>
@@ -6199,7 +6200,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
   if (mode === 'seconde') {
     const isRqp = section === 'rqp';
     return (
-      <section className="flex flex-col gap-4">
+      <section className="training-responsive flex flex-col gap-4">
         <TrainingPointsBadge user={user} />
         <div className="mx-4 rounded-3xl border border-blue-200 bg-blue-50 p-5">
           <div className="text-[11px] font-black uppercase text-blue-500">Seconde</div>
@@ -6234,7 +6235,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
   }
 
   return (
-    <div className="mx-4 rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center">
+    <div className="training-responsive mx-4 rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center">
       <div className="text-3xl mb-2">📚</div>
       <div className="text-lg font-black text-slate-700">Aucun entraînement spécial pour ta classe.</div>
     </div>

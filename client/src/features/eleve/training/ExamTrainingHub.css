@@ -1,0 +1,82 @@
+.training-responsive {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.training-responsive img,
+.training-responsive svg,
+.training-responsive canvas,
+.training-responsive iframe,
+.training-responsive video {
+  max-width: 100%;
+}
+
+.training-responsive button,
+.training-responsive input,
+.training-responsive select,
+.training-responsive textarea {
+  max-width: 100%;
+  touch-action: manipulation;
+}
+
+@media (max-width: 760px) {
+  .training-responsive {
+    margin-inline: 0 !important;
+    gap: 0.65rem !important;
+    padding: 0 0.35rem max(1rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .training-responsive > header,
+  .training-responsive > div {
+    margin-inline: 0 !important;
+  }
+
+  .training-responsive h2 {
+    font-size: clamp(1.35rem, 7vw, 1.8rem) !important;
+    line-height: 1.05 !important;
+  }
+
+  .training-responsive h3 {
+    font-size: clamp(1.05rem, 5vw, 1.35rem) !important;
+    line-height: 1.15 !important;
+  }
+
+  .training-responsive nav,
+  .training-responsive [role="tablist"] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    scrollbar-width: thin;
+  }
+
+  .training-responsive nav > button,
+  .training-responsive [role="tablist"] > button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .training-responsive {
+    gap: 0.4rem !important;
+    padding-bottom: 0.4rem !important;
+  }
+
+  .training-responsive > header,
+  .training-responsive > div:first-of-type {
+    padding: 0.65rem 0.85rem !important;
+  }
+
+  .training-responsive h2 {
+    font-size: 1.35rem !important;
+  }
+
+  .training-responsive p {
+    margin-block: 0.25rem !important;
+  }
+
+  .training-responsive button {
+    padding-block: 0.55rem !important;
+  }
+}

@@ -512,8 +512,11 @@
 
 @media (max-width: 760px) {
     .learning-wrap {
-        padding: 4px 2px 12px;
+        width: 100%;
+        min-width: 0;
+        padding: 4px max(4px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
         gap: 8px;
+        overflow-x: hidden;
     }
 
     .learning-top {
@@ -530,8 +533,11 @@
     }
 
     .learning-card {
+        width: 100%;
+        min-width: 0;
         border-radius: 12px;
-        padding: 10px;
+        padding: 8px;
+        overflow: hidden;
     }
 
     .learning-step-title,
@@ -540,15 +546,42 @@
     }
 
     .learning-sheet {
-        height: 56vh;
+        height: min(62dvh, 620px);
+        min-height: 320px;
+        background: #fff;
+        -webkit-overflow-scrolling: touch;
     }
 
     .learning-video {
-        max-height: 52vh;
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: min(62dvh, 620px);
+        aspect-ratio: 16 / 9;
+        object-fit: contain;
     }
 
     .learning-video-frame {
-        height: 52vh;
+        display: block;
+        width: 100%;
+        height: auto;
+        min-height: 220px;
+        aspect-ratio: 16 / 9;
+    }
+
+    .learning-sheet-text {
+        min-height: 100%;
+        padding: 14px;
+        font-size: 17px;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+        color: #0f172a;
+        background: #fff;
+    }
+
+    .learning-iframe {
+        display: block;
+        min-height: 320px;
     }
 
     .learning-meta {
@@ -560,5 +593,33 @@
     .learning-btn {
         padding: 9px 12px;
         font-size: 11px;
+    }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+    .learning-wrap {
+        gap: 5px;
+        padding-top: 2px;
+    }
+
+    .learning-top {
+        min-height: 34px;
+    }
+
+    .learning-card {
+        padding: 6px 8px;
+    }
+
+    .learning-step-title,
+    .learning-hint {
+        margin-bottom: 4px;
+    }
+
+    .learning-sheet,
+    .learning-video,
+    .learning-video-frame {
+        height: calc(100dvh - 170px);
+        min-height: 190px;
+        max-height: none;
     }
 }

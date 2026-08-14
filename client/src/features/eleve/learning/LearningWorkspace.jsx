@@ -2406,6 +2406,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 ref={videoRef}
                                 src={videoUrlResolved}
                                 controls
+                                playsInline
+                                preload="metadata"
                                 className="learning-video"
                                 onLoadedMetadata={() => {
                                     const el = videoRef.current;
