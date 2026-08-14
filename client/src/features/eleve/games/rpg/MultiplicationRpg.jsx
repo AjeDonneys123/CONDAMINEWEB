@@ -80,8 +80,14 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     if (!targets.length) return undefined;
     const block = (event) => event.preventDefault();
     const directionCodes = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-    const resolveControl = (touch, selector = '[data-game-code]') => {
+    const blockedTouchIds = new Set();
+    let layoutLockedUntil = 0;
+    const resolveControl = (touch, selector = '[data-game-code]', preferTouchedElement = false) => {
       if (!controlsRoot || !touch) return '';
+      const touchedButton = touch.target?.closest?.('[data-game-code]');
+      if (preferTouchedElement && touchedButton && controlsRoot.contains(touchedButton) && touchedButton.matches(selector)) {
+        return touchedButton.dataset.gameCode || '';
+      }
       const buttons = [...controlsRoot.querySelectorAll(selector)];
       let nearest = null;
       let nearestDistance = Infinity;
@@ -110,8 +116,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       event.preventDefault();
       event.stopPropagation();
       [...(event.changedTouches || [])].forEach((touch) => {
+        if (blockedTouchIds.has(touch.identifier) || performance.now() < layoutLockedUntil) return;
         releaseTouch(touch.identifier);
-        const code = resolveControl(touch);
+        const code = resolveControl(touch, '[data-game-code]', true);
         if (!code) return;
         activeTouchControlsRef.current.set(touch.identifier, code);
         if (code === 'Reload') openQuestion('arrows');
@@ -136,8 +143,17 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       event.preventDefault();
       event.stopPropagation();
       const changed = [...(event.changedTouches || [])];
-      if (changed.length) changed.forEach((touch) => releaseTouch(touch.identifier));
+      if (changed.length) changed.forEach((touch) => {
+        releaseTouch(touch.identifier);
+        blockedTouchIds.delete(touch.identifier);
+      });
       else releaseAllTouches();
+    };
+    const resetAfterLayoutChange = () => {
+      activeTouchControlsRef.current.forEach((_, identifier) => blockedTouchIds.add(identifier));
+      releaseAllTouches();
+      // Safari recalcule les rectangles tactiles après l'événement de rotation.
+      layoutLockedUntil = performance.now() + 280;
     };
     const touchOptions = { passive: false };
     targets.forEach((target) => {
@@ -150,8 +166,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     controlsRoot?.addEventListener('touchmove', handleControlsTouchMove, touchOptions);
     controlsRoot?.addEventListener('touchend', handleControlsTouchEnd, touchOptions);
     controlsRoot?.addEventListener('touchcancel', handleControlsTouchEnd, touchOptions);
-    window.addEventListener('orientationchange', releaseAllTouches);
-    window.addEventListener('blur', releaseAllTouches);
+    window.addEventListener('orientationchange', resetAfterLayoutChange);
+    window.addEventListener('resize', resetAfterLayoutChange);
+    window.addEventListener('blur', resetAfterLayoutChange);
     return () => {
       releaseAllTouches();
       targets.forEach((target) => {
@@ -164,8 +181,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       controlsRoot?.removeEventListener('touchmove', handleControlsTouchMove, touchOptions);
       controlsRoot?.removeEventListener('touchend', handleControlsTouchEnd, touchOptions);
       controlsRoot?.removeEventListener('touchcancel', handleControlsTouchEnd, touchOptions);
-      window.removeEventListener('orientationchange', releaseAllTouches);
-      window.removeEventListener('blur', releaseAllTouches);
+      window.removeEventListener('orientationchange', resetAfterLayoutChange);
+      window.removeEventListener('resize', resetAfterLayoutChange);
+      window.removeEventListener('blur', resetAfterLayoutChange);
     };
   }, [question]);
 
