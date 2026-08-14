@@ -5,7 +5,7 @@ import ProtectedGameSurface from '../ProtectedGameSurface';
 
 const ASSET_ROOT = gameUrl('simple-rpg/assets');
 const TARGET_SCORE = 400;
-const MAX_ARROWS = 10;
+const MAX_ARROW_SECONDS = 20;
 const POINTS_PER_ENEMY = 20;
 const MAX_HEARTS = 6;
 
@@ -22,16 +22,25 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   const quizStepRef = useRef(0);
   const questionRewardRef = useRef('arrows');
   const scoreRef = useRef(0);
+  const arrowTimeRef = useRef(0);
   const [question, setQuestion] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [hearts, setHearts] = useState(3);
   const [score, setScore] = useState(0);
-  const [arrows, setArrows] = useState(0);
+  const [arrowSeconds, setArrowSeconds] = useState(0);
   const [scorePop, setScorePop] = useState(null);
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
 
   useEffect(() => { scoreRef.current = score; }, [score]);
+
+  const setArrowTime = (seconds) => {
+    const next = Math.max(0, Math.min(MAX_ARROW_SECONDS, Number(seconds) || 0));
+    arrowTimeRef.current = next;
+    setArrowSeconds(next);
+  };
+
+  const grantArrowSeconds = (seconds = 5) => setArrowTime(arrowTimeRef.current + seconds);
 
   useEffect(() => {
     const shield = screenShieldRef.current;
@@ -145,7 +154,8 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.playerSpeed = 105;
           this.isQuizPaused = false;
           this.invulnerableUntil = 0;
-          this.ammo = 0;
+          this.lastArrowTime = null;
+          this.lastArrowDisplay = 0;
         }
 
         preload() {
@@ -173,8 +183,6 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.isChangingMap = false;
           this.physics.resume();
           this.currentMapKey = data.mapKey === 'forest-map-2' ? 'forest-map-2' : 'forest-map';
-          this.ammo = Number.isFinite(data.ammo) ? data.ammo : 0;
-          setArrows(this.ammo);
           const map = this.make.tilemap({ key: this.currentMapKey });
           const tiles = map.addTilesetImage('tileset', 'forest-tiles', 16, 16, 0, 0);
           const terrain = map.createLayer('terrain', tiles, 0, 0);
@@ -267,7 +275,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
               const nextMapKey = this.currentMapKey === 'forest-map' ? 'forest-map-2' : 'forest-map';
               const nextSpawn = nextMapKey === 'forest-map-2' ? { x: 60, y: 303 } : { x: 412, y: 430 };
               this.cameras.main.fadeOut(220, 8, 47, 35);
-              this.time.delayedCall(230, () => this.scene.restart({ mapKey: nextMapKey, spawn: nextSpawn, ammo: this.ammo }));
+              this.time.delayedCall(230, () => this.scene.restart({ mapKey: nextMapKey, spawn: nextSpawn }));
             });
           });
 
@@ -298,6 +306,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
         setQuizPaused(paused) {
           this.isQuizPaused = paused;
+          this.lastArrowTime = null;
           if (paused) {
             this.physics.pause();
             this.player?.setVelocity(0);
@@ -306,14 +315,19 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           }
         }
 
-        reloadArrows() {
-          this.ammo = MAX_ARROWS;
-          setArrows(MAX_ARROWS);
-          this.cameras.main.flash(180, 134, 239, 172, false);
-        }
-
         update(time) {
           if (!this.player || this.isQuizPaused || !this.player.active) return;
+          if (this.lastArrowTime === null) this.lastArrowTime = time;
+          const elapsedSeconds = Math.max(0, (time - this.lastArrowTime) / 1000);
+          this.lastArrowTime = time;
+          if (arrowTimeRef.current > 0 && elapsedSeconds > 0) {
+            arrowTimeRef.current = Math.max(0, arrowTimeRef.current - elapsedSeconds);
+            const shown = Math.ceil(arrowTimeRef.current * 10) / 10;
+            if (shown !== this.lastArrowDisplay) {
+              this.lastArrowDisplay = shown;
+              setArrowSeconds(shown);
+            }
+          }
           const virtual = virtualKeysRef.current;
           const left = virtual.has('ArrowLeft') || this.cursors.left.isDown || this.wasd.A.isDown || this.wasd.Q.isDown;
           const right = virtual.has('ArrowRight') || this.cursors.right.isDown || this.wasd.D.isDown;
@@ -349,9 +363,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         }
 
         shoot(time) {
-          if (this.ammo <= 0) return;
-          this.ammo -= 1;
-          setArrows(this.ammo);
+          if (arrowTimeRef.current <= 0) return;
           this.lastShot = time;
           // Le sprite original de la flèche est vertical : sa rotation doit
           // suivre la convention du projet source.
@@ -430,24 +442,20 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     const isCorrect = index === Number(question.correctIndex);
     if (isCorrect) {
       const nextStep = quizStepRef.current + 1;
-      setFeedback({ ok: true, message: `Bonne réponse ${nextStep}/4` });
+      grantArrowSeconds(5);
+      setFeedback({ ok: true, message: `Bonne réponse ${nextStep}/4 · +5 secondes de flèches infinies` });
       window.setTimeout(() => {
         quizStepRef.current = nextStep;
         setFeedback(null);
         if (nextStep >= 4) {
           if (questionRewardRef.current === 'hearts') setHearts((value) => Math.min(MAX_HEARTS, value + 3));
-          else sceneRef.current?.reloadArrows();
           sceneRef.current?.setQuizPaused(false);
           questionOpenRef.current = false;
           setQuestion(null);
         } else setQuestion(quizPoolRef.current[nextStep]);
       }, 650);
     } else {
-      setFeedback({ ok: false, message: questionRewardRef.current === 'hearts' ? 'Mauvaise réponse : aucun cœur gagné.' : 'Mauvaise réponse : aucune flèche. Il faut recommencer la recharge.' });
-      if (questionRewardRef.current === 'arrows') {
-        setArrows(0);
-        if (sceneRef.current) sceneRef.current.ammo = 0;
-      }
+      setFeedback({ ok: false, message: questionRewardRef.current === 'hearts' ? 'Mauvaise réponse : aucun cœur gagné. Les secondes déjà gagnées restent disponibles.' : 'Mauvaise réponse : recharge interrompue. Les secondes déjà gagnées restent disponibles.' });
       window.setTimeout(() => {
         sceneRef.current?.setQuizPaused(false);
         questionOpenRef.current = false;
@@ -462,10 +470,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     setHearts(3);
     setScore(0);
     scoreRef.current = 0;
-    setArrows(0);
+    setArrowTime(0);
     setGameOver(false);
     questionOpenRef.current = false;
-    sceneRef.current?.scene.restart({ ammo: 0 });
+    sceneRef.current?.scene.restart();
   };
 
   const setVirtualKey = (code, pressed) => {
@@ -503,7 +511,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <div className="edu-rpg-hud">
           <div className="edu-rpg-hearts" aria-label={`${hearts} cœurs`}>{Array.from({ length: MAX_HEARTS }, (_, i) => <span key={i} className={i < hearts ? 'active' : ''}>♥</span>)}</div>
           <strong>{score}/{TARGET_SCORE}</strong>
-          <span>🏹 {arrows}/{MAX_ARROWS} flèches</span>
+          <span className="edu-rpg-arrow-energy"><b>🏹 ∞ {arrowSeconds.toFixed(1)} s</b><i><em style={{ width: `${(arrowSeconds / MAX_ARROW_SECONDS) * 100}%` }} /></i></span>
         </div>
         <button type="button" className="edu-rpg-exit" onClick={onExit}>✕ Quitter</button>
       </header>
@@ -513,7 +521,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <div ref={screenShieldRef} className="edu-rpg-screen-shield" aria-hidden="true" />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
-        {arrows === 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onPointerUp={(event) => { event.preventDefault(); openQuestion('arrows'); }}>🏹 Plus de flèches · RECHARGER</button>}
+        {arrowSeconds <= 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onPointerUp={(event) => { event.preventDefault(); openQuestion('arrows'); }}>🏹 Jauge vide · RECHARGER</button>}
         <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
             {[
@@ -533,7 +541,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         {question && !gameOver && (
           <div className="edu-rpg-quiz-backdrop">
             <div ref={quizRef} className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
-              <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches'} · question {quizStepRef.current + 1}/4</div>
+              <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches infinies'} · question {quizStepRef.current + 1}/4 · +5 s si juste</div>
               <h2>{question.question}</h2>
               <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onPointerUp={(event) => { event.preventDefault(); validateAnswer(index); }}>{choice}</button>)}</div>
               {feedback && <p>{feedback.message}</p>}
