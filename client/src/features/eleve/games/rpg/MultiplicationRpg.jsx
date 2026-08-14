@@ -21,6 +21,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   const quizPoolRef = useRef([]);
   const quizStepRef = useRef(0);
   const questionRewardRef = useRef('arrows');
+  const activeTouchControlRef = useRef('');
   const scoreRef = useRef(0);
   const arrowTimeRef = useRef(0);
   const [question, setQuestion] = useState(null);
@@ -62,11 +63,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     const targets = [controlsRoot, quiz].filter(Boolean);
     if (!targets.length) return undefined;
     const block = (event) => event.preventDefault();
-    const dpad = controlsRoot?.querySelector('.edu-rpg-dpad');
     const directionCodes = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-    const resolveDirection = (touch) => {
-      if (!dpad || !touch) return '';
-      const buttons = [...dpad.querySelectorAll('[data-game-code]')];
+    const resolveControl = (touch, selector = '[data-game-code]') => {
+      if (!controlsRoot || !touch) return '';
+      const buttons = [...controlsRoot.querySelectorAll(selector)];
       let nearest = null;
       let nearestDistance = Infinity;
       buttons.forEach((button) => {
@@ -81,20 +81,32 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       });
       return nearest || '';
     };
-    const handleDpadTouchStart = (event) => {
+    const releaseActiveTouchControl = () => {
+      const active = activeTouchControlRef.current;
+      if (active && !['Reload', 'Heal'].includes(active)) setVirtualKey(active, false);
+      activeTouchControlRef.current = '';
+    };
+    const handleControlsTouchStart = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      releaseActiveTouchControl();
       directionCodes.forEach((code) => setVirtualKey(code, false));
-      const code = resolveDirection(event.changedTouches?.[0] || event.touches?.[0]);
-      if (code) setVirtualKey(code, true);
+      const code = resolveControl(event.changedTouches?.[0] || event.touches?.[0]);
+      activeTouchControlRef.current = code;
+      if (code === 'Reload') openQuestion('arrows');
+      else if (code === 'Heal') openQuestion('hearts');
+      else if (code) setVirtualKey(code, true);
     };
-    const handleDpadTouchMove = (event) => {
+    const handleControlsTouchMove = (event) => {
       event.preventDefault();
-      const code = resolveDirection(event.touches?.[0]);
+      if (!directionCodes.includes(activeTouchControlRef.current)) return;
+      const code = resolveControl(event.touches?.[0], '.edu-rpg-dpad [data-game-code]');
       directionCodes.forEach((direction) => setVirtualKey(direction, direction === code));
+      activeTouchControlRef.current = code;
     };
-    const handleDpadTouchEnd = (event) => {
+    const handleControlsTouchEnd = (event) => {
       event.preventDefault();
+      releaseActiveTouchControl();
       directionCodes.forEach((code) => setVirtualKey(code, false));
     };
     const touchOptions = { passive: false };
@@ -104,10 +116,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       target.addEventListener('selectstart', block);
       target.addEventListener('dragstart', block);
     });
-    dpad?.addEventListener('touchstart', handleDpadTouchStart, touchOptions);
-    dpad?.addEventListener('touchmove', handleDpadTouchMove, touchOptions);
-    dpad?.addEventListener('touchend', handleDpadTouchEnd, touchOptions);
-    dpad?.addEventListener('touchcancel', handleDpadTouchEnd, touchOptions);
+    controlsRoot?.addEventListener('touchstart', handleControlsTouchStart, touchOptions);
+    controlsRoot?.addEventListener('touchmove', handleControlsTouchMove, touchOptions);
+    controlsRoot?.addEventListener('touchend', handleControlsTouchEnd, touchOptions);
+    controlsRoot?.addEventListener('touchcancel', handleControlsTouchEnd, touchOptions);
     return () => {
       targets.forEach((target) => {
         target.removeEventListener('touchmove', block, touchOptions);
@@ -115,10 +127,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         target.removeEventListener('selectstart', block);
         target.removeEventListener('dragstart', block);
       });
-      dpad?.removeEventListener('touchstart', handleDpadTouchStart, touchOptions);
-      dpad?.removeEventListener('touchmove', handleDpadTouchMove, touchOptions);
-      dpad?.removeEventListener('touchend', handleDpadTouchEnd, touchOptions);
-      dpad?.removeEventListener('touchcancel', handleDpadTouchEnd, touchOptions);
+      controlsRoot?.removeEventListener('touchstart', handleControlsTouchStart, touchOptions);
+      controlsRoot?.removeEventListener('touchmove', handleControlsTouchMove, touchOptions);
+      controlsRoot?.removeEventListener('touchend', handleControlsTouchEnd, touchOptions);
+      controlsRoot?.removeEventListener('touchcancel', handleControlsTouchEnd, touchOptions);
     };
   }, [question]);
 
@@ -490,7 +502,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     blockGameGesture(event);
     // Sur Safari iOS, la direction est résolue depuis les coordonnées du doigt
     // par le gestionnaire TouchEvent natif du pavé.
-    if (event.pointerType === 'touch' && code.startsWith('Arrow')) return;
+    if (event.pointerType === 'touch') return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setVirtualKey(code, true);
   };
@@ -521,7 +533,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <div ref={screenShieldRef} className="edu-rpg-screen-shield" aria-hidden="true" />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
-        {arrowSeconds <= 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onPointerUp={(event) => { event.preventDefault(); openQuestion('arrows'); }}>🏹 Jauge vide · RECHARGER</button>}
+        {arrowSeconds <= 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onClick={() => openQuestion('arrows')}>🏹 Jauge vide · RECHARGER</button>}
         <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
             {[
@@ -543,7 +555,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             <div ref={quizRef} className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
               <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches infinies'} · question {quizStepRef.current + 1}/4 · +5 s si juste</div>
               <h2>{question.question}</h2>
-              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onPointerUp={(event) => { event.preventDefault(); validateAnswer(index); }}>{choice}</button>)}</div>
+              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onClick={() => validateAnswer(index)}>{choice}</button>)}</div>
               {feedback && <p>{feedback.message}</p>}
             </div>
           </div>
