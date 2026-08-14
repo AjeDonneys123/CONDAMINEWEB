@@ -1,0 +1,15 @@
+.protected-game-surface,
+.protected-game-surface *:not(input):not(textarea) {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+.protected-game-surface { position: fixed; inset: 0; z-index: 9998; overflow: hidden; overscroll-behavior: none; touch-action: manipulation; }
+.protected-game-surface img,
+.protected-game-surface canvas,
+.protected-game-surface iframe,
+.protected-game-surface [role="button"],
+.protected-game-surface button { -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; -webkit-user-drag: none !important; }
+.protected-game-surface [role="button"], .protected-game-surface button { touch-action: manipulation; }

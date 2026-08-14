@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './MultiplicationRpg.css';
 import { gameUrl } from './gameHosting';
+import ProtectedGameSurface from '../ProtectedGameSurface';
 
 const ASSET_ROOT = gameUrl('simple-rpg/assets');
 const TARGET_SCORE = 400;
 const MAX_ARROWS = 10;
 const POINTS_PER_ENEMY = 20;
+const MAX_HEARTS = 6;
 
 export default function MultiplicationRpg({ onExit, learningContext = { lessons: [] } }) {
   const canvasHostRef = useRef(null);
@@ -18,12 +20,13 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   const virtualKeysRef = useRef(new Set());
   const quizPoolRef = useRef([]);
   const quizStepRef = useRef(0);
+  const questionRewardRef = useRef('arrows');
   const scoreRef = useRef(0);
   const [question, setQuestion] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [hearts, setHearts] = useState(3);
   const [score, setScore] = useState(0);
-  const [arrows, setArrows] = useState(MAX_ARROWS);
+  const [arrows, setArrows] = useState(0);
   const [scorePop, setScorePop] = useState(null);
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
@@ -55,14 +58,15 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       event.preventDefault();
       event.stopPropagation();
       const code = event.currentTarget.dataset.gameCode;
-      if (code === 'Reload') openQuestion();
+      if (code === 'Reload') openQuestion('arrows');
+      else if (code === 'Heal') openQuestion('hearts');
       else setVirtualKey(code, true);
     };
     const handleControlTouchEnd = (event) => {
       event.preventDefault();
       event.stopPropagation();
       const code = event.currentTarget.dataset.gameCode;
-      if (code && code !== 'Reload') setVirtualKey(code, false);
+      if (code && !['Reload', 'Heal'].includes(code)) setVirtualKey(code, false);
     };
     const touchOptions = { passive: false };
     targets.forEach((target) => {
@@ -95,8 +99,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     (lesson?.quiz || []).map((row) => ({ ...row, lessonTitle: lesson.title }))
   ), [learningContext]);
 
-  const openQuestion = () => {
+  const openQuestion = (reward = 'arrows') => {
     if (questionOpenRef.current || gameOver) return;
+    questionRewardRef.current = reward;
     questionOpenRef.current = true;
     sceneRef.current?.setQuizPaused(true);
     const shuffled = [...quizQuestions].sort(() => Math.random() - 0.5);
@@ -119,10 +124,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.orientation = 'down';
           this.lastShot = 0;
           this.reloadMs = 520;
-          this.playerSpeed = 125;
+          this.playerSpeed = 105;
           this.isQuizPaused = false;
           this.invulnerableUntil = 0;
-          this.ammo = MAX_ARROWS;
+          this.ammo = 0;
         }
 
         preload() {
@@ -150,7 +155,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.isChangingMap = false;
           this.physics.resume();
           this.currentMapKey = data.mapKey === 'forest-map-2' ? 'forest-map-2' : 'forest-map';
-          this.ammo = Number.isFinite(data.ammo) ? data.ammo : MAX_ARROWS;
+          this.ammo = Number.isFinite(data.ammo) ? data.ammo : 0;
           setArrows(this.ammo);
           const map = this.make.tilemap({ key: this.currentMapKey });
           const tiles = map.addTilesetImage('tileset', 'forest-tiles', 16, 16, 0, 0);
@@ -200,7 +205,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
               const spawnY = Phaser.Math.Clamp(obj.y + Math.sin(angle) * 52, 24, map.heightInPixels - 24);
               const monster = this.monsters.create(spawnX, spawnY, key).setDepth(8);
               monster.hp = 1;
-              monster.speed = key === 'treant' ? 38 : 48;
+              monster.speed = key === 'treant' ? 24 : 30;
               monster.setData('spawnX', spawnX).setData('spawnY', spawnY).setCollideWorldBounds(true);
               monster.setData('kind', key);
               monster.play(key === 'treant' ? 'treant-walk' : 'mole-walk');
@@ -357,7 +362,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             this.time.delayedCall(2500, () => {
               const revived = this.monsters.create(spawnX, spawnY, kind).setDepth(8).setCollideWorldBounds(true);
               revived.hp = 1;
-              revived.speed = kind === 'treant' ? 38 : 48;
+              revived.speed = kind === 'treant' ? 24 : 30;
               revived.setData('spawnX', spawnX).setData('spawnY', spawnY).setData('kind', kind);
               revived.play(kind === 'treant' ? 'treant-walk' : 'mole-walk');
             });
@@ -412,16 +417,19 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         quizStepRef.current = nextStep;
         setFeedback(null);
         if (nextStep >= 4) {
-          sceneRef.current?.reloadArrows();
+          if (questionRewardRef.current === 'hearts') setHearts((value) => Math.min(MAX_HEARTS, value + 3));
+          else sceneRef.current?.reloadArrows();
           sceneRef.current?.setQuizPaused(false);
           questionOpenRef.current = false;
           setQuestion(null);
         } else setQuestion(quizPoolRef.current[nextStep]);
       }, 650);
     } else {
-      setFeedback({ ok: false, message: 'Mauvaise réponse : aucune flèche. Il faut recommencer la recharge.' });
-      setArrows(0);
-      if (sceneRef.current) sceneRef.current.ammo = 0;
+      setFeedback({ ok: false, message: questionRewardRef.current === 'hearts' ? 'Mauvaise réponse : aucun cœur gagné.' : 'Mauvaise réponse : aucune flèche. Il faut recommencer la recharge.' });
+      if (questionRewardRef.current === 'arrows') {
+        setArrows(0);
+        if (sceneRef.current) sceneRef.current.ammo = 0;
+      }
       window.setTimeout(() => {
         sceneRef.current?.setQuizPaused(false);
         questionOpenRef.current = false;
@@ -436,10 +444,10 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     setHearts(3);
     setScore(0);
     scoreRef.current = 0;
-    setArrows(MAX_ARROWS);
+    setArrows(0);
     setGameOver(false);
     questionOpenRef.current = false;
-    sceneRef.current?.scene.restart();
+    sceneRef.current?.scene.restart({ ammo: 0 });
   };
 
   const setVirtualKey = (code, pressed) => {
@@ -462,14 +470,14 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   };
 
   return (
-    <div className="edu-rpg-shell">
+    <ProtectedGameSurface><div className="edu-rpg-shell">
       <header className="edu-rpg-header">
         <div>
           <div className="edu-rpg-kicker">Aventure éducative · QCM du chapitre</div>
           <h1>La forêt des savoirs</h1>
         </div>
         <div className="edu-rpg-hud">
-          <div className="edu-rpg-hearts" aria-label={`${hearts} cœurs`}>{Array.from({ length: 5 }, (_, i) => <span key={i} className={i < hearts ? 'active' : ''}>♥</span>)}</div>
+          <div className="edu-rpg-hearts" aria-label={`${hearts} cœurs`}>{Array.from({ length: MAX_HEARTS }, (_, i) => <span key={i} className={i < hearts ? 'active' : ''}>♥</span>)}</div>
           <strong>{score}/{TARGET_SCORE}</strong>
           <span>🏹 {arrows}/{MAX_ARROWS} flèches</span>
         </div>
@@ -481,20 +489,22 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         <div ref={screenShieldRef} className="edu-rpg-screen-shield" aria-hidden="true" />
         <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
         {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
+        {arrows === 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onPointerUp={(event) => { event.preventDefault(); openQuestion('arrows'); }}>🏹 Plus de flèches · RECHARGER</button>}
         <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
             {['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].map((code) => <div key={code} data-game-code={code} role="button" aria-label={code} className="edu-rpg-control" onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey(code, false); }} onPointerCancel={() => setVirtualKey(code, false)}>{({ ArrowUp: '▲', ArrowLeft: '◀', ArrowDown: '▼', ArrowRight: '▶' })[code]}</div>)}
           </div>
           <div className="edu-rpg-actions">
             <div data-game-code="Space" role="button" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => { blockGameGesture(event); setVirtualKey('Space', false); }} onPointerCancel={() => setVirtualKey('Space', false)}><span aria-hidden="true">➤</span><small>TIRER</small></div>
-            <div data-game-code="Reload" role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); if (event.pointerType !== 'touch') openQuestion(); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
+            <div data-game-code="Reload" role="button" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); if (event.pointerType !== 'touch') openQuestion('arrows'); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></div>
+            <div data-game-code="Heal" role="button" aria-label="Guérir" className="edu-rpg-control heal" onPointerDown={(event) => { blockGameGesture(event); if (event.pointerType !== 'touch') openQuestion('hearts'); }}><span aria-hidden="true">♥</span><small>GUÉRIR +3</small></div>
           </div>
         </div>
 
         {question && !gameOver && (
           <div className="edu-rpg-quiz-backdrop">
             <div ref={quizRef} className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
-              <div className="edu-rpg-quiz-label">Recharge · question {quizStepRef.current + 1}/4</div>
+              <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches'} · question {quizStepRef.current + 1}/4</div>
               <h2>{question.question}</h2>
               <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} onPointerUp={(event) => { event.preventDefault(); validateAnswer(index); }}>{choice}</button>)}</div>
               {feedback && <p>{feedback.message}</p>}
@@ -516,6 +526,6 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         {won && <div className="edu-rpg-quiz-backdrop"><div className="edu-rpg-game-over"><div className="edu-rpg-quiz-label">Mission réussie</div><h2>Forêt maîtrisée !</h2><p>Tu as atteint la dernière porte avec {score} points.</p><button type="button" onClick={restart}>Rejouer</button><button type="button" className="secondary" onClick={onExit}>Retour aux jeux</button></div></div>}
       </main>
       <footer className="edu-rpg-credit">Code adapté de Phaser3 Simple RPG (MIT) · graphismes Tiny RPG Forest par Ansimuz (CC0).</footer>
-    </div>
+    </div></ProtectedGameSurface>
   );
 }

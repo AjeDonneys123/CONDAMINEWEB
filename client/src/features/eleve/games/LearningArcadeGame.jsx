@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
 import StarshipWrapper from './starship/StarshipWrapper';
+import ProtectedGameSurface from './ProtectedGameSurface';
 
 const youtubeEmbed = (url = '') => {
   const source = String(url || '').trim();
@@ -32,7 +33,7 @@ export default function LearningArcadeGame({ user, gameData, onExit }) {
   const lessonSheet = (resources.lessonSheets || []).find((row) => !lesson?.sectionId || row.sectionId === lesson.sectionId);
   const lessonVideo = (resources.sequenceVideos || []).find((row) => !lesson?.sectionId || row.sectionId === lesson.sectionId);
 
-  if (!level) return <div className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950 p-6 text-center text-white"><div><h2 className="text-3xl font-black">Aucun QCM disponible</h2><button onClick={onExit} className="mt-6 rounded-xl bg-white px-6 py-3 font-black text-slate-900">RETOUR</button></div></div>;
+  if (!level) return <ProtectedGameSurface><div className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950 p-6 text-center text-white"><div><h2 className="text-3xl font-black">Aucun QCM disponible</h2><button onClick={onExit} className="mt-6 rounded-xl bg-white px-6 py-3 font-black text-slate-900">RETOUR</button></div></div></ProtectedGameSurface>;
 
   if (started) {
     const common = {
@@ -47,12 +48,12 @@ export default function LearningArcadeGame({ user, gameData, onExit }) {
         } else onExit();
       }
     };
-    return gameData.type === 'starship' ? <StarshipWrapper {...common} /> : <ZombieWrapper {...common} />;
+    return <ProtectedGameSurface>{gameData.type === 'starship' ? <StarshipWrapper {...common} /> : <ZombieWrapper {...common} />}</ProtectedGameSurface>;
   }
 
   const shownSheet = levelIndex === 0 ? generalSheet : (lessonSheet || generalSheet);
   const shownVideo = levelIndex === 0 ? generalVideo : (lessonVideo || generalVideo);
-  return <div className="fixed inset-0 z-[9999] overflow-auto bg-slate-950 p-4 text-white md:p-8">
+  return <ProtectedGameSurface><div className="fixed inset-0 z-[9999] overflow-auto bg-slate-950 p-4 text-white md:p-8">
     <button onClick={onExit} className="fixed right-5 top-5 z-10 h-12 w-12 rounded-full border-2 border-slate-500 bg-slate-900 text-2xl font-black">✕</button>
     <main className="mx-auto flex min-h-full max-w-6xl flex-col items-center justify-center py-12">
       <div className="text-xs font-black uppercase tracking-[.25em] text-cyan-300">{gameData.title} · {levelIndex + 1}/{levels.length}</div>
@@ -63,5 +64,5 @@ export default function LearningArcadeGame({ user, gameData, onExit }) {
       </div>
       <button onClick={() => setStarted(true)} className="mt-8 rounded-full border-4 border-indigo-500 bg-white px-12 py-5 text-2xl font-black text-indigo-950 shadow-2xl">DÉMARRER 🚀</button>
     </main>
-  </div>;
+  </div></ProtectedGameSurface>;
 }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './MonsterTamerGame.css';
 import { gameUrl } from './gameHosting';
 import GameLearningGuide from './GameLearningGuide';
+import ProtectedGameSurface from '../ProtectedGameSurface';
 
 export default function MonsterTamerGame({ onExit, learningContext = { lessons: [] } }) {
   const frameRef = useRef(null);
@@ -189,7 +190,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   };
 
   return (
-    <div className="monster-tamer-shell">
+    <ProtectedGameSurface><div className="monster-tamer-shell">
       <header className="monster-tamer-header">
         <div>
           <div className="monster-tamer-kicker">Prototype importé · Monster Tamer</div>
@@ -289,6 +290,6 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
       <footer className="monster-tamer-credit">
         « Monster Tamer » par Dev Share Academy — code MIT, ressources créditées par leurs auteurs.
       </footer>
-    </div>
+    </div></ProtectedGameSurface>
   );
 }

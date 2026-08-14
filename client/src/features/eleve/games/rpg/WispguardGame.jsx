@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './WispguardGame.css';
+import ProtectedGameSurface from '../ProtectedGameSurface';
 
 const MAGE_POSE_LABELS = [
   'Bas · préparation', 'Bas · énergie', 'Bas · tir',
@@ -310,7 +311,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   };
 
   return (
-    <div className="wispguard-shell">
+    <ProtectedGameSurface><div className="wispguard-shell">
       <main className="wispguard-stage" onClick={focusGame} onContextMenu={(event) => event.preventDefault()}>
         <button type="button" className="wispguard-exit-simple" onClick={(event) => { event.stopPropagation(); onExit(); }}>✕</button>
         {spriteNotice && <div className="wispguard-sprite-notice">{spriteNotice}</div>}
@@ -485,6 +486,6 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
           </section>
         </div>
       )}
-    </div>
+    </div></ProtectedGameSurface>
   );
 }
