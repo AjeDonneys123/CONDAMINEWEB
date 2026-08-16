@@ -2,13 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './MonsterTamerGame.css';
 import { gameUrl } from './gameHosting';
 import GameLearningGuide from './GameLearningGuide';
-import ProtectedGameSurface from '../ProtectedGameSurface';
-import useCoordinateTouchControls from '../useCoordinateTouchControls';
 
 export default function MonsterTamerGame({ onExit, learningContext = { lessons: [] } }) {
   const frameRef = useRef(null);
-  const touchRepeatRef = useRef(null);
-  const mobileControlsRef = useRef(null);
   const [started, setStarted] = useState(false);
   const [activeChapterId, setActiveChapterId] = useState('');
   const [quizQuestion, setQuizQuestion] = useState(null);
@@ -111,56 +107,6 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
     }, 80);
   };
 
-  const sendGameKey = useCallback((code, key) => {
-    frameRef.current?.focus({ preventScroll: true });
-    frameRef.current?.contentWindow?.postMessage({
-      source: 'condamine', type: 'mobile-activate'
-    }, '*');
-    frameRef.current?.contentWindow?.postMessage({
-      source: 'condamine', type: 'simulate-key', code, key
-    }, '*');
-    setStarted(true);
-  }, []);
-
-  const stopTouchKey = useCallback((event) => {
-    event?.preventDefault();
-    if (touchRepeatRef.current) window.clearInterval(touchRepeatRef.current);
-    touchRepeatRef.current = null;
-    frameRef.current?.contentWindow?.postMessage({ source: 'condamine', type: 'mobile-activate' }, '*');
-    frameRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  const startTouchKey = (event, code, key, repeat = false) => {
-    if (event.pointerType === 'touch') return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    stopTouchKey();
-    sendGameKey(code, key);
-    if (repeat) {
-      touchRepeatRef.current = window.setInterval(() => sendGameKey(code, key), 125);
-    }
-  };
-
-  const controlKeys = {
-    ArrowUp: ['ArrowUp', 'ArrowUp', true], ArrowDown: ['ArrowDown', 'ArrowDown', true],
-    ArrowLeft: ['ArrowLeft', 'ArrowLeft', true], ArrowRight: ['ArrowRight', 'ArrowRight', true],
-    Space: ['Space', ' ', false], ShiftLeft: ['ShiftLeft', 'Shift', false], Enter: ['Enter', 'Enter', false],
-  };
-  useCoordinateTouchControls(mobileControlsRef, {
-    directionalCodes: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
-    onPress: (name) => {
-      const [code, key, repeat] = controlKeys[name] || [];
-      if (!code) return;
-      sendGameKey(code, key);
-      if (repeat) touchRepeatRef.current = window.setInterval(() => sendGameKey(code, key), 125);
-    },
-    onRelease: (code) => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) stopTouchKey();
-    },
-  });
-
-  useEffect(() => () => stopTouchKey(), [stopTouchKey]);
-
   // Keyboard controls key forwarding
   useEffect(() => {
     const forwardKey = (event) => {
@@ -211,7 +157,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   };
 
   return (
-    <ProtectedGameSurface><div className="monster-tamer-shell">
+    <div className="monster-tamer-shell">
       <header className="monster-tamer-header">
         <div>
           <div className="monster-tamer-kicker">Prototype importé · Monster Tamer</div>
@@ -252,7 +198,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         <iframe
           ref={frameRef}
           title="Monster Tamer"
-          src={gameUrl('monster-tamer/?v=c99c663-mobile-launch')}
+          src={gameUrl('monster-tamer/?v=e395b8c-native-mobile')}
           allow="autoplay; fullscreen"
           tabIndex="0"
           onLoad={sendLearningContext}
@@ -316,22 +262,9 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         )}
       </main>
 
-      <div ref={mobileControlsRef} className="monster-tamer-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
-        <div className="monster-tamer-dpad">
-          {[["ArrowUp", "up", "▲"], ["ArrowLeft", "left", "◀"], ["ArrowDown", "down", "▼"], ["ArrowRight", "right", "▶"]].map(([code, direction, label]) => (
-            <button type="button" key={code} data-game-code={code} className={`dir-${direction}`} onPointerDown={(event) => startTouchKey(event, code, code, true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>{label}</button>
-          ))}
-        </div>
-        <div className="monster-tamer-touch-actions">
-          <button type="button" data-game-code="Space" className="is-action" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')} onPointerUp={stopTouchKey}>A<small>VALIDER</small></button>
-          <button type="button" data-game-code="ShiftLeft" className="is-back" onPointerDown={(event) => startTouchKey(event, 'ShiftLeft', 'Shift')} onPointerUp={stopTouchKey}>B<small>RETOUR</small></button>
-          <button type="button" data-game-code="Enter" className="is-menu" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')} onPointerUp={stopTouchKey}>MENU</button>
-        </div>
-      </div>
-
       <footer className="monster-tamer-credit">
         « Monster Tamer » par Dev Share Academy — code MIT, ressources créditées par leurs auteurs.
       </footer>
-    </div></ProtectedGameSurface>
+    </div>
   );
 }
