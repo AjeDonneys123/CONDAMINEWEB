@@ -5847,16 +5847,16 @@ VÉRIFICATION AVANT DE RÉPONDRE
             <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[minmax(240px,0.8fr)_1fr_220px] gap-3">
                 <div>
                     <select
-                        className="v84-ans-input"
+                        className="v84-ans-input !w-full !min-w-0"
                         value={formData.generalSheetCourseId || ''}
                         onChange={(event) => selectGeneralSheetCourse(event.target.value)}
                         disabled={generalSheetCoursesLoading}
                         aria-label="Séquence de cours utilisée pour la fiche générale"
                     >
                         <option value="">{generalSheetCoursesLoading ? 'Chargement des séquences…' : 'Choisir la séquence de cours'}</option>
-                        {generalSheetCourses.map((course) => (
+                        {generalSheetCourses.map((course, courseIndex) => (
                             <option key={course._id} value={course._id}>
-                                {String(course.title || 'Séquence sans titre')}{String(course.description || '').trim() ? ` — ${String(course.description).trim()}` : ''}
+                                {`Séquence ${courseIndex + 1}`}
                             </option>
                         ))}
                     </select>
@@ -5867,13 +5867,13 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     )}
                 </div>
                 <input
-                    className="v84-ans-input"
+                    className="v84-ans-input !w-full !min-w-0"
                     value={formData.presentationUrl || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, presentationUrl: e.target.value }))}
                     placeholder="URL Google Slides (trace écrite)"
                 />
                 <input
-                    className="v84-ans-input"
+                    className="v84-ans-input !w-full !min-w-0"
                     value={formData.presentationSlidesFocus || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, presentationSlidesFocus: e.target.value }))}
                     placeholder="Slides TE (ex: 8-12,15)"
