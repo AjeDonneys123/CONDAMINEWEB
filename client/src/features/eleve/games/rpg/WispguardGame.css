@@ -147,7 +147,7 @@
   user-select: none;
   -webkit-user-select: none;
 }
-.wispguard-dpad { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); gap: 4px; }
+.wispguard-dpad { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); grid-template-areas: '. up .' 'left down right'; gap: 4px; contain: layout style; }
 .wispguard-dpad,
 .wispguard-touch-actions,
 .wispguard-dpad *,
@@ -158,14 +158,14 @@
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
 }
-.wispguard-dpad button:nth-child(1) { grid-column: 2; }
-.wispguard-dpad button:nth-child(2) { grid-column: 1; grid-row: 2; }
-.wispguard-dpad button:nth-child(3) { grid-column: 2; grid-row: 2; }
-.wispguard-dpad button:nth-child(4) { grid-column: 3; grid-row: 2; }
+.wispguard-dpad .dir-up { grid-area: up; }
+.wispguard-dpad .dir-left { grid-area: left; }
+.wispguard-dpad .dir-down { grid-area: down; }
+.wispguard-dpad .dir-right { grid-area: right; }
 .wispguard-mobile-controls button { border: 2px solid #ffffff55; border-radius: 14px; color: white; background: #1e293be8; font-size: 22px; font-weight: 950; box-shadow: 0 5px 0 #020617; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none; }
 .wispguard-mobile-controls button * { pointer-events: none; user-select: none; -webkit-user-select: none; }
 .wispguard-mobile-controls button:active { transform: translateY(3px); box-shadow: 0 2px 0 #020617; }
-.wispguard-touch-actions { display: grid; grid-template-columns: repeat(2, 66px); gap: 7px; }
+.wispguard-touch-actions { display: grid; grid-template-columns: repeat(2, 66px); gap: 7px; contain: layout style; }
 .wispguard-touch-actions button { height: 54px; display: grid; place-content: center; line-height: 1; }
 .wispguard-touch-actions small { margin-top: 4px; font-size: 8px; }
 .wispguard-touch-actions .attack { background: #dc2626e8; }

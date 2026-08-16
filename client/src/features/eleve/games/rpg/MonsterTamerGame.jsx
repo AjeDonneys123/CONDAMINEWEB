@@ -154,7 +154,9 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
       sendGameKey(code, key);
       if (repeat) touchRepeatRef.current = window.setInterval(() => sendGameKey(code, key), 125);
     },
-    onRelease: () => stopTouchKey(),
+    onRelease: (code) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) stopTouchKey();
+    },
   });
 
   useEffect(() => () => stopTouchKey(), [stopTouchKey]);
@@ -308,8 +310,8 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
 
       <div ref={mobileControlsRef} className="monster-tamer-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
         <div className="monster-tamer-dpad">
-          {[["ArrowUp", "▲"], ["ArrowLeft", "◀"], ["ArrowDown", "▼"], ["ArrowRight", "▶"]].map(([code, label]) => (
-            <button type="button" key={code} data-game-code={code} onPointerDown={(event) => startTouchKey(event, code, code, true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>{label}</button>
+          {[["ArrowUp", "up", "▲"], ["ArrowLeft", "left", "◀"], ["ArrowDown", "down", "▼"], ["ArrowRight", "right", "▶"]].map(([code, direction, label]) => (
+            <button type="button" key={code} data-game-code={code} className={`dir-${direction}`} onPointerDown={(event) => startTouchKey(event, code, code, true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>{label}</button>
           ))}
         </div>
         <div className="monster-tamer-touch-actions">

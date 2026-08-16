@@ -29,9 +29,13 @@ export function protectNativeTouchZone(element) {
 export function installCoordinateTouchRouter(root, { selector = '[data-game-code]', onPress, onRelease, continuousCodes = [] } = {}) {
   if (!root) return () => {};
   const options = { passive: false };
-  let active = '';
-  const resolve = (touch, continuousOnly = false) => {
+  const activeTouches = new Map();
+  const blockedTouchIds = new Set();
+  let layoutLockedUntil = 0;
+  const resolve = (touch, continuousOnly = false, preferTouchedElement = false) => {
     if (!touch) return '';
+    const touchedButton = touch.target?.closest?.(selector);
+    if (preferTouchedElement && touchedButton && root.contains(touchedButton)) return touchedButton.dataset.gameCode || '';
     const buttons = [...root.querySelectorAll(selector)].filter((button) => !continuousOnly || continuousCodes.includes(button.dataset.gameCode));
     let nearest = '';
     let distance = Infinity;
@@ -44,19 +48,53 @@ export function installCoordinateTouchRouter(root, { selector = '[data-game-code
     });
     return nearest;
   };
-  const release = () => { if (active) onRelease?.(active); active = ''; };
-  const start = (event) => { event.preventDefault(); event.stopPropagation(); release(); active = resolve(event.changedTouches?.[0] || event.touches?.[0]); if (active) onPress?.(active); };
-  const move = (event) => { event.preventDefault(); event.stopPropagation(); if (!continuousCodes.includes(active)) return; const next = resolve(event.touches?.[0], true); if (!next || next === active) return; release(); active = next; onPress?.(active); };
-  const end = (event) => { event.preventDefault(); event.stopPropagation(); release(); };
+  const release = (identifier) => { const code = activeTouches.get(identifier); if (code) onRelease?.(code); activeTouches.delete(identifier); };
+  const releaseAll = () => { [...activeTouches.keys()].forEach(release); };
+  const start = (event) => {
+    event.preventDefault(); event.stopPropagation();
+    [...(event.changedTouches || [])].forEach((touch) => {
+      if (blockedTouchIds.has(touch.identifier) || performance.now() < layoutLockedUntil) return;
+      release(touch.identifier);
+      const code = resolve(touch, false, true);
+      if (code) { activeTouches.set(touch.identifier, code); onPress?.(code); }
+    });
+  };
+  const move = (event) => {
+    event.preventDefault(); event.stopPropagation();
+    [...(event.changedTouches || event.touches || [])].forEach((touch) => {
+      const current = activeTouches.get(touch.identifier);
+      if (!continuousCodes.includes(current)) return;
+      const next = resolve(touch, true);
+      if (!next || next === current) return;
+      release(touch.identifier); activeTouches.set(touch.identifier, next); onPress?.(next);
+    });
+  };
+  const end = (event) => {
+    event.preventDefault(); event.stopPropagation();
+    const changed = [...(event.changedTouches || [])];
+    if (changed.length) changed.forEach((touch) => { release(touch.identifier); blockedTouchIds.delete(touch.identifier); });
+    else releaseAll();
+  };
+  const resetLayout = () => {
+    activeTouches.forEach((_, identifier) => blockedTouchIds.add(identifier));
+    releaseAll();
+    layoutLockedUntil = performance.now() + 280;
+  };
   root.addEventListener('touchstart', start, options);
   root.addEventListener('touchmove', move, options);
   root.addEventListener('touchend', end, options);
   root.addEventListener('touchcancel', end, options);
+  window.addEventListener('orientationchange', resetLayout);
+  window.addEventListener('resize', resetLayout);
+  window.addEventListener('blur', resetLayout);
   return () => {
-    release();
+    releaseAll();
     root.removeEventListener('touchstart', start, options);
     root.removeEventListener('touchmove', move, options);
     root.removeEventListener('touchend', end, options);
     root.removeEventListener('touchcancel', end, options);
+    window.removeEventListener('orientationchange', resetLayout);
+    window.removeEventListener('resize', resetLayout);
+    window.removeEventListener('blur', resetLayout);
   };
 }

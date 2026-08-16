@@ -121,7 +121,12 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
         setGameKeyState(code, key, true);
       } else pressGameKey(code, key);
     },
-    onRelease: () => stopTouchKey(),
+    onRelease: (code) => {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) return;
+      const [, key] = controlKeys[code];
+      setGameKeyState(code, key, false);
+      if (touchRepeatRef.current?.code === code) touchRepeatRef.current = null;
+    },
   });
 
   const sendToGame = (type, payload = {}) => {
@@ -354,8 +359,8 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
 
       <div ref={mobileControlsRef} className="wispguard-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
         <div className="wispguard-dpad">
-          {[["ArrowUp", "▲"], ["ArrowLeft", "◀"], ["ArrowDown", "▼"], ["ArrowRight", "▶"]].map(([code, label]) => (
-            <button type="button" key={code} data-game-code={code} onPointerDown={(event) => startTouchKey(event, code, code, true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>{label}</button>
+          {[["ArrowUp", "up", "▲"], ["ArrowLeft", "left", "◀"], ["ArrowDown", "down", "▼"], ["ArrowRight", "right", "▶"]].map(([code, direction, label]) => (
+            <button type="button" key={code} data-game-code={code} className={`dir-${direction}`} onPointerDown={(event) => startTouchKey(event, code, code, true)} onPointerUp={stopTouchKey} onPointerCancel={stopTouchKey}>{label}</button>
           ))}
         </div>
         <div className="wispguard-touch-actions">
