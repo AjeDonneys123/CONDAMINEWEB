@@ -44,15 +44,53 @@ const researchLevelProfile = (currentClass = '') => {
 };
 
 const askResearchJson = async ({ prompt, system, maxOutputTokens = 4096 }) => {
-    const raw = await AIEngine.ask(prompt, system, {
+    const options = {
         route: '/api/eleve/chat/research',
         feature: 'student-research-workshop',
         provider: 'gemini',
         responseMimeType: 'application/json',
         maxOutputTokens,
         temperature: 0.25
-    });
-    return parseResearchJson(raw);
+    };
+    let raw = '';
+    try { raw = await AIEngine.ask(prompt, system, options); }
+    catch (error) { console.warn('Cyclopédia: première génération indisponible:', error.message); }
+    const parsed = parseResearchJson(raw);
+    if (parsed) return parsed;
+
+    // En production Gemini peut exceptionnellement renvoyer une réponse vide,
+    // tronquée ou entourée de texte malgré le MIME JSON. Une seconde requête
+    // courte évite de condamner tout l'atelier pour cet incident ponctuel.
+    let retryRaw = '';
+    try {
+        retryRaw = await AIEngine.ask([
+            { text: String(prompt || '') },
+            { text: 'La réponse précédente était vide ou invalide. Réponds maintenant avec un seul objet JSON complet, sans Markdown ni commentaire.' }
+        ], system, { ...options, maxOutputTokens: Math.max(2048, maxOutputTokens), temperature: 0.1 });
+    } catch (error) { console.warn('Cyclopédia: seconde génération indisponible:', error.message); }
+    return parseResearchJson(retryRaw);
+};
+
+const buildResearchTopicFallback = (topic, level) => {
+    const title = String(topic || 'Sujet de recherche').trim();
+    const article = [
+        `Le sujet « ${title} » s’inscrit dans un contexte précis qu’il faut identifier.`,
+        'Son apparition ne dépend pas d’une seule cause et plusieurs acteurs jouent un rôle important.',
+        'Son déroulement connaît des étapes et des changements encore à éclaircir.',
+        'Enfin, ses conséquences ne sont pas identiques selon les lieux, les périodes ou les personnes concernées.'
+    ].join(' ');
+    return {
+        title,
+        article,
+        openThreads: [
+            { id: 'T1', excerpt: 's’inscrit dans un contexte précis qu’il faut identifier', angle: 'Identifier et expliquer le contexte.' },
+            { id: 'T2', excerpt: 'plusieurs acteurs jouent un rôle important', angle: 'Rechercher les acteurs et leurs rôles.' },
+            { id: 'T3', excerpt: 'connaît des étapes et des changements encore à éclaircir', angle: 'Reconstruire les principales étapes.' },
+            { id: 'T4', excerpt: 'ses conséquences ne sont pas identiques', angle: 'Comparer les conséquences.' }
+        ],
+        level: level.label,
+        fallback: true
+    };
 };
 
 const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -753,8 +791,8 @@ router.post('/research', async (req, res) => {
                     'Retourne uniquement un JSON valide : {"title":"...","article":"...","openThreads":[{"id":"T1","excerpt":"extrait exact de article","angle":"aspect à approfondir"},{"id":"T2","excerpt":"...","angle":"..."}],"level":"..."}.'
                 ].join(' ')
             });
-            if (!result?.article) return res.status(503).json({ error: 'Cyclopédia n’a pas pu préparer le sujet.' });
-            return res.json({ ok: true, phase, level: level.label, base: result });
+            const base = result?.article ? result : buildResearchTopicFallback(topic, level);
+            return res.json({ ok: true, phase, level: level.label, base });
         }
 
         if (phase === 'questions') {
