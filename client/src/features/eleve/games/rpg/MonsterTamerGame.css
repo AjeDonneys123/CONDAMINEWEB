@@ -111,6 +111,11 @@
   .quiz-feedback { margin-top: 8px; padding: 8px; }
 }
 
+@media (max-width: 700px) and (orientation: portrait) {
+  .monster-tamer-shell { grid-template-rows: auto auto 108px; align-content: start; }
+  .monster-tamer-stage { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+}
+
 @media (pointer: coarse) {
   .monster-tamer-mobile-controls { display: flex; }
   .monster-tamer-mobile-controls,

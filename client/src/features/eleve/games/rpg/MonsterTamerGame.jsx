@@ -252,14 +252,22 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         <iframe
           ref={frameRef}
           title="Monster Tamer"
-          src={gameUrl('monster-tamer/?v=bridge-2')}
+          src={gameUrl('monster-tamer/?v=c99c663-mobile-launch')}
           allow="autoplay; fullscreen"
           tabIndex="0"
           onLoad={sendLearningContext}
         />
         <GameLearningGuide frameRef={frameRef} learningContext={activeContext} />
         {!started && (
-          <button type="button" className="monster-tamer-start" onClick={focusGame}>
+          <button
+            type="button"
+            className="monster-tamer-start"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              focusGame();
+            }}
+            onClick={focusGame}
+          >
             <span>🔴</span>
             Cliquez pour jouer
             <small>Le clavier contrôlera ensuite le personnage.</small>
