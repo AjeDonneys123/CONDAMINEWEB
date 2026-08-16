@@ -88,6 +88,8 @@ export function initStarshipGame(root, api, onExit) {
     let spawnInterval;
     let isPaused = false;
     let frameId;
+    let lastUpdateTime = performance.now();
+    let lastRenderedAt = performance.now();
     
     root.innerHTML = `
         <div class="s-game-wrapper">
@@ -114,7 +116,6 @@ export function initStarshipGame(root, api, onExit) {
                 </div>
                 <div class="s-mobile-actions">
                     <button class="s-mobile-btn s-mobile-fire" id="s-mobile-fire" data-game-code="fire">TIR</button>
-                    <button class="s-mobile-btn s-mobile-jump" id="s-mobile-jump" data-game-code="jump">SAUT</button>
                 </div>
             </div>
         </div>
@@ -329,17 +330,20 @@ export function initStarshipGame(root, api, onExit) {
         }
     };
 
-    const update = () => {
+    const update = (time = performance.now()) => {
+        const frameScale = Math.min(3, Math.max(0, (time - lastUpdateTime) / (1000 / 60)));
+        lastUpdateTime = time;
+        lastRenderedAt = performance.now();
         if (!isPaused) {
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
-                p.y += 8;
+                p.y += 8 * frameScale;
                 p.div.style.bottom = p.y + 'px';
                 if (p.y > els.area.clientHeight + 30) { p.div.remove(); projectiles.splice(i, 1); }
             }
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const e = enemies[i];
-                e.y += e.speed;
+                e.y += e.speed * frameScale;
                 e.div.style.top = e.y + 'px';
                 if (e.type === 'invader') {
                     const eRect = e.div.getBoundingClientRect();
@@ -376,7 +380,7 @@ export function initStarshipGame(root, api, onExit) {
     };
     document.addEventListener('keydown', handleKey);
     let mobileHold = null;
-    const mobileActions = { left: () => moveShip(-3), right: () => moveShip(3), fire, jump: fire };
+    const mobileActions = { left: () => moveShip(-3), right: () => moveShip(3), fire };
     const stopMobileHold = () => { if (mobileHold) clearInterval(mobileHold); mobileHold = null; };
     const removeMobileRouter = installCoordinateTouchRouter(root.querySelector('.s-mobile-controls'), {
         continuousCodes: ['left', 'right'],
@@ -404,5 +408,20 @@ export function initStarshipGame(root, api, onExit) {
     loadRound();
     update();
 
-    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); stopMobileHold(); removeMobileRouter(); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey); } };
+    const wakeGameLoop = () => {
+        if (document.hidden || performance.now() - lastRenderedAt < 220) return;
+        cancelAnimationFrame(frameId);
+        lastUpdateTime = performance.now();
+        frameId = requestAnimationFrame(update);
+    };
+    const loopWatchdog = window.setInterval(wakeGameLoop, 350);
+    ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.addEventListener(type, wakeGameLoop));
+    root.addEventListener('touchstart', wakeGameLoop, { passive: true });
+
+    return { destroy: () => {
+        cancelAnimationFrame(frameId); clearInterval(spawnInterval); clearInterval(loopWatchdog);
+        ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.removeEventListener(type, wakeGameLoop));
+        root.removeEventListener('touchstart', wakeGameLoop);
+        stopMobileHold(); removeMobileRouter(); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey);
+    } };
 }

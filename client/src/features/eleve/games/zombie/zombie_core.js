@@ -30,9 +30,11 @@ export function initZombieGame(root, api, onExit) {
     
     // Mouvement
     let zombiePos = 0; 
-    let baseSpeed = 0.0175; // Vitesse de base divisée par 2
+    let baseSpeed = 2.1; // pourcentage de l'arène par seconde
     let zombieSpeed = baseSpeed; 
     let frameId;
+    let lastFrameTime = performance.now();
+    let lastRenderedAt = performance.now();
     let isPaused = false; 
 
     // --- 2. HTML UI ---
@@ -295,9 +297,12 @@ export function initZombieGame(root, api, onExit) {
         }, 1000);
     };
 
-    const loop = () => {
+    const loop = (time = performance.now()) => {
+        const deltaSeconds = Math.min(0.05, Math.max(0, (time - lastFrameTime) / 1000));
+        lastFrameTime = time;
+        lastRenderedAt = performance.now();
         if (!isPaused) {
-            zombiePos += zombieSpeed;
+            zombiePos += zombieSpeed * deltaSeconds;
             updatePositions();
 
             // COLLISION DU ZOMBIE
@@ -338,6 +343,22 @@ export function initZombieGame(root, api, onExit) {
     loadRound();
     loop();
 
+    const wakeGameLoop = () => {
+        if (document.hidden || performance.now() - lastRenderedAt < 220) return;
+        cancelAnimationFrame(frameId);
+        lastFrameTime = performance.now();
+        frameId = requestAnimationFrame(loop);
+    };
+    const loopWatchdog = window.setInterval(wakeGameLoop, 350);
+    ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.addEventListener(type, wakeGameLoop));
+    root.addEventListener('touchstart', wakeGameLoop, { passive: true });
+
     protectNativeTouchZone(root.querySelector('.z-interaction-zone'));
-    return { destroy: () => { cancelAnimationFrame(frameId); removeChoicesRouter(); removeSurfaceProtection(); heroAnimator.destroy(); zombieAnimator.destroy(); } };
+    return { destroy: () => {
+        cancelAnimationFrame(frameId);
+        clearInterval(loopWatchdog);
+        ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.removeEventListener(type, wakeGameLoop));
+        root.removeEventListener('touchstart', wakeGameLoop);
+        removeChoicesRouter(); removeSurfaceProtection(); heroAnimator.destroy(); zombieAnimator.destroy();
+    } };
 }
