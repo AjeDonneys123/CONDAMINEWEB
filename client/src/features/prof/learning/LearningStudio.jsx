@@ -4910,8 +4910,50 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setShowGeneralSheetBuilder(false);
     };
 
-    const copyNotebookLmSuperSheetPrompt = async () => {
-        const prompt = `PROMPT SUPERFICHE CONDAWEB
+    const getGeneralSheetMaster = () => (Array.isArray(formData.steps) ? formData.steps : [])
+        .find((step) => step?.type === 'sheet' && step?.isGeneralSheetMaster === true);
+
+    const openGeneralSheetBuilder = () => {
+        const master = getGeneralSheetMaster();
+        setGeneralSheetText(String(master?.sheetText || ''));
+        setGeneralSheetHtml(String(master?.sheetTextHtml || ''));
+        setShowGeneralSheetBuilder(true);
+    };
+
+    const deleteGeneralSheet = () => {
+        if (!window.confirm('Effacer la fiche générale et toutes les sections créées depuis cette fiche ?')) return;
+        setFormData((prev) => {
+            const keptSteps = (prev.steps || []).filter((step) => step?.generalSheetGenerated !== true);
+            const usedSectionIds = new Set(keptSteps.map((step) => String(step?.sectionId || '')).filter(Boolean));
+            const keptSections = (prev.sections || []).filter((section) => usedSectionIds.has(String(section?.id || '')));
+            return { ...prev, steps: keptSteps, sections: keptSections };
+        });
+        setGeneralSheetText('');
+        setGeneralSheetHtml('');
+        setGlobalSheetSourceUrl('');
+        setActiveStep(0);
+        setShowGeneralSheetBuilder(false);
+    };
+
+    const copyGeminiSuperSheetPrompt = async () => {
+        const selectedChapter = (chapters || []).find((chapter) => String(chapter?._id || '') === String(formData.chapterId || ''));
+        const chapterTitle = String(selectedChapter?.title || 'CHAPITRE NON SÉLECTIONNÉ').trim();
+        const chapterSubject = String(selectedChapter?.section || formData.subject || targetSection || '').trim();
+        const slidesUrl = String(formData.presentationUrl || '').trim();
+        const slidesFocus = String(formData.presentationSlidesFocus || '').trim();
+        const prompt = `PROMPT FICHE GÉNÉRALE CONDAWEB — GEMINI
+
+CHAPITRE À FICHER
+- Titre exact : ${chapterTitle}
+- Matière : ${chapterSubject || 'non précisée'}
+- Niveau : ${targetLevel || 'non précisé'}
+- Nom de l'apprentissage : ${String(formData.title || '').trim() || 'non précisé'}
+
+SOURCE À ANALYSER
+- URL Google Slides : ${slidesUrl || 'URL NON RENSEIGNÉE DANS CONDAWEB'}
+${slidesFocus ? `- Slides de trace écrite à privilégier : ${slidesFocus}` : '- Analyse toutes les diapositives utiles au chapitre.'}
+
+Ouvre et analyse les diapositives de cette présentation. Produis uniquement la fiche du chapitre « ${chapterTitle} ». Ignore les diapositives appartenant à un autre chapitre. Toutes les grandes parties du chapitre présentes dans les slides doivent devenir des fiches/parties distinctes dans la structure ci-dessous.
 
 À partir de mes sources, produis UNE SEULE SUPERFICHE de cours prête à être importée dans CondaWeb.
 
@@ -4975,10 +5017,19 @@ Les questions doivent porter sur les éléments en gras de la fiche (dates, pers
 Chaque proposition (a, b, c, d) doit être écrite sur sa propre ligne.
 Ne produire aucune correction séparée : la bonne réponse est uniquement identifiable grâce au gras.
 Ne rien écrire avant le titre de la fiche.
-Ne rien écrire après la dernière réponse du dernier QCM.`;
+Ne rien écrire après la dernière réponse du dernier QCM.
+
+VÉRIFICATION AVANT DE RÉPONDRE
+- Le titre et tout le contenu portent bien sur « ${chapterTitle} ».
+- Toutes les grandes parties réellement enseignées dans les slides sont présentes, sans inventer une partie absente.
+- Chaque grande partie possède son bloc LEÇON correspondant dans le QCM.
+- La fiche est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.`;
+        // L'ouverture doit être synchrone avec le clic pour ne pas être bloquée
+        // par Safari/Chrome avant l'écriture asynchrone dans le presse-papiers.
+        window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
         try {
             await navigator.clipboard.writeText(prompt);
-            alert('Prompt NotebookLM copié.');
+            alert('Prompt Gemini copié. Colle-le dans la nouvelle fenêtre Gemini.');
         } catch (_) {
             const textarea = document.createElement('textarea');
             textarea.value = prompt;
@@ -4988,7 +5039,7 @@ Ne rien écrire après la dernière réponse du dernier QCM.`;
             textarea.select();
             document.execCommand('copy');
             textarea.remove();
-            alert('Prompt NotebookLM copié.');
+            alert('Prompt Gemini copié. Colle-le dans la nouvelle fenêtre Gemini.');
         }
     };
 
@@ -5491,7 +5542,10 @@ Ne rien écrire après la dernière réponse du dernier QCM.`;
     const effectiveGlobalSheetSource = String(globalSheetSourceUrl || inferredSheetSource || '').trim();
     const effectiveGlobalVideoSource = String(globalVideoSourceUrl || inferredVideoSource || '').trim();
     const effectiveGlobalVideoName = String(globalVideoSourceName || inferredVideoName || '').trim();
-    const hasGlobalSheet = effectiveGlobalSheetSource.length > 0;
+    const generalSheetMaster = (Array.isArray(formData.steps) ? formData.steps : [])
+        .find((step) => step?.type === 'sheet' && step?.isGeneralSheetMaster === true);
+    const hasGeneratedGeneralSheet = Boolean(String(generalSheetMaster?.sheetText || '').trim());
+    const hasGlobalSheet = effectiveGlobalSheetSource.length > 0 || hasGeneratedGeneralSheet;
     const hasGlobalVideo = effectiveGlobalVideoSource.length > 0;
     const sheetBtnText = (() => {
         if (hasGlobalSheet && globalSlidesWarmup.active) return `+ FICHE GÉNÉRALE ${globalSlidesWarmup.percent}%`;
@@ -5521,8 +5575,8 @@ Ne rien écrire après la dernière réponse du dernier QCM.`;
                     </button>
                     <button
                         className={`v84-res-btn upload ${sheetBtnClass}`}
-                        onClick={() => setShowGeneralSheetBuilder(true)}
-                        title={hasGlobalSheet ? `Source: ${effectiveGlobalSheetSource}` : ''}
+                        onClick={openGeneralSheetBuilder}
+                        title={hasGeneratedGeneralSheet ? 'Une fiche générale est enregistrée dans cet apprentissage.' : (hasGlobalSheet ? `Source: ${effectiveGlobalSheetSource}` : '')}
                         style={hasGlobalSheet ? { backgroundColor: '#4f46e5', color: '#ffffff', borderColor: '#4338ca' } : undefined}
                     >
                         {sheetBtnText}
@@ -5643,8 +5697,8 @@ Ne rien écrire après la dernière réponse du dernier QCM.`;
                             <button
                                 type="button"
                                 className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
-                                onClick={copyNotebookLmSuperSheetPrompt}
-                            >📋 Copier le prompt NotebookLM</button>
+                                onClick={copyGeminiSuperSheetPrompt}
+                            >📋 Copier le prompt Gemini et ouvrir Gemini</button>
                             <button className="v84-close-btn" onClick={() => setShowGeneralSheetBuilder(false)}>✕</button>
                         </div>
                         <div className="flex-1 overflow-auto p-6">
@@ -5661,12 +5715,19 @@ Ne rien écrire après la dernière réponse du dernier QCM.`;
                             />
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
-                            <button type="button" className="v84-res-btn upload" onClick={() => {
-                                setShowGeneralSheetBuilder(false);
-                                openSourcePicker('sheet');
-                            }}>
-                                Utiliser une source externe
-                            </button>
+                            <div className="flex gap-2">
+                                <button type="button" className="v84-res-btn upload" onClick={() => {
+                                    setShowGeneralSheetBuilder(false);
+                                    openSourcePicker('sheet');
+                                }}>
+                                    Utiliser une source externe
+                                </button>
+                                {hasGeneratedGeneralSheet && (
+                                    <button type="button" className="v84-res-btn upload !border-red-300 !bg-red-50 !text-red-700" onClick={deleteGeneralSheet}>
+                                        Effacer la fiche générale
+                                    </button>
+                                )}
+                            </div>
                             <div className="flex gap-2">
                                 <button type="button" className="v84-res-btn upload" onClick={() => setShowGeneralSheetBuilder(false)}>Annuler</button>
                                 <button
