@@ -45,31 +45,40 @@ const researchLevelProfile = (currentClass = '') => {
 };
 
 const askResearchJson = async ({ prompt, system, maxOutputTokens = 4096 }) => {
-    const options = {
+    const baseOptions = {
         route: '/api/eleve/chat/research',
         feature: 'student-research-workshop',
-        provider: 'gemini',
         responseMimeType: 'application/json',
         maxOutputTokens,
         temperature: 0.25
     };
-    let raw = '';
-    try { raw = await AIEngine.ask(prompt, system, options); }
-    catch (error) { console.warn('Cyclopédia: première génération indisponible:', error.message); }
-    const parsed = parseResearchJson(raw);
-    if (parsed) return parsed;
+    const configuredProvider = String(process.env.AI_PROVIDER || '').toLowerCase().trim();
+    const providers = [...new Set(['gemini', configuredProvider].filter(Boolean))];
 
-    // En production Gemini peut exceptionnellement renvoyer une réponse vide,
-    // tronquée ou entourée de texte malgré le MIME JSON. Une seconde requête
-    // courte évite de condamner tout l'atelier pour cet incident ponctuel.
-    let retryRaw = '';
+    for (const provider of providers) {
+        try {
+            const raw = await AIEngine.ask(prompt, system, { ...baseOptions, provider });
+            const parsed = parseResearchJson(raw);
+            if (parsed) return { ...parsed, generationProvider: provider };
+            console.warn(`Cyclopédia: réponse ${provider} vide ou invalide.`);
+        } catch (error) {
+            console.warn(`Cyclopédia: génération ${provider} indisponible:`, error.message);
+        }
+    }
+
+    // Dernier essai plus déterministe chez le fournisseur réellement configuré.
+    const retryProvider = configuredProvider || 'gemini';
     try {
-        retryRaw = await AIEngine.ask([
+        const retryRaw = await AIEngine.ask([
             { text: String(prompt || '') },
             { text: 'La réponse précédente était vide ou invalide. Réponds maintenant avec un seul objet JSON complet, sans Markdown ni commentaire.' }
-        ], system, { ...options, maxOutputTokens: Math.max(2048, maxOutputTokens), temperature: 0.1 });
-    } catch (error) { console.warn('Cyclopédia: seconde génération indisponible:', error.message); }
-    return parseResearchJson(retryRaw);
+        ], system, { ...baseOptions, provider: retryProvider, maxOutputTokens: Math.max(2048, maxOutputTokens), temperature: 0.1 });
+        const parsed = parseResearchJson(retryRaw);
+        return parsed ? { ...parsed, generationProvider: retryProvider } : null;
+    } catch (error) {
+        console.warn(`Cyclopédia: seconde génération ${retryProvider} indisponible:`, error.message);
+        return null;
+    }
 };
 
 const targetFallbackWords = (levelLabel = '') => {
@@ -816,10 +825,12 @@ router.post('/research', async (req, res) => {
                 system: [
                     "Tu écris le document déclencheur d'un simulateur pédagogique de recherche scolaire appelé Cyclopédia CondaWeb.",
                     `L'élève est en ${level.label}. Écris une amorce extrêmement courte de ${level.baseWords} mots adaptée à ce niveau. Respecte impérativement cette limite.`,
-                    "Ce texte n'est ni une notice, ni un résumé, ni un mini-exposé : c'est uniquement un déclencheur de curiosité.",
-                    "Mentionne le personnage ou le phénomène principal, puis évoque seulement trois ou quatre faits sous une forme volontairement vague, sans expliquer leurs causes, leur déroulement, leurs acteurs secondaires ni leurs conséquences précises.",
-                    "Cache délibérément les informations que l'élève devra rechercher. Par exemple, écris « il conquiert un peuple très connu » plutôt que de nommer ce peuple et son chef, ou « les conséquences sont terribles » plutôt que de les raconter.",
-                    "N'emploie au maximum qu'une seule date et un seul nom propre en plus du sujet lui-même. Ne donne aucune liste, aucune définition et aucun détail permettant de rédiger directement l'exposé.",
+                    "Ce texte n'est ni une notice complète, ni un mini-exposé : c'est un déclencheur de curiosité historiquement solide.",
+                    "Identifie clairement le sujet, son époque, son espace et le contexte historique précis. Pour un personnage, explique brièvement qui il est et pourquoi il compte.",
+                    "Fais comprendre qu'une accession au pouvoir, une rupture ou un phénomène historique résulte de plusieurs facteurs : n'attribue jamais son apparition à une cause unique.",
+                    "Présente trois ou quatre faits substantiels et exacts, dont au moins un sur les actions, les choix ou les effets propres au sujet. L'élève doit apprendre quelque chose de précis sur le sujet dès cette amorce.",
+                    "Laisse cependant ouvertes plusieurs explications importantes : causes profondes et immédiates, acteurs, mécanismes, débats d'interprétation ou conséquences. Ne remplace jamais un fait essentiel par une formule creuse comme « les conséquences sont terribles ».",
+                    "N'emploie au maximum que deux dates et trois noms propres en plus du sujet lui-même. Ne donne aucune liste ni assez de détails pour rédiger directement l'exposé.",
                     "Les zones d'ombre doivent faire pressentir les grandes parties possibles du futur exposé sans les révéler explicitement. Ne pose aucune question à la place de l'élève.",
                     "Le texte doit être exact, neutre, clair, sans fausse citation et sans URL.",
                     "Repère trois ou quatre passages courts du texte qui portent les zones d'ombre essentielles. Chaque passage doit être recopié MOT POUR MOT depuis article, sous forme d'un extrait continu de 4 à 12 mots.",
