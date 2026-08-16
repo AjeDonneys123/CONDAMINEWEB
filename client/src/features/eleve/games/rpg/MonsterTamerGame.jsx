@@ -10,6 +10,8 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   const [quizQuestion, setQuizQuestion] = useState(null);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState(null);
   const [isAnswerCorrect, setIsAnswerCorrect] = useState(null);
+  const [gamePlayable, setGamePlayable] = useState(false);
+  const [gameLoadError, setGameLoadError] = useState('');
 
   const lessons = useMemo(() => {
     return Array.isArray(learningContext?.lessons) ? learningContext.lessons : [];
@@ -62,6 +64,11 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
       if (event.data?.source === 'condamine-game') {
         if (event.data.type === 'game-ready') {
           sendLearningContext();
+        } else if (event.data.type === 'game-playable') {
+          setGamePlayable(true);
+          setGameLoadError('');
+        } else if (event.data.type === 'game-error') {
+          setGameLoadError(String(event.data?.message || 'Le jeu n’a pas pu terminer son chargement.'));
         } else if (event.data.type === 'request-qcm') {
           const requestedLessonId = String(event.data?.lessonId || '');
           const currentLesson = activeContext.lessons?.find((lesson) => lesson.id === requestedLessonId)
@@ -95,6 +102,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
   }, [activeContext, started, sendLearningContext]);
 
   const focusGame = () => {
+    if (!gamePlayable) return;
     setStarted(true);
     window.setTimeout(() => {
       frameRef.current?.focus();
@@ -198,7 +206,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         <iframe
           ref={frameRef}
           title="Monster Tamer"
-          src={gameUrl('monster-tamer/?v=e395b8c-native-mobile')}
+          src={gameUrl('monster-tamer/?v=0ec88f6-fast-mobile')}
           allow="autoplay; fullscreen"
           tabIndex="0"
           onLoad={sendLearningContext}
@@ -208,15 +216,16 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
           <button
             type="button"
             className="monster-tamer-start"
+            disabled={!gamePlayable}
             onPointerDown={(event) => {
               event.preventDefault();
               focusGame();
             }}
             onClick={focusGame}
           >
-            <span>🔴</span>
-            Cliquez pour jouer
-            <small>Le clavier contrôlera ensuite le personnage.</small>
+            <span>{gameLoadError ? '⚠️' : (gamePlayable ? '🔴' : '⏳')}</span>
+            {gameLoadError ? 'Chargement interrompu' : (gamePlayable ? 'Touchez pour jouer' : 'Chargement du jeu…')}
+            <small>{gameLoadError || (gamePlayable ? 'Le jeu est prêt.' : 'Les images et le monde sont en préparation.')}</small>
           </button>
         )}
 
