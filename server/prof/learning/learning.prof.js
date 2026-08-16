@@ -1352,6 +1352,9 @@ router.post('/', async (req, res) => {
         data.steps = sanitizeSteps(data.steps);
         data.presentationUrl = String(data.presentationUrl || '').trim();
         data.presentationSlidesFocus = String(data.presentationSlidesFocus || '').trim().slice(0, 200);
+        data.generalSheetCourseId = String(data.generalSheetCourseId || '').trim();
+        data.generalSheetCourseTitle = String(data.generalSheetCourseTitle || '').trim().slice(0, 300);
+        data.generalSheetCourseDescription = String(data.generalSheetCourseDescription || '').trim().slice(0, 2000);
         if (!data.title) data.title = 'APPRENTISSAGE';
         await assertLearningChapterMatchesTargets(data);
 

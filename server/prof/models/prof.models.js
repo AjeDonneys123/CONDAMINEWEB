@@ -204,6 +204,9 @@ const Models = {
         isEnabled: { type: Boolean, default: true },
         presentationUrl: { type: String, default: '' },
         presentationSlidesFocus: { type: String, default: '' },
+        generalSheetCourseId: { type: String, default: '' },
+        generalSheetCourseTitle: { type: String, default: '' },
+        generalSheetCourseDescription: { type: String, default: '' },
         sections: {
             type: [Object],
             default: []

@@ -805,7 +805,39 @@ const normalizeLoadedSections = (rawSections = []) => {
     }).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 };
 
-export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
+const normalizeCourseMatchText = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(chapitre|sequence|cours|histoire|geo(?:graphie)?|emc|ch)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const COURSE_MATCH_STOP_WORDS = new Set(['le', 'la', 'les', 'de', 'des', 'du', 'un', 'une', 'et', 'en', 'au', 'aux', 'ses', 'ces', 'son', 'sa']);
+
+const getCourseMatchTokens = (value = '') => normalizeCourseMatchText(value)
+    .split(/\s+/)
+    .filter((token) => token.length > 1 && !COURSE_MATCH_STOP_WORDS.has(token));
+
+const scoreCourseForChapter = (course = {}, chapter = {}) => {
+    const chapterText = normalizeCourseMatchText(chapter?.title || '');
+    const courseTitle = normalizeCourseMatchText(course?.title || '');
+    const courseDescription = normalizeCourseMatchText(course?.description || '');
+    if (!chapterText || (!courseTitle && !courseDescription)) return 0;
+    let score = 0;
+    if (courseTitle.includes(chapterText) || chapterText.includes(courseTitle)) score += 120;
+    if (courseDescription.includes(chapterText) || chapterText.includes(courseDescription)) score += 100;
+    const chapterTokens = [...new Set(getCourseMatchTokens(chapterText))];
+    const titleTokens = new Set(getCourseMatchTokens(courseTitle));
+    const descriptionTokens = new Set(getCourseMatchTokens(courseDescription));
+    chapterTokens.forEach((token) => {
+        if (titleTokens.has(token)) score += 18;
+        if (descriptionTokens.has(token)) score += 14;
+    });
+    return score;
+};
+
+export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, globalClassId = '', onClose, allStudents: propStudents, allClasses: propClasses }) {
     // Le contentEditable peut contenir une frappe plus récente que le dernier rendu React.
     // Ce registre synchrone garantit que « Inspecter fiche » utilise toujours ce qui est
     // réellement visible dans l'éditeur au moment du clic.
@@ -825,7 +857,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         chapterId: initialData?.chapterId ? String(initialData.chapterId) : '',
         subject: initialData?.subject || targetSection || 'GÉNÉRAL',
         presentationUrl: initialData?.presentationUrl || '',
-        presentationSlidesFocus: initialData?.presentationSlidesFocus || ''
+        presentationSlidesFocus: initialData?.presentationSlidesFocus || '',
+        generalSheetCourseId: initialData?.generalSheetCourseId || '',
+        generalSheetCourseTitle: initialData?.generalSheetCourseTitle || '',
+        generalSheetCourseDescription: initialData?.generalSheetCourseDescription || ''
     }));
     const [activeStep, setActiveStep] = useState(0);
     const [allStudents, setAllStudents] = useState(propStudents || []);
@@ -895,6 +930,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
     const [sourcePickerVideoName, setSourcePickerVideoName] = useState('');
     const [showGeneralSheetBuilder, setShowGeneralSheetBuilder] = useState(false);
+    const [generalSheetCourses, setGeneralSheetCourses] = useState([]);
+    const [generalSheetCoursesLoading, setGeneralSheetCoursesLoading] = useState(false);
+    const [generalSheetCourseAutomatic, setGeneralSheetCourseAutomatic] = useState(false);
     const [generalSheetText, setGeneralSheetText] = useState('');
     const [generalSheetHtml, setGeneralSheetHtml] = useState('');
     const [globalSheetSourceUrl, setGlobalSheetSourceUrl] = useState('');
@@ -932,6 +970,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const timelineZonesRef = useRef(null);
     const resizingSegmentRef = useRef(null);
     const hydratedQuestionDraftsRef = useRef(new Set());
+    const generalSheetMatchedChapterRef = useRef(String(initialData?.chapterId || ''));
     const teacherId = String(user?._id || user?.id || '').trim();
     const step = formData.steps[activeStep] || null;
     const questionDraftKey = useMemo(() => {
@@ -1013,6 +1052,63 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         }, 900);
         return () => clearTimeout(timer);
     }, [formData?._id, step]);
+
+    useEffect(() => {
+        if (!globalClassId) {
+            setGeneralSheetCourses([]);
+            return undefined;
+        }
+        let cancelled = false;
+        setGeneralSheetCoursesLoading(true);
+        fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}`)
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data?.error || 'Chargement des séquences impossible');
+                if (!cancelled) setGeneralSheetCourses(Array.isArray(data) ? data : []);
+            })
+            .catch(() => {
+                if (!cancelled) setGeneralSheetCourses([]);
+            })
+            .finally(() => {
+                if (!cancelled) setGeneralSheetCoursesLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [globalClassId]);
+
+    useEffect(() => {
+        if (!formData.chapterId || generalSheetCourses.length === 0) return;
+        const chapter = (chapters || []).find((row) => String(row?._id || '') === String(formData.chapterId));
+        if (!chapter) return;
+        const ranked = generalSheetCourses
+            .map((course) => ({ course, score: scoreCourseForChapter(course, chapter) }))
+            .sort((a, b) => b.score - a.score);
+        const current = ranked.find((row) => String(row.course?._id || '') === String(formData.generalSheetCourseId || ''));
+        const chapterChanged = generalSheetMatchedChapterRef.current !== String(formData.chapterId);
+        generalSheetMatchedChapterRef.current = String(formData.chapterId);
+        if (!chapterChanged && current && current.score > 0) return;
+        const best = ranked[0];
+        if (!best || best.score <= 0) return;
+        setFormData((prev) => ({
+            ...prev,
+            generalSheetCourseId: String(best.course?._id || ''),
+            generalSheetCourseTitle: String(best.course?.title || ''),
+            generalSheetCourseDescription: String(best.course?.description || ''),
+            presentationUrl: String(best.course?.slidesUrl || prev.presentationUrl || '')
+        }));
+        setGeneralSheetCourseAutomatic(true);
+    }, [chapters, formData.chapterId, formData.generalSheetCourseId, generalSheetCourses]);
+
+    const selectGeneralSheetCourse = (courseId, automatic = false) => {
+        const course = generalSheetCourses.find((row) => String(row?._id || '') === String(courseId || ''));
+        setFormData((prev) => ({
+            ...prev,
+            generalSheetCourseId: String(course?._id || ''),
+            generalSheetCourseTitle: String(course?.title || ''),
+            generalSheetCourseDescription: String(course?.description || ''),
+            presentationUrl: course ? String(course.slidesUrl || '') : prev.presentationUrl
+        }));
+        setGeneralSheetCourseAutomatic(Boolean(automatic));
+    };
 
     const availableChapters = useMemo(() => {
         const section = String(targetSection || 'GÉNÉRAL').toUpperCase();
@@ -4939,6 +5035,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const selectedChapter = (chapters || []).find((chapter) => String(chapter?._id || '') === String(formData.chapterId || ''));
         const chapterTitle = String(selectedChapter?.title || 'CHAPITRE NON SÉLECTIONNÉ').trim();
         const chapterSubject = String(selectedChapter?.section || formData.subject || targetSection || '').trim();
+        const selectedCourse = generalSheetCourses.find((course) => String(course?._id || '') === String(formData.generalSheetCourseId || ''));
+        const courseTitle = String(selectedCourse?.title || formData.generalSheetCourseTitle || '').trim();
+        const courseDescription = String(selectedCourse?.description || formData.generalSheetCourseDescription || '').trim();
         const slidesUrl = String(formData.presentationUrl || '').trim();
         const slidesFocus = String(formData.presentationSlidesFocus || '').trim();
         const prompt = `PROMPT FICHE GÉNÉRALE CONDAWEB — GEMINI
@@ -4950,10 +5049,12 @@ CHAPITRE À FICHER
 - Nom de l'apprentissage : ${String(formData.title || '').trim() || 'non précisé'}
 
 SOURCE À ANALYSER
+- Séquence de cours sélectionnée : ${courseTitle || 'SÉQUENCE NON SÉLECTIONNÉE'}
+- Détail de la séquence : ${courseDescription || 'aucun détail renseigné'}
 - URL Google Slides : ${slidesUrl || 'URL NON RENSEIGNÉE DANS CONDAWEB'}
 ${slidesFocus ? `- Slides de trace écrite à privilégier : ${slidesFocus}` : '- Analyse toutes les diapositives utiles au chapitre.'}
 
-Ouvre et analyse les diapositives de cette présentation. Produis uniquement la fiche du chapitre « ${chapterTitle} ». Ignore les diapositives appartenant à un autre chapitre. Toutes les grandes parties du chapitre présentes dans les slides doivent devenir des fiches/parties distinctes dans la structure ci-dessous.
+Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-dessus. Produis uniquement la fiche du chapitre « ${chapterTitle} ». Ignore les diapositives appartenant à un autre chapitre. Toutes les grandes parties du chapitre présentes dans les slides doivent devenir des fiches/parties distinctes dans la structure ci-dessous.
 
 À partir de mes sources, produis UNE SEULE SUPERFICHE de cours prête à être importée dans CondaWeb.
 
@@ -5743,7 +5844,28 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     </div>
                 </div>
             )}
-            <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
+            <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[minmax(240px,0.8fr)_1fr_220px] gap-3">
+                <div>
+                    <select
+                        className="v84-ans-input"
+                        value={formData.generalSheetCourseId || ''}
+                        onChange={(event) => selectGeneralSheetCourse(event.target.value)}
+                        disabled={generalSheetCoursesLoading}
+                        aria-label="Séquence de cours utilisée pour la fiche générale"
+                    >
+                        <option value="">{generalSheetCoursesLoading ? 'Chargement des séquences…' : 'Choisir la séquence de cours'}</option>
+                        {generalSheetCourses.map((course) => (
+                            <option key={course._id} value={course._id}>
+                                {String(course.title || 'Séquence sans titre')}{String(course.description || '').trim() ? ` — ${String(course.description).trim()}` : ''}
+                            </option>
+                        ))}
+                    </select>
+                    {formData.generalSheetCourseId && (
+                        <div className="mt-1 text-[10px] font-black uppercase text-emerald-700">
+                            {generalSheetCourseAutomatic ? '✓ Séquence proposée automatiquement' : '✓ Séquence choisie manuellement'}
+                        </div>
+                    )}
+                </div>
                 <input
                     className="v84-ans-input"
                     value={formData.presentationUrl || ''}

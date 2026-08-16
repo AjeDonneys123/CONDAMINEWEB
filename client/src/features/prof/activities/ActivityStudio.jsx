@@ -119,6 +119,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
             allClasses, // Transmis
             allStudents, // Transmis
             globalClass,
+            globalClassId,
             globalLevel,
             targetLevel: globalLevel, 
             user,
