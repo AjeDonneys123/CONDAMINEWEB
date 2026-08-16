@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
+const fetch = require('node-fetch');
 const AIEngine = require('../../core/ai.engine');
 const { Student, LearningModule, GptInboxMessage } = require('../../prof/models/prof.models');
 
@@ -71,25 +72,59 @@ const askResearchJson = async ({ prompt, system, maxOutputTokens = 4096 }) => {
     return parseResearchJson(retryRaw);
 };
 
-const buildResearchTopicFallback = (topic, level) => {
+const targetFallbackWords = (levelLabel = '') => {
+    if (levelLabel === '6e') return 60;
+    if (levelLabel === '5e') return 70;
+    if (levelLabel === '4e') return 80;
+    if (levelLabel === '3e') return 90;
+    return 105;
+};
+
+const factualResearchTopicFallback = async (topic, level) => {
     const title = String(topic || 'Sujet de recherche').trim();
-    const article = [
-        `Le sujet « ${title} » s’inscrit dans un contexte précis qu’il faut identifier.`,
-        'Son apparition ne dépend pas d’une seule cause et plusieurs acteurs jouent un rôle important.',
-        'Son déroulement connaît des étapes et des changements encore à éclaircir.',
-        'Enfin, ses conséquences ne sont pas identiques selon les lieux, les périodes ou les personnes concernées.'
-    ].join(' ');
+    let sourceTitle = title;
+    let extract = '';
+    try {
+        const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(title)}&srlimit=1&format=json&origin=*`;
+        const searchResponse = await fetch(searchUrl, { headers: { 'User-Agent': 'CondaWeb-Cyclopedia/1.0 (educational)' }, timeout: 8000 });
+        if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            sourceTitle = String(searchData?.query?.search?.[0]?.title || title).trim();
+        }
+        const summaryUrl = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(sourceTitle.replace(/ /g, '_'))}`;
+        const summaryResponse = await fetch(summaryUrl, { headers: { 'User-Agent': 'CondaWeb-Cyclopedia/1.0 (educational)' }, timeout: 8000 });
+        if (summaryResponse.ok) {
+            const summary = await summaryResponse.json();
+            extract = String(summary?.extract || '').replace(/\s+/g, ' ').trim();
+            sourceTitle = String(summary?.title || sourceTitle).trim();
+        }
+    } catch (error) {
+        console.warn('Cyclopédia: secours Wikipédia indisponible:', error.message);
+    }
+
+    const maxWords = targetFallbackWords(level.label);
+    const words = extract.split(/\s+/).filter(Boolean);
+    let article = words.slice(0, maxWords).join(' ');
+    if (words.length > maxWords) article = article.replace(/[,:;]?$/, '') + '…';
+    if (!article) article = `« ${title} » est le sujet choisi. Identifie d’abord sa nature, son époque et son espace géographique, puis recherche ses principaux acteurs, les étapes essentielles, ses causes et ses conséquences à partir de sources documentaires vérifiables.`;
+
+    const articleWords = article.split(/\s+/).filter(Boolean);
+    const excerptAt = (ratio) => {
+        const length = Math.min(9, Math.max(4, Math.floor(articleWords.length / 8)));
+        const start = Math.max(0, Math.min(articleWords.length - length, Math.floor((articleWords.length - length) * ratio)));
+        return articleWords.slice(start, start + length).join(' ').replace(/^[«“"(]+|[»”"),.;:!?…]+$/g, '');
+    };
     return {
-        title,
+        title: sourceTitle,
         article,
         openThreads: [
-            { id: 'T1', excerpt: 's’inscrit dans un contexte précis qu’il faut identifier', angle: 'Identifier et expliquer le contexte.' },
-            { id: 'T2', excerpt: 'plusieurs acteurs jouent un rôle important', angle: 'Rechercher les acteurs et leurs rôles.' },
-            { id: 'T3', excerpt: 'connaît des étapes et des changements encore à éclaircir', angle: 'Reconstruire les principales étapes.' },
-            { id: 'T4', excerpt: 'ses conséquences ne sont pas identiques', angle: 'Comparer les conséquences.' }
+            { id: 'T1', excerpt: excerptAt(0.08), angle: 'Préciser le contexte et les origines.' },
+            { id: 'T2', excerpt: excerptAt(0.38), angle: 'Identifier les acteurs et les étapes importantes.' },
+            { id: 'T3', excerpt: excerptAt(0.7), angle: 'Approfondir les effets et les limites.' }
         ],
         level: level.label,
-        fallback: true
+        fallback: true,
+        source: 'Wikipédia — résumé introductif à vérifier et compléter'
     };
 };
 
@@ -791,7 +826,7 @@ router.post('/research', async (req, res) => {
                     'Retourne uniquement un JSON valide : {"title":"...","article":"...","openThreads":[{"id":"T1","excerpt":"extrait exact de article","angle":"aspect à approfondir"},{"id":"T2","excerpt":"...","angle":"..."}],"level":"..."}.'
                 ].join(' ')
             });
-            const base = result?.article ? result : buildResearchTopicFallback(topic, level);
+            const base = result?.article ? result : await factualResearchTopicFallback(topic, level);
             return res.json({ ok: true, phase, level: level.label, base });
         }
 
