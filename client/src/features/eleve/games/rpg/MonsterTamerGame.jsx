@@ -206,7 +206,7 @@ export default function MonsterTamerGame({ onExit, learningContext = { lessons: 
         <iframe
           ref={frameRef}
           title="Monster Tamer"
-          src={gameUrl('monster-tamer/?v=0ec88f6-fast-mobile')}
+          src={gameUrl('monster-tamer/?v=1217a98-single-qcm')}
           allow="autoplay; fullscreen"
           tabIndex="0"
           onLoad={sendLearningContext}
