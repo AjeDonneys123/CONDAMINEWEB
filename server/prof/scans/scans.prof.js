@@ -33,12 +33,13 @@ router.get('/sessions', async (req, res) => {
 
 router.post('/sessions', async (req, res) => {
     try {
-        const { title, teacherId, classId, className } = req.body || {};
+        const { title, teacherId, classId, className, isManualOnly } = req.body || {};
         const created = await ScanSession.create({
             title,
             teacherId,
             classId: classId || null,
             className: String(className || '').trim(),
+            isManualOnly: isManualOnly === true,
             aiInstructions: defaultAiInstructions
         });
         res.json(created);

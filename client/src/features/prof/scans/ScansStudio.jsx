@@ -642,6 +642,15 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const saveManualGrade = async (studentId, value) => {
         if (!gradingSession?._id) return;
         const key = `${studentId}-${value}`;
+        const previousSession = gradingSession;
+        const now = new Date().toISOString();
+        const optimisticGrades = [...(gradingSession.manualGrades || [])];
+        const existingIndex = optimisticGrades.findIndex((row) => String(row.studentId?._id || row.studentId) === String(studentId));
+        if (existingIndex >= 0) optimisticGrades[existingIndex] = { ...optimisticGrades[existingIndex], value, gradedAt: now };
+        else optimisticGrades.push({ studentId, value, gradedAt: now });
+        const optimisticSession = { ...gradingSession, manualGrades: optimisticGrades };
+        setGradingSession(optimisticSession);
+        setSessions((current) => current.map((row) => row._id === optimisticSession._id ? optimisticSession : row));
         setSavingGradeKey(key);
         try {
             const res = await fetch(`/api/scans/sessions/${gradingSession._id}/manual-grade`, {
@@ -655,9 +664,43 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
             setSessions((current) => current.map((row) => row._id === data.session._id ? data.session : row));
             setStatus(`Note ${value}/5 enregistrée.`);
         } catch (e) {
+            setGradingSession(previousSession);
+            setSessions((current) => current.map((row) => row._id === previousSession._id ? previousSession : row));
             setStatus(e.message || "La note n'a pas été enregistrée.");
         } finally {
             setSavingGradeKey('');
+        }
+    };
+
+    const createSession = async (isManualOnly = false) => {
+        const title = String(prompt(isManualOnly ? "Titre du devoir manuel :" : "Titre de l'évaluation :") || '').trim();
+        if (!title) return;
+        try {
+            const res = await fetch('/api/scans/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    teacherId,
+                    classId: globalClassId || null,
+                    className: globalClass || '',
+                    isManualOnly
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data?._id) throw new Error(data?.error || "Création de session impossible");
+            await loadSessions();
+            if (isManualOnly) {
+                setActiveSession(null);
+                setView('list');
+                await openManualGrading(data);
+            } else {
+                setActiveSession(data);
+                setView('scan');
+                setWorkspaceCollapsed(false);
+            }
+        } catch (e) {
+            alert(e.message || "Création de session impossible");
         }
     };
     const toggleSessionCollapse = (sessionId) => {
@@ -1001,34 +1044,14 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Scanner et corriger via le Drive Pro</p>
                     {globalClass && <p className="scan-class-context">Classe active: {globalClass}</p>}
                 </div>
-                <button onClick={async () => {
-                    const title = String(prompt("Titre de l'évaluation :") || '').trim();
-                    if (!title) return;
-                    try {
-                        const res = await fetch('/api/scans/sessions', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                title,
-                                teacherId,
-                                classId: globalClassId || null,
-                                className: globalClass || ''
-                            })
-                        });
-                        const data = await res.json().catch(() => ({}));
-                        if (!res.ok || !data?._id) {
-                            throw new Error(data?.error || "Création de session impossible");
-                        }
-                        await loadSessions();
-                        setActiveSession(data);
-                        setView('scan');
-                        setWorkspaceCollapsed(false);
-                    } catch (e) {
-                        alert(e.message || "Création de session impossible");
-                    }
-                }} className="bg-indigo-600 text-white px-8 py-5 rounded-[25px] font-black text-sm shadow-xl hover:scale-105 transition-transform">
-                    + NOUVELLE SESSION
-                </button>
+                <div className="scan-create-actions">
+                    <button onClick={() => createSession(false)} className="scan-create-btn primary">
+                        + NOUVELLE SESSION
+                    </button>
+                    <button onClick={() => createSession(true)} className="scan-create-btn manual">
+                        ✋ MANUEL
+                    </button>
+                </div>
             </div>
 
             <div className="sessions-list">
@@ -1051,11 +1074,11 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                         </button>
                                     </div>
                                     <div className="session-card-actions">
-                                        <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>
-                                        <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>
-                                        <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>
+                                        {!s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>}
+                                        {!s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>}
+                                        {!s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>}
                                         <button onClick={() => openManualGrading(s)} className="act-btn btn-quick-grade">Manuel</button>
-                                        <button
+                                        {!s.isManualOnly && <button
                                             onClick={() => {
                                                 setActiveSession(s);
                                                 setView('ia');
@@ -1064,8 +1087,8 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                             className="act-btn btn-ia"
                                         >
                                             IA
-                                        </button>
-                                        {isDesktopMode && (
+                                        </button>}
+                                        {isDesktopMode && !s.isManualOnly && (
                                             <button
                                                 onClick={() => handleLaunchManualMode(s)}
                                                 className="act-btn btn-manual"

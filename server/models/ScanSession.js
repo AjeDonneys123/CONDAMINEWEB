@@ -16,6 +16,7 @@ const ScanSessionSchema = new mongoose.Schema({
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', default: null },
     className: { type: String, default: '' },
+    isManualOnly: { type: Boolean, default: false },
     subjectUrls: [String],
     copyUrls: [String],
     aiInstructions: { type: String, default: "Corrige sévèrement la syntaxe." },

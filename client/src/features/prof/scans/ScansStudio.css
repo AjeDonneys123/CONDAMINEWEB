@@ -3,6 +3,11 @@
 
 /* LISTE DES SESSIONS (CARTES) */
 .sessions-list { display: flex; flex-direction: column; gap: 20px; }
+.scan-create-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.scan-create-btn { border: 0; border-radius: 25px; padding: 20px 28px; color: #fff; font-size: .85rem; font-weight: 950; cursor: pointer; box-shadow: 0 14px 28px rgba(15, 23, 42, .14); transition: transform .15s; }
+.scan-create-btn:hover { transform: translateY(-2px); }
+.scan-create-btn.primary { background: #4f46e5; }
+.scan-create-btn.manual { background: #f59e0b; }
 
 .session-card {
     background: white;
@@ -680,11 +685,8 @@
         margin-bottom: 1.2rem;
     }
     .scan-page h2 { font-size: 2rem; line-height: 1.02; }
-    .scan-page > .flex > button {
-        width: 100%;
-        padding: 14px 18px;
-        border-radius: 16px;
-    }
+    .scan-create-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+    .scan-create-btn { width: 100%; padding: 14px 10px; border-radius: 16px; font-size: .75rem; }
 
     .session-card {
         padding: 16px;

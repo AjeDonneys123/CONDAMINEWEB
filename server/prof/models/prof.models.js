@@ -582,6 +582,7 @@ const Models = {
         date: { type: Date, default: Date.now },
         classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', default: null },
         className: { type: String, default: '' },
+        isManualOnly: { type: Boolean, default: false },
         manualGrades: [{
             studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
             value: { type: Number, min: 1, max: 5 },
