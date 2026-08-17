@@ -143,6 +143,9 @@ router.post('/chapters', async (req, res) => {
 
 router.patch('/chapters/:id', async (req, res) => {
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ error: 'Identifiant de chapitre invalide.' });
+        }
         const { title, scope, target, isArchived, section, active } = req.body;
         const up = {};
         if (title) up.title = title.toUpperCase().trim();
@@ -150,8 +153,14 @@ router.patch('/chapters/:id', async (req, res) => {
         if (scope) { up.classroom = scope === 'CLASS' ? target : ""; up.sharedLevel = scope === 'LEVEL' ? target : ""; }
         if (isArchived !== undefined) up.isArchived = isArchived;
         if (typeof active === 'boolean') up.active = active;
-        const updated = await Chapter.findByIdAndUpdate(req.params.id, up, { new: true });
-        res.json(updated);
+        const updated = await Chapter.findByIdAndUpdate(
+            req.params.id,
+            { $set: up },
+            { new: true, runValidators: true }
+        ).lean();
+        if (!updated) return res.status(404).json({ error: 'Chapitre introuvable.' });
+        res.set('Cache-Control', 'no-store');
+        res.json({ ...updated, _id: String(updated._id), active: updated.active !== false });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -42,7 +42,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 fetchJson('/api/comments/all'),
                 fetchJson('/api/productions/all'),
                 fetchJson('/api/revisions/all'),
-                fetchJson(`/api/structure/chapters?teacherId=${encodeURIComponent(teacherId)}&classContext=${encodeURIComponent(globalClass || '')}`),
+                fetchJson(`/api/structure/chapters?teacherId=${encodeURIComponent(teacherId)}&classContext=${encodeURIComponent(globalClass || '')}&_=${Date.now()}`),
                 fetchJson('/api/admin/students'),
                 fetchJson('/api/admin/classrooms') // Ajouté
             ]);

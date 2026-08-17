@@ -40,6 +40,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const [draggedActivity, setDraggedActivity] = useState(null);
     const [dropChapterId, setDropChapterId] = useState('');
     const [enabledOverrides, setEnabledOverrides] = useState({});
+    const [chapterActiveOverrides, setChapterActiveOverrides] = useState({});
 
     const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
     const isObjectId = (v) => /^[a-f0-9]{24}$/i.test(String(v || '').trim());
@@ -294,14 +295,29 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
     async function handleToggleChapterActive(e, chapter) {
         e.stopPropagation();
-        const active = chapter?.active === false;
-        const res = await fetch(`/api/structure/chapters/${chapter._id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ active })
-        });
-        if (!res.ok) return alert('Impossible de changer le statut du chapitre.');
-        if (onRefresh) onRefresh();
+        const chapterId = String(chapter?._id || '');
+        if (!chapterId) return;
+        const override = chapterActiveOverrides[chapterId];
+        const currentActive = typeof override === 'boolean' ? override : chapter?.active !== false;
+        const nextActive = !currentActive;
+        setChapterActiveOverrides((prev) => ({ ...prev, [chapterId]: nextActive }));
+        try {
+            const res = await fetch(`/api/structure/chapters/${chapterId}`, {
+                method: 'PATCH',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: nextActive })
+            });
+            const saved = await res.json().catch(() => null);
+            if (!res.ok || !saved || saved.active !== nextActive) {
+                throw new Error(saved?.error || 'Le serveur n’a pas confirmé le nouveau statut.');
+            }
+            setChapterActiveOverrides((prev) => ({ ...prev, [chapterId]: saved.active }));
+            if (onRefresh) await onRefresh();
+        } catch (error) {
+            setChapterActiveOverrides((prev) => ({ ...prev, [chapterId]: currentActive }));
+            alert(`Impossible de changer le statut du chapitre : ${error.message}`);
+        }
     }
 
     async function handleToggleActivityEnabled(e, item) {
@@ -514,6 +530,9 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                             return it.targetClassrooms.some((cls) => normalizeClassKey(cls) === normalizedClassFilter);
                         });
                         const isOpen = openChaps[chap._id];
+                        const chapterActive = typeof chapterActiveOverrides[String(chap._id)] === 'boolean'
+                            ? chapterActiveOverrides[String(chap._id)]
+                            : chap.active !== false;
                         const isRoot = activeSection.toUpperCase() === "GÉNÉRAL" && chap.title.toUpperCase() === "GÉNÉRAL";
                         const isLastSurvivor = activeSection.toUpperCase() === "GÉNÉRAL" && filteredChapters.length <= 1;
 
@@ -556,9 +575,9 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                         {!showArchived && !isRoot && (
                                             <button
                                                 onClick={(e) => handleToggleChapterActive(e, chap)}
-                                                className={`mr-1 px-3 py-2 rounded-xl text-[9px] font-black border ${chap.active === false ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}
+                                                className={`mr-1 px-3 py-2 rounded-xl text-[9px] font-black border ${chapterActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}
                                             >
-                                                {chap.active === false ? 'INACTIF' : 'ACTIF'}
+                                                {chapterActive ? 'ACTIF' : 'INACTIF'}
                                             </button>
                                         )}
                                         {!showArchived && (
