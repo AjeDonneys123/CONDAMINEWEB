@@ -10,6 +10,7 @@ export default function StatusOverview({ user, onOpenActivity }) {
     const groups = new Map();
     (chapters || []).forEach((chapter) => {
       const title = String(chapter?.chapterTitle || 'CHAPITRE').trim();
+      if (title.toUpperCase() === 'GÉNÉRAL') return;
       const key = String(chapter?.chapterId || title);
       groups.set(key, { key, title, section: chapter?.chapterSection || '', items: [] });
     });
@@ -37,7 +38,8 @@ export default function StatusOverview({ user, onOpenActivity }) {
           params.set('level', String(user?.currentClass || ''));
         }
         const suffix = params.toString() ? `?${params.toString()}` : '';
-        const res = await fetch(`/api/eleve/classroom/status-summary/${userId}${suffix}`);
+        const res = await fetch(`/api/eleve/classroom/status-summary/${userId}${suffix}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Statut indisponible (${res.status})`);
         const json = await res.json();
         setData(json || { disciplines: [] });
         hasLoadedOnceRef.current = true;
@@ -56,7 +58,12 @@ export default function StatusOverview({ user, onOpenActivity }) {
     return <div className="status-page">Chargement du statut...</div>;
   }
 
-  const disciplines = data?.disciplines || [];
+  const disciplines = (data?.disciplines || []).filter((discipline) => {
+    if (Number(discipline?.activities?.total || 0) > 0) return true;
+    return (discipline?.activities?.chapters || []).some((chapter) =>
+      String(chapter?.chapterTitle || '').trim().toUpperCase() !== 'GÉNÉRAL'
+    );
+  });
   if (disciplines.length === 0) {
     return (
       <div className="status-page">

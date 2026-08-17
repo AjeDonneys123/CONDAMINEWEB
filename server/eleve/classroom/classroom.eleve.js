@@ -304,6 +304,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
             '_id title section classroom sharedLevel teacherId active isArchived'
         ).lean();
         const chapterMatchesStudent = (chapter) => {
+            if (normalizeSubject(chapter?.title) === 'GÉNÉRAL') return false;
             const sharedLevel = academicLevel(chapter?.sharedLevel);
             if (sharedLevel) return Boolean(studentLevel) && sharedLevel === studentLevel;
             const classroom = normalizeTargetKey(chapter?.classroom);
