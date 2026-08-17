@@ -1,7 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
-const fetch = require('node-fetch');
 const AIEngine = require('../../core/ai.engine');
 const { Student, LearningModule, GptInboxMessage } = require('../../prof/models/prof.models');
 
@@ -79,76 +78,6 @@ const askResearchJson = async ({ prompt, system, maxOutputTokens = 4096 }) => {
         console.warn(`Cyclopédia: seconde génération ${retryProvider} indisponible:`, error.message);
         return null;
     }
-};
-
-const targetFallbackWords = (levelLabel = '') => {
-    if (levelLabel === '6e') return 60;
-    if (levelLabel === '5e') return 70;
-    if (levelLabel === '4e') return 80;
-    if (levelLabel === '3e') return 90;
-    return 105;
-};
-
-const factualResearchTopicFallback = async (topic, level) => {
-    const title = String(topic || 'Sujet de recherche').trim();
-    let sourceTitle = title;
-    let extract = '';
-    try {
-        const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(title)}&srlimit=1&format=json&origin=*`;
-        const searchResponse = await fetch(searchUrl, { headers: { 'User-Agent': 'CondaWeb-Cyclopedia/1.0 (educational)' }, timeout: 8000 });
-        if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            sourceTitle = String(searchData?.query?.search?.[0]?.title || title).trim();
-        }
-        const summaryUrl = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(sourceTitle.replace(/ /g, '_'))}`;
-        const summaryResponse = await fetch(summaryUrl, { headers: { 'User-Agent': 'CondaWeb-Cyclopedia/1.0 (educational)' }, timeout: 8000 });
-        if (summaryResponse.ok) {
-            const summary = await summaryResponse.json();
-            extract = String(summary?.extract || '').replace(/\s+/g, ' ').trim();
-            sourceTitle = String(summary?.title || sourceTitle).trim();
-        }
-        const detailUrl = `https://fr.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&redirects=1&titles=${encodeURIComponent(sourceTitle)}&format=json&origin=*`;
-        const detailResponse = await fetch(detailUrl, { headers: { 'User-Agent': 'CondaWeb-Cyclopedia/1.0 (educational)' }, timeout: 8000 });
-        if (detailResponse.ok) {
-            const detailData = await detailResponse.json();
-            const page = Object.values(detailData?.query?.pages || {})[0] || {};
-            const detailedExtract = String(page?.extract || '').replace(/\s+/g, ' ').trim();
-            const sentences = detailedExtract.match(/[^.!?…]+[.!?…]+/g) || [];
-            const identity = sentences.find((sentence) => new RegExp(escapeRegex(sourceTitle.split(' ')[0]), 'i').test(sentence)) || sentences[0] || '';
-            const hooks = sentences
-                .filter((sentence) => /guerre|succession|alliance|mort|suicide|bataille|pouvoir|règne|assassin|conflit|révolution|découverte|invention/i.test(sentence))
-                .filter((sentence) => sentence !== identity)
-                .slice(0, 3);
-            if (hooks.length > 0) extract = [identity, ...hooks].join(' ').trim();
-        }
-    } catch (error) {
-        console.warn('Cyclopédia: secours Wikipédia indisponible:', error.message);
-    }
-
-    const maxWords = targetFallbackWords(level.label);
-    const words = extract.split(/\s+/).filter(Boolean);
-    let article = words.slice(0, maxWords).join(' ');
-    if (words.length > maxWords) article = article.replace(/[,:;]?$/, '') + '…';
-    if (!article) article = `« ${title} » est le sujet choisi. Identifie d’abord sa nature, son époque et son espace géographique, puis recherche ses principaux acteurs, les étapes essentielles, ses causes et ses conséquences à partir de sources documentaires vérifiables.`;
-
-    const articleWords = article.split(/\s+/).filter(Boolean);
-    const excerptAt = (ratio) => {
-        const length = Math.min(9, Math.max(4, Math.floor(articleWords.length / 8)));
-        const start = Math.max(0, Math.min(articleWords.length - length, Math.floor((articleWords.length - length) * ratio)));
-        return articleWords.slice(start, start + length).join(' ').replace(/^[«“"(]+|[»”"),.;:!?…]+$/g, '');
-    };
-    return {
-        title: sourceTitle,
-        article,
-        openThreads: [
-            { id: 'T1', excerpt: excerptAt(0.08), angle: 'Préciser le contexte et les origines.' },
-            { id: 'T2', excerpt: excerptAt(0.38), angle: 'Identifier les acteurs et les étapes importantes.' },
-            { id: 'T3', excerpt: excerptAt(0.7), angle: 'Approfondir les effets et les limites.' }
-        ],
-        level: level.label,
-        fallback: true,
-        source: 'Wikipédia — résumé introductif à vérifier et compléter'
-    };
 };
 
 const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -842,20 +771,23 @@ router.post('/research', async (req, res) => {
                     "Ce texte n'est ni une notice complète, ni un mini-exposé : c'est un déclencheur de curiosité historiquement solide.",
                     "Identifie clairement le sujet, son époque, son espace et le contexte historique précis. Pour un personnage, explique brièvement qui il est et pourquoi il compte.",
                     "Fais comprendre qu'une accession au pouvoir, une rupture ou un phénomène historique résulte de plusieurs facteurs : n'attribue jamais son apparition à une cause unique.",
-                    "Présente trois ou quatre faits substantiels et exacts, dont au moins un sur les actions, les choix ou les effets propres au sujet. L'élève doit apprendre quelque chose de précis sur le sujet dès cette amorce.",
-                    "Structure l'amorce comme les bases d'un plan cohérent en trois axes implicites : 1) contexte, origines ou accession ; 2) actions, rôle, œuvre ou mécanisme principal ; 3) conséquences, héritage, limites ou épisode final remarquable. Les trois axes doivent porter précisément sur le sujet demandé.",
+                    "Sélectionne plusieurs faits substantiels et exacts sur les actions, les choix, l'œuvre, le fonctionnement ou les effets propres au sujet. L'élève doit apprendre quelque chose de précis dès cette amorce.",
+                    "Structure l'amorce comme les bases d'un plan cohérent. Le nombre de parties ou d'axes dépend uniquement du sujet : n'impose jamais artificiellement trois parties.",
                     "Tease explicitement les éléments les plus intéressants afin de donner envie à l'élève de les transformer en questions, sans fournir encore toute leur explication. Signale leur intérêt avec des formulations naturelles comme « de façon étonnante », « joue un rôle clé », « une œuvre extraordinaire », « un épisode décisif », « une fin devenue légendaire » ou « un choix aux conséquences majeures ».",
                     "Choisis ces accroches selon le sujet réel : une accession déloyale ou inattendue, un rôle clé dans la création d'un empire, une toile extraordinaire, une découverte contestée, une bataille décisive, une mort singulière, une invention qui bouleverse une société, etc. N'utilise jamais mécaniquement ces exemples s'ils ne correspondent pas au sujet.",
                     "Chaque fait teasé doit être assez concret pour susciter une question précise, mais garder volontairement à découvrir le comment, le pourquoi, les acteurs ou les conséquences.",
                     "Laisse cependant ouvertes plusieurs explications importantes : causes profondes et immédiates, acteurs, mécanismes, débats d'interprétation ou conséquences. Ne remplace jamais un fait essentiel par une formule creuse comme « les conséquences sont terribles ».",
-                    "N'emploie au maximum que deux dates et trois noms propres en plus du sujet lui-même. Ne donne aucune liste ni assez de détails pour rédiger directement l'exposé.",
+                    "Tu peux employer quelques dates et noms propres lorsqu'ils structurent réellement les axes de recherche. Écarte les variantes de nom, dates biographiques et détails secondaires qui n'aident pas à comprendre l'intérêt du sujet.",
                     "Les zones d'ombre doivent faire pressentir les grandes parties possibles du futur exposé sans les révéler explicitement. Ne pose aucune question à la place de l'élève.",
                     "Le texte doit être exact, neutre, clair, sans fausse citation et sans URL.",
-                    "Repère trois ou quatre passages courts du texte qui portent les zones d'ombre essentielles. Chaque passage doit être recopié MOT POUR MOT depuis article, sous forme d'un extrait continu de 4 à 12 mots.",
+                    "Repère autant de passages courts qu'il existe de véritables axes de recherche, généralement entre deux et cinq. Chaque passage doit être recopié MOT POUR MOT depuis article, sous forme d'un extrait continu de 4 à 12 mots.",
                     'Retourne uniquement un JSON valide : {"title":"...","article":"...","openThreads":[{"id":"T1","excerpt":"extrait exact de article","angle":"aspect à approfondir"},{"id":"T2","excerpt":"...","angle":"..."}],"level":"..."}.'
                 ].join(' ')
             });
-            const base = result?.article ? result : await factualResearchTopicFallback(topic, level);
+            if (!result?.article || !Array.isArray(result?.openThreads) || result.openThreads.length === 0) {
+                return res.status(503).json({ error: 'Échec de la requête Gemini. Aucun texte de secours n’a été utilisé. Réessaie dans un instant.' });
+            }
+            const base = result;
             return res.json({ ok: true, phase, level: level.label, base });
         }
 
