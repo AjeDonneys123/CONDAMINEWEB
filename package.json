@@ -9,6 +9,7 @@
     "client:web5e": "npm run dev --prefix client-web5e",
     "test": "node tests/integrity.test.js",
     "migrate:drive-urls": "node scripts/migrate-drive-proxy-urls.js",
+    "migrate:general-sheets": "node scripts/migrate-learning-general-sheets.js",
     "homework": "node homeworkSnap.js",
     "dev:client": "concurrently --kill-others --kill-others-on-fail -n \"CONDA-API,CONDAWEB\" -c \"magenta,cyan\" \"npm run server-dev\" \"npm run client\"",
     "dev:raw": "concurrently --kill-others --kill-others-on-fail -n \"WEB5E-API,WEB5E\" -c \"yellow,green\" \"npm run server-dev:web5e\" \"npm run client:web5e\"",

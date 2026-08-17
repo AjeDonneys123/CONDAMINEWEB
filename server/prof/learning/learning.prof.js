@@ -5,6 +5,7 @@ const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Cha
 const fetch = require('node-fetch');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
+const { restoreGeneralSheet } = require('./general-sheet.persistence');
 
 const inferAcademicLevel = (value = '') => {
     const cleaned = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
@@ -283,7 +284,8 @@ const sanitizeSteps = (steps = []) => {
                 id: String(step?.id || `step_${idx + 1}`),
                 title: String(step?.title || '').trim().slice(0, 120),
                 type,
-                sectionId: String(step?.sectionId || '').trim().slice(0, 120)
+                sectionId: String(step?.sectionId || '').trim().slice(0, 120),
+                generalSheetGenerated: step?.generalSheetGenerated === true
             };
             if (type === 'quiz') {
                 return {
@@ -316,6 +318,13 @@ const sanitizeSteps = (steps = []) => {
                     sheetUrl: String(step?.sheetUrl || '').trim(),
                     sheetText,
                     sheetTextHtml: String(step?.sheetTextHtml || '').slice(0, 120000),
+                    isGeneralSheetMaster: step?.isGeneralSheetMaster === true,
+                    generalSheetParentId: String(step?.generalSheetParentId || '').trim().slice(0, 160),
+                    generalSheetPartIndex: Math.max(0, Number(step?.generalSheetPartIndex || 0)),
+                    generalSheetDocumentTitle: String(step?.generalSheetDocumentTitle || '').trim().slice(0, 500),
+                    generalSheetQuizText: String(step?.generalSheetQuizText || '').slice(0, 60000),
+                    generalSheetQuizHtml: String(step?.generalSheetQuizHtml || '').slice(0, 120000),
+                    generalSheetSyncVersion: Math.max(0, Number(step?.generalSheetSyncVersion || 0)),
                     sheetSlidesCondition: String(step?.sheetSlidesCondition || '').trim().slice(0, 200),
                     sheetSlideSectionMap: (() => {
                         const raw = step?.sheetSlideSectionMap && typeof step.sheetSlideSectionMap === 'object'
@@ -949,6 +958,14 @@ router.get('/slides/thumbnail', async (req, res) => {
 router.get('/all', async (_req, res) => {
     try {
         const rows = await LearningModule.find({}).sort({ createdAt: -1 }).lean();
+        const updates = [];
+        rows.forEach((row) => {
+            const restored = restoreGeneralSheet(row.steps, row.title);
+            if (!restored.changed) return;
+            row.steps = restored.steps;
+            updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { steps: restored.steps } } } });
+        });
+        if (updates.length > 0) await LearningModule.bulkWrite(updates, { ordered: false });
         res.json(rows);
     } catch (e) {
         res.status(500).json([]);
@@ -1336,6 +1353,11 @@ router.get('/:id', async (req, res) => {
     try {
         const row = await LearningModule.findById(req.params.id).lean();
         if (!row) return res.status(404).json({ error: "Apprentissage introuvable" });
+        const restored = restoreGeneralSheet(row.steps, row.title);
+        if (restored.changed) {
+            row.steps = restored.steps;
+            await LearningModule.updateOne({ _id: row._id }, { $set: { steps: restored.steps } });
+        }
         res.json(row);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1349,7 +1371,7 @@ router.post('/', async (req, res) => {
         if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
         data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
         data.sections = sanitizeSections(data.sections);
-        data.steps = sanitizeSteps(data.steps);
+        data.steps = restoreGeneralSheet(sanitizeSteps(data.steps), data.title).steps;
         data.presentationUrl = String(data.presentationUrl || '').trim();
         data.presentationSlidesFocus = String(data.presentationSlidesFocus || '').trim().slice(0, 200);
         data.generalSheetCourseId = String(data.generalSheetCourseId || '').trim();
