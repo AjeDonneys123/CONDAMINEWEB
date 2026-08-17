@@ -126,6 +126,13 @@
   color: #166534;
 }
 
+.status-chapter-empty {
+  color: #94a3b8;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+}
+
 .status-empty {
   background: #fff;
   border: 2px dashed #cbd5e1;

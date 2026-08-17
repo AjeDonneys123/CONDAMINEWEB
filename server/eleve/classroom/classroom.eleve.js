@@ -240,7 +240,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     bonuses: 0,
                     homework: { total: 0, done: 0, todo: 0, todoTitles: [] },
                     games: { total: 0, done: 0, started: 0, todo: 0, todoTitles: [] },
-                    activities: { total: 0, done: 0, todo: 0, todoTitles: [], todoItems: [], savedItems: [] }
+                    activities: { total: 0, done: 0, todo: 0, todoTitles: [], todoItems: [], savedItems: [], chapters: [] }
                 });
             }
             return disciplineMap.get(subject);
@@ -292,9 +292,32 @@ router.get('/status-summary/:studentId', async (req, res) => {
                 .map(it => it.chapterId ? String(it.chapterId) : null)
                 .filter(Boolean)
         )];
-        const chapterRows = chapterIds.length > 0
-            ? await Chapter.find({ _id: { $in: chapterIds }, active: { $ne: false } }, '_id title section active').lean()
+        const teacherIds = teachers.map((teacher) => teacher._id).filter(Boolean);
+        const studentLevel = academicLevel(student.currentClass);
+        const chapterScopeQuery = {
+            active: { $ne: false },
+            isArchived: { $ne: true },
+            ...(teacherIds.length > 0 ? { teacherId: { $in: teacherIds } } : {})
+        };
+        const scopedChapterRows = await Chapter.find(
+            chapterScopeQuery,
+            '_id title section classroom sharedLevel teacherId active isArchived'
+        ).lean();
+        const chapterMatchesStudent = (chapter) => {
+            const sharedLevel = academicLevel(chapter?.sharedLevel);
+            if (sharedLevel) return Boolean(studentLevel) && sharedLevel === studentLevel;
+            const classroom = normalizeTargetKey(chapter?.classroom);
+            return classroom ? classTargetKeys.has(classroom) : true;
+        };
+        const visibleScopedChapters = scopedChapterRows.filter(chapterMatchesStudent);
+        const missingChapterIds = chapterIds.filter((id) => !visibleScopedChapters.some((chapter) => String(chapter._id) === id));
+        const linkedChapterRows = missingChapterIds.length > 0
+            ? await Chapter.find({ _id: { $in: missingChapterIds }, active: { $ne: false }, isArchived: { $ne: true } }, '_id title section classroom sharedLevel teacherId active isArchived').lean()
             : [];
+        const chapterRows = [...new Map(
+            [...visibleScopedChapters, ...linkedChapterRows.filter(chapterMatchesStudent)]
+                .map((chapter) => [String(chapter._id), chapter])
+        ).values()];
         const activeChapterIds = new Set(chapterRows.map((chapter) => String(chapter._id)));
         const hiddenByChapter = (item) => Boolean(item?.chapterId) && !activeChapterIds.has(String(item.chapterId));
         const chapterSectionById = new Map(
@@ -333,6 +356,21 @@ router.get('/status-summary/:studentId', async (req, res) => {
             if (disciplineMap.size === 1) return [...disciplineMap.keys()][0];
             return null;
         };
+
+        // Les dossiers actifs existent côté élève indépendamment du nombre
+        // d'activités actuellement attribuées dans chacun d'eux.
+        chapterRows.forEach((chapter) => {
+            const subject = resolveItemSubject(chapter) || mapToParentDiscipline(chapter.section || 'GÉNÉRAL');
+            if (!subject || subject === 'GÉNÉRAL') return;
+            const entry = ensureDiscipline(subject);
+            if (!entry.activities.chapters.some((row) => String(row.chapterId) === String(chapter._id))) {
+                entry.activities.chapters.push({
+                    chapterId: String(chapter._id),
+                    chapterTitle: String(chapter.title || 'CHAPITRE'),
+                    chapterSection: String(chapter.section || subject)
+                });
+            }
+        });
 
         const submissions = student._id ? await Submission.find({ studentId: student._id }, 'homeworkId').lean() : [];
         const submittedHomeworkIds = new Set(submissions.map(s => String(s.homeworkId)));
@@ -514,7 +552,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         const disciplines = [...disciplineMap.values()]
-            .filter((entry) => Number(entry?.activities?.total || 0) > 0)
+            .filter((entry) => Number(entry?.activities?.total || 0) > 0 || (entry?.activities?.chapters || []).length > 0)
             .map((entry) => {
                 const enrich = (item) => ({
                     ...item,

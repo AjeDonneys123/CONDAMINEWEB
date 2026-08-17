@@ -6,8 +6,13 @@ export default function StatusOverview({ user, onOpenActivity }) {
   const [data, setData] = useState({ disciplines: [] });
   const hasLoadedOnceRef = useRef(false);
   const userId = user?._id || user?.id;
-  const groupByChapter = (items = []) => {
+  const groupByChapter = (items = [], chapters = []) => {
     const groups = new Map();
+    (chapters || []).forEach((chapter) => {
+      const title = String(chapter?.chapterTitle || 'CHAPITRE').trim();
+      const key = String(chapter?.chapterId || title);
+      groups.set(key, { key, title, section: chapter?.chapterSection || '', items: [] });
+    });
     (items || []).forEach((item) => {
       const title = String(item?.chapterTitle || 'Autres activités').trim();
       const key = String(item?.chapterId || title);
@@ -75,11 +80,11 @@ export default function StatusOverview({ user, onOpenActivity }) {
               </span>
             </div>
 
-            {(d.activities?.todoItems?.length > 0) && (
+            {((d.activities?.todoItems?.length || 0) > 0 || (d.activities?.chapters?.length || 0) > 0) && (
               <div className="status-todo">
                 <div className="mb-1">{Number(d.activities?.todo || 0) > 0 ? 'À faire:' : 'À refaire:'}</div>
                 <div className="status-chapter-list">
-                  {groupByChapter(d.activities.todoItems).map((chapter) => (
+                  {groupByChapter(d.activities.todoItems, d.activities.chapters).map((chapter) => (
                     <section key={chapter.key} className="status-chapter-folder">
                       <div className="status-chapter-head"><span>📂</span><strong>{chapter.title}</strong></div>
                       <div className="flex flex-wrap gap-2">
@@ -88,6 +93,7 @@ export default function StatusOverview({ user, onOpenActivity }) {
                             {it.label || it.title || 'Activité'}
                           </button>
                         ))}
+                        {chapter.items.length === 0 && <span className="status-chapter-empty">Aucune activité attribuée pour le moment.</span>}
                       </div>
                     </section>
                   ))}

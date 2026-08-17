@@ -876,7 +876,10 @@ router.get('/list/:studentId', async (req, res) => {
             if (!chapter || chapter.isArchived === true) return false;
             const chapterLevel = inferAcademicLevel(chapter.sharedLevel || chapter.classroom);
             if (chapterLevel && studentLevel && chapterLevel !== studentLevel) return false;
-            if (!forGames && chapter.classroom && !classTargetKeys.has(normalizeTargetKey(chapter.classroom))) return false;
+            // Un dossier partagé au niveau (ex. toutes les 5e) peut avoir conservé
+            // la classe depuis laquelle il a été créé (ex. 5B). Dans ce cas cette
+            // classe d'origine ne doit pas masquer le contenu aux autres 5e.
+            if (!forGames && !chapter.sharedLevel && chapter.classroom && !classTargetKeys.has(normalizeTargetKey(chapter.classroom))) return false;
             return true;
         };
 
