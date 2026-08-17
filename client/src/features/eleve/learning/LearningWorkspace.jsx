@@ -2400,7 +2400,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             </div>
                         )}
                         {videoUrlResolved ? (
-                            directVideo && !videoRenderError ? (
+                            <div className="learning-video-shell">
+                            {directVideo && !videoRenderError ? (
                             <video
                                 key={`${videoUrlResolved}_${segmentStart}_${segmentEnd}`}
                                 ref={videoRef}
@@ -2465,7 +2466,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                         ✅ J'ai fini de regarder la vidéo
                                     </button>
                                 </div>
-                            )
+                            )}
+                            </div>
                         ) : (
                             <div className="learning-missing">Aucune vidéo configurée.</div>
                         )}
