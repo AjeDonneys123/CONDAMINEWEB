@@ -8,6 +8,20 @@
     padding-bottom: 40px;
 }
 
+.student-chapter-folder {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 24px;
+    background: #f8fafc;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+.student-chapter-header { display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: #fff; border-bottom: 1px solid #e2e8f0; }
+.student-chapter-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: #eef2ff; font-size: 1.25rem; }
+.student-chapter-title { color: #1e293b; font-size: 1rem; font-weight: 950; text-transform: uppercase; line-height: 1.2; }
+.student-chapter-meta { margin-top: 3px; color: #94a3b8; font-size: .65rem; font-weight: 900; text-transform: uppercase; }
+.student-chapter-items { display: grid; gap: 10px; padding: 12px; }
+.student-chapter-items .stream-card { margin: 0; box-shadow: none; border-color: #e2e8f0; }
+
 .stream-card {
     background: white;
     border-radius: 20px;
@@ -177,6 +191,11 @@
         padding: 12px;
         gap: 8px;
     }
+    .student-chapter-folder { border-radius: 16px; }
+    .student-chapter-header { padding: 11px 12px; gap: 9px; }
+    .student-chapter-icon { width: 34px; height: 34px; border-radius: 10px; font-size: 1rem; }
+    .student-chapter-title { font-size: .82rem; overflow-wrap: anywhere; }
+    .student-chapter-items { padding: 8px; gap: 8px; }
 
     .card-title {
         font-size: 0.92rem;

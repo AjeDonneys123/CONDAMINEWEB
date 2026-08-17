@@ -292,6 +292,18 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         if (res.ok && onRefresh) onRefresh();
     }
 
+    async function handleToggleChapterActive(e, chapter) {
+        e.stopPropagation();
+        const active = chapter?.active === false;
+        const res = await fetch(`/api/structure/chapters/${chapter._id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active })
+        });
+        if (!res.ok) return alert('Impossible de changer le statut du chapitre.');
+        if (onRefresh) onRefresh();
+    }
+
     async function handleToggleActivityEnabled(e, item) {
         e.stopPropagation();
         if (!item?._id) return;
@@ -541,6 +553,14 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                        {!showArchived && !isRoot && (
+                                            <button
+                                                onClick={(e) => handleToggleChapterActive(e, chap)}
+                                                className={`mr-1 px-3 py-2 rounded-xl text-[9px] font-black border ${chap.active === false ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}
+                                            >
+                                                {chap.active === false ? 'INACTIF' : 'ACTIF'}
+                                            </button>
+                                        )}
                                         {!showArchived && (
                                             <button
                                                 onClick={(e) => {

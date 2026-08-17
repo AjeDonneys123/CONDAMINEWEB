@@ -11,6 +11,7 @@ const ChapterSchema = new mongoose.Schema({
     sharedLevel: String, 
 
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+    active: { type: Boolean, default: true },
     isArchived: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'chapters' });

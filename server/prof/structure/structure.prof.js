@@ -93,6 +93,8 @@ router.get('/chapters', async (req, res) => {
     try {
         const { teacherId, classContext } = req.query;
         const isValidId = teacherId && teacherId !== 'undefined' && mongoose.Types.ObjectId.isValid(teacherId);
+        const migrationQuery = isValidId ? { teacherId, active: { $exists: false } } : { active: { $exists: false } };
+        await Chapter.updateMany(migrationQuery, { $set: { active: true } });
         
         if (isValidId) {
             const root = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
@@ -134,19 +136,20 @@ router.post('/chapters', async (req, res) => {
             await existing.save();
             return res.json(existing);
         }
-        const newChap = await Chapter.create({ title: cleanTitle, section: cleanSection, classroom: scope === 'CLASS' ? target : "", sharedLevel: scope === 'LEVEL' ? target : "", teacherId, isArchived: false });
+        const newChap = await Chapter.create({ title: cleanTitle, section: cleanSection, classroom: scope === 'CLASS' ? target : "", sharedLevel: scope === 'LEVEL' ? target : "", teacherId, active: true, isArchived: false });
         res.json(newChap);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch('/chapters/:id', async (req, res) => {
     try {
-        const { title, scope, target, isArchived, section } = req.body;
+        const { title, scope, target, isArchived, section, active } = req.body;
         const up = {};
         if (title) up.title = title.toUpperCase().trim();
         if (section) up.section = section.toUpperCase().trim();
         if (scope) { up.classroom = scope === 'CLASS' ? target : ""; up.sharedLevel = scope === 'LEVEL' ? target : ""; }
         if (isArchived !== undefined) up.isArchived = isArchived;
+        if (typeof active === 'boolean') up.active = active;
         const updated = await Chapter.findByIdAndUpdate(req.params.id, up, { new: true });
         res.json(updated);
     } catch (e) { res.status(500).json({ error: e.message }); }

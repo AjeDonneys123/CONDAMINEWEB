@@ -274,7 +274,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
 
         const homeworks = (await Homework.find({ ...activityQuery, isPunishment: { $ne: true } }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean()).filter(visibleActivity);
 
-        const rawLearningModules = await LearningModule.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions').lean();
+        const rawLearningModules = await LearningModule.find({ ...activityQuery, active: { $ne: false } }, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions active').lean();
         const learningModules = rawLearningModules.filter(visibleActivity);
         const [rawExposes, rawLectures, rawComments, rawProductions] = await Promise.all([
             Expose.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass presentations').lean(),
@@ -293,8 +293,10 @@ router.get('/status-summary/:studentId', async (req, res) => {
                 .filter(Boolean)
         )];
         const chapterRows = chapterIds.length > 0
-            ? await Chapter.find({ _id: { $in: chapterIds } }, '_id section').lean()
+            ? await Chapter.find({ _id: { $in: chapterIds }, active: { $ne: false } }, '_id title section active').lean()
             : [];
+        const activeChapterIds = new Set(chapterRows.map((chapter) => String(chapter._id)));
+        const hiddenByChapter = (item) => Boolean(item?.chapterId) && !activeChapterIds.has(String(item.chapterId));
         const chapterSectionById = new Map(
             chapterRows.map(ch => [String(ch._id), normalizeSubject(ch.section)])
         );
@@ -316,6 +318,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const submissions = student._id ? await Submission.find({ studentId: student._id }, 'homeworkId').lean() : [];
         const submittedHomeworkIds = new Set(submissions.map(s => String(s.homeworkId)));
         for (const hw of homeworks) {
+            if (hiddenByChapter(hw)) continue;
             const fallbackSubject = mapToParentDiscipline(hw.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(hw) || fallbackSubject || 'GÉNÉRAL';
             const entry = ensureDiscipline(subject);
@@ -349,6 +352,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         for (const m of learningModules) {
+            if (hiddenByChapter(m)) continue;
             const fallbackSubject = mapToParentDiscipline(m.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(m) || fallbackSubject || 'GÉNÉRAL';
             const entry = ensureDiscipline(subject);
@@ -378,6 +382,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         for (const ex of exposes) {
+            if (hiddenByChapter(ex)) continue;
             const fallbackSubject = mapToParentDiscipline(ex.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(ex) || fallbackSubject || 'GÉNÉRAL';
             const entry = ensureDiscipline(subject);
@@ -405,6 +410,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         for (const lec of lectures) {
+            if (hiddenByChapter(lec)) continue;
             const fallbackSubject = mapToParentDiscipline(lec.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(lec) || fallbackSubject || 'GÉNÉRAL';
             const entry = ensureDiscipline(subject);
@@ -432,6 +438,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         for (const com of comments) {
+            if (hiddenByChapter(com)) continue;
             const fallbackSubject = mapToParentDiscipline(com.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(com) || fallbackSubject || 'GÉNÉRAL';
             const entry = ensureDiscipline(subject);
@@ -459,6 +466,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         for (const prod of productions) {
+            if (hiddenByChapter(prod)) continue;
             const fallbackSubject = mapToParentDiscipline(prod.subject || 'GÉNÉRAL');
             const subject = resolveItemSubject(prod) || fallbackSubject || 'GÉNÉRAL';
             const entry = ensureDiscipline(subject);

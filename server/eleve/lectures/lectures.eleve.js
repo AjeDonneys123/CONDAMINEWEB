@@ -149,7 +149,7 @@ router.get('/list/:studentId', async (req, res) => {
 
         const chapterIds = [...new Set(lectures.map((x) => String(x.chapterId || '')).filter(Boolean))];
         const chapters = chapterIds.length > 0
-            ? await Chapter.find({ _id: { $in: chapterIds } }, '_id title section').lean()
+            ? await Chapter.find({ _id: { $in: chapterIds }, active: { $ne: false }, isArchived: { $ne: true } }, '_id title section active').lean()
             : [];
         const chapterById = new Map(chapters.map((c) => [String(c._id), c]));
 

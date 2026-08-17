@@ -152,6 +152,7 @@ const Models = {
         classroom: { type: String, default: "" },
         sharedLevel: { type: String, default: "" },
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+        active: { type: Boolean, default: true },
         isArchived: { type: Boolean, default: false },
         hiddenIn: { type: [String], default: [] }
     }),

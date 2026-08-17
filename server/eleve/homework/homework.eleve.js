@@ -393,18 +393,19 @@ router.get('/list/:studentId', async (req, res) => {
 
         const chapterIds = [...new Set(homeworks.map((hw) => String(hw.chapterId || '')).filter(Boolean))];
         const chapters = chapterIds.length > 0
-            ? await mongoose.model('Chapter').find({ _id: { $in: chapterIds } }, '_id title section').lean()
+            ? await mongoose.model('Chapter').find({ _id: { $in: chapterIds }, active: { $ne: false } }, '_id title section active').lean()
             : [];
         const chapterById = new Map(chapters.map((chapter) => [String(chapter._id), chapter]));
 
         res.json(homeworks.map((hw) => {
             const chapter = chapterById.get(String(hw.chapterId || ''));
+            if (hw.chapterId && !chapter) return null;
             return {
                 ...hw,
                 chapterTitle: chapter?.title || hw.chapterTitle || '',
                 chapterSection: chapter?.section || hw.chapterSection || ''
             };
-        }));
+        }).filter(Boolean));
     } catch (e) {
         console.error("❌ [ELEVE HW LIST] studentId=%s error=%s", req.params.studentId, e.message);
         res.status(500).json([]);

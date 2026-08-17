@@ -117,7 +117,7 @@ router.get('/list/:studentId', async (req, res) => {
                 { title: /tapping/i }
             ] })
         }).sort({ createdAt: -1 }).lean();
-        const games = rawGames.filter(g => {
+        let games = rawGames.filter(g => {
             if (isVisitor) return (g.targetClassrooms || []).some((target) => academicLevel(target) === visitorLevel);
             if (/tapping/i.test(String(g?.title || ''))) return true;
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
@@ -130,9 +130,12 @@ router.get('/list/:studentId', async (req, res) => {
 
         const chapterIds = [...new Set(games.map(g => g.chapterId ? String(g.chapterId) : null).filter(Boolean))];
         const chapters = chapterIds.length > 0
-            ? await Chapter.find({ _id: { $in: chapterIds } }, '_id section').lean()
+            ? await Chapter.find({ _id: { $in: chapterIds }, active: { $ne: false } }, '_id title section active').lean()
             : [];
+        const activeChapterIds = new Set(chapters.map((chapter) => String(chapter._id)));
+        games = games.filter((game) => !game.chapterId || activeChapterIds.has(String(game.chapterId)));
         const chapterSectionById = new Map(chapters.map(ch => [String(ch._id), normalizeSubject(ch.section)]));
+        const chapterTitleById = new Map(chapters.map(ch => [String(ch._id), String(ch.title || '')]));
 
         const teacherIds = [...new Set(games.map(g => g.teacherId ? String(g.teacherId) : null).filter(Boolean))];
         const teachers = teacherIds.length > 0
@@ -169,7 +172,7 @@ router.get('/list/:studentId', async (req, res) => {
                     if (byTeacher && byTeacher !== 'GÉNÉRAL') subject = byTeacher;
                 }
             }
-            return { ...g, subject };
+            return { ...g, subject, chapterTitle: g.chapterId ? (chapterTitleById.get(String(g.chapterId)) || '') : '' };
         });
 
         res.json(resolvedGames);

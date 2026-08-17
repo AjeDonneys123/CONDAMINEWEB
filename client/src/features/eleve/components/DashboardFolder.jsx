@@ -15,6 +15,16 @@ export default function DashboardFolder({ items, type, onSelect, onDelete }) {
       const dateB = new Date(b.createdAt || b.date || 0);
       return dateB - dateA; // Descendant
   });
+  const chapterGroups = sortedItems.reduce((groups, item) => {
+      const title = String(item.chapterTitle || item.chapter?.title || 'Sans chapitre').trim() || 'Sans chapitre';
+      const key = String(item.chapterId || title);
+      if (!groups.has(key)) groups.set(key, { key, title, section: item.chapterSection || item.subject || 'GÉNÉRAL', items: [] });
+      groups.get(key).items.push(item);
+      return groups;
+  }, new Map());
+  const sortedGroups = [...chapterGroups.values()].sort((a, b) =>
+      String(a.title).localeCompare(String(b.title), 'fr', { numeric: true, sensitivity: 'base' })
+  );
 
   // 2. HELPER COULEURS
   const getSubjectClass = (subject) => {
@@ -45,7 +55,17 @@ export default function DashboardFolder({ items, type, onSelect, onDelete }) {
   // 4. RENDU LISTE
   return (
     <div className="stream-container animate-in">
-      {sortedItems.map(item => {
+      {sortedGroups.map((group) => (
+        <section key={group.key} className="student-chapter-folder">
+          <header className="student-chapter-header">
+            <span className="student-chapter-icon">📂</span>
+            <div>
+              <div className="student-chapter-title">{group.title}</div>
+              <div className="student-chapter-meta">{group.section} · {group.items.length} activité{group.items.length > 1 ? 's' : ''}</div>
+            </div>
+          </header>
+          <div className="student-chapter-items">
+      {group.items.map(item => {
           const subjectName = item.subject || "GÉNÉRAL";
           const isDone = item.status === 'done';
           
@@ -100,6 +120,9 @@ export default function DashboardFolder({ items, type, onSelect, onDelete }) {
             </div>
           );
       })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

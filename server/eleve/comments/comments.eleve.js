@@ -48,9 +48,9 @@ router.get('/list/:studentId', async (req, res) => {
             return matchesClassTargets(x.targetClassrooms, classTargetKeys);
         });
         const chapterIds = [...new Set(rows.map((x) => String(x.chapterId || '')).filter(Boolean))];
-        const chapters = chapterIds.length ? await Chapter.find({ _id: { $in: chapterIds } }, '_id title section').lean() : [];
+        const chapters = chapterIds.length ? await Chapter.find({ _id: { $in: chapterIds }, active: { $ne: false }, isArchived: { $ne: true } }, '_id title section active').lean() : [];
         const chapterById = new Map(chapters.map((c) => [String(c._id), c]));
-        res.json(rows.map((x) => {
+        res.json(rows.filter((x) => !x.chapterId || chapterById.has(String(x.chapterId))).map((x) => {
             const chapter = chapterById.get(String(x.chapterId || ''));
             const sub = (x.submissions || []).find((s) => String(s.studentId) === String(student._id)) || null;
             return {

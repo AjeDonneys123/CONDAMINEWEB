@@ -134,13 +134,13 @@ router.get('/list/:studentId', async (req, res) => {
         const chapterIds = [...new Set(rows.map((x) => String(x.chapterId || '')).filter(Boolean))];
         const gameIds = [...new Set(rows.map((x) => String(x.gameId || '')).filter(Boolean))];
         const [chapters, games] = await Promise.all([
-            chapterIds.length > 0 ? Chapter.find({ _id: { $in: chapterIds } }, '_id title section').lean() : [],
+            chapterIds.length > 0 ? Chapter.find({ _id: { $in: chapterIds }, active: { $ne: false }, isArchived: { $ne: true } }, '_id title section active').lean() : [],
             gameIds.length > 0 ? GameLevel.find({ _id: { $in: gameIds } }, '_id title').lean() : []
         ]);
         const chapterById = new Map(chapters.map((c) => [String(c._id), c]));
         const gameById = new Map(games.map((g) => [String(g._id), g]));
 
-        const out = rows.map((x) => {
+        const out = rows.filter((x) => !x.chapterId || chapterById.has(String(x.chapterId))).map((x) => {
             const chapter = chapterById.get(String(x.chapterId || ''));
             const studentSubs = (x.submissions || [])
                 .filter((p) => String(p.studentId) === String(student._id))
