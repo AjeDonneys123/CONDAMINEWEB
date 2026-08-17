@@ -300,6 +300,25 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const chapterSectionById = new Map(
             chapterRows.map(ch => [String(ch._id), normalizeSubject(ch.section)])
         );
+        const chapterById = new Map(chapterRows.map(ch => [String(ch._id), ch]));
+        const activityChapterByKey = new Map();
+        const registerActivityChapters = (type, rows) => {
+            (rows || []).forEach((item) => {
+                const chapter = chapterById.get(String(item?.chapterId || ''));
+                if (!chapter || hiddenByChapter(item)) return;
+                activityChapterByKey.set(`${type}:${String(item._id)}`, {
+                    chapterId: String(chapter._id),
+                    chapterTitle: String(chapter.title || 'CHAPITRE'),
+                    chapterSection: String(chapter.section || item.subject || 'GÉNÉRAL')
+                });
+            });
+        };
+        registerActivityChapters('homework', homeworks);
+        registerActivityChapters('learning', learningModules);
+        registerActivityChapters('expose', exposes);
+        registerActivityChapters('lecture', lectures);
+        registerActivityChapters('comment', comments);
+        registerActivityChapters('production', productions);
         const teacherPrimaryById = new Map(
             teachers.map(t => [String(t._id), getTeacherPrimarySubject(t)])
         );
@@ -496,6 +515,15 @@ router.get('/status-summary/:studentId', async (req, res) => {
 
         const disciplines = [...disciplineMap.values()]
             .filter((entry) => Number(entry?.activities?.total || 0) > 0)
+            .map((entry) => {
+                const enrich = (item) => ({
+                    ...item,
+                    ...(activityChapterByKey.get(`${item.type}:${String(item.id)}`) || {})
+                });
+                entry.activities.todoItems = (entry.activities.todoItems || []).map(enrich);
+                entry.activities.savedItems = (entry.activities.savedItems || []).map(enrich);
+                return entry;
+            })
             .sort((a, b) => a.subject.localeCompare(b.subject, 'fr'));
         res.json({ disciplines });
     } catch (e) {

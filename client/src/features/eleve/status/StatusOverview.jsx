@@ -6,6 +6,16 @@ export default function StatusOverview({ user, onOpenActivity }) {
   const [data, setData] = useState({ disciplines: [] });
   const hasLoadedOnceRef = useRef(false);
   const userId = user?._id || user?.id;
+  const groupByChapter = (items = []) => {
+    const groups = new Map();
+    (items || []).forEach((item) => {
+      const title = String(item?.chapterTitle || 'Autres activités').trim();
+      const key = String(item?.chapterId || title);
+      if (!groups.has(key)) groups.set(key, { key, title, section: item?.chapterSection || '', items: [] });
+      groups.get(key).items.push(item);
+    });
+    return [...groups.values()].sort((a, b) => a.title.localeCompare(b.title, 'fr', { numeric: true, sensitivity: 'base' }));
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -68,16 +78,18 @@ export default function StatusOverview({ user, onOpenActivity }) {
             {(d.activities?.todoItems?.length > 0) && (
               <div className="status-todo">
                 <div className="mb-1">{Number(d.activities?.todo || 0) > 0 ? 'À faire:' : 'À refaire:'}</div>
-                <div className="flex flex-wrap gap-2">
-                  {(d.activities.todoItems || []).map((it, idx) => (
-                    <button
-                      key={`${it.type}_${it.id}_${idx}`}
-                      type="button"
-                      className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-black text-blue-700 hover:bg-blue-50"
-                      onClick={() => onOpenActivity && onOpenActivity(it)}
-                    >
-                      {it.label || it.title || 'Activité'}
-                    </button>
+                <div className="status-chapter-list">
+                  {groupByChapter(d.activities.todoItems).map((chapter) => (
+                    <section key={chapter.key} className="status-chapter-folder">
+                      <div className="status-chapter-head"><span>📂</span><strong>{chapter.title}</strong></div>
+                      <div className="flex flex-wrap gap-2">
+                        {chapter.items.map((it, idx) => (
+                          <button key={`${it.type}_${it.id}_${idx}`} type="button" className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-black text-blue-700 hover:bg-blue-50" onClick={() => onOpenActivity && onOpenActivity(it)}>
+                            {it.label || it.title || 'Activité'}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               </div>
@@ -86,16 +98,18 @@ export default function StatusOverview({ user, onOpenActivity }) {
             {(d.activities?.savedItems?.length > 0) && (
               <div className="status-saved">
                 <div className="mb-1">À refaire:</div>
-                <div className="flex flex-wrap gap-2">
-                  {(d.activities.savedItems || []).map((it, idx) => (
-                    <button
-                      key={`${it.type}_${it.id}_${idx}`}
-                      type="button"
-                      className="status-saved-btn"
-                      onClick={() => onOpenActivity && onOpenActivity(it)}
-                    >
-                      {it.label || it.title || 'Activité'}
-                    </button>
+                <div className="status-chapter-list">
+                  {groupByChapter(d.activities.savedItems).map((chapter) => (
+                    <section key={chapter.key} className="status-chapter-folder saved">
+                      <div className="status-chapter-head"><span>📂</span><strong>{chapter.title}</strong></div>
+                      <div className="flex flex-wrap gap-2">
+                        {chapter.items.map((it, idx) => (
+                          <button key={`${it.type}_${it.id}_${idx}`} type="button" className="status-saved-btn" onClick={() => onOpenActivity && onOpenActivity(it)}>
+                            {it.label || it.title || 'Activité'}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               </div>

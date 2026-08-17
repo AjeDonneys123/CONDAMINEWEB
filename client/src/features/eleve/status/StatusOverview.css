@@ -93,6 +93,39 @@
   font-weight: 900;
 }
 
+.status-chapter-list {
+  display: grid;
+  gap: 8px;
+}
+
+.status-chapter-folder {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.status-chapter-folder.saved {
+  border-color: #bbf7d0;
+  background: #f7fef9;
+}
+
+.status-chapter-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  color: #1e3a8a;
+  font-size: 11px;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.status-chapter-folder.saved .status-chapter-head {
+  color: #166534;
+}
+
 .status-empty {
   background: #fff;
   border: 2px dashed #cbd5e1;
@@ -125,6 +158,14 @@
   .status-row .label,
   .status-row .value,
   .status-todo {
+    font-size: 10px;
+  }
+
+  .status-chapter-folder {
+    padding: 8px;
+  }
+
+  .status-chapter-head {
     font-size: 10px;
   }
 }
