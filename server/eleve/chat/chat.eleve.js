@@ -107,6 +107,20 @@ const factualResearchTopicFallback = async (topic, level) => {
             extract = String(summary?.extract || '').replace(/\s+/g, ' ').trim();
             sourceTitle = String(summary?.title || sourceTitle).trim();
         }
+        const detailUrl = `https://fr.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&redirects=1&titles=${encodeURIComponent(sourceTitle)}&format=json&origin=*`;
+        const detailResponse = await fetch(detailUrl, { headers: { 'User-Agent': 'CondaWeb-Cyclopedia/1.0 (educational)' }, timeout: 8000 });
+        if (detailResponse.ok) {
+            const detailData = await detailResponse.json();
+            const page = Object.values(detailData?.query?.pages || {})[0] || {};
+            const detailedExtract = String(page?.extract || '').replace(/\s+/g, ' ').trim();
+            const sentences = detailedExtract.match(/[^.!?…]+[.!?…]+/g) || [];
+            const identity = sentences.find((sentence) => new RegExp(escapeRegex(sourceTitle.split(' ')[0]), 'i').test(sentence)) || sentences[0] || '';
+            const hooks = sentences
+                .filter((sentence) => /guerre|succession|alliance|mort|suicide|bataille|pouvoir|règne|assassin|conflit|révolution|découverte|invention/i.test(sentence))
+                .filter((sentence) => sentence !== identity)
+                .slice(0, 3);
+            if (hooks.length > 0) extract = [identity, ...hooks].join(' ').trim();
+        }
     } catch (error) {
         console.warn('Cyclopédia: secours Wikipédia indisponible:', error.message);
     }
@@ -829,6 +843,10 @@ router.post('/research', async (req, res) => {
                     "Identifie clairement le sujet, son époque, son espace et le contexte historique précis. Pour un personnage, explique brièvement qui il est et pourquoi il compte.",
                     "Fais comprendre qu'une accession au pouvoir, une rupture ou un phénomène historique résulte de plusieurs facteurs : n'attribue jamais son apparition à une cause unique.",
                     "Présente trois ou quatre faits substantiels et exacts, dont au moins un sur les actions, les choix ou les effets propres au sujet. L'élève doit apprendre quelque chose de précis sur le sujet dès cette amorce.",
+                    "Structure l'amorce comme les bases d'un plan cohérent en trois axes implicites : 1) contexte, origines ou accession ; 2) actions, rôle, œuvre ou mécanisme principal ; 3) conséquences, héritage, limites ou épisode final remarquable. Les trois axes doivent porter précisément sur le sujet demandé.",
+                    "Tease explicitement les éléments les plus intéressants afin de donner envie à l'élève de les transformer en questions, sans fournir encore toute leur explication. Signale leur intérêt avec des formulations naturelles comme « de façon étonnante », « joue un rôle clé », « une œuvre extraordinaire », « un épisode décisif », « une fin devenue légendaire » ou « un choix aux conséquences majeures ».",
+                    "Choisis ces accroches selon le sujet réel : une accession déloyale ou inattendue, un rôle clé dans la création d'un empire, une toile extraordinaire, une découverte contestée, une bataille décisive, une mort singulière, une invention qui bouleverse une société, etc. N'utilise jamais mécaniquement ces exemples s'ils ne correspondent pas au sujet.",
+                    "Chaque fait teasé doit être assez concret pour susciter une question précise, mais garder volontairement à découvrir le comment, le pourquoi, les acteurs ou les conséquences.",
                     "Laisse cependant ouvertes plusieurs explications importantes : causes profondes et immédiates, acteurs, mécanismes, débats d'interprétation ou conséquences. Ne remplace jamais un fait essentiel par une formule creuse comme « les conséquences sont terribles ».",
                     "N'emploie au maximum que deux dates et trois noms propres en plus du sujet lui-même. Ne donne aucune liste ni assez de détails pour rédiger directement l'exposé.",
                     "Les zones d'ombre doivent faire pressentir les grandes parties possibles du futur exposé sans les révéler explicitement. Ne pose aucune question à la place de l'élève.",
@@ -849,8 +867,56 @@ router.post('/research', async (req, res) => {
                 return { id: String(thread?.id || `T${index + 1}`).slice(0, 30), excerpt: String(thread?.excerpt || '').slice(0, 300), angle: String(thread?.angle || thread?.excerpt || '').slice(0, 300) };
             }).filter((thread) => thread.excerpt);
             if (!topic || !questions) return res.status(400).json({ error: 'Sujet ou questions manquants.' });
+            const questionLines = questions.split(/[\n?]+/).map((line) => line.trim()).filter(Boolean);
+            const broadQuestionCount = questionLines.filter((line) => /^(pourquoi|comment|quel(?:le)?s?|en quoi|dans quelle mesure|quels liens|quel rôle)/i.test(line)).length;
+            const fallbackEvaluation = {
+                ready: questionLines.length >= 2 && broadQuestionCount >= 1,
+                feedback: questionLines.length >= 2 && broadQuestionCount >= 1
+                    ? 'Tes questions ouvrent plusieurs axes de recherche et nécessitent de confronter plusieurs informations.'
+                    : 'Ajoute au moins deux questions, dont une commençant par « Pourquoi », « Comment », « En quoi » ou « Quel rôle ».',
+                acceptedQuestions: questionLines,
+                uncoveredThreadIds: questionLines.length >= 2 && broadQuestionCount >= 1 ? [] : openThreads.map((thread) => thread.id)
+            };
+            const evaluation = await askResearchJson({
+                maxOutputTokens: 1200,
+                prompt: [
+                    `Sujet : ${topic}`,
+                    `Texte déclencheur : ${String(base.article || '').slice(0, 5000)}`,
+                    `Angles laissés ouverts : ${JSON.stringify(openThreads)}`,
+                    `Questions de l'élève :\n${questions}`
+                ].join('\n\n'),
+                system: [
+                    `Tu évalues uniquement les questions de recherche d'un élève de ${level.label}.`,
+                    `On attend ${level.demand}.`,
+                    "Accepte l'ensemble s'il contient plusieurs questions pertinentes, dont au moins une question large nécessitant plusieurs informations.",
+                    "Une question ciblée sur un rôle, une alliance, un conflit, une cause ou une mort est parfaitement valable.",
+                    "N'écris aucun article à cette étape.",
+                    'Réponds uniquement en JSON : {"ready":true,"feedback":"...","acceptedQuestions":["..."],"uncoveredThreadIds":["T1"]}.'
+                ].join(' ')
+            }) || fallbackEvaluation;
+            const validThreadIds = new Set(openThreads.map((thread) => thread.id));
+            const evaluationUncovered = (Array.isArray(evaluation.uncoveredThreadIds) ? evaluation.uncoveredThreadIds : [])
+                .map(String)
+                .filter((id) => validThreadIds.has(id));
+            // Des questions simples mais complémentaires (« pourquoi », liens,
+            // mort...) constituent déjà une vraie enquête au collège. L'IA ne
+            // doit pas les bloquer artificiellement à cause d'un identifiant
+            // d'angle mal associé.
+            const evaluationReady = fallbackEvaluation.ready || (evaluationUncovered.length === 0 && evaluation.ready === true);
+            if (!evaluationReady) {
+                return res.json({
+                    ok: true,
+                    phase,
+                    level: level.label,
+                    ready: false,
+                    feedback: String(evaluation.feedback || fallbackEvaluation.feedback),
+                    acceptedQuestions: Array.isArray(evaluation.acceptedQuestions) ? evaluation.acceptedQuestions : fallbackEvaluation.acceptedQuestions,
+                    uncoveredThreadIds: fallbackEvaluation.ready ? [] : evaluationUncovered,
+                    documents: null
+                });
+            }
             const result = await askResearchJson({
-                maxOutputTokens: 8192,
+                maxOutputTokens: 6500,
                 prompt: [
                     `Sujet : ${topic}`,
                     `Texte déclencheur : ${String(base.article || '').slice(0, 5000)}`,
@@ -858,7 +924,7 @@ router.post('/research', async (req, res) => {
                     `Questions proposées par l'élève :\n${questions}`
                 ].join('\n\n'),
                 system: [
-                    "Tu accompagnes la problématisation d'une recherche scolaire simulée.",
+                    "Les questions ont déjà été validées. Tu dois maintenant produire les deux articles documentaires et retourner ready=true ; ne refais pas l'analyse des questions.",
                     `Niveau : ${level.label}. On attend ${level.demand}.`,
                     "Évalue l'ensemble des questions, et non chaque question isolément. Une question précise inspirée directement par une zone d'ombre du texte est légitime : ne la pénalise jamais seulement parce qu'elle est ciblée.",
                     "L'ensemble doit couvrir les principaux angles volontairement ouverts et comporter au moins une question assez large pour relier plusieurs informations. Refuse seulement un ensemble entièrement fermé, redondant, hors sujet ou auquel quelques lignes suffisent.",
@@ -880,11 +946,20 @@ router.post('/research', async (req, res) => {
                     "Pour ready=false conserve la même structure, avec uncoveredThreadIds rempli et documents à null."
                 ].join(' ')
             });
-            if (!result || typeof result.ready !== 'boolean') return res.status(503).json({ error: 'L’analyse des questions a échoué.' });
-            const validThreadIds = new Set(openThreads.map((thread) => thread.id));
-            const uncoveredThreadIds = (Array.isArray(result.uncoveredThreadIds) ? result.uncoveredThreadIds : []).map(String).filter((id) => validThreadIds.has(id));
-            const ready = uncoveredThreadIds.length > 0 ? false : result.ready;
-            return res.json({ ok: true, phase, level: level.label, ...result, ready, documents: ready ? result.documents : null, uncoveredThreadIds });
+            if (!result?.documents?.article1?.content || !result?.documents?.article2?.content) {
+                return res.status(503).json({ error: 'Les questions sont validées, mais la création des deux sources a échoué. Réessaie dans un instant.' });
+            }
+            return res.json({
+                ok: true,
+                phase,
+                level: level.label,
+                ...result,
+                ready: true,
+                feedback: String(evaluation.feedback || result.feedback || 'Questions validées.'),
+                acceptedQuestions: Array.isArray(evaluation.acceptedQuestions) ? evaluation.acceptedQuestions : fallbackEvaluation.acceptedQuestions,
+                documents: result.documents,
+                uncoveredThreadIds: []
+            });
         }
 
         if (phase === 'review') {
