@@ -704,6 +704,25 @@ export default function StudentsManager({ globalClassId }) {
                         <button onClick={() => setViewingStudent(null)} className="text-white text-2xl font-black">✕</button>
                     </div>
                     <div className="corr-body flex-col bg-slate-50 p-6 overflow-y-auto gap-4 custom-scrollbar">
+                        {/* NOTES MANUELLES DE SCAN */}
+                        {Array.isArray(viewingStudent.manualScanGrades) && viewingStudent.manualScanGrades.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-xs font-black text-amber-600 uppercase mb-2">✋ Notes manuelles · Scan</h4>
+                                {[...viewingStudent.manualScanGrades]
+                                    .sort((a, b) => new Date(b.assignmentDate || b.gradedAt || 0) - new Date(a.assignmentDate || a.gradedAt || 0))
+                                    .map((grade, index) => (
+                                        <div key={`${grade.sessionId || index}`} className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex justify-between items-center gap-3 mb-2">
+                                            <div className="min-w-0">
+                                                <div className="font-black text-slate-800 break-words">{grade.title || 'Devoir Scan'}</div>
+                                                <div className="text-[10px] text-slate-500 font-bold">
+                                                    {new Date(grade.assignmentDate || grade.gradedAt).toLocaleDateString('fr-FR')}
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-white font-black">{grade.value}/5</div>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
                         
                         {/* PUNITIONS */}
                         {workloadItems.filter(w => w.isPunishment).length > 0 && (

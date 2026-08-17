@@ -78,6 +78,53 @@ router.put('/sessions/:id/instructions', async (req, res) => {
     }
 });
 
+router.put('/sessions/:id/manual-grade', async (req, res) => {
+    try {
+        const value = Number(req.body?.value);
+        const studentId = String(req.body?.studentId || '').trim();
+        if (!studentId || !Number.isInteger(value) || value < 1 || value > 5) {
+            return res.status(400).json({ error: 'Élève ou note invalide (1 à 5).' });
+        }
+        const [session, student] = await Promise.all([
+            ScanSession.findById(req.params.id),
+            Student.findById(studentId)
+        ]);
+        if (!session) return res.status(404).json({ error: 'Devoir introuvable.' });
+        if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
+
+        const belongsToClass = !session.classId ||
+            String(student.classId || '') === String(session.classId) ||
+            (student.assignedGroups || []).some((id) => String(id) === String(session.classId));
+        if (!belongsToClass) return res.status(400).json({ error: "Cet élève n'appartient pas à la classe du devoir." });
+
+        const now = new Date();
+        const sessionGrade = (session.manualGrades || []).find((row) => String(row.studentId) === studentId);
+        if (sessionGrade) {
+            sessionGrade.value = value;
+            sessionGrade.gradedAt = now;
+        } else {
+            session.manualGrades.push({ studentId, value, gradedAt: now });
+        }
+
+        const studentGrade = (student.manualScanGrades || []).find((row) => String(row.sessionId) === String(session._id));
+        const gradePayload = {
+            sessionId: session._id,
+            title: String(session.title || 'Devoir Scan'),
+            value,
+            assignmentDate: session.date || now,
+            gradedAt: now,
+            teacherId: String(session.teacherId || '')
+        };
+        if (studentGrade) Object.assign(studentGrade, gradePayload);
+        else student.manualScanGrades.push(gradePayload);
+
+        await Promise.all([session.save(), student.save()]);
+        res.json({ ok: true, session: session.toObject(), grade: gradePayload });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.delete('/sessions/:id', async (req, res) => {
     try {
         await ScanSession.findByIdAndDelete(req.params.id);

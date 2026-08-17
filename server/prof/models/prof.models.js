@@ -99,6 +99,14 @@ const StudentSchema = new mongoose.Schema({
     punishmentLateMailError: { type: String, default: "" },
     indicators: Array,
     spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }],
+    manualScanGrades: [{
+        sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'ScanSession', index: true },
+        title: { type: String, default: '' },
+        value: { type: Number, min: 1, max: 5 },
+        assignmentDate: { type: Date, default: Date.now },
+        gradedAt: { type: Date, default: Date.now },
+        teacherId: { type: String, default: '' }
+    }],
     activeTutorSession: {
         moduleId: { type: String, default: '' },
         stepId: { type: String, default: '' },
@@ -573,7 +581,12 @@ const Models = {
         aiInstructions: { type: String, default: "Corrige sévèrement la syntaxe." },
         date: { type: Date, default: Date.now },
         classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', default: null },
-        className: { type: String, default: '' }
+        className: { type: String, default: '' },
+        manualGrades: [{
+            studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+            value: { type: Number, min: 1, max: 5 },
+            gradedAt: { type: Date, default: Date.now }
+        }]
     }),
 
     Teacher: getModel('Teacher', {

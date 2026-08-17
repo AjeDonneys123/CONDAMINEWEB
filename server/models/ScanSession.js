@@ -20,6 +20,11 @@ const ScanSessionSchema = new mongoose.Schema({
     copyUrls: [String],
     aiInstructions: { type: String, default: "Corrige sévèrement la syntaxe." },
     corrections: [CorrectionResultSchema],
+    manualGrades: [{
+        studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+        value: { type: Number, min: 1, max: 5 },
+        gradedAt: { type: Date, default: Date.now }
+    }],
     status: { type: String, enum: ['OPEN', 'ARCHIVED'], default: 'OPEN' }
 }, { collection: 'scansessions' });
 

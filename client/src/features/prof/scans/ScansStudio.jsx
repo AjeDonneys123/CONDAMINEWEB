@@ -25,6 +25,11 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const [manualCopyingClipboard, setManualCopyingClipboard] = useState(false);
     const [selectedAssetUrls, setSelectedAssetUrls] = useState([]);
     const [manualZipDownloading, setManualZipDownloading] = useState(false);
+    const [gradingSession, setGradingSession] = useState(null);
+    const [gradingStudents, setGradingStudents] = useState([]);
+    const [selectedGradingStudentId, setSelectedGradingStudentId] = useState('');
+    const [gradingLoading, setGradingLoading] = useState(false);
+    const [savingGradeKey, setSavingGradeKey] = useState('');
     const [isDesktopMode, setIsDesktopMode] = useState(() => {
         if (typeof window === 'undefined') return true;
         const ua = navigator?.userAgent || '';
@@ -608,6 +613,53 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
         });
         await loadSessions();
     };
+
+    const openManualGrading = async (session) => {
+        setGradingSession(session);
+        setSelectedGradingStudentId('');
+        setGradingLoading(true);
+        try {
+            const res = await fetch('/api/admin/students');
+            if (!res.ok) throw new Error('Impossible de charger les élèves.');
+            const rows = await res.json();
+            const classId = String(session?.classId || normalizedGlobalClassId || '');
+            const filtered = (Array.isArray(rows) ? rows : []).filter((student) => {
+                if (!classId) return true;
+                if (String(student?.classId || '') === classId) return true;
+                return (student?.assignedGroups || []).some((id) => String(id?._id || id) === classId);
+            });
+            filtered.sort((a, b) => String(a?.firstName || '').localeCompare(String(b?.firstName || ''), 'fr', { sensitivity: 'base' }) ||
+                String(a?.lastName || '').localeCompare(String(b?.lastName || ''), 'fr', { sensitivity: 'base' }));
+            setGradingStudents(filtered);
+        } catch (e) {
+            setStatus(e.message || 'Impossible de charger les élèves.');
+            setGradingStudents([]);
+        } finally {
+            setGradingLoading(false);
+        }
+    };
+
+    const saveManualGrade = async (studentId, value) => {
+        if (!gradingSession?._id) return;
+        const key = `${studentId}-${value}`;
+        setSavingGradeKey(key);
+        try {
+            const res = await fetch(`/api/scans/sessions/${gradingSession._id}/manual-grade`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId, value })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || "La note n'a pas été enregistrée.");
+            setGradingSession(data.session);
+            setSessions((current) => current.map((row) => row._id === data.session._id ? data.session : row));
+            setStatus(`Note ${value}/5 enregistrée.`);
+        } catch (e) {
+            setStatus(e.message || "La note n'a pas été enregistrée.");
+        } finally {
+            setSavingGradeKey('');
+        }
+    };
     const toggleSessionCollapse = (sessionId) => {
         setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
     };
@@ -1002,6 +1054,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                         <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>
                                         <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>
                                         <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>
+                                        <button onClick={() => openManualGrading(s)} className="act-btn btn-quick-grade">Manuel</button>
                                         <button
                                             onClick={() => {
                                                 setActiveSession(s);
@@ -1062,6 +1115,54 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                     </div>
                 )}
             </div>
+            {gradingSession && (
+                <div className="scan-grading-overlay" onClick={() => setGradingSession(null)}>
+                    <section className="scan-grading-modal" onClick={(event) => event.stopPropagation()}>
+                        <header className="scan-grading-header">
+                            <div>
+                                <div className="scan-grading-kicker">Notation manuelle · {gradingSession.className || globalClass || 'Classe'}</div>
+                                <h2>{gradingSession.title || 'Devoir'}</h2>
+                                <time>Date du devoir : {new Date(gradingSession.date).toLocaleDateString('fr-FR')}</time>
+                            </div>
+                            <button type="button" onClick={() => setGradingSession(null)} aria-label="Fermer">✕</button>
+                        </header>
+                        <div className="scan-grading-help">Touchez un élève, puis attribuez immédiatement une note de 1 à 5.</div>
+                        <div className="scan-grading-grid">
+                            {gradingLoading && <div className="scan-grading-empty">Chargement de la classe…</div>}
+                            {!gradingLoading && gradingStudents.map((student) => {
+                                const studentId = String(student._id);
+                                const grade = (gradingSession.manualGrades || []).find((row) => String(row.studentId?._id || row.studentId) === studentId);
+                                const selected = selectedGradingStudentId === studentId;
+                                return (
+                                    <article key={studentId} className={`scan-student-grade ${selected ? 'is-selected' : ''} ${grade ? 'is-graded' : ''}`}>
+                                        <button className="scan-student-select" type="button" onClick={() => setSelectedGradingStudentId(selected ? '' : studentId)}>
+                                            <span>{student.firstName} {student.lastName}</span>
+                                            <strong>{grade ? `${grade.value}/5` : '—'}</strong>
+                                        </button>
+                                        {selected && (
+                                            <div className="scan-grade-buttons" aria-label={`Noter ${student.firstName}`}>
+                                                {[1, 2, 3, 4, 5].map((value) => (
+                                                    <button
+                                                        key={value}
+                                                        type="button"
+                                                        className={Number(grade?.value) === value ? 'is-current' : ''}
+                                                        disabled={!!savingGradeKey}
+                                                        onClick={() => saveManualGrade(studentId, value)}
+                                                    >
+                                                        {savingGradeKey === `${studentId}-${value}` ? '…' : value}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <small>{new Date(gradingSession.date).toLocaleDateString('fr-FR')}</small>
+                                    </article>
+                                );
+                            })}
+                            {!gradingLoading && gradingStudents.length === 0 && <div className="scan-grading-empty">Aucun élève trouvé dans cette classe.</div>}
+                        </div>
+                    </section>
+                </div>
+            )}
         </div>
     );
 }
