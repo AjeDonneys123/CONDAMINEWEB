@@ -39,6 +39,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const [deleteTarget, setDeleteTarget] = useState(null); 
     const [draggedActivity, setDraggedActivity] = useState(null);
     const [dropChapterId, setDropChapterId] = useState('');
+    const [enabledOverrides, setEnabledOverrides] = useState({});
 
     const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
     const isObjectId = (v) => /^[a-f0-9]{24}$/i.test(String(v || '').trim());
@@ -151,6 +152,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         if (type === 'production') return '/api/productions';
         if (type === 'fiche') return '/api/fiches';
         return '';
+    };
+    const isItemInactive = (item = {}) => {
+        const override = enabledOverrides[String(item?._id || '')];
+        if (typeof override === 'boolean') return !override;
+        if (item.actType === 'learning' && typeof item.active === 'boolean') return !item.active;
+        return item.isEnabled === false;
     };
 
     // --- CHARGEMENT ---
@@ -289,14 +296,28 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         e.stopPropagation();
         if (!item?._id) return;
         if (!['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(item.actType)) return;
-        const nextValue = item.isEnabled === false;
+        const override = enabledOverrides[String(item._id)];
+        const currentValue = typeof override === 'boolean'
+            ? override
+            : (item.actType === 'learning' && typeof item.active === 'boolean'
+                ? item.active
+                : item.isEnabled !== false);
+        const nextValue = !currentValue;
         const base = getActivityApiBase(item.actType);
+        setEnabledOverrides((prev) => ({ ...prev, [String(item._id)]: nextValue }));
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isEnabled: nextValue })
+            body: JSON.stringify(item.actType === 'learning'
+                ? { active: nextValue }
+                : { isEnabled: nextValue })
         });
         if (!res.ok) {
+            setEnabledOverrides((prev) => {
+                const next = { ...prev };
+                delete next[String(item._id)];
+                return next;
+            });
             alert("Impossible de changer le statut actif/inactif.");
             return;
         }
@@ -580,7 +601,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                 
                                 {isOpen && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">
-                                        {chapItems.map(it => (
+                                            {chapItems.map(it => (
                                             <div
                                                 key={it._id}
                                                 draggable={['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(it.actType)}
@@ -614,12 +635,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                                         <button
                                                             onClick={(e) => handleToggleActivityEnabled(e, it)}
                                                             className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${
-                                                                it.isEnabled === false
+                                                                isItemInactive(it)
                                                                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                                                                     : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                             }`}
                                                         >
-                                                            {it.isEnabled === false ? 'INACTIF' : 'ACTIF'}
+                                                            {isItemInactive(it) ? 'INACTIF' : 'ACTIF'}
                                                         </button>
                                                     )}
                                                     <button

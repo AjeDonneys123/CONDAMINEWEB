@@ -341,7 +341,7 @@ const ensureLearningAccess = async ({ studentId = '', moduleId = '' }) => {
         Student.findById(studentId).lean(),
         LearningModule.findById(moduleId).lean()
     ]);
-    if (!student || !moduleDoc || moduleDoc.isEnabled === false) {
+    if (!student || !moduleDoc || moduleDoc.active === false || moduleDoc.isEnabled === false) {
         const err = new Error('Session CondaWeb introuvable');
         err.status = 404;
         throw err;
@@ -447,7 +447,7 @@ const updateTutorInstructionDoc = async ({ student, text }) => {
 const markLearningCompletedByTutorToken = async ({ studentId = '', moduleId = '', stepIndex = null }) => {
     const LearningModule = mongoose.model('LearningModule');
     const moduleDoc = await LearningModule.findById(moduleId);
-    if (!moduleDoc) return false;
+    if (!moduleDoc || moduleDoc.active === false || moduleDoc.isEnabled === false) return false;
     const now = new Date();
     const sid = String(studentId);
     const stepsLength = Array.isArray(moduleDoc.steps) ? moduleDoc.steps.length : 0;
@@ -495,7 +495,7 @@ const requireTutorActionKey = (req) => {
 const saveRecitationAttempt = async ({ studentId = '', moduleId = '', stepId = '', foundWords = [], missingWords = [], complete = false }) => {
     const LearningModule = mongoose.model('LearningModule');
     const moduleDoc = await LearningModule.findById(moduleId);
-    if (!moduleDoc) throw Object.assign(new Error('Apprentissage introuvable'), { status: 404 });
+    if (!moduleDoc || moduleDoc.active === false || moduleDoc.isEnabled === false) throw Object.assign(new Error('Apprentissage introuvable'), { status: 404 });
     const sid = String(studentId);
     const completions = Array.isArray(moduleDoc.completions) ? [...moduleDoc.completions] : [];
     let idx = completions.findIndex((entry) => String(entry?.studentId || '') === sid);
@@ -848,7 +848,7 @@ router.get('/list/:studentId', async (req, res) => {
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
 
-        const moduleQuery = { isEnabled: { $ne: false } };
+        const moduleQuery = { active: { $ne: false }, isEnabled: { $ne: false } };
         if (!forGames) {
             moduleQuery.$or = [
                 { isAllClass: true },
@@ -909,7 +909,7 @@ router.post('/progress', async (req, res) => {
         if (!moduleId || !studentId) return res.status(400).json({ error: 'moduleId et studentId requis' });
 
         const row = await LearningModule.findById(moduleId);
-        if (!row) return res.status(404).json({ error: 'Apprentissage introuvable' });
+        if (!row || row.active === false || row.isEnabled === false) return res.status(404).json({ error: 'Apprentissage introuvable' });
 
         const sid = String(studentId);
         const now = new Date();
@@ -973,7 +973,7 @@ router.post('/realtime-session', express.text({ type: ['application/sdp', 'text/
             LearningModule.findById(moduleId).lean(),
             Student.findById(studentId).lean()
         ]);
-        if (!moduleDoc || !student) return res.status(404).send('Apprentissage ou utilisateur introuvable.');
+        if (!moduleDoc || moduleDoc.active === false || moduleDoc.isEnabled === false || !student) return res.status(404).send('Apprentissage ou utilisateur introuvable.');
 
         const steps = Array.isArray(moduleDoc.steps) ? moduleDoc.steps : [];
         const currentStep = steps.find((candidate) => String(candidate?.id || '') === stepId) || steps[stepIndex] || {};
@@ -1120,7 +1120,7 @@ router.post('/sheet-chat', async (req, res) => {
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
 
         const module = await LearningModule.findById(moduleId);
-        if (!module || module.isEnabled === false) return res.status(404).json({ error: 'Module introuvable' });
+        if (!module || module.active === false || module.isEnabled === false) return res.status(404).json({ error: 'Module introuvable' });
 
         const assigned = (module.assignedStudents || []).some(id => String(id) === String(student._id));
         const allowed = assigned || (module.isAllClass && matchesClassTargets(module.targetClassrooms || [], classTargetKeys));
@@ -1311,7 +1311,7 @@ router.post('/validate-synonym', async (req, res) => {
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
         const module = await LearningModule.findById(moduleId).lean();
-        if (!module || module.isEnabled === false) return res.status(404).json({ error: 'Module introuvable' });
+        if (!module || module.active === false || module.isEnabled === false) return res.status(404).json({ error: 'Module introuvable' });
         const assigned = (module.assignedStudents || []).some((id) => String(id) === String(student._id));
         const allowed = assigned || (module.isAllClass && matchesClassTargets(module.targetClassrooms || [], classTargetKeys));
         if (!allowed) return res.status(403).json({ error: "Accès refusé à ce module" });

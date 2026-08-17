@@ -136,6 +136,7 @@ async function markLearningValidatedFromGpt({ moduleId = '', student = null }) {
     if (!module) {
         const classKey = normalizeClassKey(student.currentClass);
         const candidates = await LearningModule.find({
+            active: { $ne: false },
             isEnabled: { $ne: false },
             $or: [{ assignedStudents: student._id }, { isAllClass: true }]
         }).sort({ date: -1, createdAt: -1 }).limit(20);
@@ -960,6 +961,10 @@ router.get('/all', async (_req, res) => {
         const rows = await LearningModule.find({}).sort({ createdAt: -1 }).lean();
         const updates = [];
         rows.forEach((row) => {
+            if (typeof row.active !== 'boolean') {
+                row.active = row.isEnabled !== false;
+                updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { active: row.active, isEnabled: row.active } } } });
+            }
             const restored = restoreGeneralSheet(row.steps, row.title);
             if (!restored.changed) return;
             row.steps = restored.steps;
@@ -1318,6 +1323,7 @@ router.get('/game-question-bank', async (req, res) => {
         if (moduleId) query._id = moduleId;
         if (chapterId) query.chapterId = chapterId;
         if (targetClass) query.targetClassrooms = targetClass;
+        query.active = { $ne: false };
         query.isEnabled = { $ne: false };
         const modules = await LearningModule.find(query).select('title chapterId sections steps').lean();
         const questions = [];
@@ -1368,7 +1374,11 @@ router.post('/', async (req, res) => {
     try {
         const data = { ...req.body };
         if (!data._id || data._id === 'null') delete data._id;
-        if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
+        const active = typeof data.active === 'boolean'
+            ? data.active
+            : (typeof data.isEnabled === 'boolean' ? data.isEnabled : true);
+        data.active = active;
+        data.isEnabled = active;
         data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
         data.sections = sanitizeSections(data.sections);
         data.steps = restoreGeneralSheet(sanitizeSteps(data.steps), data.title).steps;
@@ -1549,10 +1559,13 @@ router.patch('/:id/structure', async (req, res) => {
 
 router.patch('/:id/enabled', async (req, res) => {
     try {
-        const isEnabled = req.body?.isEnabled !== false;
+        const active = typeof req.body?.active === 'boolean'
+            ? req.body.active
+            : req.body?.isEnabled;
+        if (typeof active !== 'boolean') return res.status(400).json({ error: 'Le statut active doit être un booléen.' });
         const row = await LearningModule.findByIdAndUpdate(
             req.params.id,
-            { $set: { isEnabled } },
+            { $set: { active, isEnabled: active } },
             { new: true }
         ).lean();
         if (!row) return res.status(404).json({ error: "Apprentissage introuvable" });

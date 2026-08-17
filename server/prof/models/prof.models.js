@@ -209,6 +209,7 @@ const Models = {
         targetClassrooms: [String],
         assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
+        active: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
         presentationUrl: { type: String, default: '' },
         presentationSlidesFocus: { type: String, default: '' },
