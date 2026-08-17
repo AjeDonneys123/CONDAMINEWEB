@@ -57,81 +57,6 @@
     cursor: pointer;
 }
 
-.eleve-external-link-card {
-    margin-top: 22px;
-    padding: 24px 26px;
-    border-radius: 28px;
-    border: 1px solid rgba(244, 114, 182, 0.18);
-    background:
-        radial-gradient(circle at top right, rgba(251, 191, 36, 0.12), transparent 28%),
-        radial-gradient(circle at bottom left, rgba(236, 72, 153, 0.08), transparent 24%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 247, 251, 0.98));
-    box-shadow: 0 22px 44px rgba(236, 72, 153, 0.08);
-    display: flex;
-    justify-content: space-between;
-    gap: 24px;
-    align-items: center;
-    position: relative;
-    overflow: hidden;
-}
-
-.eleve-external-link-copy {
-    min-width: 0;
-}
-
-.eleve-external-link-kicker {
-    font-size: 0.75rem;
-    font-weight: 900;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #db2777;
-}
-
-.eleve-external-link-title {
-    margin-top: 4px;
-    font-size: 1.45rem;
-    font-weight: 900;
-    color: #1f2937;
-}
-
-.eleve-external-link-sub {
-    margin-top: 8px;
-    max-width: 760px;
-    font-size: 1rem;
-    line-height: 1.6;
-    color: #475569;
-}
-
-.eleve-external-link-actions {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-}
-
-.eleve-external-link-btn {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 220px;
-    padding: 16px 22px;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #ec4899, #f97316);
-    color: white;
-    font-size: 0.9rem;
-    font-weight: 900;
-    text-transform: uppercase;
-    text-decoration: none;
-    letter-spacing: 0.04em;
-    box-shadow: 0 16px 30px rgba(236, 72, 153, 0.22);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.eleve-external-link-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 18px 32px rgba(236, 72, 153, 0.28);
-}
-
 @media (max-width: 900px) {
     .eleve-page-container {
         padding: 1rem;
@@ -141,16 +66,6 @@
         margin-top: 1rem;
     }
 
-    .eleve-external-link-card {
-        flex-direction: column;
-        align-items: stretch;
-        padding: 18px;
-    }
-
-    .eleve-external-link-btn {
-        width: 100%;
-        min-width: 0;
-    }
 }
 
 @media (max-width: 640px) {
