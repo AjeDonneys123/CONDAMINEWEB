@@ -4223,7 +4223,6 @@ function TrainingMethodSheetModal({ src, title, onClose }) {
 function DnbDocumentsMethodology({ onBack, user }) {
   const [module, setModule] = useState('home');
   const canCalibrate = user?.isDeveloper === true || user?.isTestAccount === true;
-  if (module === 'analysis') return <DnbDocumentAnalysisMethodology onBack={() => setModule('home')} />;
   if (module === 'presentation') return canCalibrate
     ? <DnbDocumentMethodCalibration type="presentation" onBack={() => setModule('home')} />
     : <DnbDocumentMethodReader type="presentation" user={user} onBack={() => setModule('home')} />;
@@ -4235,39 +4234,15 @@ function DnbDocumentsMethodology({ onBack, user }) {
       <div><div className="text-[11px] font-black uppercase text-cyan-600">Documents · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Présenter et décrire un document</h3></div>
       <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour aux dossiers</button>
     </div>
-    <div className="mt-5 grid gap-4 md:grid-cols-3">
+    <div className="mt-5 grid gap-4 md:grid-cols-2">
       <button type="button" onClick={() => setModule('presentation')} className="rounded-3xl border-2 border-blue-200 bg-blue-50 p-6 text-left transition hover:border-blue-500 hover:shadow-md">
         <div className="text-3xl">📄</div><div className="mt-3 text-xl font-black text-slate-900">Présentation de document</div><div className="mt-2 text-sm font-bold text-blue-800">Date, auteur, nature, sujet et contexte.</div><div className="mt-5 inline-flex rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
       </button>
       <button type="button" onClick={() => setModule('image')} className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-6 text-left transition hover:border-emerald-500 hover:shadow-md">
         <div className="text-3xl">🖼️</div><div className="mt-3 text-xl font-black text-slate-900">Description d’image</div><div className="mt-2 text-sm font-bold text-emerald-800">Premier plan, deuxième plan et arrière-plan.</div><div className="mt-5 inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
       </button>
-      <button type="button" onClick={() => setModule('analysis')} className="rounded-3xl border-2 border-violet-200 bg-violet-50 p-6 text-left transition hover:border-violet-500 hover:shadow-md">
-        <div className="text-3xl">🔎</div><div className="mt-3 text-xl font-black text-slate-900">Analyse de documents</div><div className="mt-2 text-sm font-bold text-violet-800">Introduction, citations, explications et conclusion.</div><div className="mt-5 inline-flex rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">Commencer</div>
-      </button>
     </div>
   </section>;
-}
-
-function DnbDocumentAnalysisMethodology({ onBack }) {
-  const [showSheet, setShowSheet] = useState(false);
-  return <><section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><div className="text-[11px] font-black uppercase text-violet-600">Documents · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Analyser un document</h3></div>
-      <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
-    </div>
-    <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)]">
-      <div className="overflow-hidden rounded-2xl border-2 border-violet-200 bg-slate-950 shadow-sm">
-        <div className="aspect-video">
-          <iframe className="h-full w-full" src="https://www.youtube.com/embed/j_zAZ5lKX2s" title="Méthodologie de l’analyse de documents" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
-        </div>
-      </div>
-      <button type="button" onClick={() => setShowSheet(true)} className="block overflow-hidden rounded-2xl border-2 border-violet-200 bg-white text-left shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
-        <img src="/2d-AnalyseDoc.png" alt="Fiche méthode pour analyser un document" className="block h-auto w-full" />
-      </button>
-    </div>
-    <div className="mt-4 rounded-2xl bg-violet-50 p-4 text-sm font-bold text-violet-800">Regarde la vidéo, puis utilise la fiche comme guide pour construire ton introduction, ton développement et ta conclusion. Clique sur la fiche pour l’ouvrir en grand.</div>
-  </section><TrainingMethodSheetModal src={showSheet ? '/2d-AnalyseDoc.png' : ''} title="Analyser un document" onClose={() => setShowSheet(false)} /></>;
 }
 
 const documentMethodFields = {
