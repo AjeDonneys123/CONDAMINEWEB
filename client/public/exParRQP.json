@@ -1,0 +1,57 @@
+{
+  "exercice_2_developpements": {
+    "titre": "Diagnostiquer la Qualité du Paragraphe de Développement",
+    "consigne": "Pour chaque paragraphe complet ci-dessous, identifie le problème principal dans la rédaction (ou sélectionne 'Aucun problème').",
+    "options": [
+      { "cle": "ARGUMENT", "label": "Argument pas clair ou hors-sujet" },
+      { "cle": "EXPLICATION", "label": "Explication pas claire ou illogique" },
+      { "cle": "ILLUSTRATION", "label": "Illustration approximative, fausse ou manquante" },
+      { "cle": "INSUFFISANT", "label": "Paragraphe trop court / affirmation gratuite" },
+      { "cle": "CORRECT", "label": "Rien (Paragraphe complet et réussi)" }
+    ],
+    "questions": [
+      {
+        "id": 1,
+        "sujet": "L'exode rural et la croissance urbaine au XIXe siècle en France.",
+        "texte": "Au XIXe siècle, l'essor industriel provoque une vaste transformation des campagnes et des villes en France. L'industrialisation entraîne la mécanisation de l'agriculture, réduisant le besoin de main-d'œuvre agricole et poussant les paysans à quitter la campagne pour chercher du travail en ville. Cependant, cette transition est facilitée par la loi Guizot de 1833 qui oblige chaque commune à entretenir une école primaire, garantissant ainsi l'alphabétisation des jeunes ouvriers.",
+        "reponse_correcte": "ARGUMENT",
+        "explication": "Le début est bon, mais la fin bifurque hors-sujet vers l'histoire de l'éducation (loi Guizot), ce qui casse la cohérence de l'argument sur l'exode rural et la croissance urbaine."
+      },
+      {
+        "id": 2,
+        "sujet": "La Seconde Guerre mondiale : une guerre d'anéantissement.",
+        "texte": "La Seconde Guerre mondiale est une guerre d'anéantissement car les combattants cherchent à détruire totalement l'adversaire militaire et politique. Sur le front de l'Est, le conflit entre l'Allemagne nazie et l'URSS prend une dimension raciale et idéologique extrême. Par conséquent, les deux camps ont signé un pacte de non-agression très respecté qui a permis aux civils d'échapper aux violences jusqu'en 1945.",
+        "reponse_correcte": "EXPLICATION",
+        "explication": "L'explication est illogique et historique erronée : dire que le pacte a été respecté et a protégé les civils contredit directement le sujet et l'idée d'anéantissement."
+      },
+      {
+        "id": 3,
+        "sujet": "Les métropoles mondiales et la concentration des fonctions de commandement.",
+        "texte": "Les métropoles mondiales s'imposent comme les moteurs de la mondialisation en concentrant les fonctions de commandement économique, financier et culturel. Cette concentration s'explique par la présence de sièges sociaux de firmes transnationales et de grandes bourses qui prennent des décisions à portée globale. Par exemple, à Tokyo ou à New York, le quartier d'affaires de Wall Street rassemble les centres décisionnels majeurs qui influencent les flux financiers mondiaux.",
+        "reponse_correcte": "CORRECT",
+        "explication": "Paragraphe parfait : l'argument est clair (concentration du commandement), l'explication est logique (mécanismes de la mondialisation) et l'illustration est précise (Wall Street à New York / Tokyo)."
+      },
+      {
+        "id": 4,
+        "sujet": "Le régime de Vichy : un régime autoritaire et collaborateur.",
+        "texte": "Le régime de Vichy met fin à la République pour instaurer un pouvoir autoritaire centré sur le maréchal Pétain. Les libertés fondamentales sont supprimées et la démocratie est suspendue au profit d'une Révolution nationale. Pour illustrer cela, Pétain rencontre Hitler à la gare de Montoire en octobre 1941 où ils décident de l'assassinat de Kennedy.",
+        "reponse_correcte": "ILLUSTRATION",
+        "explication": "L'illustration contient une grosse erreur/approximation historique (confusion anachronique absurde avec Kennedy), ce qui invalide l'exemple."
+      },
+      {
+        "id": 5,
+        "sujet": "Les espaces de faible densité en France : des territoires attractifs.",
+        "texte": "Aujourd'hui, les espaces de faible densité en France ne sont plus seulement des espaces en déclin, mais attirent de nouvelles populations. En effet, de plus en plus de citadins recherchent un cadre de vie plus calme, proche de la nature et avec un coût du logement moins élevé.",
+        "reponse_correcte": "ILLUSTRATION",
+        "explication": "Il manque une illustration / un exemple concret. Il aurait fallu citer une dynamique précise (ex: l'essor du néo-ruralisme dans les Cévennes, le tourisme vert dans le Vercors, etc.)."
+      },
+      {
+        "id": 6,
+        "sujet": "La Guerre froide : un affrontement indirect entre deux blocs (1947-1991).",
+        "texte": "La Guerre froide se caractérise par la bipolarisation du monde autour des États-Unis et de l'URSS. Les deux superpuissances s'affrontent indirectement sur plusieurs continents. C'est la preuve que les armes nucléaires ont rendu la guerre impossible et que les gens vivaient en paix.",
+        "reponse_correcte": "INSUFFISANT",
+        "explication": "Le paragraphe est trop creux et l'argumentation est insuffisante : aucune crise ni guerre périphérique n'est expliquée ou illustrée (ex: crise de Berlin, guerre de Corée, crise de Cuba)."
+      }
+    ]
+  }
+}

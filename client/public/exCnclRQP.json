@@ -1,0 +1,57 @@
+{
+  "exercice_3_conclusions": {
+    "titre": "Diagnostiquer la Qualité de la Conclusion",
+    "consigne": "Pour chaque conclusion ci-dessous, identifie le problème principal dans la rédaction (ou sélectionne 'Aucun problème').",
+    "options": [
+      { "cle": "BILAN_INCOMPLET", "label": "Bilan incomplet ou qui ne répond pas à la problématique" },
+      { "cle": "OUVERTURE_HORS_SUJET", "label": "Ouverture hors-sujet / banale / cliché" },
+      { "cle": "OUVERTURE_UCHRONIE", "label": "Ouverture uchronique ou 'si' (réécriture de l'Histoire)" },
+      { "cle": "SANS_OUVERTURE", "label": "Pas d'ouverture (ou simple redite du sujet)" },
+      { "cle": "CORRECT", "label": "Rien (Conclusion complète : Bilan + Ouverture réussie)" }
+    ],
+    "questions": [
+      {
+        "id": 1,
+        "sujet": "La Première Guerre mondiale, une guerre totale (1914-1918).",
+        "texte": "En conclusion, la Première Guerre mondiale a bien été une guerre totale car elle a mobilisé l'ensemble des sociétés, tant au front qu'à l'arrière, ainsi que les économies des pays belligérants. Ce conflit majeur a profondément déstabilisé l'Europe. Mais on peut se demander : que se serait-il passé si Hitler n'était jamais arrivé au pouvoir en Allemagne par la suite ?",
+        "reponse_correcte": "OUVERTURE_UCHRONIE",
+        "explication": "Classique de la mauvaise ouverture : poser une question uchronique ('Et si... ?'). L'Histoire analyse des faits passés réels, elle ne fait pas de spéculation fictionnelle."
+      },
+      {
+        "id": 2,
+        "sujet": "Les métropoles et la concentration des fonctions de commandement.",
+        "texte": "Ainsi, nous avons vu que les métropoles concentrent les pouvoirs économiques et politiques à l'échelle mondiale, ce qui renforce leur poids dans la mondialisation. C'est pourquoi nous pouvons nous demander ce que nous réservera l'avenir dans le monde de demain...",
+        "reponse_correcte": "OUVERTURE_HORS_SUJET",
+        "explication": "Classique du cliché d'ouverture : l'appel flou à 'l'avenir' ou 'demain'. Une bonne ouverture doit poser une vraie question géographique précise (ex: l'accentuation des inégalités infra-urbaines)."
+      },
+      {
+        "id": 3,
+        "sujet": "Le régime de Vichy : collaboration et antisémitisme (1940-1944).",
+        "texte": "Pour conclure, le régime de Vichy a activement participé à la politique de collaboration avec l'occupant nazi, notamment en durcissant les lois antisémites et en prêtant main-forte à la Déportation des Juifs de France. Cette sombre période s'achève avec la Libération en 1944. Dès lors, comment la France d'après-guerre a-t-elle reconstruit sa démocratie tout en faisant face au mythe d'une France unanimement résistante ?",
+        "reponse_correcte": "CORRECT",
+        "explication": "Conclusion parfaite : le bilan synthétise les points clés du sujet et l'ouverture relance logiquement sur le sujet chronologique suivant (la mémoire du régime de Vichy et la Libération)."
+      },
+      {
+        "id": 4,
+        "sujet": "L'aménagement du territoire français : réduire les inégalités.",
+        "texte": "En somme, l'aménagement du territoire en France réunit de nombreux acteurs publics pour tenter de rééquilibrer le développement entre les régions. Cependant, les disparités restent fortes entre la métropole parisienne et les espaces isolés. Aujourd'hui, l'aménagement du territoire doit-il réorienter ses priorités face aux défis de la transition écologique et du changement climatique ?",
+        "reponse_correcte": "CORRECT",
+        "explication": "Conclusion réussie : le bilan apporte une réponse claire à la problématique et l'ouverture élargit la réflexion sur un enjeu contemporain majeur lié au sujet."
+      },
+      {
+        "id": 5,
+        "sujet": "La Guerre froide, un monde bipolaire (1947-1991).",
+        "texte": "Pour terminer, la Guerre froide a divisé le monde en deux blocs idéologiques étanches menés par Washington et Moscou. Chaque camp a cherché à étendre son influence sans affrontement direct. Ainsi, la Guerre froide s'est terminée en 1991 avec la chute de l'URSS.",
+        "reponse_correcte": "SANS_OUVERTURE",
+        "explication": "La conclusion s'arrête brutalement au bilan. Il manque l'ouverture (qui aurait pu porter sur l'émergence d'un monde unipolaire dominé par les États-Unis ou la multiplication de nouveaux conflits)."
+      },
+      {
+        "id": 6,
+        "sujet": "Les espaces de faible densité et leurs atouts en France.",
+        "texte": "En conclusion, les espaces de faible densité sont des territoires très vastes. On y trouve de belles montagnes et des campagnes calmes où l'agriculture tient une place importante. On peut se demander quelles seront les prochaines vacances préférées des Français.",
+        "reponse_correcte": "BILAN_INCOMPLET",
+        "explication": "Le bilan est très faible et incomplet (il oublie de répondre au cœur du sujet : l'attractivité et les nouveaux atouts économiques/résidentiels), et l'ouverture est anecdotique/hors-sujet."
+      }
+    ]
+  }
+}

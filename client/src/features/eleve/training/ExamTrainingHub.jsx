@@ -4213,6 +4213,7 @@ const youtubeEmbedUrl = (url = '') => {
 function DnbDocumentsMethodology({ onBack, user }) {
   const [module, setModule] = useState('home');
   const canCalibrate = user?.isDeveloper === true || user?.isTestAccount === true;
+  if (module === 'analysis') return <DnbDocumentAnalysisMethodology onBack={() => setModule('home')} />;
   if (module === 'presentation') return canCalibrate
     ? <DnbDocumentMethodCalibration type="presentation" onBack={() => setModule('home')} />
     : <DnbDocumentMethodReader type="presentation" user={user} onBack={() => setModule('home')} />;
@@ -4224,14 +4225,37 @@ function DnbDocumentsMethodology({ onBack, user }) {
       <div><div className="text-[11px] font-black uppercase text-cyan-600">Documents · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Présenter et décrire un document</h3></div>
       <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour aux dossiers</button>
     </div>
-    <div className="mt-5 grid gap-4 md:grid-cols-2">
+    <div className="mt-5 grid gap-4 md:grid-cols-3">
       <button type="button" onClick={() => setModule('presentation')} className="rounded-3xl border-2 border-blue-200 bg-blue-50 p-6 text-left transition hover:border-blue-500 hover:shadow-md">
         <div className="text-3xl">📄</div><div className="mt-3 text-xl font-black text-slate-900">Présentation de document</div><div className="mt-2 text-sm font-bold text-blue-800">Date, auteur, nature, sujet et contexte.</div><div className="mt-5 inline-flex rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
       </button>
       <button type="button" onClick={() => setModule('image')} className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-6 text-left transition hover:border-emerald-500 hover:shadow-md">
         <div className="text-3xl">🖼️</div><div className="mt-3 text-xl font-black text-slate-900">Description d’image</div><div className="mt-2 text-sm font-bold text-emerald-800">Premier plan, deuxième plan et arrière-plan.</div><div className="mt-5 inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
       </button>
+      <button type="button" onClick={() => setModule('analysis')} className="rounded-3xl border-2 border-violet-200 bg-violet-50 p-6 text-left transition hover:border-violet-500 hover:shadow-md">
+        <div className="text-3xl">🔎</div><div className="mt-3 text-xl font-black text-slate-900">Analyse de documents</div><div className="mt-2 text-sm font-bold text-violet-800">Introduction, citations, explications et conclusion.</div><div className="mt-5 inline-flex rounded-xl bg-violet-600 px-4 py-3 text-xs font-black text-white">Commencer</div>
+      </button>
     </div>
+  </section>;
+}
+
+function DnbDocumentAnalysisMethodology({ onBack }) {
+  return <section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-[11px] font-black uppercase text-violet-600">Documents · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Analyser un document</h3></div>
+      <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
+    </div>
+    <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)]">
+      <div className="overflow-hidden rounded-2xl border-2 border-violet-200 bg-slate-950 shadow-sm">
+        <div className="aspect-video">
+          <iframe className="h-full w-full" src="https://www.youtube.com/embed/j_zAZ5lKX2s" title="Méthodologie de l’analyse de documents" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+        </div>
+      </div>
+      <a href="/2d-AnalyseDoc.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-violet-200 bg-white shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
+        <img src="/2d-AnalyseDoc.png" alt="Fiche méthode pour analyser un document" className="block h-auto w-full" />
+      </a>
+    </div>
+    <div className="mt-4 rounded-2xl bg-violet-50 p-4 text-sm font-bold text-violet-800">Regarde la vidéo, puis utilise la fiche comme guide pour construire ton introduction, ton développement et ta conclusion. Clique sur la fiche pour l’ouvrir en grand.</div>
   </section>;
 }
 
@@ -6067,6 +6091,73 @@ const hasLocalDnbParagraphActivities = (chapter = {}) => (
   && /premi[eè]re guerre mondiale/i.test(String(chapter.title || ''))
 );
 
+const RQP_EXERCISE_FILES = ['/exIntroRQP.json', '/exParRQP.json', '/exCnclRQP.json'];
+
+function RqpMethodExercises() {
+  const [activities, setActivities] = useState([]);
+  const [activityIndex, setActivityIndex] = useState(0);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [checked, setChecked] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(RQP_EXERCISE_FILES.map((url) => fetch(url).then((response) => {
+      if (!response.ok) throw new Error(`Impossible de charger ${url}`);
+      return response.json();
+    }))).then((files) => {
+      if (cancelled) return;
+      setActivities(files.flatMap((file, fileIndex) => Object.entries(file || {}).map(([key, value]) => ({
+        ...value,
+        key: `${fileIndex}-${key}`
+      }))));
+    }).catch(() => {
+      if (!cancelled) setActivities([]);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const activity = activities[activityIndex];
+  const question = activity?.questions?.[questionIndex];
+  const answerKey = activity && question ? `${activity.key}:${question.id}` : '';
+  const selectedAnswer = answers[answerKey] || '';
+  const isChecked = checked[answerKey] === true;
+  const isCorrect = selectedAnswer === question?.reponse_correcte;
+
+  const selectActivity = (index) => {
+    setActivityIndex(index);
+    setQuestionIndex(0);
+  };
+
+  if (!activity || !question) return <div className="flex min-h-[360px] items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50 p-5 text-center text-sm font-bold text-blue-500">Chargement des exercices RQP…</div>;
+
+  return <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 shadow-sm">
+    <div className="text-[10px] font-black uppercase text-blue-600">3. Entraîne-toi</div>
+    <select value={activityIndex} onChange={(event) => selectActivity(Number(event.target.value))} className="mt-2 w-full rounded-xl border-2 border-blue-200 bg-white px-3 py-2 text-sm font-black text-slate-800">
+      {activities.map((item, index) => <option key={item.key} value={index}>{item.titre}</option>)}
+    </select>
+    <div className="mt-3 flex items-center justify-between gap-2"><div className="text-xs font-black text-blue-700">Question {questionIndex + 1}/{activity.questions.length}</div><div className="h-2 flex-1 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-blue-600 transition-all" style={{ width: `${((questionIndex + 1) / activity.questions.length) * 100}%` }} /></div></div>
+    <div className="mt-3 rounded-xl bg-white p-3">
+      <div className="text-[10px] font-black uppercase text-slate-400">Sujet</div>
+      <div className="mt-1 text-sm font-black text-slate-900">{question.sujet}</div>
+      <div className="mt-3 text-sm font-bold leading-relaxed text-slate-700">{question.texte}</div>
+    </div>
+    <div className="mt-3 space-y-2">{activity.options.map((option) => {
+      const selected = selectedAnswer === option.cle;
+      const tone = !isChecked ? (selected ? 'border-blue-500 bg-blue-100' : 'border-blue-100 bg-white') : option.cle === question.reponse_correcte ? 'border-emerald-500 bg-emerald-50' : selected ? 'border-red-400 bg-red-50' : 'border-blue-100 bg-white';
+      return <button key={option.cle} type="button" disabled={isChecked} onClick={() => setAnswers((previous) => ({ ...previous, [answerKey]: option.cle }))} className={`block w-full rounded-xl border-2 px-3 py-2 text-left text-xs font-bold transition ${tone}`}>{option.label}</button>;
+    })}</div>
+    {isChecked && <div className={`mt-3 rounded-xl p-3 text-xs font-bold ${isCorrect ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}><div className="font-black">{isCorrect ? '✓ Bonne réponse' : 'À revoir'}</div><div className="mt-1 leading-relaxed">{question.explication || question.explication_alternative}</div></div>}
+    <div className="mt-3 flex items-center justify-between gap-2">
+      <button type="button" disabled={questionIndex === 0} onClick={() => setQuestionIndex((index) => Math.max(0, index - 1))} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-30">← Précédent</button>
+      {!isChecked ? <button type="button" disabled={!selectedAnswer} onClick={() => setChecked((previous) => ({ ...previous, [answerKey]: true }))} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40">Vérifier</button> : <button type="button" onClick={() => {
+        if (questionIndex < activity.questions.length - 1) setQuestionIndex((index) => index + 1);
+        else selectActivity((activityIndex + 1) % activities.length);
+      }} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white">{questionIndex < activity.questions.length - 1 ? 'Suivant →' : 'Série suivante →'}</button>}
+    </div>
+  </div>;
+}
+
 export default function ExamTrainingHub({ user, canCalibrate = false }) {
   const mode = getTrainingModeForStudent(user);
   const [section, setSection] = useState(mode === 'seconde' ? 'rqp' : 'full');
@@ -6225,6 +6316,21 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
             </button>
           </div>
         </div>
+        {isRqp && <section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
+          <div><div className="text-[11px] font-black uppercase text-blue-600">RQP · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Réussir une réponse à une question problématisée</h3></div>
+          <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.68fr)_minmax(340px,0.9fr)]">
+            <div className="overflow-hidden rounded-2xl border-2 border-blue-200 bg-slate-950 shadow-sm">
+              <div className="aspect-video">
+                <iframe className="h-full w-full" src="https://www.youtube.com/embed/9pITlqVsPhM" title="Méthodologie de la réponse à une question problématisée" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+              </div>
+            </div>
+            <a href="/2d-RQP.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-blue-200 bg-white shadow-sm" title="Ouvrir la fiche RQP en grand">
+              <img src="/2d-RQP.png" alt="Fiche méthode pour réussir une RQP" className="block h-auto w-full" />
+            </a>
+            <RqpMethodExercises />
+          </div>
+          <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-800">Regarde la vidéo, puis garde la fiche sous les yeux pour construire ta réponse. Clique sur la fiche pour l’ouvrir en grand.</div>
+        </section>}
         <HomeworkList
           user={user}
           assessmentKinds={[isRqp ? 'rqp' : 'commentaire']}

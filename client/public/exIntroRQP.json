@@ -1,0 +1,111 @@
+{
+  "exercice_1_introductions": {
+    "titre": "Diagnostiquer l'Introduction",
+    "consigne": "Pour chaque introduction, identifie l'élément manquant parmi les choix proposés.",
+    "options": [
+      { "cle": "C", "label": "Contexte / Amorce" },
+      { "cle": "A", "label": "Analyse du sujet / Définition des termes" },
+      { "cle": "P_PROB", "label": "Problématique" },
+      { "cle": "P_PLAN", "label": "Plan annoncé" },
+      { "cle": "RIEN", "label": "Rien (Introduction complète)" }
+    ],
+    "questions": [
+      {
+        "id": 1,
+        "sujet": "La Première Guerre mondiale, une guerre totale (1914-1918).",
+        "texte": "Entre 1914 et 1918, l'Europe est plongée dans un conflit majeur qui oppose la Triple Entente aux Empires centraux. Une guerre totale se caractérise par la mobilisation de l'ensemble de la société (humaine, économique, culturelle) au service de l'effort de guerre. En quoi la Première Guerre mondiale constitue-t-elle le premier exemple de guerre totale dans l'Histoire ?",
+        "reponse_correcte": "P_PLAN",
+        "explication": "Il manque la présentation des grands axes du devoir (annonce du plan)."
+      },
+      {
+        "id": 2,
+        "sujet": "La métropolisation et ses effets dans le monde.",
+        "texte": "Dans un monde de plus en plus urbanisé, les métropoles jouent un rôle stratégique. Nous verrons d'abord que la métropolisation concentre les hommes et les fonctions de commandement, puis nous analyserons les inégalités territoriales et sociales qu'elle accentue.",
+        "reponse_correcte": "A",
+        "explication_alternative": "Sont manquants : l'Analyse du sujet (terme métropolisation non défini) et la Problématique (pas de question centrale).",
+        "explication": "Le terme « métropolisation » n'est pas défini et il n'y a pas de problématique explicite."
+      },
+      {
+        "id": 3,
+        "sujet": "Le régime de Vichy : collaboration et antisémitisme (1940-1944).",
+        "texte": "Après la défaite de juin 1940 face à l'Allemagne nazie, la République s'effondre et laisse place au régime autoritaire de Vichy dirigé par le maréchal Pétain. La collaboration désigne la politique d'entraide avec l'occupant allemand, tandis que l'antisémitisme regroupe l'ensemble des mesures discriminatoires et de persécution ciblant les Juifs. Comment l'État français a-t-il mis ses ressources au service de la collaboration et de la politique antisémite nazie ? Dans un premier temps, nous étudierons la mise en place d'un État autoritaire et collaborateur, puis nous examinerons sa participation active à la Déportation.",
+        "reponse_correcte": "RIEN",
+        "explication": "L'introduction est complète : Contexte, Analyse/Définition, Problématique et Plan sont tous présents."
+      },
+      {
+        "id": 4,
+        "sujet": "L'aménagement du territoire français : réduire les inégalités.",
+        "texte": "L'aménagement du territoire désigne l'ensemble des actions publiques visant à équilibrer le développement des régions et réduire les disparités socio-économiques. Dans quelle mesure les politiques d'aménagement parviennent-elles à corriger les déséquilibres entre la région parisienne, les grandes métropoles et les espaces isolés ? Nous analyserons d'abord les acteurs nationaux et européens, avant d'évaluer l'impact des infrastructures de transport.",
+        "reponse_correcte": "C",
+        "explication": "Il manque l'amorce / le contexte général situant la France actuelle avant d'entrer directement dans la définition."
+      },
+      {
+        "id": 5,
+        "sujet": "La Guerre froide, un monde bipolaire (1947-1991).",
+        "texte": "De 1947 à 1991, le monde est divisé en deux blocs idéologiques opposés menés par les États-Unis et l'URSS. Comment cette rivalité s'est-elle manifestée à l'échelle mondiale sans affrontement direct entre les deux superpuissances ?",
+        "reponse_correcte": "P_PLAN",
+        "explication": "Seule la problématique est posée, l'annonce du plan est manquante."
+      },
+      {
+        "id": 6,
+        "sujet": "Les espaces de faible densité et leurs atouts en France.",
+        "texte": "En France, les espaces de faible densité (moins de 30 hab/km²) couvrent de vastes zones rurales et montagnardes. Longtemps considérés comme des territoires en marge et déclinants, ces espaces connaissent aujourd'hui de nouvelles dynamiques attractives. Comment ces territoires valorisent-ils leurs ressources pour attirer de nouvelles populations et activités ? Nous aborderons d'abord l'essor du tourisme vert et de l'agriculture, puis l'arrivée de nouveaux habitants en quête de cadre de vie.",
+        "reponse_correcte": "RIEN",
+        "explication": "L'introduction contient tous les éléments nécessaires."
+      }
+    ]
+  },
+  "exercice_2_developpements": {
+    "titre": "Diagnostiquer l'Argumentation dans le Développement",
+    "consigne": "Pour chaque extrait de paragraphe, indique la nature du problème dans l'argumentation.",
+    "options": [
+      { "cle": "MAUVAIS", "label": "Mauvais / Erroné / Hors-sujet" },
+      { "cle": "INSUFFISANT", "label": "Insuffisant (Affirmation sans exemple/preuve)" },
+      { "cle": "CORRECT", "label": "Aucun problème (Argument solide)" }
+    ],
+    "questions": [
+      {
+        "id": 1,
+        "sujet": "L'exode rural et l'urbanisation au XIXe siècle en France.",
+        "texte": "L'urbanisation du XIXe siècle s'explique principalement par le développement des usines dans les grandes villes. De nombreux paysans quittent les campagnes car les machines agricoles réduisent le besoin de main-d'œuvre. De plus, la vie à la ville était beaucoup plus agréable, avec des logements très modernes, du chauffage partout et de superbes conditions de travail pour tous les ouvriers.",
+        "reponse_correcte": "MAUVAIS",
+        "explication": "Contresens historique majeur : les conditions ouvrières au XIXe siècle étaient extrêmement précaires et pénibles."
+      },
+      {
+        "id": 2,
+        "sujet": "La décolonisation de l'Inde (1947).",
+        "texte": "La décolonisation de l'Inde s'est faite pacifiquement grâce à la figure de Gandhi. Ce dernier a prôné la non-violence et le boycott des produits britanniques. Cela a fonctionné et les Britanniques ont quitté le pays sans poser de problèmes.",
+        "reponse_correcte": "INSUFFISANT",
+        "explication": "Analyse trop superficielle : oublie d'évoquer la partition violente entre l'Inde et le Pakistan."
+      },
+      {
+        "id": 3,
+        "sujet": "Les risques industriels et technologiques dans les métropoles.",
+        "texte": "Les métropoles concentrent des zones industrielles à risque qui nécessitent des politiques de prévention strictes. Par exemple, la catastrophe d'AZF à Toulouse en 2001 a montré la vulnérabilité des populations urbaines face aux usines de produits chimiques situées près des habitations. Depuis, des Plans de Prévention des Risques Technologiques (PPRT) ont été mis en place pour encadrer l'urbanisme autour des sites Seveso.",
+        "reponse_correcte": "CORRECT",
+        "explication": "L'argumentation est complète, fluide et appuyée sur un exemple précis."
+      },
+      {
+        "id": 4,
+        "sujet": "La puissance géopolitique des États-Unis dans le monde.",
+        "texte": "Les États-Unis sont la première puissance mondiale parce qu'ils ont une économie très forte et une armée puissante. Leurs entreprises vendent des produits partout sur la planète et leur culture est dominante. C'est pour cela qu'aucun autre pays ne peut rivaliser avec eux aujourd'hui.",
+        "reponse_correcte": "INSUFFISANT",
+        "explication": "Enchaînement de généralités sans aucun exemple précis (pas de chiffres, noms de firmes, bases ou concepts de Soft/Hard power)."
+      },
+      {
+        "id": 5,
+        "sujet": "L'Union Européenne, un espace de puissance économique.",
+        "texte": "L'Union Européenne est un marché unique majeur fondé sur la libre circulation des biens, des services et des personnes. Cependant, les institutions européennes comme le Parlement européen sont situées à Strasbourg et Bruxelles. La politique de la France sous le général de Gaulle a fortement marqué la construction européenne dans les années 1960.",
+        "reponse_correcte": "MAUVAIS",
+        "explication": "Hors-sujet : l'évocation de la politique gaulliste des années 1960 s'éloigne du thème de la puissance économique actuelle."
+      },
+      {
+        "id": 6,
+        "sujet": "La Seconde Guerre mondiale, une guerre d'anéantissement.",
+        "texte": "La Seconde Guerre mondiale est marquée par une volonté de détruire totalement l'adversaire et les populations civiles. Sur le front de l'Est, la guerre entre la Nazi-Allemagne et l'URSS prend une dimension idéologique et raciale inédite, comme le montre la bataille de Stalingrad où près de 2 millions de personnes périssent. Parallèlement, le régime nazi met en place le génocide des Juifs et des Tziganes avec la création de centres de mise à mort comme Auschwitz-Birkenau.",
+        "reponse_correcte": "CORRECT",
+        "explication": "Paragraphe solide, bien structuré et appuyé sur des faits historiques précis."
+      }
+    ]
+  }
+}
