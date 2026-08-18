@@ -6331,6 +6331,20 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
           </div>
           <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-800">Regarde la vidéo, puis garde la fiche sous les yeux pour construire ta réponse. Clique sur la fiche pour l’ouvrir en grand.</div>
         </section>}
+        {!isRqp && <section className="mx-4 rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
+          <div><div className="text-[11px] font-black uppercase text-emerald-600">Question commentaire · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Analyser des documents</h3></div>
+          <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)]">
+            <div className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-slate-950 shadow-sm">
+              <div className="aspect-video">
+                <iframe className="h-full w-full" src="https://www.youtube.com/embed/j_zAZ5lKX2s" title="Méthodologie de l’analyse de documents" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+              </div>
+            </div>
+            <a href="/2d-AnalyseDoc.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
+              <img src="/2d-AnalyseDoc.png" alt="Fiche méthode pour analyser des documents" className="block h-auto w-full" />
+            </a>
+          </div>
+          <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-800">Regarde la vidéo, puis utilise la fiche pour structurer ton introduction, ton développement et ta conclusion. Clique sur la fiche pour l’ouvrir en grand.</div>
+        </section>}
         <HomeworkList
           user={user}
           assessmentKinds={[isRqp ? 'rqp' : 'commentaire']}
