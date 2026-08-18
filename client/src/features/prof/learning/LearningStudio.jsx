@@ -4910,7 +4910,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
 
     const generateLearningFromGeneralSheet = () => {
-        const parsed = splitGeneralSheetIntoParts(generalSheetText, generalSheetHtml);
+        const startMarker = '=== DÉBUT FICHE CONDAWEB ===';
+        const endMarker = '=== FIN FICHE CONDAWEB ===';
+        const rawGeneralText = String(generalSheetText || '');
+        const startIndex = rawGeneralText.toUpperCase().indexOf(startMarker);
+        const endIndex = rawGeneralText.toUpperCase().indexOf(endMarker);
+        const importText = startIndex >= 0 && endIndex > startIndex
+            ? rawGeneralText.slice(startIndex + startMarker.length, endIndex).trim()
+            : rawGeneralText.trim();
+        const rawBlocks = generalSheetHtmlToBlocks(generalSheetHtml);
+        const htmlStartIndex = rawBlocks.findIndex((block) => String(block?.text || '').trim().toUpperCase() === startMarker);
+        const htmlEndIndex = rawBlocks.findIndex((block, index) => index > htmlStartIndex && String(block?.text || '').trim().toUpperCase() === endMarker);
+        const importHtml = htmlStartIndex >= 0 && htmlEndIndex > htmlStartIndex
+            ? rawBlocks.slice(htmlStartIndex + 1, htmlEndIndex).map((block) => block.html).join('')
+            : String(generalSheetHtml || '').trim();
+        const parsed = splitGeneralSheetIntoParts(importText, importHtml);
         if (!parsed.parts.length) {
             alert('Aucune grande partie détectée. Utilise des titres comme « 1. Titre », « 2. Titre » ou « I. Titre », « II. Titre ».');
             return;
@@ -4944,15 +4958,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
         const planSectionId = uid();
         sections.push({ id: planSectionId, name: 'Introduction', order: 0, visible: true });
-        const allGeneralBlocks = generalSheetHtmlToBlocks(generalSheetHtml);
+        const allGeneralBlocks = generalSheetHtmlToBlocks(importHtml);
         const qcmBlockIndex = allGeneralBlocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block?.text || '').trim()));
         const generalQuizBlocks = qcmBlockIndex >= 0 ? allGeneralBlocks.slice(qcmBlockIndex) : [];
         const masterSheet = {
             ...emptyStep('sheet'),
             sectionId: planSectionId,
             title: `Fiche générale · ${parsed.documentTitle}`,
-            sheetText: String(generalSheetText || '').trim(),
-            sheetTextHtml: String(generalSheetHtml || '').trim(),
+            sheetText: importText,
+            sheetTextHtml: importHtml,
             generalSheetGenerated: true,
             isGeneralSheetMaster: true,
             generalSheetDocumentTitle: parsed.documentTitle,
@@ -5040,7 +5054,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const courseDescription = String(selectedCourse?.description || formData.generalSheetCourseDescription || '').trim();
         const slidesUrl = String(formData.presentationUrl || '').trim();
         const slidesFocus = String(formData.presentationSlidesFocus || '').trim();
-        const prompt = `PROMPT FICHE GÉNÉRALE CONDAWEB — GEMINI
+        const prompt = `PROMPT UNIQUE CONDAWEB — FICHE GÉNÉRALE + PDF SOURCE NOTEBOOKLM
 
 CHAPITRE À FICHER
 - Titre exact : ${chapterTitle}
@@ -5056,7 +5070,18 @@ ${slidesFocus ? `- Slides de trace écrite à privilégier : ${slidesFocus}` : '
 
 Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-dessus. Produis uniquement la fiche du chapitre « ${chapterTitle} ». Ignore les diapositives appartenant à un autre chapitre. Toutes les grandes parties du chapitre présentes dans les slides doivent devenir des fiches/parties distinctes dans la structure ci-dessous.
 
-À partir de mes sources, produis UNE SEULE SUPERFICHE de cours prête à être importée dans CondaWeb.
+À partir de mes sources, produis DEUX LIVRABLES cohérents à partir du même plan :
+1. une super-fiche de cours prête à être importée dans CondaWeb ;
+2. un document PDF illustré disponible en ligne, destiné à servir de source à la génération d'une vidéo NotebookLM.
+
+Les deux livrables doivent transmettre exactement les mêmes connaissances, dans le même ordre et avec les mêmes grandes parties. Le PDF ne doit pas introduire un second plan ni contredire la fiche CondaWeb.
+
+LIVRABLE 1 — BLOC « FICHE CONDAWEB »
+
+Place toute la fiche et son QCM dans un unique bloc clairement délimité par les lignes :
+=== DÉBUT FICHE CONDAWEB ===
+et
+=== FIN FICHE CONDAWEB ===
 
 FORMAT IMPÉRATIF — PARTIE 1 : FICHE DE COURS
 
@@ -5117,20 +5142,41 @@ Les mauvaises réponses doivent être plausibles mais sans ambiguïté.
 Les questions doivent porter sur les éléments en gras de la fiche (dates, personnages, lieux, notions, mots-clés...).
 Chaque proposition (a, b, c, d) doit être écrite sur sa propre ligne.
 Ne produire aucune correction séparée : la bonne réponse est uniquement identifiable grâce au gras.
-Ne rien écrire avant le titre de la fiche.
-Ne rien écrire après la dernière réponse du dernier QCM.
+À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire avant le titre de la fiche.
+À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire après la dernière réponse du dernier QCM.
+
+LIVRABLE 2 — PDF ILLUSTRÉ SOURCE DE LA VIDÉO NOTEBOOKLM
+
+Après la ligne === FIN FICHE CONDAWEB ===, crée un document visuel autonome fondé sur le même plan.
+Ce document doit :
+- reprendre le titre, l'introduction utile et toutes les grandes parties I, II, III... de la fiche ;
+- présenter les idées essentielles sous forme de pages aérées, avec titres, courts paragraphes, repères chronologiques et légendes ;
+- sélectionner directement dans les Google Slides quelques images stratégiques seulement : cartes, frises, schémas, œuvres, photographies, graphiques ou documents qui constituent des repères visuels essentiels ;
+- privilégier une image lorsqu'elle aide réellement à comprendre ou mémoriser une idée du plan ;
+- placer chaque image près de la partie concernée et ajouter une légende pédagogique indiquant précisément ce qu'il faut observer ;
+- ne jamais utiliser une image purement décorative, un doublon, une capture illisible ou un visuel appartenant à un autre chapitre ;
+- conserver une excellente lisibilité, sans surcharge, avec environ 1 à 3 repères visuels essentiels par grande partie selon les besoins ;
+- terminer par une page « À retenir » qui synthétise le plan et les notions indispensables ;
+- ne pas inclure le QCM dans le PDF : ce document est la source narrative et visuelle de la future vidéo NotebookLM.
+
+Crée réellement ce document dans Gemini Canvas ou Google Docs, exporte-le en PDF, enregistre-le dans Google Drive si l'accès est disponible, puis fournis à la fin :
+PDF NOTEBOOKLM : [lien direct permettant d'ouvrir ou télécharger le PDF]
+
+Le lien doit être exploitable en ligne et partager le fichier en lecture. Si Gemini ne peut pas publier automatiquement le fichier, génère tout de même le document complet prêt à exporter et indique clairement l'unique action manuelle nécessaire pour obtenir le PDF, sans inventer de faux lien.
 
 VÉRIFICATION AVANT DE RÉPONDRE
 - Le titre et tout le contenu portent bien sur « ${chapterTitle} ».
 - Toutes les grandes parties réellement enseignées dans les slides sont présentes, sans inventer une partie absente.
 - Chaque grande partie possède son bloc LEÇON correspondant dans le QCM.
-- La fiche est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.`;
+- Le bloc FICHE CONDAWEB est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.
+- Le PDF suit exactement le même plan, contient seulement des visuels utiles tirés des slides et possède un lien réel ou une instruction d'export honnête.
+- Les deux livrables sont adaptés au niveau ${targetLevel || 'indiqué'} de l'élève.`;
         // L'ouverture doit être synchrone avec le clic pour ne pas être bloquée
         // par Safari/Chrome avant l'écriture asynchrone dans le presse-papiers.
         window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
         try {
             await navigator.clipboard.writeText(prompt);
-            alert('Prompt Gemini copié. Colle-le dans la nouvelle fenêtre Gemini.');
+            alert('Prompt unique fiche + PDF copié. Colle-le dans la nouvelle fenêtre Gemini.');
         } catch (_) {
             const textarea = document.createElement('textarea');
             textarea.value = prompt;
@@ -5140,7 +5186,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
             textarea.select();
             document.execCommand('copy');
             textarea.remove();
-            alert('Prompt Gemini copié. Colle-le dans la nouvelle fenêtre Gemini.');
+            alert('Prompt unique fiche + PDF copié. Colle-le dans la nouvelle fenêtre Gemini.');
         }
     };
 
@@ -5796,18 +5842,18 @@ VÉRIFICATION AVANT DE RÉPONDRE
                         <div className="flex items-center gap-3 border-b border-slate-200 px-6 py-4">
                             <div>
                                 <div className="text-xl font-black text-slate-900">Créer une fiche générale</div>
-                                <div className="text-sm font-bold text-slate-500">Colle la fiche puis son QCM : le programme crée les sections, les questions IA et les banques de questions des jeux.</div>
+                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche CondaWeb, son QCM et le PDF illustré destiné à la vidéo NotebookLM.</div>
                             </div>
                             <button
                                 type="button"
                                 className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
                                 onClick={copyGeminiSuperSheetPrompt}
-                            >📋 Copier le prompt Gemini et ouvrir Gemini</button>
+                            >📋 Copier le prompt fiche + PDF et ouvrir Gemini</button>
                             <button className="v84-close-btn" onClick={() => setShowGeneralSheetBuilder(false)}>✕</button>
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
-                                La partie cours utilise <b>I. Titre</b>, <b>II. Titre</b>… Puis ajoute <b>QCM DE RÉVISION</b> et des blocs <b>LEÇON 1</b>, <b>LEÇON 2</b>… La bonne réponse de chaque QCM doit être en gras.
+                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Le PDF et son lien servent ensuite de source à la vidéo NotebookLM.
                             </div>
                             <SheetRichTextEditor
                                 html={generalSheetHtml}
