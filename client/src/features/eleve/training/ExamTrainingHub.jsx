@@ -4210,6 +4210,16 @@ const youtubeEmbedUrl = (url = '') => {
   return match ? `https://www.youtube.com/embed/${match[1]}` : value;
 };
 
+function TrainingMethodSheetModal({ src, title, onClose }) {
+  if (!src) return null;
+  return <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/70 p-4" onClick={onClose}>
+    <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border-2 border-blue-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3"><div><div className="text-[10px] font-black uppercase text-blue-600">Fiche de méthodologie</div><div className="text-lg font-black text-slate-900">{title}</div></div><button type="button" onClick={onClose} aria-label="Fermer la fiche" className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xl font-black text-slate-700 hover:bg-red-100 hover:text-red-600">×</button></div>
+      <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3"><img src={src} alt={title} className="mx-auto block max-w-full rounded-xl bg-white object-contain" /></div>
+    </div>
+  </div>;
+}
+
 function DnbDocumentsMethodology({ onBack, user }) {
   const [module, setModule] = useState('home');
   const canCalibrate = user?.isDeveloper === true || user?.isTestAccount === true;
@@ -4240,7 +4250,8 @@ function DnbDocumentsMethodology({ onBack, user }) {
 }
 
 function DnbDocumentAnalysisMethodology({ onBack }) {
-  return <section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+  const [showSheet, setShowSheet] = useState(false);
+  return <><section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><div className="text-[11px] font-black uppercase text-violet-600">Documents · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Analyser un document</h3></div>
       <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
@@ -4251,12 +4262,12 @@ function DnbDocumentAnalysisMethodology({ onBack }) {
           <iframe className="h-full w-full" src="https://www.youtube.com/embed/j_zAZ5lKX2s" title="Méthodologie de l’analyse de documents" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
         </div>
       </div>
-      <a href="/2d-AnalyseDoc.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-violet-200 bg-white shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
+      <button type="button" onClick={() => setShowSheet(true)} className="block overflow-hidden rounded-2xl border-2 border-violet-200 bg-white text-left shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
         <img src="/2d-AnalyseDoc.png" alt="Fiche méthode pour analyser un document" className="block h-auto w-full" />
-      </a>
+      </button>
     </div>
     <div className="mt-4 rounded-2xl bg-violet-50 p-4 text-sm font-bold text-violet-800">Regarde la vidéo, puis utilise la fiche comme guide pour construire ton introduction, ton développement et ta conclusion. Clique sur la fiche pour l’ouvrir en grand.</div>
-  </section>;
+  </section><TrainingMethodSheetModal src={showSheet ? '/2d-AnalyseDoc.png' : ''} title="Analyser un document" onClose={() => setShowSheet(false)} /></>;
 }
 
 const documentMethodFields = {
@@ -4543,10 +4554,11 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
 
 function DnbParagraphMethodology({ onBack }) {
   const [module, setModule] = useState('home');
+  const [showSheet, setShowSheet] = useState(false);
   if (module === 'hors-sujet') return <DnbOffTopicCalibration onBack={() => setModule('home')} />;
   if (module === 'introduction') return <DnbIntroductionCalibration onBack={() => setModule('home')} />;
   return (
-    <section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
+    <><section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[11px] font-black uppercase text-blue-500">Paragraphe · Méthodologie</div>
@@ -4566,9 +4578,9 @@ function DnbParagraphMethodology({ onBack }) {
             />
           </div>
         </div>
-        <a href="/dnb-paragraph.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-blue-200 bg-white shadow-sm" title="Ouvrir la fiche méthode en grand">
+        <button type="button" onClick={() => setShowSheet(true)} className="block overflow-hidden rounded-2xl border-2 border-blue-200 bg-white text-left shadow-sm" title="Ouvrir la fiche méthode en grand">
           <img src="/dnb-paragraph.png" alt="Fiche méthode du développement construit au DNB" className="block h-auto w-full" />
-        </a>
+        </button>
       </div>
       <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-800">Regarde d’abord la vidéo, puis utilise la fiche méthode comme modèle. Clique sur la fiche pour l’ouvrir en grand.</div>
       <div className="mt-5 rounded-3xl border-2 border-amber-200 bg-amber-50 p-4">
@@ -4596,7 +4608,7 @@ function DnbParagraphMethodology({ onBack }) {
         </div>
         <button type="button" onClick={() => setModule('introduction')} className="rounded-2xl bg-violet-600 px-6 py-4 text-sm font-black text-white shadow-sm">Calibrer les 6 introductions</button>
       </div>
-    </section>
+    </section><TrainingMethodSheetModal src={showSheet ? '/dnb-paragraph.png' : ''} title="Réussir le développement construit" onClose={() => setShowSheet(false)} /></>
   );
 }
 
@@ -6164,6 +6176,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
   const [dnbSubject, setDnbSubject] = useState('all');
   const [selectedDnbChapter, setSelectedDnbChapter] = useState(null);
   const [selectedLocalDnbActivity, setSelectedLocalDnbActivity] = useState('');
+  const [secondeMethodSheet, setSecondeMethodSheet] = useState('');
 
   if (mode === 'cinquieme') {
     return <FifthGradeGeoTraining user={user} canCalibrate={canCalibrate} />;
@@ -6324,9 +6337,9 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
                 <iframe className="h-full w-full" src="https://www.youtube.com/embed/9pITlqVsPhM" title="Méthodologie de la réponse à une question problématisée" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
               </div>
             </div>
-            <a href="/2d-RQP.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-blue-200 bg-white shadow-sm" title="Ouvrir la fiche RQP en grand">
+            <button type="button" onClick={() => setSecondeMethodSheet('rqp')} className="block overflow-hidden rounded-2xl border-2 border-blue-200 bg-white text-left shadow-sm" title="Ouvrir la fiche RQP en grand">
               <img src="/2d-RQP.png" alt="Fiche méthode pour réussir une RQP" className="block h-auto w-full" />
-            </a>
+            </button>
             <RqpMethodExercises />
           </div>
           <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-800">Regarde la vidéo, puis garde la fiche sous les yeux pour construire ta réponse. Clique sur la fiche pour l’ouvrir en grand.</div>
@@ -6339,9 +6352,9 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
                 <iframe className="h-full w-full" src="https://www.youtube.com/embed/j_zAZ5lKX2s" title="Méthodologie de l’analyse de documents" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
               </div>
             </div>
-            <a href="/2d-AnalyseDoc.png" target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
+            <button type="button" onClick={() => setSecondeMethodSheet('commentaire')} className="block overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white text-left shadow-sm" title="Ouvrir la fiche d’analyse de documents en grand">
               <img src="/2d-AnalyseDoc.png" alt="Fiche méthode pour analyser des documents" className="block h-auto w-full" />
-            </a>
+            </button>
           </div>
           <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-800">Regarde la vidéo, puis utilise la fiche pour structurer ton introduction, ton développement et ta conclusion. Clique sur la fiche pour l’ouvrir en grand.</div>
         </section>}
@@ -6349,6 +6362,11 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
           user={user}
           assessmentKinds={[isRqp ? 'rqp' : 'commentaire']}
           emptyTitle={isRqp ? "Aucun entraînement RQP disponible pour l'instant." : "Aucune question commentaire disponible pour l'instant."}
+        />
+        <TrainingMethodSheetModal
+          src={secondeMethodSheet === 'rqp' ? '/2d-RQP.png' : secondeMethodSheet === 'commentaire' ? '/2d-AnalyseDoc.png' : ''}
+          title={secondeMethodSheet === 'rqp' ? 'Réussir une RQP' : 'Analyser des documents'}
+          onClose={() => setSecondeMethodSheet('')}
         />
       </section>
     );
