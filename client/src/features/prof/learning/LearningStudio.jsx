@@ -5045,6 +5045,52 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setShowGeneralSheetBuilder(false);
     };
 
+    const copyLearningText = async (text, successMessage) => {
+        try {
+            await navigator.clipboard.writeText(String(text || ''));
+        } catch (_) {
+            const textarea = document.createElement('textarea');
+            textarea.value = String(text || '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+        }
+        alert(successMessage);
+    };
+
+    const copyNotebookLmSlidesSource = async () => {
+        const slidesUrl = String(formData.presentationUrl || '').trim();
+        if (!slidesUrl) return alert('Aucune présentation Google Slides n’est associée à cette séquence.');
+        await copyLearningText(slidesUrl, 'URL des slides copiée. Ajoute-la comme SOURCE 2 dans NotebookLM.');
+    };
+
+    const copyNotebookLmVideoPrompt = async () => {
+        const selectedChapter = (chapters || []).find((chapter) => String(chapter?._id || '') === String(formData.chapterId || ''));
+        const chapterTitle = String(selectedChapter?.title || formData.title || 'ce chapitre').trim();
+        const prompt = `GÉNÈRE UNE VIDÉO PÉDAGOGIQUE SUR « ${chapterTitle} » POUR DES ÉLÈVES DE NIVEAU ${targetLevel || 'INDIQUÉ'}.
+
+RÈGLE ABSOLUE SUR LES SOURCES
+- SOURCE 1 (le PDF pédagogique) est l'unique source du contenu, du plan, des explications, des faits, des dates, des notions et du récit de la vidéo.
+- SOURCE 2 (la présentation Google Slides) ne doit jamais fournir une information supplémentaire et ne doit jamais modifier le plan de la SOURCE 1.
+- SOURCE 2 sert exclusivement à illustrer les passages pour lesquels la SOURCE 1 contient une référence explicite de la forme « REPÈRE VISUEL — SOURCE 2, DIAPOSITIVE N°... ».
+- Pour chaque repère, utilise uniquement la ou les diapositives exactement numérotées dans la SOURCE 1. N'utilise aucune autre diapositive, même si elle semble pertinente.
+- Si un visuel référencé est indisponible ou illisible, poursuis la vidéo sans lui et n'invente aucun visuel de remplacement présenté comme provenant des slides.
+
+CONSTRUCTION DE LA VIDÉO
+- Suis exactement l'ordre des grandes parties de la SOURCE 1.
+- Explique clairement les liens de cause, conséquence, évolution, comparaison ou opposition présents dans la SOURCE 1.
+- Fais apparaître les repères visuels référencés au moment précis où l'idée correspondante est expliquée.
+- Commente ce qu'il faut observer dans chaque visuel, conformément à la légende donnée dans la SOURCE 1.
+- Adapte le vocabulaire, le rythme et la durée au niveau ${targetLevel || 'indiqué'}.
+- Termine par une synthèse fidèle à la page « À retenir » de la SOURCE 1.
+
+Avant de générer, vérifie que chaque phrase informative vient de la SOURCE 1 et que chaque visuel issu de la SOURCE 2 possède une référence explicite dans la SOURCE 1.`;
+        await copyLearningText(prompt, 'Prompt vidéo copié. Colle-le dans le générateur vidéo NotebookLM.');
+    };
+
     const copyGeminiSuperSheetPrompt = async () => {
         const selectedChapter = (chapters || []).find((chapter) => String(chapter?._id || '') === String(formData.chapterId || ''));
         const chapterTitle = String(selectedChapter?.title || 'CHAPITRE NON SÉLECTIONNÉ').trim();
@@ -5072,7 +5118,7 @@ Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-d
 
 À partir de mes sources, produis DEUX LIVRABLES cohérents à partir du même plan :
 1. une super-fiche de cours prête à être importée dans CondaWeb ;
-2. un document PDF illustré disponible en ligne, destiné à servir de source à la génération d'une vidéo NotebookLM.
+2. un document PDF pédagogique disponible en ligne, destiné à devenir la SOURCE 1 de la génération vidéo NotebookLM.
 
 Les deux livrables doivent transmettre exactement les mêmes connaissances, dans le même ordre et avec les mêmes grandes parties. Le PDF ne doit pas introduire un second plan ni contredire la fiche CondaWeb.
 
@@ -5145,17 +5191,19 @@ Ne produire aucune correction séparée : la bonne réponse est uniquement ident
 À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire avant le titre de la fiche.
 À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire après la dernière réponse du dernier QCM.
 
-LIVRABLE 2 — PDF ILLUSTRÉ SOURCE DE LA VIDÉO NOTEBOOKLM
+LIVRABLE 2 — PDF PÉDAGOGIQUE, SOURCE 1 DE LA VIDÉO NOTEBOOKLM
 
-Après la ligne === FIN FICHE CONDAWEB ===, crée un document visuel autonome fondé sur le même plan.
+Après la ligne === FIN FICHE CONDAWEB ===, crée un document pédagogique autonome fondé sur le même plan.
 Ce document doit :
 - reprendre le titre, l'introduction utile et toutes les grandes parties I, II, III... de la fiche ;
 - présenter les idées essentielles sous forme de pages aérées, avec titres, courts paragraphes, repères chronologiques et légendes ;
-- sélectionner directement dans les Google Slides quelques images stratégiques seulement : cartes, frises, schémas, œuvres, photographies, graphiques ou documents qui constituent des repères visuels essentiels ;
-- privilégier une image lorsqu'elle aide réellement à comprendre ou mémoriser une idée du plan ;
-- placer chaque image près de la partie concernée et ajouter une légende pédagogique indiquant précisément ce qu'il faut observer ;
-- ne jamais utiliser une image purement décorative, un doublon, une capture illisible ou un visuel appartenant à un autre chapitre ;
-- conserver une excellente lisibilité, sans surcharge, avec environ 1 à 3 repères visuels essentiels par grande partie selon les besoins ;
+- ne pas tenter d'extraire ou d'intégrer directement les images des Google Slides dans le PDF ;
+- identifier dans la présentation quelques visuels stratégiques seulement : cartes, frises, schémas, œuvres, photographies, graphiques ou documents qui constituent des repères visuels essentiels ;
+- privilégier un repère lorsqu'il aide réellement à comprendre ou mémoriser une idée du plan ;
+- insérer près de l'idée concernée une référence exacte respectant impérativement ce format : « REPÈRE VISUEL — SOURCE 2, DIAPOSITIVE N°12 : [description précise du visuel et de ce qu'il faut observer] » ;
+- indiquer le numéro réel de la diapositive dans la présentation, sans numéro inventé ni référence approximative ;
+- ne référencer aucun visuel décoratif, doublon, illisible ou appartenant à un autre chapitre ;
+- conserver une excellente lisibilité, sans surcharge, avec environ 1 à 3 références visuelles essentielles par grande partie selon les besoins ;
 - terminer par une page « À retenir » qui synthétise le plan et les notions indispensables ;
 - ne pas inclure le QCM dans le PDF : ce document est la source narrative et visuelle de la future vidéo NotebookLM.
 
@@ -5169,7 +5217,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
 - Toutes les grandes parties réellement enseignées dans les slides sont présentes, sans inventer une partie absente.
 - Chaque grande partie possède son bloc LEÇON correspondant dans le QCM.
 - Le bloc FICHE CONDAWEB est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.
-- Le PDF suit exactement le même plan, contient seulement des visuels utiles tirés des slides et possède un lien réel ou une instruction d'export honnête.
+- Le PDF suit exactement le même plan, référence précisément les diapositives utiles de la SOURCE 2 et possède un lien réel ou une instruction d'export honnête.
 - Les deux livrables sont adaptés au niveau ${targetLevel || 'indiqué'} de l'élève.`;
         // L'ouverture doit être synchrone avec le clic pour ne pas être bloquée
         // par Safari/Chrome avant l'écriture asynchrone dans le presse-papiers.
@@ -5839,21 +5887,31 @@ VÉRIFICATION AVANT DE RÉPONDRE
             {showGeneralSheetBuilder && (
                 <div className="fixed inset-0 z-[50030] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-2xl">
-                        <div className="flex items-center gap-3 border-b border-slate-200 px-6 py-4">
+                        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-6 py-4">
                             <div>
                                 <div className="text-xl font-black text-slate-900">Créer une fiche générale</div>
-                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche CondaWeb, son QCM et le PDF illustré destiné à la vidéo NotebookLM.</div>
+                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche, son QCM et le PDF source 1 ; les slides deviennent la source 2 visuelle de NotebookLM.</div>
                             </div>
                             <button
                                 type="button"
                                 className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
                                 onClick={copyGeminiSuperSheetPrompt}
                             >📋 Copier le prompt fiche + PDF et ouvrir Gemini</button>
+                            <button
+                                type="button"
+                                className="v84-res-btn upload !border-sky-300 !bg-sky-50 !text-sky-800"
+                                onClick={copyNotebookLmSlidesSource}
+                            >🖼️ Source 2 : slides</button>
+                            <button
+                                type="button"
+                                className="v84-res-btn upload !border-emerald-300 !bg-emerald-50 !text-emerald-800"
+                                onClick={copyNotebookLmVideoPrompt}
+                            >🎬 Prompt vidéo</button>
                             <button className="v84-close-btn" onClick={() => setShowGeneralSheetBuilder(false)}>✕</button>
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
-                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Le PDF et son lien servent ensuite de source à la vidéo NotebookLM.
+                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : PDF = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
                             </div>
                             <SheetRichTextEditor
                                 html={generalSheetHtml}
