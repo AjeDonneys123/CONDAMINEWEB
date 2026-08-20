@@ -314,16 +314,20 @@ const sheetToFillBlankText = (sheet = null) => {
     if (!html || typeof DOMParser === 'undefined') return plainText;
     try {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        doc.body.querySelectorAll('strong, b').forEach((node) => {
-            const value = String(node.textContent || '')
+        doc.body.querySelectorAll('strong, b, u').forEach((node) => {
+            const raw = String(node.textContent || '').replace(/\u00a0/g, ' ');
+            // Keep list markers and punctuation in the displayed text, outside
+            // the expected answer. A student must answer the word, not `1-`.
+            const prefix = raw.match(/^\s*(?:(?:\d{1,2}\s*[-.)]|[a-z]\)|[-–—•▪◦])\s*)?/i)?.[0] || '';
+            const withoutPrefix = raw.slice(prefix.length);
+            const suffix = withoutPrefix.match(/(?:\s*[,.!?;:…]+\s*)$/)?.[0] || '';
+            const value = withoutPrefix
+                .slice(0, Math.max(0, withoutPrefix.length - suffix.length))
                 .trim()
                 .replace(/^["“”«»]+|["“”«»]+$/g, '')
-                // Les marqueurs servent uniquement à structurer la fiche : un
-                // élève ne doit jamais avoir à saisir « - », « 1- » ou « a) ».
-                .replace(/^\s*(?:\d{1,2}\s*[-.)]|[a-z]\)|[-–—•▪◦])\s*/i, '')
                 .trim();
-            if (value) node.replaceWith(doc.createTextNode(`"${value}"`));
-            else node.replaceWith(doc.createTextNode(''));
+            if (value) node.replaceWith(doc.createTextNode(`${prefix}"${value}"${suffix}`));
+            else node.replaceWith(doc.createTextNode(raw));
         });
         doc.body.querySelectorAll('br').forEach((node) => node.replaceWith(doc.createTextNode('\n')));
         doc.body.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6').forEach((node) => {
@@ -5073,11 +5077,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const prompt = `GÉNÈRE UNE VIDÉO PÉDAGOGIQUE SUR « ${chapterTitle} » POUR DES ÉLÈVES DE NIVEAU ${targetLevel || 'INDIQUÉ'}.
 
 RÈGLE ABSOLUE SUR LES SOURCES
-- SOURCE 1 (le Google Docs pédagogique) est l'unique source du contenu, du plan, des explications, des faits, des dates, des notions et du récit de la vidéo.
+- SOURCE 1 (le PDF pédagogique) est l'unique source du contenu, du plan, des explications, des faits, des dates, des notions et du récit de la vidéo.
 - SOURCE 2 (la présentation Google Slides) ne doit jamais fournir une information supplémentaire et ne doit jamais modifier le plan de la SOURCE 1.
 - SOURCE 2 sert exclusivement à illustrer les passages pour lesquels la SOURCE 1 contient une référence explicite de la forme « REPÈRE VISUEL — SOURCE 2, DIAPOSITIVE N°... ».
 - Pour chaque repère, utilise uniquement la ou les diapositives exactement numérotées dans la SOURCE 1. N'utilise aucune autre diapositive, même si elle semble pertinente.
-- Si un visuel référencé est indisponible ou illisible, poursuis la vidéo sans lui.
+- Si un visuel référencé est indisponible ou illisible, poursuis la vidéo sans lui et n'invente aucun visuel de remplacement présenté comme provenant des slides.
 
 CONSTRUCTION DE LA VIDÉO
 - Suis exactement l'ordre des grandes parties de la SOURCE 1.
@@ -5100,7 +5104,7 @@ Avant de générer, vérifie que chaque phrase informative vient de la SOURCE 1 
         const courseDescription = String(selectedCourse?.description || formData.generalSheetCourseDescription || '').trim();
         const slidesUrl = String(formData.presentationUrl || '').trim();
         const slidesFocus = String(formData.presentationSlidesFocus || '').trim();
-        const prompt = `PROMPT UNIQUE CONDAWEB — FICHE GÉNÉRALE + GOOGLE DOCS SOURCE NOTEBOOKLM
+        const prompt = `PROMPT UNIQUE CONDAWEB — FICHE GÉNÉRALE + PDF SOURCE NOTEBOOKLM
 
 CHAPITRE À FICHER
 - Titre exact : ${chapterTitle}
@@ -5118,9 +5122,9 @@ Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-d
 
 À partir de mes sources, produis DEUX LIVRABLES cohérents à partir du même plan :
 1. une super-fiche de cours prête à être importée dans CondaWeb ;
-2. un document Google Docs pédagogique enregistré dans Google Drive et directement ajoutable comme SOURCE 1 dans NotebookLM.
+2. un document PDF pédagogique disponible en ligne, destiné à devenir la SOURCE 1 de la génération vidéo NotebookLM.
 
-Les deux livrables doivent transmettre exactement les mêmes connaissances, dans le même ordre et avec les mêmes grandes parties. Le Google Docs ne doit pas introduire un second plan ni contredire la fiche CondaWeb.
+Les deux livrables doivent transmettre exactement les mêmes connaissances, dans le même ordre et avec les mêmes grandes parties. Le PDF ne doit pas introduire un second plan ni contredire la fiche CondaWeb.
 
 LIVRABLE 1 — BLOC « FICHE CONDAWEB »
 
@@ -5191,13 +5195,13 @@ Ne produire aucune correction séparée : la bonne réponse est uniquement ident
 À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire avant le titre de la fiche.
 À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire après la dernière réponse du dernier QCM.
 
-LIVRABLE 2 — GOOGLE DOCS PÉDAGOGIQUE, SOURCE 1 DE LA VIDÉO NOTEBOOKLM
+LIVRABLE 2 — PDF PÉDAGOGIQUE, SOURCE 1 DE LA VIDÉO NOTEBOOKLM
 
 Après la ligne === FIN FICHE CONDAWEB ===, crée un document pédagogique autonome fondé sur le même plan.
 Ce document doit :
 - reprendre le titre, l'introduction utile et toutes les grandes parties I, II, III... de la fiche ;
 - présenter les idées essentielles sous forme de pages aérées, avec titres, courts paragraphes, repères chronologiques et légendes ;
-- ne pas tenter d'extraire ou d'intégrer directement les images des Google Slides dans le Google Docs ;
+- ne pas tenter d'extraire ou d'intégrer directement les images des Google Slides dans le PDF ;
 - identifier dans la présentation quelques visuels stratégiques seulement : cartes, frises, schémas, œuvres, photographies, graphiques ou documents qui constituent des repères visuels essentiels ;
 - privilégier un repère lorsqu'il aide réellement à comprendre ou mémoriser une idée du plan ;
 - insérer près de l'idée concernée une référence exacte respectant impérativement ce format : « REPÈRE VISUEL — SOURCE 2, DIAPOSITIVE N°12 : [description précise du visuel et de ce qu'il faut observer] » ;
@@ -5205,29 +5209,26 @@ Ce document doit :
 - ne référencer aucun visuel décoratif, doublon, illisible ou appartenant à un autre chapitre ;
 - conserver une excellente lisibilité, sans surcharge, avec environ 1 à 3 références visuelles essentielles par grande partie selon les besoins ;
 - terminer par une page « À retenir » qui synthétise le plan et les notions indispensables ;
-- ne pas inclure le QCM dans le Google Docs : ce document est la source narrative et visuelle de la future vidéo NotebookLM.
+- ne pas inclure le QCM dans le PDF : ce document est la source narrative et visuelle de la future vidéo NotebookLM.
 
-Crée réellement ce document dans Gemini Canvas, puis utilise « Exporter vers Docs » afin de créer un véritable fichier Google Docs dans Google Drive. Ne fournis ni PDF, ni fichier Word, ni simple texte présenté comme un document. Le résultat doit être un Google Docs natif que NotebookLM peut sélectionner directement depuis Google Drive.
+Crée réellement ce document dans Gemini Canvas ou Google Docs, exporte-le en PDF, enregistre-le dans Google Drive si l'accès est disponible, puis fournis à la fin :
+PDF NOTEBOOKLM : [lien direct permettant d'ouvrir ou télécharger le PDF]
 
-Donne au document le titre : « ${chapterTitle} — Source NotebookLM ».
-Vérifie que le document est enregistré et accessible avec le compte Google actuellement connecté, puis fournis à la fin :
-GOOGLE DOCS NOTEBOOKLM : [URL réelle au format https://docs.google.com/document/d/...]
-
-Le lien doit ouvrir le Google Docs réel, et non une page Gemini Canvas, un aperçu temporaire ou un faux lien. Si Gemini ne peut pas créer ou exporter automatiquement le Google Docs, génère tout de même le document complet dans Canvas et écris exactement : « ACTION MANUELLE REQUISE : cliquez sur Partager et exporter > Exporter vers Docs, puis ajoutez ce Google Docs comme source dans NotebookLM. » N'invente jamais d'URL.
+Le lien doit être exploitable en ligne et partager le fichier en lecture. Si Gemini ne peut pas publier automatiquement le fichier, génère tout de même le document complet prêt à exporter et indique clairement l'unique action manuelle nécessaire pour obtenir le PDF, sans inventer de faux lien.
 
 VÉRIFICATION AVANT DE RÉPONDRE
 - Le titre et tout le contenu portent bien sur « ${chapterTitle} ».
 - Toutes les grandes parties réellement enseignées dans les slides sont présentes, sans inventer une partie absente.
 - Chaque grande partie possède son bloc LEÇON correspondant dans le QCM.
 - Le bloc FICHE CONDAWEB est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.
-- Le Google Docs suit exactement le même plan, référence précisément les diapositives utiles de la SOURCE 2 et possède une URL Google Docs réelle ou l'instruction d'export honnête.
+- Le PDF suit exactement le même plan, référence précisément les diapositives utiles de la SOURCE 2 et possède un lien réel ou une instruction d'export honnête.
 - Les deux livrables sont adaptés au niveau ${targetLevel || 'indiqué'} de l'élève.`;
         // L'ouverture doit être synchrone avec le clic pour ne pas être bloquée
         // par Safari/Chrome avant l'écriture asynchrone dans le presse-papiers.
         window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
         try {
             await navigator.clipboard.writeText(prompt);
-            alert('Prompt unique fiche + Google Docs copié. Colle-le dans la nouvelle fenêtre Gemini.');
+            alert('Prompt unique fiche + PDF copié. Colle-le dans la nouvelle fenêtre Gemini.');
         } catch (_) {
             const textarea = document.createElement('textarea');
             textarea.value = prompt;
@@ -5237,7 +5238,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
             textarea.select();
             document.execCommand('copy');
             textarea.remove();
-            alert('Prompt unique fiche + Google Docs copié. Colle-le dans la nouvelle fenêtre Gemini.');
+            alert('Prompt unique fiche + PDF copié. Colle-le dans la nouvelle fenêtre Gemini.');
         }
     };
 
@@ -5893,13 +5894,13 @@ VÉRIFICATION AVANT DE RÉPONDRE
                         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-6 py-4">
                             <div>
                                 <div className="text-xl font-black text-slate-900">Créer une fiche générale</div>
-                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche, son QCM et le Google Docs source 1 ; les slides deviennent la source 2 visuelle de NotebookLM.</div>
+                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche, son QCM et le PDF source 1 ; les slides deviennent la source 2 visuelle de NotebookLM.</div>
                             </div>
                             <button
                                 type="button"
                                 className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
                                 onClick={copyGeminiSuperSheetPrompt}
-                            >📋 Copier le prompt fiche + Google Docs et ouvrir Gemini</button>
+                            >📋 Copier le prompt fiche + PDF et ouvrir Gemini</button>
                             <button
                                 type="button"
                                 className="v84-res-btn upload !border-sky-300 !bg-sky-50 !text-sky-800"
@@ -5914,7 +5915,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
-                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : Google Docs = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
+                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : PDF = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
                             </div>
                             <SheetRichTextEditor
                                 html={generalSheetHtml}

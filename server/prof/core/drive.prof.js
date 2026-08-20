@@ -47,6 +47,34 @@ const collectSlidesTextAndColors = (pageElements = [], detectColor = null) => {
     return { texts, colors: Array.from(colors) };
 };
 
+const collectSlidesTitleCandidates = (pageElements = []) => {
+    const rows = [];
+    const visitTextElements = (elements = [], isTitle = false) => {
+        (Array.isArray(elements) ? elements : []).forEach((element) => {
+            const text = normalizeSlidesTextChunk(element?.textRun?.content || element?.autoText?.content || '');
+            if (!text) return;
+            rows.push({
+                text,
+                fontSize: Number(element?.textRun?.style?.fontSize?.magnitude || 0),
+                isTitle
+            });
+        });
+    };
+    const visitElement = (element) => {
+        if (!element || typeof element !== 'object') return;
+        const placeholderType = String(element?.shape?.placeholder?.type || '').toUpperCase();
+        const isTitle = placeholderType === 'TITLE' || placeholderType === 'CENTERED_TITLE';
+        visitTextElements(element?.shape?.text?.textElements, isTitle);
+        if (element?.wordArt?.text) rows.push({ text: normalizeSlidesTextChunk(element.wordArt.text), fontSize: 100, isTitle: true });
+        (element?.table?.tableRows || []).forEach((row) => (row?.tableCells || []).forEach((cell) => visitTextElements(cell?.text?.textElements)));
+        (element?.group?.children || []).forEach(visitElement);
+    };
+    (Array.isArray(pageElements) ? pageElements : []).forEach(visitElement);
+    return rows;
+};
+
+const chapterMarkerPattern = /^(?:ch(?:apitre)?\.?\s*(?:n[°o]\s*)?(?:\d+|[ivxlcdm]+)\b|chapitre\b)/i;
+
 const extractSlideTextViaOcr = async ({ presentationId = '', pageObjectId = '', slideNumber = 0, slidesApi = null }) => {
     const pid = String(presentationId || '').trim();
     const oid = String(pageObjectId || '').trim();
@@ -265,6 +293,112 @@ const ProfDrive = {
         };
     },
 
+    splitGoogleSlidesByChapter: async (presentationRef = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        const sourceTitle = String(pres?.data?.title || 'Présentation').trim();
+        const slides = Array.isArray(pres?.data?.slides) ? pres.data.slides : [];
+        const boundaries = [];
+
+        slides.forEach((slide, index) => {
+            const candidates = collectSlidesTitleCandidates(slide?.pageElements || []);
+            const marker = candidates.find((row) => chapterMarkerPattern.test(row.text)
+                && (row.isTitle || row.fontSize >= 24 || (row.fontSize === 0 && candidates.length <= 4)));
+            if (!marker) return;
+            const extracted = collectSlidesTextAndColors(slide?.pageElements || []);
+            const fullText = normalizeSlidesTextChunk(extracted.texts.join(' '));
+            boundaries.push({ index, slideNumber: index + 1, title: (fullText || marker.text).slice(0, 140) });
+        });
+
+        if (!boundaries.length) {
+            throw Object.assign(new Error('Aucun grand titre « CH » ou « Chapitre » détecté dans la présentation.'), { status: 422 });
+        }
+
+        const chapters = [];
+        for (let index = 0; index < boundaries.length; index += 1) {
+            const start = boundaries[index].index;
+            const end = index + 1 < boundaries.length ? boundaries[index + 1].index - 1 : slides.length - 1;
+            const chapterTitle = boundaries[index].title || `Chapitre ${index + 1}`;
+            const copy = await drive.files.copy({
+                fileId: presentationId,
+                requestBody: { name: `${chapterTitle} — NotebookLM`.slice(0, 180) },
+                fields: 'id,name'
+            });
+            const copyId = String(copy?.data?.id || '');
+            if (!copyId) throw new Error(`Copie du chapitre ${index + 1} impossible`);
+            const deleteRequests = slides
+                .filter((_slide, slideIndex) => slideIndex < start || slideIndex > end)
+                .map((slide) => ({ deleteObject: { objectId: String(slide?.objectId || '') } }))
+                .filter((request) => request.deleteObject.objectId);
+            if (deleteRequests.length) {
+                await slidesApi.presentations.batchUpdate({
+                    presentationId: copyId,
+                    requestBody: { requests: deleteRequests }
+                });
+            }
+            chapters.push({
+                title: chapterTitle,
+                startSlide: start + 1,
+                endSlide: end + 1,
+                slideCount: end - start + 1,
+                presentationId: copyId,
+                editUrl: `https://docs.google.com/presentation/d/${copyId}/edit`
+            });
+        }
+        return { sourcePresentationId: presentationId, sourceTitle, chapters };
+    },
+
+    createGoogleSlidesRange: async (presentationRef = '', startSlide = 1, endSlide = 1, title = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        const slides = Array.isArray(pres?.data?.slides) ? pres.data.slides : [];
+        const start = Math.max(1, Number(startSlide || 0));
+        const end = Math.min(slides.length, Number(endSlide || 0));
+        if (!Number.isInteger(start) || !Number.isInteger(end) || start > end) {
+            throw Object.assign(new Error(`Sélection invalide. Choisis une plage comprise entre 1 et ${slides.length}.`), { status: 400 });
+        }
+        const copy = await drive.files.copy({
+            fileId: presentationId,
+            requestBody: { name: `${String(title || `Slides ${start}-${end}`).trim()} — NotebookLM`.slice(0, 180) },
+            fields: 'id,name'
+        });
+        const copyId = String(copy?.data?.id || '');
+        if (!copyId) throw new Error('Copie de la présentation impossible');
+        const deleteRequests = slides
+            .filter((_slide, index) => index + 1 < start || index + 1 > end)
+            .map((slide) => ({ deleteObject: { objectId: String(slide?.objectId || '') } }))
+            .filter((request) => request.deleteObject.objectId);
+        if (deleteRequests.length) {
+            await slidesApi.presentations.batchUpdate({ presentationId: copyId, requestBody: { requests: deleteRequests } });
+        }
+        await drive.permissions.create({
+            fileId: copyId,
+            requestBody: {
+                type: 'anyone',
+                role: 'reader',
+                allowFileDiscovery: false
+            },
+            fields: 'id,role,type'
+        });
+        return {
+            presentationId: copyId,
+            editUrl: `https://docs.google.com/presentation/d/${copyId}/edit`,
+            publicReaderUrl: `https://docs.google.com/presentation/d/${copyId}/view`,
+            publicAccess: 'reader',
+            startSlide: start,
+            endSlide: end,
+            slideCount: end - start + 1
+        };
+    },
+
     getGoogleDocStats: async (docId) => {
         if (!oauth2Client) throw new Error("Drive non connecté");
         const docs = google.docs({ version: 'v1', auth: oauth2Client });
@@ -288,7 +422,7 @@ const ProfDrive = {
         };
     },
 
-    replaceGoogleDocContent: async (docId, text = '') => {
+    replaceGoogleDocContent: async (docId, text = '', boldRanges = []) => {
         if (!oauth2Client) throw new Error("Drive non connecté");
         if (!docId) throw new Error("docId manquant");
         const docs = google.docs({ version: 'v1', auth: oauth2Client });
@@ -309,6 +443,18 @@ const ProfDrive = {
                     location: { index: 1 },
                     text: safeText
                 }
+            });
+            (Array.isArray(boldRanges) ? boldRanges : []).slice(0, 500).forEach((range) => {
+                const start = Math.max(0, Math.min(safeText.length, Number(range?.start || 0)));
+                const end = Math.max(start, Math.min(safeText.length, Number(range?.end || 0)));
+                if (end <= start) return;
+                requests.push({
+                    updateTextStyle: {
+                        range: { startIndex: start + 1, endIndex: end + 1 },
+                        textStyle: { bold: true },
+                        fields: 'bold'
+                    }
+                });
             });
         }
         if (requests.length > 0) {

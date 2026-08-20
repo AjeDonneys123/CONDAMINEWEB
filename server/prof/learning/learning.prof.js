@@ -209,8 +209,10 @@ const resequenceVideoSegments = async (teacherId = '', normalizedUrl = '', stepI
     rows.sort(timelineSegmentCompare);
     for (let i = 0; i < rows.length; i += 1) {
         const wanted = i + 1;
-        if (Number(rows[i].order || 0) === wanted) continue;
+        const wantedLabel = `Séquence ${i}`;
+        if (Number(rows[i].order || 0) === wanted && String(rows[i].label || '') === wantedLabel) continue;
         rows[i].order = wanted;
+        rows[i].label = wantedLabel;
         await rows[i].save();
     }
 };
@@ -893,6 +895,57 @@ router.post('/slides/manifest', async (req, res) => {
     }
 });
 
+router.post('/slides/split-chapters', async (req, res) => {
+    try {
+        const presentationUrl = String(req.body?.presentationUrl || req.body?.presentationId || '').trim();
+        if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
+        const result = await ProfDrive.splitGoogleSlidesByChapter(presentationUrl);
+        return res.json({ ok: true, ...result });
+    } catch (e) {
+        const status = Number(e?.status || e?.response?.status || 500);
+        return res.status(status >= 400 && status < 600 ? status : 500).json({ error: String(e?.message || 'Découpage impossible') });
+    }
+});
+
+router.post('/slides/create-range', async (req, res) => {
+    try {
+        const presentationUrl = String(req.body?.presentationUrl || '').trim();
+        const title = String(req.body?.title || 'Chapitre').trim();
+        if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
+        const result = await ProfDrive.createGoogleSlidesRange(presentationUrl, Number(req.body?.startSlide), Number(req.body?.endSlide), title);
+        return res.json({ ok: true, ...result });
+    } catch (e) {
+        const status = Number(e?.status || e?.response?.status || 500);
+        return res.status(status >= 400 && status < 600 ? status : 500).json({ error: String(e?.message || 'Création impossible') });
+    }
+});
+
+router.post('/general-sheet/google-doc', async (req, res) => {
+    try {
+        const title = String(req.body?.title || 'Fiche générale').trim().slice(0, 180);
+        const text = String(req.body?.text || '').replace(/\r/g, '').trim().slice(0, 60000);
+        const boldRanges = (Array.isArray(req.body?.boldRanges) ? req.body.boldRanges : [])
+            .map((range) => ({ start: Number(range?.start || 0), end: Number(range?.end || 0) }))
+            .filter((range) => Number.isInteger(range.start) && Number.isInteger(range.end) && range.start >= 0 && range.end > range.start && range.end <= text.length)
+            .slice(0, 500);
+        const existingUrl = String(req.body?.existingUrl || '').trim();
+        if (!text) return res.status(400).json({ error: 'La fiche générale est vide.' });
+        const existingId = (existingUrl.match(/\/document\/d\/([a-zA-Z0-9_-]+)/i) || [])[1] || '';
+        let docId = existingId;
+        let editUrl = existingUrl;
+        if (!docId) {
+            const created = await ProfDrive.createGoogleDoc(`${title} — Source NotebookLM`);
+            docId = String(created?.docId || '');
+            editUrl = String(created?.editUrl || '');
+        }
+        if (!docId) throw new Error('Création du Google Docs impossible');
+        await ProfDrive.replaceGoogleDocContent(docId, text, boldRanges);
+        return res.json({ ok: true, docId, editUrl: editUrl || `https://docs.google.com/document/d/${docId}/edit` });
+    } catch (e) {
+        return res.status(500).json({ error: String(e?.message || 'Création du Google Docs impossible') });
+    }
+});
+
 router.get('/slides/thumbnail', async (req, res) => {
     try {
         const presentationId = String(req.query.presentationId || '').trim();
@@ -989,7 +1042,7 @@ router.get('/video-segments', async (req, res) => {
         if (strictStepId && stepId) query.stepId = stepId;
         const list = await VideoSegment.find(query).lean();
         list.sort(timelineSegmentCompare);
-        res.json(list);
+        res.json(list.map((segment, index) => ({ ...segment, label: `Séquence ${index}` })));
     } catch (e) {
         res.status(500).json([]);
     }
@@ -1383,6 +1436,8 @@ router.post('/', async (req, res) => {
         data.sections = sanitizeSections(data.sections);
         data.steps = restoreGeneralSheet(sanitizeSteps(data.steps), data.title).steps;
         data.presentationUrl = String(data.presentationUrl || '').trim();
+        data.presentationSourceUrl = String(data.presentationSourceUrl || '').trim();
+        data.generalSheetDocUrl = String(data.generalSheetDocUrl || '').trim();
         data.presentationSlidesFocus = String(data.presentationSlidesFocus || '').trim().slice(0, 200);
         data.generalSheetCourseId = String(data.generalSheetCourseId || '').trim();
         data.generalSheetCourseTitle = String(data.generalSheetCourseTitle || '').trim().slice(0, 300);

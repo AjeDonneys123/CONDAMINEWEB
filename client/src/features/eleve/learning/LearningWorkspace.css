@@ -312,6 +312,10 @@
     line-height: 2.35;
 }
 
+.learning-fill-sentence > span {
+    white-space: pre-wrap;
+}
+
 .learning-fill-input {
     width: min(190px, 42vw);
     margin: 0 6px;

@@ -213,6 +213,8 @@ const Models = {
         active: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
         presentationUrl: { type: String, default: '' },
+        presentationSourceUrl: { type: String, default: '' },
+        generalSheetDocUrl: { type: String, default: '' },
         presentationSlidesFocus: { type: String, default: '' },
         generalSheetCourseId: { type: String, default: '' },
         generalSheetCourseTitle: { type: String, default: '' },

@@ -194,6 +194,60 @@ const serializePlainText = (root) => {
     .replace(/\n$/, '');
 };
 
+const applySheetHeadingColors = (root) => {
+  if (!root) return false;
+  const blockTags = new Set(['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+  const styleLine = (line) => {
+    const text = String(line.textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (/^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(text)) {
+      line.style.color = '#dc2626';
+      line.style.fontWeight = '700';
+      return true;
+    }
+    if (/^\d{1,2}\s*-\s+.+/.test(text)) {
+      line.style.color = '#16a34a';
+      line.style.fontWeight = '700';
+      return true;
+    }
+    return false;
+  };
+
+  const nodes = Array.from(root.childNodes);
+  const hasInlineLines = nodes.some((node) => node.nodeName === 'BR');
+  let changed = false;
+  if (hasInlineLines) {
+    const output = document.createDocumentFragment();
+    let inlineNodes = [];
+    const flush = () => {
+      if (!inlineNodes.length) return;
+      const line = document.createElement('div');
+      inlineNodes.forEach((node) => line.appendChild(node));
+      if (styleLine(line)) changed = true;
+      output.appendChild(line);
+      inlineNodes = [];
+    };
+    nodes.forEach((node) => {
+      if (node.nodeName === 'BR') {
+        flush();
+      } else if (node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName)) {
+        flush();
+        if (styleLine(node)) changed = true;
+        output.appendChild(node);
+      } else {
+        inlineNodes.push(node);
+      }
+    });
+    flush();
+    if (changed) root.replaceChildren(output);
+    return changed;
+  }
+
+  root.querySelectorAll('div, p, li, h1, h2, h3, h4, h5, h6').forEach((line) => {
+    if (styleLine(line)) changed = true;
+  });
+  return changed;
+};
+
 export default function SheetRichTextEditor({ html = '', plainText = '', onChange }) {
   const editorRef = useRef(null);
   const displayedHtml = useMemo(
@@ -227,6 +281,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     const htmlFromClipboard = event.clipboardData?.getData('text/html') || '';
     const safeHtml = reformatImportedSheetStructure(htmlFromClipboard, text);
     document.execCommand('insertHTML', false, normalizeExpectedHtml(safeHtml));
+    applySheetHeadingColors(editorRef.current);
     emitChange();
   };
 
@@ -273,6 +328,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     // La structure et la numérotation fournies par NotebookLM doivent rester
     // strictement inchangées. La renumérotation reste disponible via le bouton
     // manuel « 1- Numéroter » lorsque le professeur en a réellement besoin.
+    applySheetHeadingColors(editorRef.current);
     emitChange();
   };
 
@@ -382,8 +438,8 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border-4 border-slate-300 bg-white shadow-inner focus-within:border-purple-500">
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b-2 border-slate-200 bg-slate-50 p-3">
+    <div className="flex max-h-[600px] min-h-[540px] flex-col overflow-hidden rounded-2xl border-4 border-slate-300 bg-white shadow-inner focus-within:border-purple-500">
+      <div className="z-10 shrink-0 flex flex-wrap items-center gap-2 border-b-2 border-slate-200 bg-slate-50 p-3">
         <button
           type="button"
           className="grid h-10 min-w-10 place-items-center rounded-lg border-2 border-slate-300 bg-white px-3 text-lg font-black text-slate-900 shadow-sm hover:bg-slate-100"
@@ -438,7 +494,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
       </div>
       <div
         ref={editorRef}
-        className="sheet-rich-editor min-h-[540px] w-full whitespace-pre-wrap p-6 text-lg font-medium leading-relaxed text-slate-900 outline-none"
+        className="sheet-rich-editor min-h-0 flex-1 overflow-y-auto w-full whitespace-pre-wrap p-6 text-lg font-medium leading-relaxed text-slate-900 outline-none"
         contentEditable
         suppressContentEditableWarning
         onInput={emitChange}

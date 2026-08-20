@@ -75,6 +75,9 @@ const parseFillBlankText = (value = '') => {
             // Compatibilité avec les anciennes fiches déjà sauvegardées : les
             // signes de structure ne font jamais partie de la réponse attendue.
             .replace(/^\s*(?:\d{1,2}\s*[-.)]|[a-z]\)|[-–—•▪◦])\s*/i, '')
+            // A blank asks for words only.  Punctuation stays in the sentence
+            // and must never become an expected student answer.
+            .replace(/^[\s,.;:!?…()\[\]{}«»"'’\-–—•▪◦]+|[\s,.;:!?…()\[\]{}«»"'’\-–—•▪◦]+$/g, '')
             .trim();
         return { raw: match[0], content, end: position + match[0].length };
     };
@@ -2259,8 +2262,11 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             .filter((r) => r.start < segment.end && r.end > segment.start)
             .map((r) => ({ start: Math.max(0, r.start - base), end: Math.min(source.length, r.end - base) }))
             .filter((r) => r.end > r.start);
-        if (localRanges.length === 0) return source;
-        const cuts = [0, source.length, ...localRanges.flatMap((r) => [r.start, r.end])];
+        const lineCuts = [];
+        source.split('').forEach((character, index) => {
+            if (character === '\n') lineCuts.push(index + 1);
+        });
+        const cuts = [0, source.length, ...lineCuts, ...localRanges.flatMap((r) => [r.start, r.end])];
         const points = [...new Set(cuts)].sort((a, b) => a - b);
         const out = [];
         for (let i = 0; i < points.length - 1; i += 1) {
@@ -2269,8 +2275,18 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             if (end <= start) continue;
             const chunk = source.slice(start, end);
             const inPink = localRanges.some((r) => start >= r.start && end <= r.end);
-            if (!inPink) out.push(<React.Fragment key={`t_${segment.index}_${start}`}>{chunk}</React.Fragment>);
-            else out.push(<mark key={`p_${segment.index}_${start}`} className="bg-pink-200 text-pink-900 rounded px-[2px]">{chunk}</mark>);
+            const globalStart = base + start;
+            const lineStart = Math.max(0, sheetText.lastIndexOf('\n', Math.max(0, globalStart - 1)) + 1);
+            const lineEndMatch = sheetText.indexOf('\n', globalStart);
+            const lineEnd = lineEndMatch < 0 ? sheetText.length : lineEndMatch;
+            const line = sheetText.slice(lineStart, lineEnd).trim();
+            const romanHeading = /^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(line);
+            const mainPoint = /^\d{1,2}\s*-\s+.+/.test(line);
+            const hierarchyStyle = romanHeading
+                ? { color: '#dc2626', fontWeight: 800 }
+                : mainPoint ? { color: '#16a34a', fontWeight: 800 } : undefined;
+            if (!inPink) out.push(<span key={`t_${segment.index}_${start}`} style={hierarchyStyle}>{chunk}</span>);
+            else out.push(<mark key={`p_${segment.index}_${start}`} className="bg-pink-200 rounded px-[2px]" style={hierarchyStyle || { color: '#831843' }}>{chunk}</mark>);
         }
         return out;
     };
