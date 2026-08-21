@@ -270,6 +270,8 @@ router.get('/plan/:classId', async (req, res) => {
             let homeworkAssigned = 0;
             let gameAssigned = 0;
             let learningAssigned = 0;
+            let learningOpened = 0;
+            let learningFullyValidated = 0;
             hws.forEach(hw => {
                 const isAssigned = hw.isAllClass || (hw.assignedStudents || []).some(id => String(id) === sId);
                 if (isAssigned) {
@@ -299,6 +301,9 @@ router.get('/plan/:classId', async (req, res) => {
                 learningAssigned += 1;
                 const completion = (m.completions || []).find((c) => String(c?.studentId || '') === sId);
                 learningProgressValue += Math.max(0, Number(completion?.currentStep || 0));
+                if (completion) learningOpened += 1;
+                const validatedCount = Array.isArray(completion?.validatedStepIndexes) ? completion.validatedStepIndexes.length : 0;
+                if (completion?.completedAt || (m.steps || []).length > 0 && validatedCount >= (m.steps || []).length) learningFullyValidated += 1;
             });
             const hwAvg = hwNotes.length > 0
                 ? Math.round((hwNotes.reduce((a, b) => a + b, 0) / hwNotes.length) * 10) / 10
@@ -316,6 +321,9 @@ router.get('/plan/:classId', async (req, res) => {
                     game: gameAssigned,
                     learning: learningAssigned
                 },
+                learningStatus: learningAssigned === 0 || learningOpened === 0
+                    ? 'yellow'
+                    : (learningFullyValidated >= learningAssigned ? 'green' : 'orange'),
                 myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || ""
             };
         });

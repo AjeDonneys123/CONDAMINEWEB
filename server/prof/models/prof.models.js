@@ -233,6 +233,7 @@ const Models = {
                 studentId: mongoose.Schema.Types.ObjectId,
                 completedAt: Date,
                 currentStep: { type: Number, default: 0 },
+                validatedStepIndexes: { type: [Number], default: [] },
                 lastUpdateAt: Date,
                 chatDocId: { type: String, default: '' },
                 chatDocUrl: { type: String, default: '' },

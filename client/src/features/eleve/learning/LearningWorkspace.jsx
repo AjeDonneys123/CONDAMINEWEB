@@ -485,6 +485,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                 return visibleSectionIds.has(sid);
             })
             .sort((a, b) => {
+            // La fiche générale est l'entrée du parcours, même si d'anciennes
+            // sauvegardes lui ont attribué un ordre numérique en fin de liste.
+            if (a?.isGeneralSheetMaster === true && b?.isGeneralSheetMaster !== true) return -1;
+            if (b?.isGeneralSheetMaster === true && a?.isGeneralSheetMaster !== true) return 1;
             const ao = Number(a?.order);
             const bo = Number(b?.order);
             const aOk = Number.isFinite(ao);
@@ -497,7 +501,11 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     }, [module?.steps, visibleSectionIds]);
     const initialStep = Math.max(0, Math.min(Number(module?.completion?.currentStep || 0), Math.max(0, steps.length - 1)));
     const [stepIndex, setStepIndex] = useState(initialStep);
-    const [validated, setValidated] = useState(() => new Set(Array.from({ length: initialStep }, (_, i) => i)));
+    const [validated, setValidated] = useState(() => new Set(
+        Array.isArray(module?.completion?.validatedStepIndexes)
+            ? module.completion.validatedStepIndexes.map(Number).filter(Number.isInteger)
+            : Array.from({ length: initialStep }, (_, i) => i)
+    ));
     const [sheetReadMs, setSheetReadMs] = useState(0);
     const [sheetScrollRatio, setSheetScrollRatio] = useState(0);
     const [videoEnded, setVideoEnded] = useState(false);
@@ -1231,6 +1239,20 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return { ...state, blankAnswers: rows };
         });
     };
+    const dictateBlank = (questionId, blankIndex) => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setGateHint('La dictée n’est pas disponible dans ce navigateur.');
+            return;
+        }
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'fr-FR';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.onresult = (event) => updateBlankAnswer(questionId, blankIndex, event.results?.[0]?.[0]?.transcript || '');
+        recognition.onerror = () => setGateHint('Micro indisponible : écris la réponse au clavier.');
+        try { recognition.start(); } catch (_) {}
+    };
     const appendQuizAnswer = (quizKey, questionId, addition) => {
         const key = String(quizKey || '');
         const id = String(questionId || '');
@@ -1758,8 +1780,19 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         await fetch('/api/eleve/learning/progress', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ moduleId: module._id, studentId, sheetTimesMs, ...payload })
+            body: JSON.stringify({ moduleId: module._id, studentId, sheetTimesMs, validatedStepIndexes: [...validated], ...payload })
         });
+    };
+
+    const goToNextStepWithoutValidation = async () => {
+        if (stepIndex >= steps.length - 1) {
+            setGateHint(`Il reste ${Math.max(0, steps.length - validated.size)} étape(s) à valider. Reviens sur celles marquées « étape non validée ». `);
+            return;
+        }
+        setGateHint('Étape non validée : tu peux continuer, mais elle devra être validée avant la fin.');
+        const nextStep = stepIndex + 1;
+        setStepIndex(nextStep);
+        try { await saveProgress({ currentStep: nextStep, completed: false }); } catch (_) {}
     };
 
     const advanceAfterAcceptedQuestion = async () => {
@@ -2611,6 +2644,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                     <React.Fragment key={`${item.id}_blank_${blankIndex}`}>
                                                         <span>{part}</span>
                                                         {blankIndex < fillBlank.answers.length && (
+                                                            <>
                                                             <input
                                                                 className="learning-fill-input"
                                                                 value={currentQuizState.blankAnswers?.[item.id]?.[blankIndex] || ''}
@@ -2618,6 +2652,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                                 aria-label={`Trou ${blankIndex + 1}`}
                                                                 onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
                                                             />
+                                                            <button
+                                                                type="button"
+                                                                className="learning-quiz-mic learning-fill-mic"
+                                                                disabled={!canEdit}
+                                                                title="Dicter ce trou"
+                                                                onClick={() => dictateBlank(item.id, blankIndex)}
+                                                            >🎙️</button>
+                                                            </>
                                                         )}
                                                     </React.Fragment>
                                                 ))}
@@ -2745,7 +2787,15 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))}
                     </button>
                 )}
+                <button className="learning-btn ghost" disabled={saving} onClick={goToNextStepWithoutValidation}>
+                    {stepIndex >= steps.length - 1 ? 'Voir les étapes manquantes' : 'Suivant sans valider'}
+                </button>
             </div>
+            {stepIndex >= steps.length - 1 && validated.size < steps.length && (
+                <div className="learning-error">
+                    Activité incomplète : {steps.length - validated.size} étape(s) ne sont pas validées. Reviens en arrière pour les valider avant de quitter.
+                </div>
+            )}
             {gateHint && <div className="learning-error">{gateHint}</div>}
             {activeOral && (
                 <div className="learning-oral-overlay">

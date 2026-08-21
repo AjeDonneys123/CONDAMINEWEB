@@ -908,7 +908,7 @@ router.get('/list/:studentId', async (req, res) => {
 router.post('/progress', async (req, res) => {
     try {
         const LearningModule = mongoose.model('LearningModule');
-        const { moduleId, studentId, currentStep = 0, completed = false, sheetTimesMs = {} } = req.body || {};
+        const { moduleId, studentId, currentStep = 0, completed = false, sheetTimesMs = {}, validatedStepIndexes = [] } = req.body || {};
         if (!moduleId || !studentId) return res.status(400).json({ error: 'moduleId et studentId requis' });
 
         const row = await LearningModule.findById(moduleId);
@@ -922,6 +922,7 @@ router.post('/progress', async (req, res) => {
             studentId: studentId,
             currentStep: Number(currentStep || 0),
             lastUpdateAt: now,
+            validatedStepIndexes: [...new Set((Array.isArray(validatedStepIndexes) ? validatedStepIndexes : []).map(Number).filter((value) => Number.isInteger(value) && value >= 0 && value < (row.steps || []).length))],
             sheetTimesMs: {}
         };
         if (sheetTimesMs && typeof sheetTimesMs === 'object') {
@@ -931,7 +932,9 @@ router.post('/progress', async (req, res) => {
                 patch.sheetTimesMs[key] = Math.max(0, Number(sheetTimesMs[k] || 0));
             });
         }
-        if (completed) patch.completedAt = now;
+        // Un parcours n'est achevé que lorsque toutes ses étapes ont été validées,
+        // même si l'élève a utilisé « suivant sans valider ».
+        if (completed && patch.validatedStepIndexes.length >= (row.steps || []).length) patch.completedAt = now;
 
         if (idx >= 0) {
             const base = typeof next[idx]?.toObject === 'function' ? next[idx].toObject() : next[idx];
@@ -941,6 +944,7 @@ router.post('/progress', async (req, res) => {
                 mergedTimes[k] = Math.max(Number(prevTimes[k] || 0), Number(patch.sheetTimesMs[k] || 0));
             });
             patch.sheetTimesMs = mergedTimes;
+            if (patch.validatedStepIndexes.length === 0 && Array.isArray(base?.validatedStepIndexes)) patch.validatedStepIndexes = base.validatedStepIndexes;
             next[idx] = { ...base, ...patch };
         }
         else next.push(patch);

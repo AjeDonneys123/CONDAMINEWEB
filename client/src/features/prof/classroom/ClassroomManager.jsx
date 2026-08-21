@@ -705,7 +705,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <div className="sc-realizations sc-realizations-inline">
                                     {getActivityTotals(student).homework > 0 && <span className="alpha-mini-stat hw" title="Devoir">{getActivityStats(student).homework}</span>}
                                     {getActivityTotals(student).game > 0 && <span className="alpha-mini-stat game" title="Jeu">{getActivityStats(student).game}</span>}
-                                    {getActivityTotals(student).learning > 0 && <span className="alpha-mini-stat learning" title="Apprentissage">{getActivityStats(student).learning}</span>}
+                                    {getActivityTotals(student).learning > 0 && <span className={`alpha-mini-stat learning learning-${student.learningStatus || 'yellow'}`} title="Apprentissage : vert = tout validé, orange = partiel, jaune = non ouvert">{getActivityStats(student).learning}</span>}
                                 </div>
                                 <div className="sc-avatar-row">
                                     <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
@@ -797,7 +797,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                         <div className="alpha-grid-topline">
                                             {aTotals.homework > 0 && <span className="alpha-mini-stat hw">{aStats.homework}</span>}
                                             {aTotals.game > 0 && <span className="alpha-mini-stat game">{aStats.game}</span>}
-                                            {aTotals.learning > 0 && <span className="alpha-mini-stat learning">{aStats.learning}</span>}
+                                            {aTotals.learning > 0 && <span className={`alpha-mini-stat learning learning-${student.learningStatus || 'yellow'}`}>{aStats.learning}</span>}
                                         </div>
                                         <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                         <div className={`sc-name ${stats.workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
@@ -835,7 +835,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     <span className="plan-match-real">
                                         {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
                                         {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
-                                        {aTotals.learning > 0 && <span className="sc-real-badge learning">{aStats.learning}</span>}
+                                        {aTotals.learning > 0 && <span className={`sc-real-badge learning learning-${s.learningStatus || 'yellow'}`}>{aStats.learning}</span>}
                                     </span>
                                 </span>
                             </div>
