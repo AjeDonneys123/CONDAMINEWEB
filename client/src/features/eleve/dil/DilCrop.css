@@ -1,0 +1,18 @@
+.dil-crop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 16px;
+  background: #f8fafc;
+  border: 2px solid #ddd6fe;
+  border-radius: 18px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.dil-crop-preview { position: relative; overflow: hidden; border-radius: 12px; background: #0f172a; line-height: 0; }
+.dil-crop-preview img { width: 100%; max-height: 330px; object-fit: contain; background: white; }
+.dil-crop-window { position: absolute; border: 3px solid #8b5cf6; border-radius: 8px; box-shadow: 0 0 0 9999px #0f172a88; pointer-events: none; }
+.dil-crop-controls { display: flex; flex-direction: column; gap: 10px; font-weight: 900; color: #475569; }
+.dil-crop-controls label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dil-crop-controls input { width: 125px; }
+.dil-crop-controls button { margin-top: auto; border: 0; border-radius: 12px; padding: 13px; font-weight: 900; background: #6d28d9; color: white; cursor: pointer; }
+@media (max-width: 600px) { .dil-crop { grid-template-columns: 1fr; } .dil-crop-preview img { max-height: 230px; } }

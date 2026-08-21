@@ -1,8 +1,31 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './DilWorkspace.css';
+import './DilCrop.css';
 
 const tokenise = (text = '') => String(text || '').split(/(\s+|[^\p{L}\p{N}'’-]+)/u).filter(Boolean);
 const isWord = (value = '') => /[\p{L}]/u.test(value) && !/^\s+$/u.test(value);
+const numberedTitle = (value = '') => /^(?:\d{1,2}\s*[.)-]\s+|(?:I|V|X){1,5}\s*[.)]\s+)[A-ZÀ-ÖØ-Ý]/.test(String(value || '').trim());
+const extractCentralDocument = (raw = '', ocrLines = []) => {
+  const paragraphs = String(raw || '').replace(/\r/g, '').split(/\n\s*\n+/).map((part) => part.replace(/\n{3,}/g, '\n').trim()).filter(Boolean);
+  if (!paragraphs.length) return { title: '', body: '' };
+  const start = Math.max(0, paragraphs.findIndex(numberedTitle));
+  const from = start >= 0 ? paragraphs.slice(start) : paragraphs;
+  // Un nouveau titre numéroté isolé par un grand blanc annonce le document
+  // suivant : on ne conserve pas ce second document dans la traduction.
+  const end = from.findIndex((paragraph, index) => index > 0 && numberedTitle(paragraph));
+  const kept = (end > 0 ? from.slice(0, end) : from);
+  const first = kept[0] || '';
+  const firstLine = first.split('\n')[0].trim();
+  const heights = (Array.isArray(ocrLines) ? ocrLines : []).map((line) => Number(line?.height || 0)).filter(Boolean).sort((a, b) => a - b);
+  const median = heights.length ? heights[Math.floor(heights.length / 2)] : 0;
+  const largeTitle = (Array.isArray(ocrLines) ? ocrLines : []).slice(0, 12).find((line) => {
+    const value = String(line?.text || '').trim();
+    return value.length <= 140 && Number(line?.height || 0) >= median * 1.25;
+  })?.text || '';
+  const title = largeTitle || (numberedTitle(firstLine) || (firstLine.length <= 110 && !/[.!?;:]$/.test(firstLine)) ? firstLine : '');
+  const body = [title ? first.split('\n').slice(1).join('\n').trim() : first, ...kept.slice(1)].filter(Boolean).join('\n\n');
+  return { title, body };
+};
 
 export default function DilWorkspace({ user }) {
   const studentId = String(user?._id || user?.id || '');
@@ -58,11 +81,8 @@ export default function DilWorkspace({ user }) {
       const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId || 'preview')}/ocr`, { method: 'POST', body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error);
-      const lines = String(data.text || '').split(/\n+/).map((line) => line.trim()).filter(Boolean);
-      const first = lines[0] || '';
-      const looksLikeTitle = first.length <= 110 && !/[.!?;:]$/.test(first);
-      setDocumentTitle(looksLikeTitle ? first : '');
-      setText((looksLikeTitle ? lines.slice(1) : lines).join('\n')); setSelected(null);
+      const detected = extractCentralDocument(data.text || '', data.lines || []);
+      setDocumentTitle(detected.title); setText(detected.body); setSelected(null);
     } catch (error) { alert(error.message || 'Lecture de la photo impossible.'); }
     finally { setPhotoBusy(false); }
   };
@@ -97,8 +117,8 @@ export default function DilWorkspace({ user }) {
     <div className="dil-tabs"><button className={mode === 'translation' ? 'active' : ''} onClick={() => setMode('translation')}>📷 TRADUCTION</button><button className={mode === 'training' ? 'active' : ''} onClick={() => setMode('training')}>✍️ ENTRAÎNEMENT</button></div>
     {mode === 'translation' ? <div className="dil-card">
       <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={selectPhoto} />
-      <div className="dil-actions"><button onClick={() => fileRef.current?.click()} disabled={photoBusy}>📷 PRENDRE / CHOISIR UNE PHOTO</button><span>Recadre la zone utile avant la lecture.</span></div>
-      {photoUrl && <div className="dil-crop"><img src={photoUrl} alt="Document à recadrer" /><div className="dil-crop-controls">{['top', 'bottom', 'left', 'right'].map((side) => <label key={side}>{side === 'top' ? 'Haut' : side === 'bottom' ? 'Bas' : side === 'left' ? 'Gauche' : 'Droite'} <input type="range" min="0" max="45" value={crop[side]} onChange={(event) => setCrop((value) => ({ ...value, [side]: Number(event.target.value) }))} /></label>)}<button onClick={readPhoto} disabled={photoBusy}>{photoBusy ? 'LECTURE…' : 'LIRE LA ZONE CADRÉE'}</button></div></div>}
+      <div className="dil-actions"><button onClick={() => fileRef.current?.click()} disabled={photoBusy}>📷 PRENDRE / CHOISIR UNE PHOTO</button><span>Cadre la zone utile, puis lance la lecture.</span></div>
+      {photoUrl && <div className="dil-crop"><div className="dil-crop-preview"><img src={photoUrl} alt="Document à recadrer" /><div className="dil-crop-window" style={{ top: `${crop.top}%`, left: `${crop.left}%`, right: `${crop.right}%`, bottom: `${crop.bottom}%` }} /></div><div className="dil-crop-controls">{['top', 'bottom', 'left', 'right'].map((side) => <label key={side}>{side === 'top' ? 'Haut' : side === 'bottom' ? 'Bas' : side === 'left' ? 'Gauche' : 'Droite'} <input type="range" min="0" max="45" value={crop[side]} onChange={(event) => setCrop((value) => ({ ...value, [side]: Number(event.target.value) }))} /></label>)}<button onClick={readPhoto} disabled={photoBusy}>{photoBusy ? 'LECTURE…' : 'LIRE LA ZONE CADRÉE'}</button></div></div>}
       <input className="dil-title-input" value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="Titre du document (détecté automatiquement)" />
       <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Le texte du document apparaîtra ici. Clique ensuite sur un mot français pour le traduire." />
       <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''}`} key={`title-${index}`}><button onClick={() => translate(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small>{selected.spanish}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''}`} key={`${part}-${index}`}><button onClick={() => translate(part, index)}>{part}</button>{selected?.index === index && <small>{selected.spanish}</small>}</span> : <span key={index}>{part}</span>)}</div>

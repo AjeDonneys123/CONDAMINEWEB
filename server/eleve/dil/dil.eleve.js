@@ -53,14 +53,19 @@ router.post('/:studentId/ocr', upload.single('image'), async (req, res) => {
         const body = new URLSearchParams({
             apikey: String(process.env.OCR_SPACE_API_KEY || 'helloworld'),
             language: 'fre',
-            isOverlayRequired: 'false',
+            isOverlayRequired: 'true',
             base64Image: `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`
         });
         const response = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body });
         const data = await response.json().catch(() => ({}));
         const text = (data?.ParsedResults || []).map((row) => row?.ParsedText || '').join('\n').trim();
         if (!response.ok || !text) throw new Error(data?.ErrorMessage?.join(' ') || 'Aucun texte lisible trouvé.');
-        res.json({ text: text.slice(0, 30000) });
+        const lines = (data?.ParsedResults || []).flatMap((result) => (result?.TextOverlay?.Lines || []).map((line) => ({
+            text: String(line?.LineText || '').trim(),
+            height: Number(line?.MaxHeight || 0),
+            top: Number(line?.MinTop || 0)
+        }))).filter((line) => line.text);
+        res.json({ text: text.slice(0, 30000), lines });
     } catch (error) {
         res.status(502).json({ error: error.message || 'OCR indisponible. Saisis le texte manuellement.' });
     }
