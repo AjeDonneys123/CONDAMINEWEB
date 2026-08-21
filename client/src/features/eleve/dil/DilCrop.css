@@ -16,3 +16,6 @@
 .dil-crop-controls input { width: 125px; }
 .dil-crop-controls button { margin-top: auto; border: 0; border-radius: 12px; padding: 13px; font-weight: 900; background: #6d28d9; color: white; cursor: pointer; }
 @media (max-width: 600px) { .dil-crop { grid-template-columns: 1fr; } .dil-crop-preview img { max-height: 230px; } }
+.dil-word .dil-save-word { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: 6px; border: 0; border-radius: 50%; background: #16a34a; color: white; font-size: 17px; font-weight: 900; line-height: 1; vertical-align: middle; }
+.dil-word .dil-save-word:disabled { background: #94a3b8; cursor: default; }
+.dil-word small i { display: block; color: #b91c1c; font-size: 10px; white-space: normal; }
