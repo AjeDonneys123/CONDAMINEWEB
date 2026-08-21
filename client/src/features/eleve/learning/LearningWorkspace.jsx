@@ -612,7 +612,14 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     };
 
     const currentSheetKey = String(currentStep?.id || `step_${stepIndex}`);
-    const sheetText = String(currentStep?.sheetText || '');
+    const sheetText = (() => {
+        const source = String(currentStep?.sheetText || '');
+        // Le QCM reste conservé dans la fiche générale pour alimenter les jeux,
+        // mais n'est jamais une partie à lire côté élève.
+        if (currentStep?.isGeneralSheetMaster !== true) return source;
+        const qcmAt = source.search(/(?:^|\n)\s*(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i);
+        return qcmAt >= 0 ? source.slice(0, qcmAt).trim() : source;
+    })();
     const sheetPinkRanges = useMemo(() => normalizeRanges(currentStep?.sheetPinkRanges || [], sheetText.length), [currentStep?.sheetPinkRanges, sheetText.length]);
     const sheetZoneMarkers = useMemo(() => {
         if (Array.isArray(currentStep?.sheetZoneMarkers) && currentStep.sheetZoneMarkers.length > 0) {
@@ -2249,8 +2256,10 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         }
     };
     const embedVideoUrl = withSegmentParams(toEmbedUrl(videoUrlResolved));
-    const generalSheetMedia = currentStep?.type === 'sheet' && currentStep?.generalSheetParentId
-        ? steps.find((candidate) => String(candidate?.id || '') === String(currentStep.generalSheetParentId))
+    const generalSheetMedia = currentStep?.type === 'sheet'
+        ? (steps.find((candidate) => String(candidate?.id || '') === String(currentStep?.generalSheetParentId || ''))
+            || steps.find((candidate) => candidate?.type === 'sheet' && candidate?.isGeneralSheetMaster === true)
+            || null)
         : null;
     const sheetMediaItems = (() => {
         const source = currentStep?.type === 'sheet' && ((Array.isArray(currentStep?.sheetMediaItems) && currentStep.sheetMediaItems.length) || String(currentStep?.sheetMediaUrl || '').trim())
@@ -2457,22 +2466,11 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 </aside>
                             );
                         })}
-                        <div className="learning-study-toggle-row">
-                            <button className="learning-btn ghost" onClick={openGeminiCourseHelper}>✨ Poser des questions a l'IA sur le cours</button>
-                        </div>
-                        {!hasGeminiExtension && geminiExtensionHint && (
-                            <div className="learning-error">
-                                {geminiExtensionHint}
-                                <div style={{ marginTop: 8 }}>
-                                    <a
-                                        href="https://chromewebstore.google.com/search/gemini"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="learning-btn ghost"
-                                    >
-                                        Installer l&apos;extension Gemini
-                                    </a>
-                                </div>
+                        {sheetMediaItems.length > 0 && (
+                            <div className="learning-study-toggle-row">
+                                <button className="learning-btn ghost" onClick={() => document.querySelector('.learning-sheet-media-player')?.play?.()}>
+                                    🎵 Jouer la chanson
+                                </button>
                             </div>
                         )}
                     </>
