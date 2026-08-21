@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
-import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
+import { resolveBackendAssetUrl, resolveDriveAssetUrl } from '../../../utils/driveUrl';
 import SheetRichTextEditor from './SheetRichTextEditor';
 
 const uid = () => `st_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -955,6 +955,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [loadingQuestionSourceText, setLoadingQuestionSourceText] = useState(false);
     const [extractingSheetText, setExtractingSheetText] = useState(false);
     const [savingSheetText, setSavingSheetText] = useState(false);
+    const [uploadingSheetMedia, setUploadingSheetMedia] = useState(false);
     const [annotColor, setAnnotColor] = useState('orange');
     const [annotLabel, setAnnotLabel] = useState('');
     const [annotDraft, setAnnotDraft] = useState(null);
@@ -1009,6 +1010,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
     const [sourcePickerVideoName, setSourcePickerVideoName] = useState('');
     const [showGeneralSheetBuilder, setShowGeneralSheetBuilder] = useState(false);
+    const [generalSheetMedia, setGeneralSheetMedia] = useState(null);
     const [generalSheetCourses, setGeneralSheetCourses] = useState([]);
     const [generalSheetCoursesLoading, setGeneralSheetCoursesLoading] = useState(false);
     const [generalSheetCourseAutomatic, setGeneralSheetCourseAutomatic] = useState(false);
@@ -1043,6 +1045,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const youtubeBoundsRef = useRef({ start: 0, end: 0 });
     const videoPreviewRef = useRef(null);
     const sheetImportInputRef = useRef(null);
+    const sheetMediaInputRef = useRef(null);
+    const generalSheetMediaInputRef = useRef(null);
     const keywordSelectionRef = useRef(null);
     const slidesManifestCacheRef = useRef(new Map());
     const slidesRetryTimerRef = useRef(new Map());
@@ -4599,6 +4603,61 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         await importSheetFile(file);
         if (e?.target) e.target.value = null;
     };
+    const handleSheetMediaFile = async (event) => {
+        const file = event?.target?.files?.[0];
+        if (!file || !step || step.type !== 'sheet') return;
+        if (!/^(audio|video)\//.test(String(file.type || ''))) {
+            alert('Choisis un MP3 ou un fichier audio.');
+            if (event?.target) event.target.value = null;
+            return;
+        }
+        setUploadingSheetMedia(true);
+        try {
+            const data = new FormData();
+            data.append('file', file);
+            const response = await fetch('/api/learning/media/upload', { method: 'POST', body: data });
+            const result = await response.json();
+            if (!response.ok || !result?.url) throw new Error(result?.error || 'Import impossible');
+            const existing = Array.isArray(step.sheetMediaItems) ? step.sheetMediaItems : (step.sheetMediaUrl ? [{
+                id: uid(), url: step.sheetMediaUrl, name: step.sheetMediaName, type: step.sheetMediaType,
+                startSec: step.sheetMediaStartSec || 0, endSec: step.sheetMediaEndSec || 0
+            }] : []);
+            updateStep(activeStep, {
+                sheetMediaItems: [...existing, {
+                    id: uid(), url: result.url, name: result.name || file.name, type: result.mimeType || file.type, startSec: 0, endSec: 0
+                }],
+                sheetMediaUrl: '', sheetMediaName: '', sheetMediaType: '', sheetMediaStartSec: 0, sheetMediaEndSec: 0,
+                sheetMediaInheritedFromGeneral: false
+            });
+        } catch (error) {
+            alert(`Ajout du média impossible : ${error.message || 'erreur réseau'}`);
+        } finally {
+            setUploadingSheetMedia(false);
+            if (event?.target) event.target.value = null;
+        }
+    };
+    const handleGeneralSheetMediaFile = async (event) => {
+        const file = event?.target?.files?.[0];
+        if (!file) return;
+        if (!/^(audio|video)\//.test(String(file.type || ''))) {
+            alert('Choisis un MP3 ou un fichier audio.');
+            return;
+        }
+        setUploadingSheetMedia(true);
+        try {
+            const data = new FormData();
+            data.append('file', file);
+            const response = await fetch('/api/learning/media/upload', { method: 'POST', body: data });
+            const result = await response.json();
+            if (!response.ok || !result?.url) throw new Error(result?.error || 'Import impossible');
+            setGeneralSheetMedia({ url: result.url, name: result.name || file.name, type: result.mimeType || file.type, startSec: 0, endSec: 0 });
+        } catch (error) {
+            alert(`Ajout du média impossible : ${error.message || 'erreur réseau'}`);
+        } finally {
+            setUploadingSheetMedia(false);
+            if (event?.target) event.target.value = null;
+        }
+    };
     const handlePasteSheet = async (event) => {
         if (!step || step.type !== 'sheet') return;
         const items = Array.from(event.clipboardData?.items || []);
@@ -5050,6 +5109,14 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const allGeneralBlocks = generalSheetHtmlToBlocks(importHtml);
         const qcmBlockIndex = allGeneralBlocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block?.text || '').trim()));
         const generalQuizBlocks = qcmBlockIndex >= 0 ? allGeneralBlocks.slice(qcmBlockIndex) : [];
+        const previousMaster = (formData.steps || []).find((candidate) => candidate?.type === 'sheet' && candidate?.isGeneralSheetMaster === true);
+        const selectedGeneralMedia = generalSheetMedia || (previousMaster?.sheetMediaUrl ? {
+            url: previousMaster.sheetMediaUrl,
+            name: previousMaster.sheetMediaName,
+            type: previousMaster.sheetMediaType,
+            startSec: previousMaster.sheetMediaStartSec,
+            endSec: previousMaster.sheetMediaEndSec
+        } : null);
         const masterSheet = {
             ...emptyStep('sheet'),
             sectionId: planSectionId,
@@ -5060,7 +5127,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             isGeneralSheetMaster: true,
             generalSheetDocumentTitle: parsed.documentTitle,
             generalSheetQuizText: generalQuizBlocks.map((block) => block.text).join('\n').trim(),
-            generalSheetQuizHtml: generalQuizBlocks.map((block) => block.html).join('')
+            generalSheetQuizHtml: generalQuizBlocks.map((block) => block.html).join(''),
+            sheetMediaUrl: String(selectedGeneralMedia?.url || ''),
+            sheetMediaName: String(selectedGeneralMedia?.name || ''),
+            sheetMediaType: String(selectedGeneralMedia?.type || ''),
+            sheetMediaStartSec: Math.max(0, Number(selectedGeneralMedia?.startSec || 0)),
+            sheetMediaEndSec: Math.max(0, Number(selectedGeneralMedia?.endSec || 0))
         };
         steps.push(masterSheet);
         const planLines = parsed.parts.map((part, index) => `${toRomanPartNumber(index + 1)} ${part.title}`);
@@ -5088,7 +5160,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 sheetTextHtml: part.html,
                 generalSheetGenerated: true,
                 generalSheetParentId: masterSheet.id,
-                generalSheetPartIndex: index
+                generalSheetPartIndex: index,
+                sheetMediaUrl: masterSheet.sheetMediaUrl,
+                sheetMediaName: masterSheet.sheetMediaName,
+                sheetMediaType: masterSheet.sheetMediaType,
+                sheetMediaStartSec: masterSheet.sheetMediaStartSec,
+                sheetMediaEndSec: masterSheet.sheetMediaEndSec,
+                sheetMediaInheritedFromGeneral: Boolean(masterSheet.sheetMediaUrl)
             };
             steps.push(partSheet);
             addLinkedQuestion(partSheet, 'full');
@@ -5148,6 +5226,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const master = getGeneralSheetMaster();
         setGeneralSheetText(String(master?.sheetText || ''));
         setGeneralSheetHtml(String(master?.sheetTextHtml || ''));
+        setGeneralSheetMedia(master?.sheetMediaUrl ? {
+            url: master.sheetMediaUrl,
+            name: master.sheetMediaName,
+            type: master.sheetMediaType,
+            startSec: Number(master.sheetMediaStartSec || 0),
+            endSec: Number(master.sheetMediaEndSec || 0)
+        } : null);
         setShowGeneralSheetBuilder(true);
     };
 
@@ -6251,6 +6336,22 @@ VÉRIFICATION AVANT DE RÉPONDRE
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
                                 Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : Google Docs = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
                             </div>
+                            <div className="mb-4 rounded-2xl border-2 border-violet-200 bg-violet-50 p-4">
+                                <div className="font-black text-violet-900">🎵 Chanson / audio de la fiche générale</div>
+                                <div className="mt-1 text-xs font-bold text-violet-700">Sans découpage, la chanson entière sera présente dans toutes les sous-fiches créées.</div>
+                                <input ref={generalSheetMediaInputRef} type="file" accept=".mp3,audio/mpeg,audio/*" className="hidden" onChange={handleGeneralSheetMediaFile} />
+                                <button type="button" className="v84-res-btn upload mt-3 !bg-violet-600 !text-white !border-violet-700" onClick={() => generalSheetMediaInputRef.current?.click()} disabled={uploadingSheetMedia}>
+                                    {uploadingSheetMedia ? 'Import…' : (generalSheetMedia?.url ? 'Remplacer le MP3 / audio' : 'Ajouter un MP3 / audio')}
+                                </button>
+                                {generalSheetMedia?.url && (
+                                    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-white p-3 text-sm font-black text-slate-700">
+                                        <span>🎵 {generalSheetMedia.name || 'Média ajouté'}</span>
+                                        <label>Début <input type="number" min="0" className="ml-1 w-20 rounded border p-1" value={generalSheetMedia.startSec || 0} onChange={(e) => setGeneralSheetMedia((value) => ({ ...value, startSec: Math.max(0, Number(e.target.value || 0)) }))} /></label>
+                                        <label>Fin <input type="number" min="0" className="ml-1 w-20 rounded border p-1" value={generalSheetMedia.endSec || 0} onChange={(e) => setGeneralSheetMedia((value) => ({ ...value, endSec: Math.max(0, Number(e.target.value || 0)) }))} /></label>
+                                        <button type="button" className="text-red-600 underline" onClick={() => setGeneralSheetMedia(null)}>Retirer</button>
+                                    </div>
+                                )}
+                            </div>
                             <SheetRichTextEditor
                                 html={generalSheetHtml}
                                 plainText={generalSheetText}
@@ -6547,6 +6648,38 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                         value={step.minReadSeconds || 20}
                                         onChange={(e) => updateStep(activeStep, { minReadSeconds: Number(e.target.value || 20) })}
                                     />
+                                    <div className="mt-5 rounded-2xl border-2 border-violet-200 bg-violet-50 p-4">
+                                        <div className="text-base font-black text-violet-900">🎵 Chanson / audio associé à cette fiche</div>
+                                        <div className="mt-1 text-xs font-bold text-violet-700">Ajoute un MP3. Le découpage début/fin est celui que les élèves écouteront.</div>
+                                        <input
+                                            ref={sheetMediaInputRef}
+                                            type="file"
+                                            accept=".mp3,audio/mpeg,audio/*"
+                                            className="hidden"
+                                            onChange={handleSheetMediaFile}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload mt-3 bg-violet-600 text-white border-violet-700"
+                                            onClick={() => sheetMediaInputRef.current?.click()}
+                                            disabled={uploadingSheetMedia}
+                                        >
+                                            {uploadingSheetMedia ? 'Import de la chanson…' : 'Ajouter un MP3 / audio'}
+                                        </button>
+                                        {(Array.isArray(step.sheetMediaItems) ? step.sheetMediaItems : (step.sheetMediaUrl ? [{ id: 'legacy', url: step.sheetMediaUrl, name: step.sheetMediaName, type: step.sheetMediaType, startSec: step.sheetMediaStartSec, endSec: step.sheetMediaEndSec }] : [])).map((media, mediaIndex) => (
+                                            <div key={media.id || mediaIndex} className="mt-3 rounded-xl border border-violet-200 bg-white p-3">
+                                                <div className="mb-2 text-sm font-black text-slate-700">🎵 {media.name || `Chanson ${mediaIndex + 1}`}</div>
+                                                {String(media.type || '').startsWith('video/')
+                                                    ? <video src={resolveBackendAssetUrl(resolveDriveAssetUrl(media.url))} controls className="w-full max-h-56 rounded-lg bg-slate-950" />
+                                                    : <audio src={resolveBackendAssetUrl(resolveDriveAssetUrl(media.url))} controls className="w-full" />}
+                                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                                    <label className="text-xs font-black text-slate-600">✂️ Début (sec)<input type="number" min="0" step="1" className="v84-ans-input mt-1" value={Number(media.startSec || 0)} onChange={(e) => updateStep(activeStep, { sheetMediaItems: step.sheetMediaItems.map((item, index) => index === mediaIndex ? { ...item, startSec: Math.max(0, Number(e.target.value || 0)) } : item) })} /></label>
+                                                    <label className="text-xs font-black text-slate-600">✂️ Fin (sec, 0 = entier)<input type="number" min="0" step="1" className="v84-ans-input mt-1" value={Number(media.endSec || 0)} onChange={(e) => updateStep(activeStep, { sheetMediaItems: step.sheetMediaItems.map((item, index) => index === mediaIndex ? { ...item, endSec: Math.max(0, Number(e.target.value || 0)) } : item) })} /></label>
+                                                </div>
+                                                <button type="button" className="mt-3 text-xs font-black text-red-600 underline" onClick={() => updateStep(activeStep, { sheetMediaItems: step.sheetMediaItems.filter((_, index) => index !== mediaIndex) })}>Retirer cette chanson</button>
+                                            </div>
+                                        ))}
+                                    </div>
                                     <div className="mt-2">
                                         <button
                                             type="button"

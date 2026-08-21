@@ -6,15 +6,10 @@ const tokenise = (text = '') => String(text || '').split(/(\s+|[^\p{L}\p{N}'’-
 const isWord = (value = '') => /[\p{L}]/u.test(value) && !/^\s+$/u.test(value);
 const numberedTitle = (value = '') => /^(?:\d{1,2}\s*[.)-]\s+|(?:I|V|X){1,5}\s*[.)]\s+)[A-ZÀ-ÖØ-Ý]/.test(String(value || '').trim());
 const extractCentralDocument = (raw = '', ocrLines = []) => {
-  const paragraphs = String(raw || '').replace(/\r/g, '').split(/\n\s*\n+/).map((part) => part.replace(/\n{3,}/g, '\n').trim()).filter(Boolean);
-  if (!paragraphs.length) return { title: '', body: '' };
-  const start = Math.max(0, paragraphs.findIndex(numberedTitle));
-  const from = start >= 0 ? paragraphs.slice(start) : paragraphs;
-  // Un nouveau titre numéroté isolé par un grand blanc annonce le document
-  // suivant : on ne conserve pas ce second document dans la traduction.
-  const end = from.findIndex((paragraph, index) => index > 0 && numberedTitle(paragraph));
-  const kept = (end > 0 ? from.slice(0, end) : from);
-  const first = kept[0] || '';
+  const cleaned = String(raw || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const lines = cleaned.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return { title: '', body: '' };
+  const first = lines[0] || '';
   const firstLine = first.split('\n')[0].trim();
   const heights = (Array.isArray(ocrLines) ? ocrLines : []).map((line) => Number(line?.height || 0)).filter(Boolean).sort((a, b) => a - b);
   const median = heights.length ? heights[Math.floor(heights.length / 2)] : 0;
@@ -23,7 +18,9 @@ const extractCentralDocument = (raw = '', ocrLines = []) => {
     return value.length <= 140 && Number(line?.height || 0) >= median * 1.25;
   })?.text || '';
   const title = largeTitle || (numberedTitle(firstLine) || (firstLine.length <= 110 && !/[.!?;:]$/.test(firstLine)) ? firstLine : '');
-  const body = [title ? first.split('\n').slice(1).join('\n').trim() : first, ...kept.slice(1)].filter(Boolean).join('\n\n');
+  // Aucune coupe automatique : la détection sert uniquement à séparer le
+  // titre du corps. L'élève garde toujours l'intégralité de sa photo OCR.
+  const body = title && first === title ? lines.slice(1).join('\n') : cleaned;
   return { title, body };
 };
 
@@ -56,6 +53,7 @@ export default function DilWorkspace({ user }) {
     event.target.value = '';
     if (!image) return;
     if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setDocumentTitle(''); setText(''); setSelected(null);
     setPhotoFile(image); setPhotoUrl(URL.createObjectURL(image)); setCrop({ top: 0, right: 0, bottom: 0, left: 0 });
   };
   const cropPhoto = async () => {

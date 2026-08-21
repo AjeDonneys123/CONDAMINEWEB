@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './LearningWorkspace.css';
-import { resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
+import { resolveBackendAssetUrl, resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
 
 const normalize = (txt = '') =>
     String(txt || '')
@@ -2216,6 +2216,30 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         }
     };
     const embedVideoUrl = withSegmentParams(toEmbedUrl(videoUrlResolved));
+    const generalSheetMedia = currentStep?.type === 'sheet' && currentStep?.generalSheetParentId
+        ? steps.find((candidate) => String(candidate?.id || '') === String(currentStep.generalSheetParentId))
+        : null;
+    const sheetMediaItems = (() => {
+        const source = currentStep?.type === 'sheet' && ((Array.isArray(currentStep?.sheetMediaItems) && currentStep.sheetMediaItems.length) || String(currentStep?.sheetMediaUrl || '').trim())
+            ? currentStep : generalSheetMedia;
+        if (Array.isArray(source?.sheetMediaItems) && source.sheetMediaItems.length) return source.sheetMediaItems;
+        return source?.sheetMediaUrl ? [{ url: source.sheetMediaUrl, name: source.sheetMediaName, type: source.sheetMediaType, startSec: source.sheetMediaStartSec, endSec: source.sheetMediaEndSec }] : [];
+    })().filter((media) => String(media?.url || '').trim()).map((media, index) => ({
+        ...media,
+        id: media.id || `media_${index}`,
+        // Les MP3 sont stockés sur le serveur : en déploiement Vercel, /uploads
+        // doit donc viser le backend Render et non le domaine du client.
+        url: resolveBackendAssetUrl(resolveDriveAssetUrl(media.url)),
+        startSec: Math.max(0, Number(media.startSec || 0)),
+        endSec: Math.max(0, Number(media.endSec || 0))
+    }));
+    const enforceSheetMediaBounds = (media, mediaItem) => {
+        if (!media) return;
+        if (mediaItem.endSec > mediaItem.startSec && media.currentTime >= mediaItem.endSec) {
+            media.pause();
+            media.currentTime = mediaItem.startSec;
+        }
+    };
 
     useEffect(() => {
         if (currentStep?.type !== 'video') return;
@@ -2386,6 +2410,20 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             <span>Scroll: {Math.round(sheetScrollRatio * 100)}%</span>
                             {activeOral && <span className="text-red-600">Question orale en attente</span>}
                         </div>
+                        {sheetMediaItems.map((media) => {
+                            const isVideo = String(media.type || '').startsWith('video/') || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(media.url);
+                            return (
+                                <aside key={media.id} className="learning-sheet-media" aria-label={`Chanson ${media.name || ''}`}>
+                                    <div className="learning-sheet-media-title">🎵 {media.name || 'Chanson / audio'}</div>
+                                    <div className="learning-sheet-media-subtitle">{media.endSec > media.startSec ? `Extrait : ${media.startSec}s à ${media.endSec}s` : 'Écoute complète'}</div>
+                                    {isVideo ? <video src={media.url} controls className="learning-sheet-media-player" onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />
+                                        : <audio src={media.url} controls className="learning-sheet-media-player" onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />}
+                                    <a className="learning-sheet-media-download" href={media.url} download={media.name || 'chanson.mp3'}>
+                                        ⬇ Télécharger la chanson
+                                    </a>
+                                </aside>
+                            );
+                        })}
                         <div className="learning-study-toggle-row">
                             <button className="learning-btn ghost" onClick={openGeminiCourseHelper}>✨ Poser des questions a l'IA sur le cours</button>
                         </div>

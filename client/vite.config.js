@@ -59,6 +59,13 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         ws: true
+      },
+      // Les chansons sont servies par Express dans /public/uploads, pas par Vite.
+      // Sans ce proxy, un MP3 importé répondait 404 sur localhost:5173.
+      '/uploads': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false
       }
     }
   }

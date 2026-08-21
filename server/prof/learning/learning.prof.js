@@ -3,9 +3,26 @@ const mongoose = require('mongoose');
 const router = express.Router();
 const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Chapter } = require('../models/prof.models');
 const fetch = require('node-fetch');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
 const { restoreGeneralSheet } = require('./general-sheet.persistence');
+
+const learningMediaDir = path.join(process.cwd(), 'public', 'uploads', 'learning-media');
+fs.mkdirSync(learningMediaDir, { recursive: true });
+const learningMediaUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, learningMediaDir),
+        filename: (_req, file, cb) => {
+            const ext = path.extname(String(file.originalname || '')).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.bin';
+            cb(null, `media-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`);
+        }
+    }),
+    limits: { fileSize: 250 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => cb(null, /^(audio|video)\//.test(String(file.mimetype || '')) || /\.(mp3|wav|m4a|aac|ogg|flac|mp4|webm)$/i.test(String(file.originalname || '')))
+});
 
 const inferAcademicLevel = (value = '') => {
     const cleaned = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
@@ -371,6 +388,29 @@ const sanitizeSteps = (steps = []) => {
                     sheetKeywords: Array.isArray(step?.sheetKeywords)
                         ? step.sheetKeywords.map(k => String(k || '').trim().toLowerCase()).filter(Boolean).slice(0, 120)
                         : [],
+                    // Média optionnel associé à la fiche (chanson, audio ou MP4).
+                    // Il appartient à la fiche : ce n'est donc pas une étape vidéo à part.
+                    sheetMediaUrl: String(step?.sheetMediaUrl || '').trim(),
+                    sheetMediaName: String(step?.sheetMediaName || '').trim().slice(0, 180),
+                    sheetMediaType: String(step?.sheetMediaType || '').trim().slice(0, 120),
+                    sheetMediaStartSec: Math.max(0, Number(step?.sheetMediaStartSec || 0)),
+                    sheetMediaEndSec: Number(step?.sheetMediaEndSec || 0) > Number(step?.sheetMediaStartSec || 0)
+                        ? Number(step?.sheetMediaEndSec || 0)
+                        : 0,
+                    sheetMediaInheritedFromGeneral: step?.sheetMediaInheritedFromGeneral === true,
+                    sheetMediaItems: (Array.isArray(step?.sheetMediaItems) ? step.sheetMediaItems : [])
+                        .map((media) => {
+                            const startSec = Math.max(0, Number(media?.startSec || 0));
+                            const endRaw = Math.max(0, Number(media?.endSec || 0));
+                            return {
+                                id: String(media?.id || '').trim().slice(0, 80),
+                                url: String(media?.url || '').trim(),
+                                name: String(media?.name || '').trim().slice(0, 180),
+                                type: String(media?.type || '').trim().slice(0, 120),
+                                startSec,
+                                endSec: endRaw > startSec ? endRaw : 0
+                            };
+                        }).filter((media) => media.url).slice(0, 12),
                     questionCount: Math.max(1, Math.min(20, Number(step?.questionCount || 3))),
                     minReadSeconds: Math.max(5, Math.min(600, Number(step?.minReadSeconds || 20)))
                 };
@@ -1630,6 +1670,20 @@ router.patch('/:id/enabled', async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+});
+
+router.post('/media/upload', learningMediaUpload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Choisis un MP3 ou un fichier audio.' });
+    const mimeType = String(req.file.mimetype || '');
+    if (!/^(audio|video)\//.test(mimeType) && !/\.(mp3|wav|m4a|aac|ogg|flac|mp4|webm)$/i.test(String(req.file.originalname || ''))) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(400).json({ error: 'Seuls les fichiers audio et vidéo sont acceptés.' });
+    }
+    res.json({
+        url: `/uploads/learning-media/${req.file.filename}`,
+        name: String(req.file.originalname || 'Média').slice(0, 180),
+        mimeType
+    });
 });
 
 router.delete('/:id', async (req, res) => {
