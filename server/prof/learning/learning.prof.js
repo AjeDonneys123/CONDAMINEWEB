@@ -180,6 +180,8 @@ const checkGptInboxToken = (req) => {
 const normalizeVideoUrl = (url = '') => {
     const raw = String(url || '').trim();
     if (!raw) return '';
+    const youtube = raw.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&#?/]+)/i);
+    if (youtube?.[1]) return `https://www.youtube.com/watch?v=${String(youtube[1]).trim()}`;
     try {
         const u = new URL(raw);
         ['start', 'end', 't'].forEach((k) => u.searchParams.delete(k));

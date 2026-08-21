@@ -71,6 +71,7 @@ const StudentSchema = new mongoose.Schema({
         updatedAt: { type: Date, default: null }
     },
     isTestAccount: { type: Boolean, default: false },
+    isDil: { type: Boolean, default: false },
     lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });
 

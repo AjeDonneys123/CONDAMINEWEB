@@ -209,6 +209,21 @@ const extractYoutubeId = (rawUrl = '') => {
     const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&#?/]+)/i);
     return yt?.[1] ? String(yt[1]).trim() : '';
 };
+// YouTube expose souvent une même vidéo sous youtu.be et youtube.com/watch.
+// Les séquences doivent rester liées à la vidéo, quelle que soit cette forme.
+const normalizeVideoSourceUrl = (rawUrl = '') => {
+    const raw = String(rawUrl || '').trim();
+    if (!raw) return '';
+    const youtubeId = extractYoutubeId(raw);
+    if (youtubeId) return `https://www.youtube.com/watch?v=${youtubeId}`;
+    try {
+        const url = new URL(raw);
+        ['start', 'end', 't'].forEach((key) => url.searchParams.delete(key));
+        return url.toString();
+    } catch (_) {
+        return raw;
+    }
+};
 const withSegmentParams = (rawUrl = '', startSec = 0, endSec = 0) => {
     const base = String(rawUrl || '').trim();
     if (!base) return '';
@@ -314,7 +329,19 @@ const sheetToFillBlankText = (sheet = null) => {
     if (!html || typeof DOMParser === 'undefined') return plainText;
     try {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        doc.body.querySelectorAll('strong, b, u').forEach((node) => {
+        const isHeading = (node) => {
+            const line = node.closest('div, p, li, h1, h2, h3, h4, h5, h6');
+            const text = String(line?.textContent || '').replace(/\u00a0/g, ' ').trim();
+            return /^(?:(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+|\d{1,2}\s*-\s+)/i.test(text);
+        };
+        // Process U first: a title can be visually bold as a whole, but only
+        // the words manually underlined by the teacher are expected answers.
+        const formattedNodes = [
+            ...Array.from(doc.body.querySelectorAll('u')),
+            ...Array.from(doc.body.querySelectorAll('strong, b'))
+        ];
+        formattedNodes.forEach((node) => {
+            if (node.tagName !== 'U' && isHeading(node)) return;
             const raw = String(node.textContent || '').replace(/\u00a0/g, ' ');
             // Keep list markers and punctuation in the displayed text, outside
             // the expected answer. A student must answer the word, not `1-`.
@@ -437,6 +464,40 @@ const escapeGeneralSheetHtml = (value = '') => String(value || '')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
+// Les titres sont mis en forme par leur bloc, et non avec un <strong> autour
+// de toute la ligne : sinon chaque mot d'un titre deviendrait une réponse du
+// texte à trous. Cette fonction est également utilisée pendant la découpe en
+// sous-fiches, afin que ces styles ne disparaissent pas à la sauvegarde.
+const formatGeneratedSheetBlock = (text = '', innerHtml = '') => {
+    const line = String(text || '').replace(/\u00a0/g, ' ').trim();
+    const romanHeading = /^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(line);
+    const mainHeading = /^\d{1,2}\s*-\s+.+/.test(line);
+    let content = String(innerHtml || '').trim() || escapeGeneralSheetHtml(line);
+
+    // Dans un sous-titre vert, un vrai gras est un mot-clé. On le conserve en
+    // gras et on lui ajoute le soulignement, sans souligner le reste du titre.
+    if (mainHeading && typeof DOMParser !== 'undefined') {
+        try {
+            const doc = new DOMParser().parseFromString(`<div id="sheet-block">${content}</div>`, 'text/html');
+            const root = doc.getElementById('sheet-block');
+            root?.querySelectorAll('strong, b').forEach((keyword) => {
+                if (keyword.closest('u') || String(keyword.style.textDecoration || '').includes('underline')) return;
+                const underline = doc.createElement('u');
+                keyword.parentNode?.insertBefore(underline, keyword);
+                underline.appendChild(keyword);
+            });
+            content = root?.innerHTML || content;
+        } catch (_) {}
+    }
+
+    const style = romanHeading
+        ? 'color:#dc2626;font-weight:700'
+        : mainHeading
+            ? 'color:#16a34a;font-weight:700'
+            : '';
+    return `<div${style ? ` style="${style}"` : ''}>${content}</div>`;
+};
+
 // Découpe le HTML de la Superfiche ligne par ligne sans casser les balises
 // englobantes. Un éditeur contenteditable peut produire par exemple
 // `<strong>ligne 1<br>ligne 2</strong>` : un simple split sur BR faisait perdre
@@ -453,7 +514,7 @@ const generalSheetHtmlToBlocks = (richHtml = '') => {
     const flush = () => {
         const text = textParts.join('').replace(/\u00a0/g, ' ').trim();
         const html = htmlParts.join('').trim();
-        if (text) blocks.push({ text, html: `<div>${html || escapeGeneralSheetHtml(text)}</div>` });
+        if (text) blocks.push({ text, html: formatGeneratedSheetBlock(text, html) });
         textParts = [];
         htmlParts = [];
     };
@@ -461,6 +522,7 @@ const generalSheetHtmlToBlocks = (richHtml = '') => {
         let value = escapeGeneralSheetHtml(String(text || '').replace(/\u00a0/g, ' '));
         if (context.italic) value = `<em>${value}</em>`;
         if (context.color) value = `<span style="color:${escapeGeneralSheetHtml(context.color)}">${value}</span>`;
+        if (context.underline) value = `<u>${value}</u>`;
         if (context.bold) value = `<strong>${value}</strong>`;
         return value;
     };
@@ -482,16 +544,24 @@ const generalSheetHtmlToBlocks = (richHtml = '') => {
         const blockElement = ['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(element.tagName);
         if (blockElement && textParts.join('').trim()) flush();
         const fontWeight = String(element.style?.fontWeight || '').toLowerCase();
+        const textDecoration = String(element.style?.textDecoration || element.style?.textDecorationLine || '').toLowerCase();
         const color = String(element.style?.color || element.getAttribute?.('color') || inherited.color || '').trim();
         const context = {
             bold: Boolean(inherited.bold
                 || ['B', 'STRONG'].includes(element.tagName)
                 || element.getAttribute?.('data-expected-word') === 'true'
-                || fontWeight === 'bold'
-                || Number.parseInt(fontWeight, 10) >= 600),
+                // La couleur et le gras du bloc `1- ...` sont une hiérarchie
+                // visuelle : ils ne doivent pas transformer toute la ligne en
+                // mots-clés. Seul le gras appliqué à l'intérieur du texte l'est.
+                || (!blockElement && (fontWeight === 'bold' || Number.parseInt(fontWeight, 10) >= 600))),
             italic: Boolean(inherited.italic
                 || ['I', 'EM'].includes(element.tagName)
                 || String(element.style?.fontStyle || '').toLowerCase() === 'italic'),
+            // Le soulignement est le marqueur explicite des mots à compléter,
+            // y compris dans les titres `1- ...`.
+            underline: Boolean(inherited.underline
+                || element.tagName === 'U'
+                || (!blockElement && textDecoration.includes('underline'))),
             color
         };
         Array.from(element.childNodes).forEach((child) => visit(child, context));
@@ -588,7 +658,10 @@ const normalizeGeneralSheetLessonBlocks = (sourceBlocks = []) => {
 
 const splitGeneralSheetIntoParts = (plainText = '', richHtml = '') => {
     const fallbackLines = String(plainText || '').replace(/\r/g, '').split('\n');
-    let blocks = fallbackLines.map((text) => ({ text, html: `<div>${escapeGeneralSheetHtml(text)}</div>` }));
+    let blocks = fallbackLines.map((text) => ({
+        text,
+        html: formatGeneratedSheetBlock(text, escapeGeneralSheetHtml(text))
+    }));
     if (String(richHtml || '').trim() && typeof DOMParser !== 'undefined') {
         try {
             const parsed = generalSheetHtmlToBlocks(richHtml);
@@ -861,7 +934,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         chapterId: initialData?.chapterId ? String(initialData.chapterId) : '',
         subject: initialData?.subject || targetSection || 'GÉNÉRAL',
         presentationUrl: initialData?.presentationUrl || '',
+        presentationSourceUrl: initialData?.presentationSourceUrl || '',
         presentationSlidesFocus: initialData?.presentationSlidesFocus || '',
+        generalSheetDocUrl: initialData?.generalSheetDocUrl || '',
         generalSheetCourseId: initialData?.generalSheetCourseId || '',
         generalSheetCourseTitle: initialData?.generalSheetCourseTitle || '',
         generalSheetCourseDescription: initialData?.generalSheetCourseDescription || ''
@@ -945,6 +1020,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [globalSlidesWarmup, setGlobalSlidesWarmup] = useState({ active: false, percent: 0, loaded: 0, total: 0, ready: false, error: '' });
     const [savedVideoSources, setSavedVideoSources] = useState([]);
     const [savingVideoSource, setSavingVideoSource] = useState(false);
+    const [creatingNotebookLmSource, setCreatingNotebookLmSource] = useState(false);
+    const [notebookSlides, setNotebookSlides] = useState([]);
+    const [notebookSlidesLoading, setNotebookSlidesLoading] = useState(false);
+    const [notebookSlidesError, setNotebookSlidesError] = useState('');
+    const [notebookSlidesSelection, setNotebookSlidesSelection] = useState([]);
+    const [showNotebookSlidesPicker, setShowNotebookSlidesPicker] = useState(false);
     const [slidesPanelMode, setSlidesPanelMode] = useState('slide');
     const [slidesManifest, setSlidesManifest] = useState([]);
     const [slidesManifestLoading, setSlidesManifestLoading] = useState(false);
@@ -1256,17 +1337,16 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const sections = Array.isArray(formData.sections) ? formData.sections : [];
         if (sections.length <= 1) return alert("Impossible de supprimer la dernière section.");
         const section = sections.find((row) => String(row?.id) === String(sectionId));
-        if (!window.confirm(`Supprimer la section « ${section?.name || 'sans nom'} » ? Les éléments qu’elle contient seront déplacés dans la première section restante.`)) return;
+        const containedSteps = (formData.steps || []).filter((row) => String(row?.sectionId || '') === String(sectionId));
+        const suffix = containedSteps.length
+            ? ` Ses ${containedSteps.length} activité${containedSteps.length > 1 ? 's' : ''} seront aussi supprimée${containedSteps.length > 1 ? 's' : ''}.`
+            : '';
+        if (!window.confirm(`Supprimer la partie « ${section?.name || 'sans nom'} » ?${suffix}`)) return;
         setFormData((prev) => {
             const nextSections = (prev.sections || [])
                 .filter((row) => String(row?.id) !== String(sectionId))
                 .map((row, index) => ({ ...row, order: index }));
-            const fallbackId = String(nextSections[0]?.id || '');
-            const nextSteps = (prev.steps || []).map((row) => (
-                String(row?.sectionId || '') === String(sectionId)
-                    ? { ...row, sectionId: fallbackId }
-                    : row
-            ));
+            const nextSteps = (prev.steps || []).filter((row) => String(row?.sectionId || '') !== String(sectionId));
             return { ...prev, sections: nextSections, steps: nextSteps };
         });
     };
@@ -2002,26 +2082,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             if (reqId !== knownSegmentsReqRef.current) return [];
             if (knownSegmentsUrlRef.current !== `${safeUrl}::${safeStepId}`) return [];
             const rowsRaw = Array.isArray(list) ? list : [];
-            const normUrl = (() => {
-                try {
-                    const u = new URL(safeUrl);
-                    ['start', 'end', 't'].forEach((k) => u.searchParams.delete(k));
-                    return u.toString();
-                } catch (_) {
-                    return safeUrl;
-                }
-            })();
+            const normUrl = normalizeVideoSourceUrl(safeUrl);
             const dedupByBounds = new Map();
             rowsRaw.forEach((r) => {
-                const rn = (() => {
-                    try {
-                        const u = new URL(String(r?.originalUrl || r?.url || safeUrl || '').trim());
-                        ['start', 'end', 't'].forEach((k) => u.searchParams.delete(k));
-                        return u.toString();
-                    } catch (_) {
-                        return String(r?.normalizedUrl || '').trim();
-                    }
-                })();
+                const rn = normalizeVideoSourceUrl(r?.originalUrl || r?.url || r?.normalizedUrl || safeUrl);
                 if (rn && normUrl && rn !== normUrl) return;
                 const startSec = Math.max(0, Number(r?.startSec || 0));
                 const endSec = Math.max(0, Number(r?.endSec || 0));
@@ -4933,11 +4997,31 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             alert('Aucune grande partie détectée. Utilise des titres comme « 1. Titre », « 2. Titre » ou « I. Titre », « II. Titre ».');
             return;
         }
+        const preservedVideos = (formData.steps || [])
+            .filter((step) => step?.type === 'video')
+            .map((step) => ({ ...step }));
         const hasExistingWork = (formData.steps || []).length > 0;
-        if (hasExistingWork && !window.confirm('Cette génération va remplacer les sections et étapes actuelles de cet apprentissage. Continuer ?')) return;
+        if (hasExistingWork && !window.confirm(
+            `Cette génération va remplacer les fiches, questions et quiz actuels. ${preservedVideos.length ? 'Les vidéos existantes seront conservées au début de leur partie.' : ''} Continuer ?`
+        )) return;
 
         const sections = [];
         const steps = [];
+        const previousSections = (Array.isArray(formData.sections) ? formData.sections : [])
+            .map((section, index) => ({ ...section, order: Number.isFinite(Number(section?.order)) ? Number(section.order) : index }))
+            .sort((a, b) => Number(a.order) - Number(b.order));
+        const reusedSectionIds = new Set();
+        // Réutiliser l'identifiant de la section placée au même rang permet de
+        // garder les vidéos existantes attachées à leur séquence.
+        const createSection = (index, name) => {
+            const previous = previousSections.find((section) => Number(section.order) === index && !reusedSectionIds.has(String(section.id)))
+                || previousSections.find((section) => !reusedSectionIds.has(String(section.id)));
+            if (previous?.id) {
+                reusedSectionIds.add(String(previous.id));
+                return { ...previous, name, order: index };
+            }
+            return { id: uid(), name, order: index, visible: true };
+        };
         const addLinkedQuestion = (sheetStep, mode = 'full') => {
             const revision = sheetToRevisionQuestion(sheetStep, mode);
             steps.push({
@@ -4960,8 +5044,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             });
         };
 
-        const planSectionId = uid();
-        sections.push({ id: planSectionId, name: 'Introduction', order: 0, visible: true });
+        const planSection = createSection(0, 'Introduction');
+        const planSectionId = planSection.id;
+        sections.push(planSection);
         const allGeneralBlocks = generalSheetHtmlToBlocks(importHtml);
         const qcmBlockIndex = allGeneralBlocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block?.text || '').trim()));
         const generalQuizBlocks = qcmBlockIndex >= 0 ? allGeneralBlocks.slice(qcmBlockIndex) : [];
@@ -4991,9 +5076,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         addLinkedQuestion(planSheet, 'plan');
 
         parsed.parts.forEach((part, index) => {
-            const sectionId = uid();
             const romanPart = toRomanPartNumber(index + 1);
-            sections.push({ id: sectionId, name: `Partie ${romanPart}`, order: index + 1, visible: true });
+            const section = createSection(index + 1, `Partie ${romanPart}`);
+            const sectionId = section.id;
+            sections.push(section);
             const partSheet = {
                 ...emptyStep('sheet'),
                 sectionId,
@@ -5019,7 +5105,38 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             });
         });
 
-        setFormData((prev) => ({ ...prev, sections, steps }));
+        // Une vidéo est une ressource indépendante de la fiche : elle ne doit
+        // jamais être remplacée par une régénération. Les sections restantes
+        // qui contiennent une vidéo sont donc aussi conservées.
+        previousSections.forEach((previous) => {
+            const hasVideo = preservedVideos.some((video) => String(video?.sectionId || '') === String(previous.id));
+            if (!hasVideo || reusedSectionIds.has(String(previous.id))) return;
+            reusedSectionIds.add(String(previous.id));
+            sections.push({ ...previous, order: sections.length });
+        });
+        const validSectionIds = new Set(sections.map((section) => String(section.id)));
+        const videosBySection = new Map();
+        preservedVideos.forEach((video) => {
+            const sectionId = validSectionIds.has(String(video?.sectionId || ''))
+                ? String(video.sectionId)
+                : String(planSectionId);
+            const list = videosBySection.get(sectionId) || [];
+            list.push({ ...video, sectionId });
+            videosBySection.set(sectionId, list);
+        });
+        const generatedBySection = new Map();
+        steps.forEach((step) => {
+            const sectionId = String(step?.sectionId || planSectionId);
+            const list = generatedBySection.get(sectionId) || [];
+            list.push(step);
+            generatedBySection.set(sectionId, list);
+        });
+        const orderedSteps = sections.flatMap((section) => [
+            ...(videosBySection.get(String(section.id)) || []),
+            ...(generatedBySection.get(String(section.id)) || [])
+        ]);
+
+        setFormData((prev) => ({ ...prev, sections, steps: orderedSteps }));
         setActiveStep(0);
         setShowGeneralSheetBuilder(false);
     };
@@ -5066,9 +5183,149 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
 
     const copyNotebookLmSlidesSource = async () => {
-        const slidesUrl = String(formData.presentationUrl || '').trim();
+        const slidesUrl = String(formData.presentationSourceUrl || formData.presentationUrl || '').trim();
         if (!slidesUrl) return alert('Aucune présentation Google Slides n’est associée à cette séquence.');
         await copyLearningText(slidesUrl, 'URL des slides copiée. Ajoute-la comme SOURCE 2 dans NotebookLM.');
+    };
+
+    const selectNotebookSlideRange = (slideNumber) => {
+        const selected = Math.max(1, Number(slideNumber || 0));
+        if (!selected) return;
+        setNotebookSlidesSelection((current) => {
+            if (current.length !== 1) return [selected];
+            const first = Number(current[0]);
+            const start = Math.min(first, selected);
+            const end = Math.max(first, selected);
+            return Array.from({ length: end - start + 1 }, (_item, index) => start + index);
+        });
+    };
+
+    useEffect(() => {
+        const presentationUrl = String(formData.presentationUrl || '').trim();
+        if (sourcePickerKind !== 'video' || !showNotebookSlidesPicker || !isGoogleSlidesUrl(presentationUrl)) {
+            setNotebookSlides([]);
+            setNotebookSlidesError('');
+            return;
+        }
+        const initialRange = String(formData.presentationSlidesFocus || '').match(/^(\d+)\s*(?:-|–|—)\s*(\d+)$/);
+        if (initialRange) {
+            const start = Number(initialRange[1]);
+            const end = Number(initialRange[2]);
+            setNotebookSlidesSelection(Array.from({ length: Math.max(0, end - start + 1) }, (_item, index) => start + index));
+        } else {
+            setNotebookSlidesSelection([]);
+        }
+        const controller = new AbortController();
+        let timedOut = false;
+        const timeout = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, 15000);
+        (async () => {
+            setNotebookSlidesLoading(true);
+            setNotebookSlidesError('');
+            try {
+                const res = await fetch('/api/learning/slides/manifest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Les miniatures directes Google peuvent bloquer longtemps.
+                    // On affiche tout de suite la liste et chaque carte utilise
+                    // ensuite son proxy miniature individuel.
+                    body: JSON.stringify({ presentationUrl, includeThumbnails: false }),
+                    signal: controller.signal
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data?.error || 'Chargement des slides impossible');
+                setNotebookSlides(Array.isArray(data?.slides) ? data.slides : []);
+            } catch (error) {
+                if (!controller.signal.aborted || timedOut) {
+                    setNotebookSlides([]);
+                    setNotebookSlidesError(timedOut ? 'Les slides ne répondent pas. Vérifie la présentation ou la connexion Google.' : String(error?.message || 'Chargement des slides impossible'));
+                }
+            } finally {
+                clearTimeout(timeout);
+                if (!controller.signal.aborted || timedOut) setNotebookSlidesLoading(false);
+            }
+        })();
+        return () => {
+            clearTimeout(timeout);
+            controller.abort();
+        };
+    }, [sourcePickerKind, formData.presentationUrl, showNotebookSlidesPicker]);
+
+    const createNotebookLmPublicSlides = async () => {
+        const presentationUrl = String(formData.presentationUrl || '').trim();
+        const selectedNumbers = [...new Set(notebookSlidesSelection.map(Number).filter(Number.isFinite))].sort((a, b) => a - b);
+        const selection = String(formData.presentationSlidesFocus || '').trim();
+        const range = selectedNumbers.length
+            ? [String(selectedNumbers[0]), String(selectedNumbers[selectedNumbers.length - 1])]
+            : selection.match(/^(\d+)\s*(?:-|–|—)\s*(\d+)$/)?.slice(1);
+        if (!presentationUrl) return alert('Ajoute d’abord l’URL de la présentation Google Slides complète.');
+        if (!range) return alert('Indique une plage de slides au format « 8-12 ».');
+        const startSlide = Number(range[0]);
+        const endSlide = Number(range[1]);
+        if (!Number.isInteger(startSlide) || !Number.isInteger(endSlide) || startSlide < 1 || endSlide < startSlide) {
+            return alert('La plage de slides est invalide.');
+        }
+        setCreatingNotebookLmSource(true);
+        try {
+            const res = await fetch('/api/learning/slides/create-range', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    presentationUrl,
+                    startSlide,
+                    endSlide,
+                    title: `${String(formData.title || 'Apprentissage').trim()} — Slides NotebookLM`
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data?.publicReaderUrl) throw new Error(data?.error || 'Création de la présentation impossible');
+            setFormData((prev) => ({
+                ...prev,
+                presentationSourceUrl: String(data.publicReaderUrl),
+                presentationSlidesFocus: `${startSlide}-${endSlide}`
+            }));
+            await copyLearningText(String(data.publicReaderUrl), `Présentation publique ${startSlide}-${endSlide} créée et copiée. Ajoute-la comme SOURCE 2 dans NotebookLM.`);
+        } catch (error) {
+            alert(`Création des slides NotebookLM impossible : ${error.message}`);
+        } finally {
+            setCreatingNotebookLmSource(false);
+        }
+    };
+
+    const createNotebookLmGoogleDoc = async () => {
+        const master = (formData.steps || []).find((item) => item?.type === 'sheet' && item?.isGeneralSheetMaster);
+        const fullText = String(master?.sheetText || generalSheetText || '').trim();
+        // Le QCM est destiné à CondaWeb : la source narrative de NotebookLM ne
+        // contient que la fiche de cours, jusqu'au titre « QCM DE RÉVISION ».
+        const qcmStart = fullText.search(/(?:^|\n)\s*(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i);
+        const text = (qcmStart >= 0 ? fullText.slice(0, qcmStart) : fullText).trim();
+        if (!text) return alert('Crée ou colle d’abord la fiche générale avant de générer le Google Docs.');
+        setCreatingNotebookLmSource(true);
+        try {
+            const res = await fetch('/api/learning/general-sheet/google-doc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: String(formData.title || 'Fiche générale').trim(),
+                    text,
+                    existingUrl: String(formData.generalSheetDocUrl || '').trim()
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data?.editUrl) throw new Error(data?.error || 'Création du Google Docs impossible');
+            setFormData((prev) => ({ ...prev, generalSheetDocUrl: String(data.editUrl) }));
+            await copyLearningText(String(data.editUrl), 'Google Docs de la fiche créé et copié. Ajoute-le comme SOURCE 1 dans NotebookLM.');
+        } catch (error) {
+            alert(`Création du Google Docs impossible : ${error.message}`);
+        } finally {
+            setCreatingNotebookLmSource(false);
+        }
+    };
+
+    const openNotebookLm = () => {
+        window.open('https://notebooklm.google.com/', '_blank', 'noopener,noreferrer');
     };
 
     const copyNotebookLmVideoPrompt = async () => {
@@ -5077,11 +5334,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const prompt = `GÉNÈRE UNE VIDÉO PÉDAGOGIQUE SUR « ${chapterTitle} » POUR DES ÉLÈVES DE NIVEAU ${targetLevel || 'INDIQUÉ'}.
 
 RÈGLE ABSOLUE SUR LES SOURCES
-- SOURCE 1 (le PDF pédagogique) est l'unique source du contenu, du plan, des explications, des faits, des dates, des notions et du récit de la vidéo.
+- SOURCE 1 (le Google Docs pédagogique) est l'unique source du contenu, du plan, des explications, des faits, des dates, des notions et du récit de la vidéo.
 - SOURCE 2 (la présentation Google Slides) ne doit jamais fournir une information supplémentaire et ne doit jamais modifier le plan de la SOURCE 1.
 - SOURCE 2 sert exclusivement à illustrer les passages pour lesquels la SOURCE 1 contient une référence explicite de la forme « REPÈRE VISUEL — SOURCE 2, DIAPOSITIVE N°... ».
 - Pour chaque repère, utilise uniquement la ou les diapositives exactement numérotées dans la SOURCE 1. N'utilise aucune autre diapositive, même si elle semble pertinente.
-- Si un visuel référencé est indisponible ou illisible, poursuis la vidéo sans lui et n'invente aucun visuel de remplacement présenté comme provenant des slides.
+- Si un visuel référencé est indisponible ou illisible, poursuis la vidéo sans lui.
 
 CONSTRUCTION DE LA VIDÉO
 - Suis exactement l'ordre des grandes parties de la SOURCE 1.
@@ -5104,7 +5361,7 @@ Avant de générer, vérifie que chaque phrase informative vient de la SOURCE 1 
         const courseDescription = String(selectedCourse?.description || formData.generalSheetCourseDescription || '').trim();
         const slidesUrl = String(formData.presentationUrl || '').trim();
         const slidesFocus = String(formData.presentationSlidesFocus || '').trim();
-        const prompt = `PROMPT UNIQUE CONDAWEB — FICHE GÉNÉRALE + PDF SOURCE NOTEBOOKLM
+        const prompt = `PROMPT CONDAWEB — FICHE GÉNÉRALE + QCM
 
 CHAPITRE À FICHER
 - Titre exact : ${chapterTitle}
@@ -5112,19 +5369,21 @@ CHAPITRE À FICHER
 - Niveau : ${targetLevel || 'non précisé'}
 - Nom de l'apprentissage : ${String(formData.title || '').trim() || 'non précisé'}
 
-SOURCE À ANALYSER
+PRÉSENTATION À ANALYSER
 - Séquence de cours sélectionnée : ${courseTitle || 'SÉQUENCE NON SÉLECTIONNÉE'}
 - Détail de la séquence : ${courseDescription || 'aucun détail renseigné'}
 - URL Google Slides : ${slidesUrl || 'URL NON RENSEIGNÉE DANS CONDAWEB'}
-${slidesFocus ? `- Slides de trace écrite à privilégier : ${slidesFocus}` : '- Analyse toutes les diapositives utiles au chapitre.'}
+${slidesFocus ? `- Slides de trace écrite identifiées : ${slidesFocus}` : '- Repère dans la présentation les slides de trace écrite intitulées « Leçon 1 », « Leçon 2 », « Leçon 3 »…'}
 
-Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-dessus. Produis uniquement la fiche du chapitre « ${chapterTitle} ». Ignore les diapositives appartenant à un autre chapitre. Toutes les grandes parties du chapitre présentes dans les slides doivent devenir des fiches/parties distinctes dans la structure ci-dessous.
+Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-dessus. Produis uniquement la fiche du chapitre « ${chapterTitle} ».
 
-À partir de mes sources, produis DEUX LIVRABLES cohérents à partir du même plan :
-1. une super-fiche de cours prête à être importée dans CondaWeb ;
-2. un document PDF pédagogique disponible en ligne, destiné à devenir la SOURCE 1 de la génération vidéo NotebookLM.
-
-Les deux livrables doivent transmettre exactement les mêmes connaissances, dans le même ordre et avec les mêmes grandes parties. Le PDF ne doit pas introduire un second plan ni contredire la fiche CondaWeb.
+RÈGLE DE PLAN PRIORITAIRE
+- Les slides intitulées « Leçon 1 », « Leçon 2 », « Leçon 3 »… (ou leur équivalent explicite) définissent obligatoirement le plan de la fiche.
+- Respecte leur ordre : LEÇON 1 devient la partie I, LEÇON 2 la partie II, LEÇON 3 la partie III, etc.
+- Le contenu des slides de trace écrite constitue la base de chaque partie : n'invente pas de grande partie et ne mélange pas deux leçons.
+- Les autres slides servent uniquement d'illustrations, documents, cartes, frises, photographies, schémas ou exemples pour éclairer la leçon correspondante. Ils peuvent enrichir une explication, mais ne doivent jamais créer une nouvelle partie ni modifier le plan des leçons.
+- Ignore les diapositives appartenant à un autre chapitre.
+- Ne crée aucun contenu pour NotebookLM, aucune base de vidéo, aucun Google Docs et aucun texte de prompt vidéo : l'onglet Vidéo s'en charge séparément.
 
 LIVRABLE 1 — BLOC « FICHE CONDAWEB »
 
@@ -5195,40 +5454,19 @@ Ne produire aucune correction séparée : la bonne réponse est uniquement ident
 À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire avant le titre de la fiche.
 À l'intérieur du bloc FICHE CONDAWEB, ne rien écrire après la dernière réponse du dernier QCM.
 
-LIVRABLE 2 — PDF PÉDAGOGIQUE, SOURCE 1 DE LA VIDÉO NOTEBOOKLM
-
-Après la ligne === FIN FICHE CONDAWEB ===, crée un document pédagogique autonome fondé sur le même plan.
-Ce document doit :
-- reprendre le titre, l'introduction utile et toutes les grandes parties I, II, III... de la fiche ;
-- présenter les idées essentielles sous forme de pages aérées, avec titres, courts paragraphes, repères chronologiques et légendes ;
-- ne pas tenter d'extraire ou d'intégrer directement les images des Google Slides dans le PDF ;
-- identifier dans la présentation quelques visuels stratégiques seulement : cartes, frises, schémas, œuvres, photographies, graphiques ou documents qui constituent des repères visuels essentiels ;
-- privilégier un repère lorsqu'il aide réellement à comprendre ou mémoriser une idée du plan ;
-- insérer près de l'idée concernée une référence exacte respectant impérativement ce format : « REPÈRE VISUEL — SOURCE 2, DIAPOSITIVE N°12 : [description précise du visuel et de ce qu'il faut observer] » ;
-- indiquer le numéro réel de la diapositive dans la présentation, sans numéro inventé ni référence approximative ;
-- ne référencer aucun visuel décoratif, doublon, illisible ou appartenant à un autre chapitre ;
-- conserver une excellente lisibilité, sans surcharge, avec environ 1 à 3 références visuelles essentielles par grande partie selon les besoins ;
-- terminer par une page « À retenir » qui synthétise le plan et les notions indispensables ;
-- ne pas inclure le QCM dans le PDF : ce document est la source narrative et visuelle de la future vidéo NotebookLM.
-
-Crée réellement ce document dans Gemini Canvas ou Google Docs, exporte-le en PDF, enregistre-le dans Google Drive si l'accès est disponible, puis fournis à la fin :
-PDF NOTEBOOKLM : [lien direct permettant d'ouvrir ou télécharger le PDF]
-
-Le lien doit être exploitable en ligne et partager le fichier en lecture. Si Gemini ne peut pas publier automatiquement le fichier, génère tout de même le document complet prêt à exporter et indique clairement l'unique action manuelle nécessaire pour obtenir le PDF, sans inventer de faux lien.
-
 VÉRIFICATION AVANT DE RÉPONDRE
 - Le titre et tout le contenu portent bien sur « ${chapterTitle} ».
-- Toutes les grandes parties réellement enseignées dans les slides sont présentes, sans inventer une partie absente.
+- Chaque slide « Leçon n » de la trace écrite correspond à une et une seule grande partie, dans le même ordre.
+- Les autres slides ont seulement servi à illustrer ou préciser la leçon concernée, sans modifier le plan.
 - Chaque grande partie possède son bloc LEÇON correspondant dans le QCM.
 - Le bloc FICHE CONDAWEB est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.
-- Le PDF suit exactement le même plan, référence précisément les diapositives utiles de la SOURCE 2 et possède un lien réel ou une instruction d'export honnête.
-- Les deux livrables sont adaptés au niveau ${targetLevel || 'indiqué'} de l'élève.`;
+- La fiche et le QCM sont adaptés au niveau ${targetLevel || 'indiqué'} de l'élève.`;
         // L'ouverture doit être synchrone avec le clic pour ne pas être bloquée
         // par Safari/Chrome avant l'écriture asynchrone dans le presse-papiers.
         window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
         try {
             await navigator.clipboard.writeText(prompt);
-            alert('Prompt unique fiche + PDF copié. Colle-le dans la nouvelle fenêtre Gemini.');
+            alert('Prompt de fiche + QCM copié. Colle-le dans la nouvelle fenêtre Gemini.');
         } catch (_) {
             const textarea = document.createElement('textarea');
             textarea.value = prompt;
@@ -5238,7 +5476,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
             textarea.select();
             document.execCommand('copy');
             textarea.remove();
-            alert('Prompt unique fiche + PDF copié. Colle-le dans la nouvelle fenêtre Gemini.');
+            alert('Prompt unique fiche + Google Docs copié. Colle-le dans la nouvelle fenêtre Gemini.');
         }
     };
 
@@ -5500,7 +5738,9 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     subject: chapter?.section || formData.subject || targetSection || 'GÉNÉRAL',
                     chapterId,
                     presentationUrl: String(formData.presentationUrl || '').trim(),
+                    presentationSourceUrl: String(formData.presentationSourceUrl || '').trim(),
                     presentationSlidesFocus: String(formData.presentationSlidesFocus || '').trim(),
+                    generalSheetDocUrl: String(formData.generalSheetDocUrl || '').trim(),
                     generalSheetCourseId: String(formData.generalSheetCourseId || '').trim(),
                     generalSheetCourseTitle: String(formData.generalSheetCourseTitle || '').trim(),
                     generalSheetCourseDescription: String(formData.generalSheetCourseDescription || '').trim(),
@@ -5750,10 +5990,10 @@ VÉRIFICATION AVANT DE RÉPONDRE
     const hasGlobalSheet = effectiveGlobalSheetSource.length > 0 || hasGeneratedGeneralSheet;
     const hasGlobalVideo = effectiveGlobalVideoSource.length > 0;
     const sheetBtnText = (() => {
-        if (hasGlobalSheet && globalSlidesWarmup.active) return `+ FICHE GÉNÉRALE ${globalSlidesWarmup.percent}%`;
-        if (hasGlobalSheet && globalSlidesWarmup.ready) return '+ FICHE GÉNÉRALE CHARGÉ';
-        if (hasGlobalSheet) return '+ FICHE GÉNÉRALE';
-        return '+ AJOUTER FICHE GÉNÉRALE';
+        if (hasGlobalSheet && globalSlidesWarmup.active) return `✦ FICHE + VIDÉO ${globalSlidesWarmup.percent}%`;
+        if (hasGlobalSheet && globalSlidesWarmup.ready) return '✦ FICHE + VIDÉO CHARGÉE';
+        if (hasGlobalSheet) return '✦ FICHE + VIDÉO NOTEBOOKLM';
+        return '✦ GÉNÉRER FICHE + VIDÉO';
     })();
     const videoBtnText = hasGlobalVideo ? '+ VIDÉO GÉNÉRALE CHARGÉE' : '+ AJOUTER VIDÉO GÉNÉRALE';
     const videoBtnClass = hasGlobalVideo
@@ -5857,6 +6097,100 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                     onChange={(e) => setSourcePickerVideoName(e.target.value)}
                                     placeholder="ex: Richesse et pauvreté - Leçon 4"
                                 />
+                                <div className="mt-4 rounded-xl border-2 border-violet-200 bg-violet-50 p-4">
+                                    <div className="text-[12px] font-black uppercase text-violet-900">Préparer les sources NotebookLM</div>
+                                    <div className="mt-1 text-[12px] font-bold text-violet-700">
+                                        Source 1 : fiche de cours en Google Docs, sans QCM. Source 2 : copie publique des Slides sélectionnés dans la présentation générale de cet apprentissage.
+                                    </div>
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload !border-indigo-300 !bg-indigo-600 !text-white"
+                                            onClick={createNotebookLmGoogleDoc}
+                                            disabled={creatingNotebookLmSource}
+                                        >
+                                            📄 Créer le Google Docs de la fiche
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload !border-sky-300 !bg-sky-600 !text-white"
+                                            onClick={createNotebookLmPublicSlides}
+                                            disabled={creatingNotebookLmSource}
+                                        >
+                                            🖼️ Créer les Google Slides publics
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload !border-emerald-300 !bg-emerald-600 !text-white"
+                                            onClick={copyNotebookLmVideoPrompt}
+                                        >
+                                            📋 Copier le prompt vidéo
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload !border-violet-300 !bg-violet-600 !text-white"
+                                            onClick={openNotebookLm}
+                                        >
+                                            ↗ Ouvrir NotebookLM
+                                        </button>
+                                    </div>
+                                    <div className="mt-3 rounded-lg border border-violet-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">
+                                        Présentation générale : {formData.presentationUrl ? 'sélectionnée dans l’apprentissage' : 'aucune présentation choisie dans l’apprentissage'}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload mt-3 !border-violet-300 !bg-white !text-violet-800"
+                                        onClick={() => setShowNotebookSlidesPicker((visible) => !visible)}
+                                        disabled={!isGoogleSlidesUrl(formData.presentationUrl || '')}
+                                    >
+                                        {showNotebookSlidesPicker ? '▴ Fermer le sélecteur de Slides' : '▾ Ouvrir le sélecteur de Slides'}
+                                    </button>
+                                    {showNotebookSlidesPicker && <>
+                                    <div className="mt-3 flex items-center gap-2">
+                                        <div className="text-[11px] font-black text-violet-800">
+                                            {notebookSlidesSelection.length
+                                                ? `Slides sélectionnées : ${notebookSlidesSelection[0]}-${notebookSlidesSelection[notebookSlidesSelection.length - 1]}`
+                                                : 'Clique une slide de début, puis une slide de fin.'}
+                                        </div>
+                                        {notebookSlidesSelection.length > 0 && (
+                                            <button type="button" className="ml-auto text-[11px] font-black text-violet-700 underline" onClick={() => setNotebookSlidesSelection([])}>
+                                                Effacer la sélection
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-violet-200 bg-white p-2">
+                                        {notebookSlidesLoading ? (
+                                            <div className="p-4 text-center text-[12px] font-bold text-slate-400">Chargement des slides…</div>
+                                        ) : notebookSlidesError ? (
+                                            <div className="p-4 text-center text-[12px] font-bold text-red-600">{notebookSlidesError}</div>
+                                        ) : notebookSlides.length === 0 ? (
+                                            <div className="p-4 text-center text-[12px] font-bold text-slate-400">Ajoute l’URL Google Slides pour les voir ici.</div>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                                {notebookSlides.map((slide) => {
+                                                    const number = Number(slide?.slideNumber || 0);
+                                                    const selected = notebookSlidesSelection.includes(number);
+                                                    const thumbnail = String(slide?.thumbnailProxyUrl || slide?.thumbnailUrl || '').trim();
+                                                    return (
+                                                        <button
+                                                            key={String(slide?.objectId || number)}
+                                                            type="button"
+                                                            onClick={() => selectNotebookSlideRange(number)}
+                                                            className={`overflow-hidden rounded-lg border-2 text-left ${selected ? 'border-violet-600 bg-violet-100' : 'border-slate-200 bg-slate-50 hover:border-violet-300'}`}
+                                                            title={`Slide ${number}`}
+                                                        >
+                                                            {thumbnail ? <img src={thumbnail} alt={`Slide ${number}`} className="h-20 w-full object-cover" /> : <div className="grid h-20 place-items-center text-[11px] font-black text-slate-400">Slide {number}</div>}
+                                                            <div className="px-2 py-1 text-[11px] font-black text-slate-700">Slide {number}{selected ? ' ✓' : ''}</div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    </>}
+                                    {formData.generalSheetDocUrl && <div className="mt-2 text-[11px] font-bold text-emerald-800">✓ Google Docs source 1 prêt</div>}
+                                    {formData.presentationSourceUrl && <div className="mt-1 text-[11px] font-bold text-sky-800">✓ Google Slides publics source 2 prêts</div>}
+                                </div>
                             </>
                         )}
                         <div className="mt-4 text-[12px] font-bold text-slate-500">
@@ -5893,14 +6227,14 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-2xl">
                         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-6 py-4">
                             <div>
-                                <div className="text-xl font-black text-slate-900">Créer une fiche générale</div>
-                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche, son QCM et le PDF source 1 ; les slides deviennent la source 2 visuelle de NotebookLM.</div>
+                                <div className="text-xl font-black text-slate-900">Générer une fiche + vidéo NotebookLM</div>
+                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche, son QCM et le Google Docs source 1 ; les slides deviennent la source 2 visuelle de NotebookLM.</div>
                             </div>
                             <button
                                 type="button"
                                 className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
                                 onClick={copyGeminiSuperSheetPrompt}
-                            >📋 Copier le prompt fiche + PDF et ouvrir Gemini</button>
+                            >📋 Copier le prompt fiche + Google Docs et ouvrir Gemini</button>
                             <button
                                 type="button"
                                 className="v84-res-btn upload !border-sky-300 !bg-sky-50 !text-sky-800"
@@ -5915,7 +6249,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
-                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : PDF = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
+                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : Google Docs = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
                             </div>
                             <SheetRichTextEditor
                                 html={generalSheetHtml}
@@ -6017,7 +6351,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                 <div className="mb-2">
                                     <div className="flex items-center gap-2">
                                     <input
-                                        className="v84-ans-input !h-9 !text-[22px] !font-black mb-2 leading-none placeholder:!text-slate-400"
+                                        className="v84-ans-input !h-9 !w-auto !min-w-0 flex-1 !text-[22px] !font-black mb-2 leading-none placeholder:!text-slate-400"
                                         value={String(sec.name || '')}
                                         onChange={(e) => renameSection(sec.id, e.target.value)}
                                         placeholder="Nouveau"
@@ -6025,9 +6359,10 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                     <button
                                         type="button"
                                         className="v84-del-btn mb-2 shrink-0"
+                                        style={{ position: 'static', transform: 'none', width: '32px', height: '32px', fontSize: '16px', opacity: 1 }}
                                         onClick={() => removeSection(sec.id)}
-                                        title="Supprimer cette section"
-                                        aria-label={`Supprimer la section ${sec.name || ''}`}
+                                        title="Supprimer cette partie et ses activités"
+                                        aria-label={`Supprimer la partie ${sec.name || ''}`}
                                     >✕</button>
                                     </div>
                                     <button

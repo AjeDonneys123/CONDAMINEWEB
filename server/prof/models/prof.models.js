@@ -119,7 +119,8 @@ const StudentSchema = new mongoose.Schema({
         expiresAt: { type: Date, default: null },
         updatedAt: { type: Date, default: null }
     },
-    isTestAccount: { type: Boolean, default: false }
+    isTestAccount: { type: Boolean, default: false },
+    isDil: { type: Boolean, default: false }
 }, { timestamps: true });
 
 StudentSchema.pre('save', function forceSharedEmailForTestAccount(next) {
@@ -692,6 +693,15 @@ const Models = {
     GameProgress: getModel('GameProgress', {
         studentId: mongoose.Schema.Types.ObjectId, gameId: mongoose.Schema.Types.ObjectId,
         levelReached: { type: Number, default: 0 }, lastScore: { type: Number, default: 0 }
+    }),
+
+    DilVocabulary: getModel('DilVocabulary', {
+        studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
+        french: { type: String, required: true, trim: true },
+        spanish: { type: String, required: true, trim: true },
+        correctCount: { type: Number, default: 0 },
+        mastered: { type: Boolean, default: false, index: true },
+        lastCorrectAt: { type: Date, default: null }
     }),
 
     StudioProject: getModel('StudioProject', {

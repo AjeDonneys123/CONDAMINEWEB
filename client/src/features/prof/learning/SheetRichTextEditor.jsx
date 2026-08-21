@@ -207,6 +207,12 @@ const applySheetHeadingColors = (root) => {
     if (/^\d{1,2}\s*-\s+.+/.test(text)) {
       line.style.color = '#16a34a';
       line.style.fontWeight = '700';
+      // Dans une idée principale, seuls les vrais <strong>/<b> sont des
+      // mots-clés : les souligner les rend identifiables sans confondre le
+      // gras hiérarchique de toute la ligne avec un mot à compléter.
+      line.querySelectorAll('strong, b').forEach((keyword) => {
+        keyword.style.textDecoration = 'underline';
+      });
       return true;
     }
     return false;
@@ -452,6 +458,12 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
           onMouseDown={command('italic')}
           title="Mettre en italique"
         >I</button>
+        <button
+          type="button"
+          className="grid h-10 min-w-10 place-items-center rounded-lg border-2 border-slate-300 bg-white px-3 text-lg font-black underline text-slate-900 shadow-sm hover:bg-slate-100"
+          onMouseDown={command('underline')}
+          title="Souligner"
+        >U</button>
         <button
           type="button"
           className="grid h-10 min-w-10 place-items-center rounded-lg border-2 border-slate-300 bg-white px-3 text-lg font-black text-slate-900 shadow-sm hover:bg-slate-100"

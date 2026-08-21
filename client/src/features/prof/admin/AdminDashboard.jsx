@@ -322,6 +322,10 @@ export default function AdminDashboard({ user, onRefresh }) {
                                             />
                                             Compte test Google partagé
                                         </label>
+                                        <label className="flex items-center gap-2 text-[11px] font-black uppercase text-violet-700 ml-1">
+                                            <input type="checkbox" checked={currentItem.isDil === true} onChange={(e) => setCurrentItem({ ...currentItem, isDil: e.target.checked })} />
+                                            Élève DIL · français langue seconde
+                                        </label>
                                     </>
                                 )}
                                 {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}

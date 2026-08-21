@@ -20,6 +20,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     : /^(2|2DE|SECONDE)/.test(classKey)
       ? '🧠 ENTRAÎNEMENT'
       : '🧠 ENTRAÎNEMENT';
+  const hasDilMode = user?.isDil === true || user?.isVisitorPreview === true;
 
   // --- LOGIQUE STATS ---
   const behaviorRecords = Array.isArray(user.behaviorRecords) ? user.behaviorRecords : [];
@@ -142,6 +143,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
             <button onClick={() => onTabChange('courses')} className={`tab-item ${activeTab === 'courses' ? 'tab-active' : ''}`}>📚 COURS</button>
             <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
             <button onClick={() => onTabChange('training')} className={`tab-item ${activeTab === 'training' ? 'tab-active' : ''}`}>{trainingTabLabel}</button>
+            {hasDilMode && <button onClick={() => onTabChange('dil')} className={`tab-item ${activeTab === 'dil' ? 'tab-active' : ''}`}>🌍 DIL</button>}
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
             <button onClick={() => onTabChange('chat')} className={`tab-item ${activeTab === 'chat' ? 'tab-active' : ''}`}>🔎 RECHERCHE</button>
         </div>

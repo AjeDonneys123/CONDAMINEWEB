@@ -76,11 +76,24 @@ export default function StudentsManager({ globalClassId }) {
   const [gptFeedbackEntries, setGptFeedbackEntries] = useState([]);
   const [gptFeedbackLoading, setGptFeedbackLoading] = useState(false);
   const [gptFeedbackError, setGptFeedbackError] = useState('');
+  const [dilVocabulary, setDilVocabulary] = useState([]);
 
   useEffect(() => {
     if (!globalClassId) return;
     loadMatrix();
   }, [globalClassId]);
+
+  useEffect(() => {
+    const studentId = extractId(viewingStudent?._id);
+    if (!studentId || viewingStudent?.isDil !== true) {
+      setDilVocabulary([]);
+      return;
+    }
+    fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((rows) => setDilVocabulary(Array.isArray(rows) ? rows : []))
+      .catch(() => setDilVocabulary([]));
+  }, [viewingStudent]);
 
   const loadMatrix = async () => {
     setLoading(true);
@@ -704,6 +717,20 @@ export default function StudentsManager({ globalClassId }) {
                         <button onClick={() => setViewingStudent(null)} className="text-white text-2xl font-black">✕</button>
                     </div>
                     <div className="corr-body flex-col bg-slate-50 p-6 overflow-y-auto gap-4 custom-scrollbar">
+                        {viewingStudent.isDil === true && (
+                            <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                                <h4 className="text-xs font-black text-violet-700 uppercase mb-2">🌍 DIL · Vocabulaire espagnol</h4>
+                                {dilVocabulary.length === 0 ? <p className="text-sm font-bold text-slate-400">Aucun mot enregistré pour le moment.</p> : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {dilVocabulary.map((word) => (
+                                            <span key={word._id} className={`rounded-lg px-2 py-1 text-xs font-black ${word.mastered ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-500 border border-violet-100'}`}>
+                                                {word.spanish} → {word.mastered ? word.french : 'à apprendre'}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {/* NOTES MANUELLES DE SCAN */}
                         {Array.isArray(viewingStudent.manualScanGrades) && viewingStudent.manualScanGrades.length > 0 && (
                             <div className="mb-4">

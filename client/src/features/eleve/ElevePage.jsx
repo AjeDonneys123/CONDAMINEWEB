@@ -10,6 +10,7 @@ import HomeworkList from './homework/HomeworkList';
 import EleveChatWorkspace from './chat/EleveChatWorkspace';
 import EleveCoursesList from './courses/EleveCoursesList';
 import ExamTrainingHub from './training/ExamTrainingHub';
+import DilWorkspace from './dil/DilWorkspace';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
@@ -166,6 +167,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             )}
             {tab === 'chat' && <EleveChatWorkspace user={freshUser} onQuit={() => setTab('status')} />}
             {tab === 'training' && <ExamTrainingHub user={freshUser} canCalibrate={Boolean(onBackToProf) && freshUser?.isVisitorPreview !== true} />}
+            {tab === 'dil' && (freshUser?.isDil === true || freshUser?.isVisitorPreview === true) && <DilWorkspace user={freshUser} />}
             {tab === 'jeux' && (
               <GamesGrid
                 user={freshUser}
