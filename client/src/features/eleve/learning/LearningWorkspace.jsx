@@ -2282,6 +2282,13 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             media.currentTime = mediaItem.startSec;
         }
     };
+    const moduleSongItems = (() => {
+        const master = steps.find((candidate) => candidate?.type === 'sheet' && candidate?.isGeneralSheetMaster === true);
+        const raw = Array.isArray(master?.sheetMediaItems) && master.sheetMediaItems.length
+            ? master.sheetMediaItems
+            : (master?.sheetMediaUrl ? [{ url: master.sheetMediaUrl, name: master.sheetMediaName, type: master.sheetMediaType, startSec: master.sheetMediaStartSec, endSec: master.sheetMediaEndSec }] : []);
+        return raw.filter((media) => String(media?.url || '').trim()).map((media, index) => ({ ...media, id: media.id || `module_song_${index}`, url: resolveBackendAssetUrl(resolveDriveAssetUrl(media.url)), startSec: Math.max(0, Number(media.startSec || 0)), endSec: Math.max(0, Number(media.endSec || 0)) }));
+    })();
 
     useEffect(() => {
         if (currentStep?.type !== 'video') return;
@@ -2557,22 +2564,11 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             <div className="learning-missing">Aucune vidéo configurée.</div>
                         )}
                         <div className="learning-meta">{videoUnlocked ? '✅ Vidéo terminée' : '⏳ En attente de fin vidéo'}</div>
-                        <div className="learning-study-toggle-row">
-                            <button className="learning-btn ghost" onClick={openGeminiCourseHelper}>✨ Poser des questions a l'IA sur le cours</button>
-                        </div>
-                        {!hasGeminiExtension && geminiExtensionHint && (
-                            <div className="learning-error">
-                                {geminiExtensionHint}
-                                <div style={{ marginTop: 8 }}>
-                                    <a
-                                        href="https://chromewebstore.google.com/search/gemini"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="learning-btn ghost"
-                                    >
-                                        Installer l&apos;extension Gemini
-                                    </a>
-                                </div>
+                        {moduleSongItems.length > 0 && (
+                            <div className="learning-sheet-media">
+                                <div className="learning-sheet-media-title">🎵 {moduleSongItems[0].name || 'Chanson de la séquence'}</div>
+                                <audio src={moduleSongItems[0].url} controls className="learning-sheet-media-player" onLoadedMetadata={(e) => { if (moduleSongItems[0].startSec > 0) e.currentTarget.currentTime = moduleSongItems[0].startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, moduleSongItems[0])} />
+                                <a className="learning-sheet-media-download" href={moduleSongItems[0].url} download={moduleSongItems[0].name || 'chanson.mp3'}>⬇ Télécharger la chanson</a>
                             </div>
                         )}
                     </>

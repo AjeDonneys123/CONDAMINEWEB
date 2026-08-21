@@ -31,6 +31,14 @@ router.post('/:studentId/vocabulary', async (req, res) => {
     res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish }));
 });
 
+router.delete('/:studentId/vocabulary/:wordId', async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.studentId) || !mongoose.Types.ObjectId.isValid(req.params.wordId)) {
+        return res.status(400).json({ error: 'Mot ou élève invalide.' });
+    }
+    await DilVocabulary.deleteOne({ _id: req.params.wordId, studentId: req.params.studentId });
+    res.json({ ok: true });
+});
+
 router.post('/:studentId/answer', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
     const word = await DilVocabulary.findOne({ _id: req.body?.wordId, studentId: req.params.studentId });
