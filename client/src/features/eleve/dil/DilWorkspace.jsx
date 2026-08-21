@@ -108,7 +108,20 @@ export default function DilWorkspace({ user }) {
     setSelected((value) => ({ ...value, saved: true, wordId: savedWord._id }));
   };
   const toggleSelectedWord = async () => {
-    if (!selected?.french || preview || !studentId) return;
+    if (!selected?.french) return;
+    // L'aperçu professeur n'a pas d'identifiant élève : il doit néanmoins
+    // permettre de tester le clic +/✓ sans écrire dans la base.
+    if (preview || !studentId) {
+      if (selected.saved) {
+        setWords((previous) => previous.filter((item) => String(item._id) !== String(selected.wordId)));
+        setSelected((value) => ({ ...value, saved: false, wordId: '', saveError: '' }));
+      } else {
+        const localWord = { _id: `preview_${Date.now()}`, french: selected.french, spanish: selected.spanish, mastered: false };
+        setWords((previous) => [localWord, ...previous.filter((item) => String(item.french || '').toLocaleLowerCase() !== String(localWord.french).toLocaleLowerCase())]);
+        setSelected((value) => ({ ...value, saved: true, wordId: localWord._id, saveError: '' }));
+      }
+      return;
+    }
     if (!selected.saved) return saveSelectedWord();
     const stored = selected.wordId || words.find((item) => String(item.french || '').toLocaleLowerCase() === String(selected.french || '').toLocaleLowerCase())?._id;
     if (!stored) return;
@@ -116,6 +129,13 @@ export default function DilWorkspace({ user }) {
     if (!response.ok) return setSelected((value) => ({ ...value, saveError: 'Suppression impossible.' }));
     setWords((previous) => previous.filter((item) => String(item._id) !== String(stored)));
     setSelected((value) => ({ ...value, saved: false, wordId: '', saveError: '' }));
+  };
+  const selectOrToggleWord = (french, index) => {
+    if (selected?.index === index && selected?.spanish && selected.spanish !== 'Traduction…') {
+      toggleSelectedWord();
+      return;
+    }
+    translate(french, index);
   };
   const current = words[trainingIndex % Math.max(1, words.length)];
   const known = useMemo(() => words.filter((word) => word.mastered).length, [words]);
@@ -138,7 +158,7 @@ export default function DilWorkspace({ user }) {
       {photoUrl && !hasTranscription && <div className="dil-crop"><div className="dil-crop-preview"><img src={photoUrl} alt="Document à recadrer" /><div className="dil-crop-window" style={{ top: `${crop.top}%`, left: `${crop.left}%`, right: `${crop.right}%`, bottom: `${crop.bottom}%` }} /></div><div className="dil-crop-controls">{['top', 'bottom', 'left', 'right'].map((side) => <label key={side}>{side === 'top' ? 'Haut' : side === 'bottom' ? 'Bas' : side === 'left' ? 'Gauche' : 'Droite'} <input type="range" min="0" max="45" value={crop[side]} onChange={(event) => setCrop((value) => ({ ...value, [side]: Number(event.target.value) }))} /></label>)}<button onClick={readPhoto} disabled={photoBusy}>{photoBusy ? 'LECTURE…' : 'LIRE LA ZONE CADRÉE'}</button></div></div>}
       <input className="dil-title-input" value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="Titre du document (détecté automatiquement)" />
       <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Le texte du document apparaîtra ici. Clique ensuite sur un mot français pour le traduire." />
-      <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''}`} key={`title-${index}`}><button onClick={() => translate(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small>{selected.spanish}<button className="dil-save-word" onClick={toggleSelectedWord} disabled={preview} title={selected.saved ? 'Retirer de mes mots' : 'Ajouter à mes mots'}>{selected.saved ? '✓' : '+'}</button>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''}`} key={`${part}-${index}`}><button onClick={() => translate(part, index)}>{part}</button>{selected?.index === index && <small>{selected.spanish}<button className="dil-save-word" onClick={toggleSelectedWord} disabled={preview} title={selected.saved ? 'Retirer de mes mots' : 'Ajouter à mes mots'}>{selected.saved ? '✓' : '+'}</button>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : <span key={index}>{part}</span>)}</div>
+      <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''} ${selected?.index === `title-${index}` && selected?.saved ? 'saved' : ''}`} key={`title-${index}`}><button onClick={() => selectOrToggleWord(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>{selected.spanish}<b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''} ${selected?.index === index && selected?.saved ? 'saved' : ''}`} key={`${part}-${index}`}><button onClick={() => selectOrToggleWord(part, index)}>{part}</button>{selected?.index === index && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>{selected.spanish}<b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : <span key={index}>{part}</span>)}</div>
     </div> : <div className="dil-card dil-training">
       {!current ? <p className="dil-empty">Traduis d’abord des mots dans l’onglet Traduction : ils apparaîtront ici.</p> : <form onSubmit={checkAnswer}><div className="dil-instruction">TRADUISEZ EN FRANÇAIS</div><div className="dil-spanish">{current.spanish}</div><input autoFocus value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Écris le mot français" /><button type="submit">VÉRIFIER</button>{feedback && <p className="dil-feedback">{feedback}</p>}</form>}
       {words.length > 0 && <div className="dil-word-list"><b>Mes mots</b>{words.map((word) => <span key={word._id || word.french} className={word.mastered ? 'known' : ''}>{word.spanish} → {word.mastered ? word.french : 'à apprendre'}</span>)}</div>}
