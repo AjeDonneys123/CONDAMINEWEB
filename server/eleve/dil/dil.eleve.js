@@ -95,4 +95,18 @@ router.get('/translate/fr-es', async (req, res) => {
     }
 });
 
+router.get('/translate/es-fr', async (req, res) => {
+    const spanish = cleanWord(req.query?.q);
+    if (!spanish) return res.status(400).json({ error: 'Mot manquant.' });
+    try {
+        const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(spanish)}&langpair=es|fr`);
+        const data = await response.json().catch(() => ({}));
+        const french = cleanWord(data?.responseData?.translatedText);
+        if (!response.ok || !french) throw new Error('Traduction indisponible.');
+        res.json({ french, spanish });
+    } catch (error) {
+        res.status(502).json({ error: error.message || 'Traduction indisponible.' });
+    }
+});
+
 module.exports = router;

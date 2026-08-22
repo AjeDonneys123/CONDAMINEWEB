@@ -15,6 +15,11 @@ const normalize = (txt = '') =>
         .replace(/\s+/g, ' ')
         .trim();
 
+const formatVideoTime = (seconds = 0) => {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+};
+
 const normalizeRanges = (ranges = [], textLen = 0) => {
     const clean = (ranges || [])
         .map((r) => ({
@@ -513,6 +518,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [videoRenderError, setVideoRenderError] = useState(false);
     const [videoManualDone, setVideoManualDone] = useState(false);
     const [videoUseProxyFallback, setVideoUseProxyFallback] = useState(false);
+    const [videoEmbedStarted, setVideoEmbedStarted] = useState(false);
+    const [videoPosition, setVideoPosition] = useState(0);
+    const [videoPlaying, setVideoPlaying] = useState(false);
+    const [videoDuration, setVideoDuration] = useState(0);
     const [videoCongratsShown, setVideoCongratsShown] = useState(false);
     const [answerText, setAnswerText] = useState('');
     const [recording, setRecording] = useState(false);
@@ -528,6 +537,11 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [quizStates, setQuizStates] = useState({});
     const [questionFeedback, setQuestionFeedback] = useState(null);
     const [questionSuccessFlash, setQuestionSuccessFlash] = useState(false);
+    const studentRewardKey = `condaweb-training-points-v1:${String(user?._id || user?.id || user?.name || 'student').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const [learningStars, setLearningStars] = useState(() => {
+        try { return Number(JSON.parse(window.localStorage.getItem(studentRewardKey) || '{}')?.points || 0); } catch (_) { return 0; }
+    });
+    const [starGain, setStarGain] = useState(0);
     const [aiErrorPanel, setAiErrorPanel] = useState(null); // { message, expected, missingWords[] }
     const [synonymChecking, setSynonymChecking] = useState(false);
     const [synonymError, setSynonymError] = useState('');
@@ -563,6 +577,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
+    const videoEmbedRef = useRef(null);
     const sheetStartedAt = useRef(Date.now());
     const sheetTimesRef = useRef({});
     const speechRef = useRef(null);
@@ -588,9 +603,11 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const realtimeChannelRef = useRef(null);
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
+    const starGainTimerRef = useRef(0);
     const currentStep = steps[stepIndex];
     const isHardRecitation = currentStep?.type === 'question' && String(currentStep?.questionMode || 'easy') === 'hard';
     const studentIdForGpt = String(user?._id || user?.id || '').trim();
+    const isVisitorPreview = user?.isVisitorPreview === true || /^visitor-/i.test(studentIdForGpt);
     const studentCodeForGpt = (() => {
         const raw = studentIdForGpt.replace(/[^a-f0-9]/gi, '').slice(-8);
         if (!raw) return '';
@@ -599,6 +616,22 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const studentFullNameForGpt = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || user?.nickname || 'utilisateur';
     const studentClassForGpt = String(user?.currentClass || user?.className || user?.classe || '').trim();
     const studentGptUrl = import.meta.env?.VITE_STUDENT_GPT_URL || 'https://chatgpt.com/';
+
+    const awardLearningStars = (activity, amount) => {
+        if (typeof window === 'undefined' || !amount) return;
+        const rewardId = `${String(module?._id || module?.id || module?.title || 'module')}:${String(activity)}`;
+        try {
+            const saved = JSON.parse(window.localStorage.getItem(studentRewardKey) || '{}') || {};
+            const awarded = saved.learningAwards || {};
+            if (awarded[rewardId]) return;
+            const next = { ...saved, points: Math.max(0, Number(saved.points || 0)) + Number(amount), learningAwards: { ...awarded, [rewardId]: true } };
+            window.localStorage.setItem(studentRewardKey, JSON.stringify(next));
+            setLearningStars(next.points);
+            setStarGain(Number(amount));
+            window.clearTimeout(starGainTimerRef.current);
+            starGainTimerRef.current = window.setTimeout(() => setStarGain(0), 1800);
+        } catch (_) {}
+    };
 
     const clearPendingAudio = () => {
         const previous = pendingAudioRef.current;
@@ -959,6 +992,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
     const checkStudentGptValidation = useCallback(async ({ manual = false } = {}) => {
         if (currentStep?.type !== 'question') return false;
+        // L'aperçu professeur n'est pas un élève et ne doit jamais interroger
+        // la boîte de retours GPT.
+        if (isVisitorPreview) return false;
         const moduleId = String(module?._id || module?.id || '').trim();
         const stepId = String(currentStep?.id || '').trim();
         const studentId = String(user?._id || user?.id || '').trim();
@@ -1009,24 +1045,15 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         module?._id,
         module?.id,
         studentCodeForGpt,
+        isVisitorPreview,
         user?._id,
         user?.id
     ]);
 
     useEffect(() => {
-        if (currentStep?.type !== 'question' || studentGptValidated) return;
-        let stopped = false;
-        const checkFeedback = async () => {
-            if (stopped) return;
-            await checkStudentGptValidation();
-        };
-        checkFeedback();
-        const timer = window.setInterval(checkFeedback, 4000);
-        return () => {
-            stopped = true;
-            window.clearInterval(timer);
-        };
-    }, [checkStudentGptValidation, currentStep?.type, studentGptValidated]);
+        // La vérification est volontaire : elle est lancée par « Vérifier mon
+        // retour » après une vraie conversation GPT. Aucun polling en boucle.
+    }, [checkStudentGptValidation]);
 
     useEffect(() => {
         const syncGeminiExtension = () => {
@@ -1077,6 +1104,10 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         setVideoRenderError(false);
         setVideoManualDone(false);
         setVideoUseProxyFallback(false);
+        setVideoEmbedStarted(false);
+        setVideoPosition(0);
+        setVideoPlaying(false);
+        setVideoDuration(0);
         setVideoCongratsShown(false);
         setAnswerText('');
         clearPendingAudio();
@@ -1359,6 +1390,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
             setVideoUnlocked(true);
             setGateHint('');
+            awardLearningStars(`video:${currentStep.id || stepIndex}`, 5);
             if (!videoCongratsShown) {
                 setVideoCongratsShown(true);
                 speakAiText('Bravo, séquence terminée.');
@@ -2056,18 +2088,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
     const verifyQuestionPage = async () => {
         const unresolved = questionItems.filter((item) => currentQuizState.results?.[item.id] !== 'correct');
-        const hasMissingAnswer = unresolved.some((item) => {
-            if (item.validationType !== 'fill_blanks') {
-                return !String(currentQuizState.answers?.[item.id] || '').trim();
-            }
-            const expectedCount = parseFillBlankText(item.question).answers.length;
-            const values = currentQuizState.blankAnswers?.[item.id] || [];
-            return expectedCount === 0 || Array.from({ length: expectedCount }).some((_, index) => !String(values[index] || '').trim());
-        });
-        if (hasMissingAnswer) {
-            setGateHint('Réponds à toutes les questions restantes avant de vérifier.');
-            return;
-        }
+        awardLearningStars(`attempt:${currentQuizKey}`, 1);
         const nextResults = { ...(currentQuizState.results || {}) };
         unresolved.forEach((item) => {
             if (item.validationType === 'fill_blanks') {
@@ -2082,16 +2103,20 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         const failed = questionItems.filter((item) => nextResults[item.id] !== 'correct');
         if (failed.length === 0) {
             updateCurrentQuizState((state) => ({ ...state, results: nextResults, stage: 'complete' }));
+            const hasFillBlank = questionItems.some((item) => item.validationType === 'fill_blanks');
+            awardLearningStars(`success:${currentQuizKey}`, hasFillBlank ? 40 : 10);
             await finishQuestionPage();
             return;
         }
         updateCurrentQuizState((state) => ({
             ...state,
             results: nextResults,
-            stage: 'must_review',
-            revealed: {}
+            stage: 'correction',
+            // Après « Vérifier », les réponses manquantes sont visibles tout
+            // de suite pour permettre la vérification et l'apprentissage.
+            revealed: Object.fromEntries(failed.map((item) => [item.id, true]))
         }));
-        setGateHint(`${failed.length} réponse${failed.length > 1 ? 's' : ''} à revoir. Retourne à la fiche avant de réessayer.`);
+        setGateHint(`${failed.length} réponse${failed.length > 1 ? 's' : ''} à revoir : la réponse attendue est affichée en rouge.`);
         stopRecording({ transcribe: false });
     };
 
@@ -2197,6 +2222,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return;
         }
         setGateHint('');
+        if (currentStep.type === 'sheet') awardLearningStars(`sheet:${currentStep.id || stepIndex}`, 3);
         const next = new Set([...validated, stepIndex]);
         setValidated(next);
         const isLast = stepIndex >= steps.length - 1;
@@ -2256,6 +2282,66 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         }
     };
     const embedVideoUrl = withSegmentParams(toEmbedUrl(videoUrlResolved));
+    const protectedEmbedVideoUrl = (() => {
+        if (!embedVideoUrl) return '';
+        try {
+            const u = new URL(embedVideoUrl);
+            u.searchParams.set('controls', '0');
+            u.searchParams.set('disablekb', '1');
+            u.searchParams.set('playsinline', '1');
+            u.searchParams.set('enablejsapi', '1');
+            u.searchParams.set('origin', window.location.origin);
+            u.searchParams.set('autoplay', videoEmbedStarted ? '1' : '0');
+            return u.toString();
+        } catch (_) { return embedVideoUrl; }
+    })();
+    const hasVideoSegmentEnd = segmentEnd > segmentStart;
+    const timelineEnd = hasVideoSegmentEnd
+        ? segmentEnd
+        : Math.max(segmentStart, Number(videoDuration) || segmentStart);
+    const clampToVideoSegment = (value) => Math.min(timelineEnd, Math.max(segmentStart, Number(value) || segmentStart));
+    const sendEmbedVideoCommand = useCallback((func, args = []) => {
+        const frameWindow = videoEmbedRef.current?.contentWindow;
+        if (!frameWindow) return;
+        frameWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+    }, []);
+    const seekInsideVideoSegment = useCallback((value) => {
+        const nextTime = clampToVideoSegment(value);
+        setVideoPosition(nextTime);
+        setVideoEnded(false);
+        setVideoUnlocked(false);
+        if (directVideo) {
+            const el = videoRef.current;
+            if (el) {
+                try { el.currentTime = nextTime; } catch (_) {}
+            }
+            return;
+        }
+        sendEmbedVideoCommand('seekTo', [nextTime, true]);
+    }, [directVideo, sendEmbedVideoCommand, segmentStart, timelineEnd]);
+    const toggleVideoPlayback = useCallback(() => {
+        if (directVideo) {
+            const el = videoRef.current;
+            if (!el) return;
+            if (el.paused) {
+                el.play().catch(() => {});
+            } else {
+                el.pause();
+            }
+            return;
+        }
+        if (videoPlaying && videoEmbedStarted) {
+            sendEmbedVideoCommand('pauseVideo');
+            setVideoPlaying(false);
+            return;
+        }
+        setVideoEmbedStarted(true);
+        setVideoPlaying(true);
+        window.setTimeout(() => {
+            sendEmbedVideoCommand('seekTo', [clampToVideoSegment(videoPosition || segmentStart), true]);
+            sendEmbedVideoCommand('playVideo');
+        }, 350);
+    }, [clampToVideoSegment, directVideo, segmentStart, sendEmbedVideoCommand, videoEmbedStarted, videoPlaying, videoPosition]);
     const generalSheetMedia = currentStep?.type === 'sheet'
         ? (steps.find((candidate) => String(candidate?.id || '') === String(currentStep?.generalSheetParentId || ''))
             || steps.find((candidate) => candidate?.type === 'sheet' && candidate?.isGeneralSheetMaster === true)
@@ -2299,33 +2385,86 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         const clampSegment = () => {
             if (segmentStart > 0 && el.currentTime < (segmentStart - EPS)) {
                 try { el.currentTime = segmentStart; } catch (_) {}
+                setVideoPosition(segmentStart);
                 return;
             }
             if (segmentEnd > 0 && segmentEnd > segmentStart && el.currentTime >= (segmentEnd - EPS)) {
                 try { el.pause(); } catch (_) {}
+                setVideoPosition(segmentEnd);
+                setVideoPlaying(false);
                 setVideoEnded(true);
                 setVideoUnlocked(true);
+                return;
             }
+            setVideoPosition(el.currentTime);
         };
 
         const onLoaded = () => {
+            setVideoDuration(Number(el.duration) || 0);
             if (segmentStart > 0) {
                 try { el.currentTime = segmentStart; } catch (_) {}
             }
+            setVideoPosition(segmentStart);
             clampSegment();
         };
         const onSeeking = () => clampSegment();
         const onTime = () => clampSegment();
+        const onPlay = () => setVideoPlaying(true);
+        const onPause = () => setVideoPlaying(false);
 
         el.addEventListener('loadedmetadata', onLoaded);
         el.addEventListener('seeking', onSeeking);
         el.addEventListener('timeupdate', onTime);
+        el.addEventListener('play', onPlay);
+        el.addEventListener('pause', onPause);
         return () => {
             el.removeEventListener('loadedmetadata', onLoaded);
             el.removeEventListener('seeking', onSeeking);
             el.removeEventListener('timeupdate', onTime);
+            el.removeEventListener('play', onPlay);
+            el.removeEventListener('pause', onPause);
         };
     }, [currentStep, segmentStart, segmentEnd, directVideo]);
+
+    useEffect(() => {
+        if (currentStep?.type !== 'video' || directVideo || !videoEmbedStarted) return undefined;
+        const onPlayerMessage = (event) => {
+            if (!/youtube(?:-nocookie)?\.com$/.test(new URL(event.origin).hostname)) return;
+            let data;
+            try { data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch (_) { return; }
+            if (data?.event === 'onStateChange') {
+                if (Number(data?.info) === 1) setVideoPlaying(true);
+                if (Number(data?.info) === 2) setVideoPlaying(false);
+                if (Number(data?.info) === 0) {
+                    setVideoPlaying(false);
+                    setVideoEnded(true);
+                    setVideoUnlocked(true);
+                }
+            }
+            const time = Number(data?.info?.currentTime);
+            const duration = Number(data?.info?.duration);
+            if (Number.isFinite(duration) && duration > 0) setVideoDuration(duration);
+            if (!Number.isFinite(time)) return;
+            if (time < segmentStart - 0.25) {
+                sendEmbedVideoCommand('seekTo', [segmentStart, true]);
+                return;
+            }
+            setVideoPosition(time);
+            if (hasVideoSegmentEnd && time >= segmentEnd - 0.2) {
+                sendEmbedVideoCommand('pauseVideo');
+                setVideoPosition(segmentEnd);
+                setVideoPlaying(false);
+                setVideoEnded(true);
+                setVideoUnlocked(true);
+            }
+        };
+        window.addEventListener('message', onPlayerMessage);
+        const poll = window.setInterval(() => sendEmbedVideoCommand('getCurrentTime'), 500);
+        return () => {
+            window.removeEventListener('message', onPlayerMessage);
+            window.clearInterval(poll);
+        };
+    }, [currentStep?.id, currentStep?.type, directVideo, hasVideoSegmentEnd, segmentEnd, segmentStart, sendEmbedVideoCommand, videoEmbedStarted]);
 
     const renderSegmentWithPink = (segment) => {
         const source = String(segment?.text || '');
@@ -2369,7 +2508,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             <div className="learning-top">
                 <button className="learning-btn ghost" onClick={onQuit}>✕ Quitter</button>
                 <div className="learning-title">{module.title}</div>
-                <div className="learning-step">Étape {stepIndex + 1}/{steps.length}</div>
+                <div className="learning-step">⭐ {learningStars} étoile{learningStars > 1 ? 's' : ''}{starGain > 0 ? <b className="learning-star-gain"> +{starGain}</b> : null} · Étape {stepIndex + 1}/{steps.length}</div>
             </div>
 
             <div className="learning-progress">
@@ -2465,8 +2604,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 <aside key={media.id} className="learning-sheet-media" aria-label={`Chanson ${media.name || ''}`}>
                                     <div className="learning-sheet-media-title">🎵 {media.name || 'Chanson / audio'}</div>
                                     <div className="learning-sheet-media-subtitle">{media.endSec > media.startSec ? `Extrait : ${media.startSec}s à ${media.endSec}s` : 'Écoute complète'}</div>
-                                    {isVideo ? <video src={media.url} controls className="learning-sheet-media-player" onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />
-                                        : <audio src={media.url} controls className="learning-sheet-media-player" onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />}
+                                    {isVideo ? <video src={media.url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`media:${currentStep.id || stepIndex}:${media.id}`, 2)} onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />
+                                        : <audio src={media.url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`media:${currentStep.id || stepIndex}:${media.id}`, 2)} onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />}
                                     <a className="learning-sheet-media-download" href={media.url} download={media.name || 'chanson.mp3'}>
                                         ⬇ Télécharger la chanson
                                     </a>
@@ -2498,16 +2637,18 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 key={`${videoUrlResolved}_${segmentStart}_${segmentEnd}`}
                                 ref={videoRef}
                                 src={videoUrlResolved}
-                                controls
+                                controls={false}
                                 playsInline
                                 preload="metadata"
                                 className="learning-video"
                                 onLoadedMetadata={() => {
                                     const el = videoRef.current;
                                     if (!el) return;
+                                    setVideoDuration(Number(el.duration) || 0);
                                     if (segmentStart > 0) {
                                         try { el.currentTime = segmentStart; } catch (_) {}
                                     }
+                                    setVideoPosition(segmentStart);
                                 }}
                                 onSeeking={() => {
                                     const el = videoRef.current;
@@ -2525,11 +2666,18 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                     }
                                     if (segmentEnd > 0 && segmentEnd > segmentStart && el.currentTime >= segmentEnd - 0.15) {
                                         try { el.pause(); } catch (_) {}
+                                        setVideoPosition(segmentEnd);
+                                        setVideoPlaying(false);
                                         setVideoEnded(true);
                                         setVideoUnlocked(true);
+                                        return;
                                     }
+                                    setVideoPosition(el.currentTime);
                                 }}
+                                onPlay={() => setVideoPlaying(true)}
+                                onPause={() => setVideoPlaying(false)}
                                 onEnded={() => {
+                                    setVideoPlaying(false);
                                     setVideoEnded(true);
                                     setVideoUnlocked(true);
                                 }}
@@ -2546,19 +2694,41 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 <div className="learning-video-embed-wrap">
                                     <iframe
                                         title="video-learning"
-                                        src={embedVideoUrl}
+                                        ref={videoEmbedRef}
+                                        src={protectedEmbedVideoUrl}
                                         className="learning-video-frame"
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                         allowFullScreen
+                                        onLoad={() => {
+                                            if (!videoEmbedStarted) return;
+                                            window.setTimeout(() => {
+                                                sendEmbedVideoCommand('addEventListener', ['onStateChange']);
+                                                sendEmbedVideoCommand('seekTo', [segmentStart, true]);
+                                                sendEmbedVideoCommand('playVideo');
+                                            }, 200);
+                                        }}
                                     />
-                                    <button className="learning-btn ghost mt-3" onClick={() => {
-                                        setVideoManualDone(true);
-                                        setVideoUnlocked(true);
-                                    }}>
-                                        ✅ J'ai fini de regarder la vidéo
-                                    </button>
                                 </div>
                             )}
+                            <div className="learning-video-protection learning-video-timeline" aria-label="Contrôles de l'extrait vidéo">
+                                <button className="learning-btn" onClick={toggleVideoPlayback}>
+                                    {videoPlaying ? '❚❚ Pause' : '▶ Lire'}
+                                </button>
+                                <span className="learning-video-time">{formatVideoTime(Math.max(segmentStart, videoPosition))}</span>
+                                {timelineEnd > segmentStart ? (
+                                    <input
+                                        className="learning-video-range"
+                                        type="range"
+                                        min={segmentStart}
+                                        max={timelineEnd}
+                                        step="0.1"
+                                        value={clampToVideoSegment(videoPosition || segmentStart)}
+                                        onChange={(event) => seekInsideVideoSegment(event.target.value)}
+                                        aria-label="Se déplacer dans l'extrait vidéo"
+                                    />
+                                ) : <span className="learning-video-range-empty">Chargement de la durée…</span>}
+                                <span className="learning-video-time">{formatVideoTime(timelineEnd)}</span>
+                            </div>
                             </div>
                         ) : (
                             <div className="learning-missing">Aucune vidéo configurée.</div>
@@ -2567,7 +2737,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                         {moduleSongItems.length > 0 && (
                             <div className="learning-sheet-media">
                                 <div className="learning-sheet-media-title">🎵 {moduleSongItems[0].name || 'Chanson de la séquence'}</div>
-                                <audio src={moduleSongItems[0].url} controls className="learning-sheet-media-player" onLoadedMetadata={(e) => { if (moduleSongItems[0].startSec > 0) e.currentTarget.currentTime = moduleSongItems[0].startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, moduleSongItems[0])} />
+                                <audio src={moduleSongItems[0].url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`module-song:${moduleSongItems[0].id}`, 2)} onLoadedMetadata={(e) => { if (moduleSongItems[0].startSec > 0) e.currentTarget.currentTime = moduleSongItems[0].startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, moduleSongItems[0])} />
                                 <a className="learning-sheet-media-download" href={moduleSongItems[0].url} download={moduleSongItems[0].name || 'chanson.mp3'}>⬇ Télécharger la chanson</a>
                             </div>
                         )}
@@ -2612,9 +2782,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 const isRevealed = Boolean(currentQuizState.revealed?.[item.id]);
                                 const isFillBlanks = item.validationType === 'fill_blanks';
                                 const fillBlank = isFillBlanks ? parseFillBlankText(item.question) : { parts: [], answers: [] };
-                                const expected = isFillBlanks
-                                    ? String(item.question || '').replace(/[\"“”«»]/g, '')
-                                    : String(item.expectedAnswer || item.expectedKeywords?.join(' / ') || '').trim();
+                                const expected = String(item.expectedAnswer || item.expectedKeywords?.join(' / ') || '').trim();
+                                const showFillCorrection = isFillBlanks && currentQuizState.stage === 'correction' && isIncorrect;
                                 const isThisRecording = recording && String(recordingQuestionIdRef.current) === String(item.id);
                                 return (
                                     <article
@@ -2640,8 +2809,10 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                         {blankIndex < fillBlank.answers.length && (
                                                             <>
                                                             <input
-                                                                className="learning-fill-input"
-                                                                value={currentQuizState.blankAnswers?.[item.id]?.[blankIndex] || ''}
+                                                                className={`learning-fill-input ${showFillCorrection ? 'is-expected' : ''}`}
+                                                                value={showFillCorrection
+                                                                    ? (fillBlank.answers[blankIndex] || '')
+                                                                    : (currentQuizState.blankAnswers?.[item.id]?.[blankIndex] || '')}
                                                                 disabled={!canEdit}
                                                                 aria-label={`Trou ${blankIndex + 1}`}
                                                                 onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
@@ -2700,7 +2871,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                             </button>
                                         </div>
                                         )}
-                                        {currentQuizState.stage === 'correction' && isIncorrect && (
+                                        {currentQuizState.stage === 'correction' && isIncorrect && !isFillBlanks && (
                                             <div className="learning-correction-actions">
                                                 {!isRevealed ? (
                                                     <button

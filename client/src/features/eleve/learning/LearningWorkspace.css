@@ -126,11 +126,64 @@
     border: 0;
     border-radius: 12px;
     background: #020617;
+    pointer-events: none;
 }
 
-.learning-video-embed-wrap .learning-btn {
+.learning-video-protection {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 54px;
     margin-top: 10px;
-    align-self: flex-start;
+    border-radius: 12px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.learning-video-timeline {
+    justify-content: flex-start;
+    padding: 8px 12px;
+    margin: 0;
+}
+
+.learning-video-timeline .learning-btn {
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.learning-video-time {
+    min-width: 38px;
+    color: #312e81;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.learning-video-range {
+    flex: 1 1 180px;
+    min-width: 100px;
+    accent-color: #2563eb;
+    cursor: pointer;
+}
+
+.learning-video-range-empty {
+    flex: 1;
+    color: #64748b;
+    font-size: 12px;
+}
+
+@media (max-width: 640px) {
+    .learning-video-timeline {
+        flex-wrap: wrap;
+    }
+
+    .learning-video-range {
+        order: 3;
+        flex-basis: 100%;
+        width: 100%;
+    }
 }
 
 .learning-meta {
@@ -140,6 +193,19 @@
     font-size: 12px;
     font-weight: 700;
     color: #334155;
+}
+
+.learning-star-gain {
+    display: inline-block;
+    margin-left: 4px;
+    color: #16a34a;
+    animation: learning-star-pop 1.8s ease-out;
+}
+
+@keyframes learning-star-pop {
+    0% { transform: scale(.8); opacity: 0; }
+    25% { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
 .learning-sheet-media {
@@ -385,6 +451,15 @@
     background: rgba(255, 255, 255, 0.72);
 }
 
+/* Après vérification, la correction se lit directement dans chaque trou. */
+.learning-fill-input.is-expected:disabled {
+    border-bottom-color: #dc2626;
+    background: #fff1f2;
+    color: #b91c1c;
+    font-weight: 900;
+    opacity: 1;
+}
+
 .learning-quiz-textarea {
     width: 100%;
     min-height: 104px;
@@ -430,10 +505,10 @@
 
 .learning-expected-answer {
     padding: 11px 12px;
-    border: 1px solid #fdba74;
+    border: 2px solid #fca5a5;
     border-radius: 12px;
-    background: #fff7ed;
-    color: #9a3412;
+    background: #fff1f2;
+    color: #b91c1c;
     font-size: 14px;
     line-height: 1.5;
     white-space: pre-wrap;

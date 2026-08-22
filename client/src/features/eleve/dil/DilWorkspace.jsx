@@ -54,12 +54,24 @@ export default function DilWorkspace({ user }) {
   const [feedback, setFeedback] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
   const [manualWord, setManualWord] = useState('');
+  const [manualLanguage, setManualLanguage] = useState('fr');
+  const [manualFrench, setManualFrench] = useState('');
   const [manualSpanish, setManualSpanish] = useState('');
   const [manualWordId, setManualWordId] = useState('');
   const [manualSaved, setManualSaved] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
   const [manualError, setManualError] = useState('');
   const fileRef = useRef(null);
+
+  const pronounceFrench = (value) => {
+    const french = String(value || '').trim();
+    if (!french || typeof window === 'undefined' || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const speech = new SpeechSynthesisUtterance(french);
+    speech.lang = 'fr-FR';
+    speech.rate = 0.88;
+    window.speechSynthesis.speak(speech);
+  };
 
   const loadWords = async () => {
     if (!studentId || preview) return setWords([]);
@@ -163,39 +175,44 @@ export default function DilWorkspace({ user }) {
     translate(french, index);
   };
   const translateManualWord = async (value = manualWord) => {
-    const french = String(value || '').trim();
-    if (!french) return setManualError('Écris un mot français.');
+    const input = String(value || '').trim();
+    if (!input) return setManualError(manualLanguage === 'fr' ? 'Écris un mot français.' : 'Écris un mot espagnol.');
     setManualBusy(true); setManualError('');
-    const knownWord = words.find((item) => String(item.french || '').toLocaleLowerCase() === french.toLocaleLowerCase());
+    const knownWord = words.find((item) => String(manualLanguage === 'fr' ? item.french : item.spanish || '').toLocaleLowerCase() === input.toLocaleLowerCase());
     setManualSaved(Boolean(knownWord)); setManualWordId(knownWord?._id || '');
     try {
-      const response = await fetch(`/api/eleve/dil/translate/fr-es?q=${encodeURIComponent(french)}`);
+      const route = manualLanguage === 'fr' ? 'fr-es' : 'es-fr';
+      const response = await fetch(`/api/eleve/dil/translate/${route}?q=${encodeURIComponent(input)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || 'Traduction indisponible.');
-      setManualSpanish(data.spanish || 'Traduction indisponible');
-    } catch (error) { setManualSpanish(''); setManualError(error.message || 'Traduction indisponible.'); }
+      setManualFrench(data.french || (manualLanguage === 'fr' ? input : ''));
+      setManualSpanish(data.spanish || (manualLanguage === 'es' ? input : ''));
+    } catch (error) { setManualFrench(''); setManualSpanish(''); setManualError(error.message || 'Traduction indisponible.'); }
     finally { setManualBusy(false); }
   };
   const toggleManualWord = async () => {
-    const french = String(manualWord || '').trim();
-    if (!french || !manualSpanish) return;
+    const french = String(manualFrench || (manualLanguage === 'fr' ? manualWord : '')).trim();
+    const spanish = String(manualSpanish || (manualLanguage === 'es' ? manualWord : '')).trim();
+    if (!french || !spanish) return;
     if (preview || !studentId) {
       if (manualSaved) {
         setWords((previous) => previous.filter((item) => String(item._id) !== String(manualWordId)));
         setManualSaved(false); setManualWordId('');
       } else {
-        const localWord = { _id: `preview_manual_${Date.now()}`, french, spanish: manualSpanish, mastered: false };
+        const localWord = { _id: `preview_manual_${Date.now()}`, french, spanish, mastered: false };
         setWords((previous) => [localWord, ...previous.filter((item) => String(item.french || '').toLocaleLowerCase() !== french.toLocaleLowerCase())]);
         setManualSaved(true); setManualWordId(localWord._id);
+        pronounceFrench(french);
       }
       return;
     }
     if (!manualSaved) {
-      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ french, spanish: manualSpanish }) });
+      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ french, spanish }) });
       const saved = await response.json().catch(() => null);
       if (!response.ok || !saved) return setManualError(saved?.error || 'Enregistrement impossible.');
       setWords((previous) => [saved, ...previous.filter((item) => String(item.french || '').toLocaleLowerCase() !== french.toLocaleLowerCase())]);
       setManualSaved(true); setManualWordId(saved._id);
+      pronounceFrench(french);
       return;
     }
     if (!manualWordId) return;
@@ -208,10 +225,10 @@ export default function DilWorkspace({ user }) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return setManualError('La dictée vocale n’est pas disponible sur cet appareil.');
     const recognition = new SpeechRecognition();
-    recognition.lang = 'fr-FR'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.lang = manualLanguage === 'fr' ? 'fr-FR' : 'es-ES'; recognition.interimResults = false; recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
       const value = event.results?.[0]?.[0]?.transcript?.trim() || '';
-      setManualWord(value); setManualSpanish(''); setManualSaved(false); setManualWordId('');
+      setManualWord(value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId('');
       translateManualWord(value);
     };
     recognition.onerror = () => setManualError('La dictée n’a pas pu démarrer.');
@@ -237,18 +254,19 @@ export default function DilWorkspace({ user }) {
       <div className="dil-actions"><button onClick={() => fileRef.current?.click()} disabled={photoBusy}>📷 {hasTranscription ? 'NOUVELLE PHOTO' : 'PRENDRE / CHOISIR UNE PHOTO'}</button><button className="dil-new-word-trigger" onClick={() => setManualOpen((value) => !value)}>➕ NOUVEAU MOT</button>{!hasTranscription && <span>Cadre la zone utile, puis lance la lecture.</span>}</div>
       {manualOpen && <div className="dil-manual-word">
         <div className="dil-manual-heading"><b>Ajouter un mot sans photo</b></div>
-        <p>Écris ou dicte un mot français : sa traduction espagnole pourra être ajoutée à ta liste.</p>
-        <div className="dil-manual-word-row"><div className="dil-manual-input"><input value={manualWord} onChange={(event) => { setManualWord(event.target.value); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); translateManualWord(); } }} placeholder="Mot français" />{manualWord && <button type="button" className="dil-manual-erase" aria-label="Effacer le mot" onClick={() => { setManualWord(''); setManualSpanish(''); setManualWordId(''); setManualSaved(false); setManualError(''); }}>×</button>}</div><button type="button" className="dil-manual-mic" onClick={dictateManualWord} aria-label="Dicter un mot">🎙️</button><button type="button" onClick={() => translateManualWord()} disabled={manualBusy}>{manualBusy ? 'TRADUCTION…' : 'TRADUIRE'}</button></div>
-        {manualSpanish && <div className={`dil-manual-translation ${manualSaved ? 'saved' : ''}`}><span>Espagnol : <b>{manualSpanish}</b></span><button type="button" onClick={toggleManualWord}>{manualSaved ? '✓ AJOUTÉ À MA LISTE' : '+ AJOUTER À MA LISTE'}</button></div>}
+        <p>Écris ou dicte un mot en français ou en espagnol : son équivalent pourra être ajouté à ta liste.</p>
+        <div className="dil-language-switch" aria-label="Langue du mot à traduire"><button type="button" className={manualLanguage === 'fr' ? 'active' : ''} onClick={() => { setManualLanguage('fr'); setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }}>🇫🇷 Français</button><button type="button" className={manualLanguage === 'es' ? 'active' : ''} onClick={() => { setManualLanguage('es'); setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }}>🇪🇸 Espagnol</button></div>
+        <div className="dil-manual-word-row"><div className="dil-manual-input"><input value={manualWord} onChange={(event) => { setManualWord(event.target.value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); translateManualWord(); } }} placeholder={manualLanguage === 'fr' ? 'Mot français' : 'Mot espagnol'} />{manualWord && <button type="button" className="dil-manual-erase" aria-label="Effacer le mot" onClick={() => { setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualWordId(''); setManualSaved(false); setManualError(''); }}>×</button>}</div><button type="button" className="dil-manual-mic" onClick={dictateManualWord} aria-label="Dicter un mot">🎙️</button><button type="button" onClick={() => translateManualWord()} disabled={manualBusy}>{manualBusy ? 'TRADUCTION…' : 'TRADUIRE'}</button></div>
+        {manualSpanish && manualFrench && <div className={`dil-manual-translation ${manualSaved ? 'saved' : ''}`}><span>🇪🇸 <b>{manualSpanish}</b> <strong>→</strong> 🇫🇷 <b>{manualFrench}</b></span><div className="dil-manual-translation-actions"><button type="button" className="dil-pronounce" onClick={() => pronounceFrench(manualFrench)} aria-label={`Réécouter ${manualFrench}`}>🔊 Réécouter</button><button type="button" onClick={toggleManualWord}>{manualSaved ? '✓ AJOUTÉ À MA LISTE' : '+ AJOUTER À MA LISTE'}</button></div></div>}
         {manualError && <small className="dil-manual-error">{manualError}</small>}
       </div>}
       {photoUrl && !hasTranscription && <div className="dil-crop"><div className="dil-crop-preview"><div className="dil-crop-image"><img src={photoUrl} alt="Document à recadrer" /><div className="dil-crop-window" style={{ top: `${crop.top}%`, left: `${crop.left}%`, right: `${crop.right}%`, bottom: `${crop.bottom}%` }} /></div></div><div className="dil-crop-controls">{['top', 'bottom', 'left', 'right'].map((side) => <label key={side}>{side === 'top' ? 'Haut' : side === 'bottom' ? 'Bas' : side === 'left' ? 'Gauche' : 'Droite'} <input type="range" min="0" max="45" value={crop[side]} onChange={(event) => setCrop((value) => ({ ...value, [side]: Number(event.target.value) }))} /></label>)}<button onClick={readPhoto} disabled={photoBusy}>{photoBusy ? 'LECTURE…' : 'LIRE LA ZONE CADRÉE'}</button></div></div>}
       <input className="dil-title-input" value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="Titre du document (détecté automatiquement)" />
       <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Le texte du document apparaîtra ici. Clique ensuite sur un mot français pour le traduire." />
-      <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''} ${selected?.index === `title-${index}` && selected?.saved ? 'saved' : ''}`} key={`title-${index}`}><button onClick={() => selectOrToggleWord(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>{selected.spanish}<b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''} ${selected?.index === index && selected?.saved ? 'saved' : ''}`} key={`${part}-${index}`}><button onClick={() => selectOrToggleWord(part, index)}>{part}</button>{selected?.index === index && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>{selected.spanish}<b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : <span key={index}>{part}</span>)}</div>
+      <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''} ${selected?.index === `title-${index}` && selected?.saved ? 'saved' : ''}`} key={`title-${index}`}><button onClick={() => selectOrToggleWord(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>🇪🇸 {selected.spanish} → 🇫🇷 {selected.french}<button type="button" className="dil-pronounce" aria-label={`Réécouter ${selected.french}`} onClick={(event) => { event.stopPropagation(); pronounceFrench(selected.french); }}>🔊</button><b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''} ${selected?.index === index && selected?.saved ? 'saved' : ''}`} key={`${part}-${index}`}><button onClick={() => selectOrToggleWord(part, index)}>{part}</button>{selected?.index === index && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>🇪🇸 {selected.spanish} → 🇫🇷 {selected.french}<button type="button" className="dil-pronounce" aria-label={`Réécouter ${selected.french}`} onClick={(event) => { event.stopPropagation(); pronounceFrench(selected.french); }}>🔊</button><b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : <span key={index}>{part}</span>)}</div>
     </div> : <div className="dil-card dil-training">
       {!current ? <p className="dil-empty">Traduis d’abord des mots dans l’onglet Traduction : ils apparaîtront ici.</p> : <form onSubmit={checkAnswer}><div className="dil-instruction">TRADUISEZ EN FRANÇAIS</div><div className="dil-spanish">{current.spanish}</div><input autoFocus value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Écris le mot français" /><button type="submit">VÉRIFIER</button>{feedback && <p className="dil-feedback">{feedback}</p>}</form>}
-      {words.length > 0 && <div className="dil-word-list"><b>Mes mots</b>{words.map((word) => <span key={word._id || word.french} className={word.mastered ? 'known' : ''}>{word.spanish} → {word.mastered ? word.french : 'à apprendre'}</span>)}</div>}
+      {words.length > 0 && <div className="dil-word-list"><b>Mes mots</b>{words.map((word) => <span key={word._id || word.french} className={word.mastered ? 'known' : ''}>🇪🇸 {word.spanish} → 🇫🇷 {word.french}<button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></span>)}</div>}
     </div>}
   </section>;
 }
