@@ -9,6 +9,21 @@
 .dil-tabs button,.dil-actions button,.dil-training button{border:0;border-radius:14px;padding:14px 18px;font-weight:900;cursor:pointer;background:#ede9fe;color:#5b21b6}
 .dil-tabs .active,.dil-actions button,.dil-training button{background:#6d28d9;color:#fff}
 .dil-actions{display:flex;align-items:center;gap:15px;font-weight:700;color:#64748b;margin-bottom:18px}
+.dil-actions .dil-new-word-trigger{background:#ede9fe;color:#5b21b6;border:2px solid #c4b5fd}
+.dil-manual-word{margin:-2px 0 20px;padding:17px;border:2px solid #ddd6fe;border-radius:18px;background:#faf8ff;color:#312e81}
+.dil-manual-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dil-manual-word p{margin:5px 0 12px;color:#64748b;font-weight:700;font-size:14px}
+.dil-manual-word-row{display:flex;gap:9px;align-items:center}
+.dil-manual-input{position:relative;flex:1;min-width:0}
+.dil-manual-word-row .dil-manual-input input{width:100%;box-sizing:border-box;border:2px solid #c4b5fd;border-radius:11px;padding:11px 42px 11px 11px;font:inherit;font-weight:700;color:#1e1b4b}
+.dil-manual-word-row button,.dil-manual-translation button{border:0;border-radius:11px;padding:11px 13px;background:#6d28d9;color:#fff;font-weight:900;cursor:pointer;white-space:nowrap}
+.dil-manual-word-row .dil-manual-mic{font-size:19px;padding:8px 11px;background:#0f766e}
+.dil-manual-word-row .dil-manual-erase{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:27px;height:27px;padding:0;border-radius:50%;background:#e2e8f0;color:#475569;font-size:22px;line-height:1}
+.dil-manual-word-row .dil-manual-erase:hover{background:#cbd5e1;color:#0f172a}
+.dil-manual-translation{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border-radius:12px;background:#fef3c7;color:#92400e;font-weight:700}
+.dil-manual-translation.saved{background:#dcfce7;color:#166534}
+.dil-manual-translation.saved button{background:#16a34a}
+.dil-manual-error{display:block;margin-top:8px;color:#dc2626;font-weight:800}
 .dil-photo-preview{display:block;width:100%;max-height:190px;object-fit:contain;border-radius:16px;background:#f8fafc;border:1px solid #ddd6fe;margin-bottom:12px}
 .dil-card textarea,.dil-title-input{width:100%;border:2px solid #e2e8f0;border-radius:16px;padding:14px;font:inherit;box-sizing:border-box}
 .dil-card textarea{min-height:120px;margin-top:10px}
@@ -37,5 +52,7 @@
 @media(max-width:600px){.dil-heading{display:block}
 .dil-known{margin-top:15px}
 .dil-actions{align-items:flex-start;flex-direction:column}
+.dil-manual-word-row,.dil-manual-translation{align-items:stretch;flex-wrap:wrap}
+.dil-manual-input{width:100%;flex-basis:100%}
 .dil-spanish{font-size:30px}
 }

@@ -5,22 +5,35 @@ import './DilCrop.css';
 const tokenise = (text = '') => String(text || '').split(/(\s+|[^\p{L}\p{N}'’-]+)/u).filter(Boolean);
 const isWord = (value = '') => /[\p{L}]/u.test(value) && !/^\s+$/u.test(value);
 const numberedTitle = (value = '') => /^(?:\d{1,2}\s*[.)-]\s+|(?:I|V|X){1,5}\s*[.)]\s+)[A-ZÀ-ÖØ-Ý]/.test(String(value || '').trim());
-const extractCentralDocument = (raw = '', ocrLines = []) => {
+const extractCentralDocument = (raw = '') => {
   const cleaned = String(raw || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
   const lines = cleaned.split('\n').map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return { title: '', body: '' };
+  // Ne jamais chercher un titre dans le corps du texte. L'ancienne détection
+  // utilisait la taille de police de n'importe quelle ligne OCR et pouvait
+  // donc transformer une phrase intérieure en « titre ».
+  let cursor = 0;
+  const titleParts = [];
   const first = lines[0] || '';
-  const firstLine = first.split('\n')[0].trim();
-  const heights = (Array.isArray(ocrLines) ? ocrLines : []).map((line) => Number(line?.height || 0)).filter(Boolean).sort((a, b) => a - b);
-  const median = heights.length ? heights[Math.floor(heights.length / 2)] : 0;
-  const largeTitle = (Array.isArray(ocrLines) ? ocrLines : []).slice(0, 12).find((line) => {
-    const value = String(line?.text || '').trim();
-    return value.length <= 140 && Number(line?.height || 0) >= median * 1.25;
-  })?.text || '';
-  const title = largeTitle || (numberedTitle(firstLine) || (firstLine.length <= 110 && !/[.!?;:]$/.test(firstLine)) ? firstLine : '');
-  // Aucune coupe automatique : la détection sert uniquement à séparer le
-  // titre du corps. L'élève garde toujours l'intégralité de sa photo OCR.
-  const body = title && first === title ? lines.slice(1).join('\n') : cleaned;
+  const startsWithSectionNumber = /^\d{1,2}$/.test(first);
+  if (startsWithSectionNumber || numberedTitle(first)) {
+    titleParts.push(first);
+    cursor = 1;
+    if (lines[cursor]) {
+      titleParts.push(lines[cursor]);
+      cursor += 1;
+      // Une ligne qui commence en minuscule est la suite visuelle du titre
+      // dans l'OCR, pas une nouvelle phrase du corps.
+      while (lines[cursor] && /^[a-zà-öø-ÿ]/u.test(lines[cursor]) && !/[.!?;:]$/.test(titleParts.at(-1))) {
+        titleParts.push(lines[cursor]);
+        cursor += 1;
+      }
+    }
+  }
+  const title = titleParts.join(' ');
+  // Le reste reste intégral : aucun contenu n'est retiré au-delà du titre
+  // identifié au tout début du document.
+  const body = title ? lines.slice(cursor).join('\n') : cleaned;
   return { title, body };
 };
 
@@ -39,6 +52,13 @@ export default function DilWorkspace({ user }) {
   const [trainingIndex, setTrainingIndex] = useState(0);
   const [answer, setAnswer] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualWord, setManualWord] = useState('');
+  const [manualSpanish, setManualSpanish] = useState('');
+  const [manualWordId, setManualWordId] = useState('');
+  const [manualSaved, setManualSaved] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState('');
   const fileRef = useRef(null);
 
   const loadWords = async () => {
@@ -61,9 +81,14 @@ export default function DilWorkspace({ user }) {
     const sourceUrl = URL.createObjectURL(photoFile);
     try {
       const image = await new Promise((resolve, reject) => { const node = new Image(); node.onload = () => resolve(node); node.onerror = reject; node.src = sourceUrl; });
-      const left = Math.round(image.width * crop.left / 100), top = Math.round(image.height * crop.top / 100);
-      const width = Math.max(1, image.width - left - Math.round(image.width * crop.right / 100));
-      const height = Math.max(1, image.height - top - Math.round(image.height * crop.bottom / 100));
+      // La fenêtre est maintenant rendue sur l'image elle-même. Une marge
+      // généreuse évite que la première lettre d'une ligne soit coupée.
+      const safety = 12;
+      const safeLeft = Math.max(0, crop.left - safety), safeTop = Math.max(0, crop.top - safety);
+      const safeRight = Math.max(0, crop.right - safety), safeBottom = Math.max(0, crop.bottom - safety);
+      const left = Math.round(image.width * safeLeft / 100), top = Math.round(image.height * safeTop / 100);
+      const width = Math.max(1, image.width - left - Math.round(image.width * safeRight / 100));
+      const height = Math.max(1, image.height - top - Math.round(image.height * safeBottom / 100));
       const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
       canvas.getContext('2d').drawImage(image, left, top, width, height, 0, 0, width, height);
       return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
@@ -79,7 +104,7 @@ export default function DilWorkspace({ user }) {
       const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId || 'preview')}/ocr`, { method: 'POST', body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error);
-      const detected = extractCentralDocument(data.text || '', data.lines || []);
+      const detected = extractCentralDocument(data.text || '');
       setDocumentTitle(detected.title); setText(detected.body); setSelected(null);
     } catch (error) { alert(error.message || 'Lecture de la photo impossible.'); }
     finally { setPhotoBusy(false); }
@@ -137,6 +162,61 @@ export default function DilWorkspace({ user }) {
     }
     translate(french, index);
   };
+  const translateManualWord = async (value = manualWord) => {
+    const french = String(value || '').trim();
+    if (!french) return setManualError('Écris un mot français.');
+    setManualBusy(true); setManualError('');
+    const knownWord = words.find((item) => String(item.french || '').toLocaleLowerCase() === french.toLocaleLowerCase());
+    setManualSaved(Boolean(knownWord)); setManualWordId(knownWord?._id || '');
+    try {
+      const response = await fetch(`/api/eleve/dil/translate/fr-es?q=${encodeURIComponent(french)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Traduction indisponible.');
+      setManualSpanish(data.spanish || 'Traduction indisponible');
+    } catch (error) { setManualSpanish(''); setManualError(error.message || 'Traduction indisponible.'); }
+    finally { setManualBusy(false); }
+  };
+  const toggleManualWord = async () => {
+    const french = String(manualWord || '').trim();
+    if (!french || !manualSpanish) return;
+    if (preview || !studentId) {
+      if (manualSaved) {
+        setWords((previous) => previous.filter((item) => String(item._id) !== String(manualWordId)));
+        setManualSaved(false); setManualWordId('');
+      } else {
+        const localWord = { _id: `preview_manual_${Date.now()}`, french, spanish: manualSpanish, mastered: false };
+        setWords((previous) => [localWord, ...previous.filter((item) => String(item.french || '').toLocaleLowerCase() !== french.toLocaleLowerCase())]);
+        setManualSaved(true); setManualWordId(localWord._id);
+      }
+      return;
+    }
+    if (!manualSaved) {
+      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ french, spanish: manualSpanish }) });
+      const saved = await response.json().catch(() => null);
+      if (!response.ok || !saved) return setManualError(saved?.error || 'Enregistrement impossible.');
+      setWords((previous) => [saved, ...previous.filter((item) => String(item.french || '').toLocaleLowerCase() !== french.toLocaleLowerCase())]);
+      setManualSaved(true); setManualWordId(saved._id);
+      return;
+    }
+    if (!manualWordId) return;
+    const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary/${encodeURIComponent(manualWordId)}`, { method: 'DELETE' });
+    if (!response.ok) return setManualError('Suppression impossible.');
+    setWords((previous) => previous.filter((item) => String(item._id) !== String(manualWordId)));
+    setManualSaved(false); setManualWordId('');
+  };
+  const dictateManualWord = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return setManualError('La dictée vocale n’est pas disponible sur cet appareil.');
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'fr-FR'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const value = event.results?.[0]?.[0]?.transcript?.trim() || '';
+      setManualWord(value); setManualSpanish(''); setManualSaved(false); setManualWordId('');
+      translateManualWord(value);
+    };
+    recognition.onerror = () => setManualError('La dictée n’a pas pu démarrer.');
+    recognition.start();
+  };
   const current = words[trainingIndex % Math.max(1, words.length)];
   const known = useMemo(() => words.filter((word) => word.mastered).length, [words]);
   const hasTranscription = Boolean(String(documentTitle || text).trim());
@@ -154,8 +234,15 @@ export default function DilWorkspace({ user }) {
     <div className="dil-tabs"><button className={mode === 'translation' ? 'active' : ''} onClick={() => setMode('translation')}>📷 TRADUCTION</button><button className={mode === 'training' ? 'active' : ''} onClick={() => setMode('training')}>✍️ ENTRAÎNEMENT</button></div>
     {mode === 'translation' ? <div className="dil-card">
       <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={selectPhoto} />
-      <div className="dil-actions"><button onClick={() => fileRef.current?.click()} disabled={photoBusy}>📷 {hasTranscription ? 'NOUVELLE PHOTO' : 'PRENDRE / CHOISIR UNE PHOTO'}</button>{!hasTranscription && <span>Cadre la zone utile, puis lance la lecture.</span>}</div>
-      {photoUrl && !hasTranscription && <div className="dil-crop"><div className="dil-crop-preview"><img src={photoUrl} alt="Document à recadrer" /><div className="dil-crop-window" style={{ top: `${crop.top}%`, left: `${crop.left}%`, right: `${crop.right}%`, bottom: `${crop.bottom}%` }} /></div><div className="dil-crop-controls">{['top', 'bottom', 'left', 'right'].map((side) => <label key={side}>{side === 'top' ? 'Haut' : side === 'bottom' ? 'Bas' : side === 'left' ? 'Gauche' : 'Droite'} <input type="range" min="0" max="45" value={crop[side]} onChange={(event) => setCrop((value) => ({ ...value, [side]: Number(event.target.value) }))} /></label>)}<button onClick={readPhoto} disabled={photoBusy}>{photoBusy ? 'LECTURE…' : 'LIRE LA ZONE CADRÉE'}</button></div></div>}
+      <div className="dil-actions"><button onClick={() => fileRef.current?.click()} disabled={photoBusy}>📷 {hasTranscription ? 'NOUVELLE PHOTO' : 'PRENDRE / CHOISIR UNE PHOTO'}</button><button className="dil-new-word-trigger" onClick={() => setManualOpen((value) => !value)}>➕ NOUVEAU MOT</button>{!hasTranscription && <span>Cadre la zone utile, puis lance la lecture.</span>}</div>
+      {manualOpen && <div className="dil-manual-word">
+        <div className="dil-manual-heading"><b>Ajouter un mot sans photo</b></div>
+        <p>Écris ou dicte un mot français : sa traduction espagnole pourra être ajoutée à ta liste.</p>
+        <div className="dil-manual-word-row"><div className="dil-manual-input"><input value={manualWord} onChange={(event) => { setManualWord(event.target.value); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); translateManualWord(); } }} placeholder="Mot français" />{manualWord && <button type="button" className="dil-manual-erase" aria-label="Effacer le mot" onClick={() => { setManualWord(''); setManualSpanish(''); setManualWordId(''); setManualSaved(false); setManualError(''); }}>×</button>}</div><button type="button" className="dil-manual-mic" onClick={dictateManualWord} aria-label="Dicter un mot">🎙️</button><button type="button" onClick={() => translateManualWord()} disabled={manualBusy}>{manualBusy ? 'TRADUCTION…' : 'TRADUIRE'}</button></div>
+        {manualSpanish && <div className={`dil-manual-translation ${manualSaved ? 'saved' : ''}`}><span>Espagnol : <b>{manualSpanish}</b></span><button type="button" onClick={toggleManualWord}>{manualSaved ? '✓ AJOUTÉ À MA LISTE' : '+ AJOUTER À MA LISTE'}</button></div>}
+        {manualError && <small className="dil-manual-error">{manualError}</small>}
+      </div>}
+      {photoUrl && !hasTranscription && <div className="dil-crop"><div className="dil-crop-preview"><div className="dil-crop-image"><img src={photoUrl} alt="Document à recadrer" /><div className="dil-crop-window" style={{ top: `${crop.top}%`, left: `${crop.left}%`, right: `${crop.right}%`, bottom: `${crop.bottom}%` }} /></div></div><div className="dil-crop-controls">{['top', 'bottom', 'left', 'right'].map((side) => <label key={side}>{side === 'top' ? 'Haut' : side === 'bottom' ? 'Bas' : side === 'left' ? 'Gauche' : 'Droite'} <input type="range" min="0" max="45" value={crop[side]} onChange={(event) => setCrop((value) => ({ ...value, [side]: Number(event.target.value) }))} /></label>)}<button onClick={readPhoto} disabled={photoBusy}>{photoBusy ? 'LECTURE…' : 'LIRE LA ZONE CADRÉE'}</button></div></div>}
       <input className="dil-title-input" value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="Titre du document (détecté automatiquement)" />
       <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Le texte du document apparaîtra ici. Clique ensuite sur un mot français pour le traduire." />
       <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''} ${selected?.index === `title-${index}` && selected?.saved ? 'saved' : ''}`} key={`title-${index}`}><button onClick={() => selectOrToggleWord(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>{selected.spanish}<b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''} ${selected?.index === index && selected?.saved ? 'saved' : ''}`} key={`${part}-${index}`}><button onClick={() => selectOrToggleWord(part, index)}>{part}</button>{selected?.index === index && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>{selected.spanish}<b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : <span key={index}>{part}</span>)}</div>

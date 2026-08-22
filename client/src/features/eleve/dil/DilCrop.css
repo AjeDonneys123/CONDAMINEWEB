@@ -8,14 +8,17 @@
   padding: 14px;
   margin-bottom: 12px;
 }
-.dil-crop-preview { position: relative; overflow: hidden; border-radius: 12px; background: #0f172a; line-height: 0; }
-.dil-crop-preview img { width: 100%; max-height: 330px; object-fit: contain; background: white; }
+.dil-crop-preview { display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 12px; background: #0f172a; line-height: 0; }
+/* La fenêtre est relative à cette boîte, qui a exactement les dimensions
+   rendues de la photo (pas celles des éventuelles marges du conteneur). */
+.dil-crop-image { position: relative; display: inline-block; max-width: 100%; }
+.dil-crop-image img { display: block; max-width: 100%; max-height: 330px; width: auto; height: auto; background: white; }
 .dil-crop-window { position: absolute; border: 3px solid #8b5cf6; border-radius: 8px; box-shadow: 0 0 0 9999px #0f172a88; pointer-events: none; }
 .dil-crop-controls { display: flex; flex-direction: column; gap: 10px; font-weight: 900; color: #475569; }
 .dil-crop-controls label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .dil-crop-controls input { width: 125px; }
 .dil-crop-controls button { margin-top: auto; border: 0; border-radius: 12px; padding: 13px; font-weight: 900; background: #6d28d9; color: white; cursor: pointer; }
-@media (max-width: 600px) { .dil-crop { grid-template-columns: 1fr; } .dil-crop-preview img { max-height: 230px; } }
+@media (max-width: 600px) { .dil-crop { grid-template-columns: 1fr; } .dil-crop-image img { max-height: 230px; } }
 .dil-word .dil-save-word { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: 6px; border: 0; border-radius: 50%; background: #16a34a; color: white; font-size: 17px; font-weight: 900; line-height: 1; vertical-align: middle; }
 .dil-word .dil-save-word:disabled { background: #94a3b8; cursor: default; }
 .dil-word small i { display: block; color: #b91c1c; font-size: 10px; white-space: normal; }

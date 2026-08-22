@@ -62,6 +62,8 @@ router.post('/:studentId/ocr', upload.single('image'), async (req, res) => {
             apikey: String(process.env.OCR_SPACE_API_KEY || 'helloworld'),
             language: 'fre',
             isOverlayRequired: 'true',
+            scale: 'true',
+            detectOrientation: 'true',
             base64Image: `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`
         });
         const response = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body });
