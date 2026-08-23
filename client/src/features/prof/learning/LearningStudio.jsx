@@ -1007,6 +1007,7 @@ const scoreCourseForChapter = (course = {}, chapter = {}) => {
 };
 
 export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, globalClassId = '', onClose, allStudents: propStudents, allClasses: propClasses }) {
+    const usesPlainNumberedIdeas = /(?:^|\D)[56](?:\s*(?:e|ème)?)(?=\D|$)/i.test(String(targetLevel || ''));
     // Le contentEditable peut contenir une frappe plus récente que le dernier rendu React.
     // Ce registre synchrone garantit que « Inspecter fiche » utilise toujours ce qui est
     // réellement visible dans l'éditeur au moment du clic.
@@ -5546,6 +5547,7 @@ Avant de générer, vérifie que chaque phrase informative vient de la SOURCE 1 
         const selectedChapter = (chapters || []).find((chapter) => String(chapter?._id || '') === String(formData.chapterId || ''));
         const chapterTitle = String(selectedChapter?.title || 'CHAPITRE NON SÉLECTIONNÉ').trim();
         const chapterSubject = String(selectedChapter?.section || formData.subject || targetSection || '').trim();
+        const isFifthOrSixthGrade = usesPlainNumberedIdeas;
         const selectedCourse = generalSheetCourses.find((course) => String(course?._id || '') === String(formData.generalSheetCourseId || ''));
         const courseTitle = String(selectedCourse?.title || formData.generalSheetCourseTitle || '').trim();
         const courseDescription = String(selectedCourse?.description || formData.generalSheetCourseDescription || '').trim();
@@ -5586,27 +5588,45 @@ FORMAT IMPÉRATIF — PARTIE 1 : FICHE DE COURS
 
 Première ligne : titre général de la leçon.
 
-Respecte exactement cette hiérarchie :
+Construis une fiche courte, progressive, très claire et facile à mémoriser. Adapte réellement la quantité d'informations, la longueur des phrases et le vocabulaire au niveau ${targetLevel || 'indiqué'}.
 
+${isFifthOrSixthGrade ? `RÈGLE SPÉCIALE 5e/6e — PRÉSENTATION TRÈS LÉGÈRE
+- Les seuls titres sont les grandes parties I., II., III. : elles seront mises en rouge et en gras.
+- Les idées principales sont numérotées « 1- », « 2- », « 3- » et restent noires, sans gras.
+- Si une idée doit être précisée, place la précision à la ligne suivante avec un tiret « - », noir et sans gras.
+- N'utilise jamais « a) », « b) » ni aucun sous-sous-plan.
+- Aucun texte ne doit être vert. Aucun texte ne doit être gras sauf les véritables mots-clés à apprendre.
+
+Exemple de présentation attendue :
 I. Titre de la grande partie
-1- Idée principale
-a) Sous-idée
-b) Sous-idée
-2- Idée principale suivante
-a) Sous-idée
+1- Idée essentielle avec un ou deux mots-clés en gras.
+- Précision ou exemple utile.
+2- Idée essentielle suivante.
 II. Titre de la grande partie suivante
+
 RÈGLES STRICTES
 Après chaque élément, insère immédiatement un retour à la ligne.
-Un marqueur I., 1- ou a) doit toujours être le premier élément de sa ligne.
+Un marqueur I., 1- ou un tiret doit toujours être le premier élément de sa ligne.
 Il est interdit de placer deux éléments sur une même ligne.
 Les chiffres romains correspondent aux grandes parties.
 Les nombres suivis de - correspondent aux idées principales.
-Les lettres a), b), c), d)... correspondent uniquement aux précisions, conséquences, listes, exemples ou cas particuliers de l'idée principale.
-Aucune phrase libre n'est autorisée. Toute information doit appartenir soit à une idée principale (1-, 2-, 3-...), soit à une sous-idée (a), b), c)...).
+Ne multiplie pas les niveaux de plan : une fiche de 5e ou 6e doit être courte, lisible et facile à apprendre.` : `Hiérarchie de référence :
+
+I. Titre de la grande partie
+1- Idée principale
+• Précision utile ou exemple bref
+2- Idée principale suivante
+II. Titre de la grande partie suivante
+RÈGLES STRICTES
+Après chaque élément, insère immédiatement un retour à la ligne.
+Un marqueur I. ou 1- doit toujours être le premier élément de sa ligne.
+Il est interdit de placer deux éléments sur une même ligne.
+Les chiffres romains correspondent aux grandes parties.
+Les nombres suivis de - correspondent aux idées principales.
 Une idée principale doit être une phrase complète (sujet + verbe + complément) ou une affirmation claire.
-Les sous-idées ne doivent jamais répéter l'idée principale.
-Utiliser a), b), c)... uniquement lorsqu'une idée nécessite un niveau de détail supplémentaire.
-S'il n'y a aucune précision utile, ne créer aucune sous-idée.
+Ajoute des puces simples sous une idée principale seulement lorsqu'elles facilitent nettement la compréhension ou la mémorisation.
+En 3e, n'utilise a), b), c)... qu'exceptionnellement, lorsqu'un découpage supplémentaire est indispensable à la compréhension. Dans tous les autres cas, préfère une idée principale courte suivie de puces simples.
+Ne multiplie pas les niveaux de plan : une fiche doit pouvoir être relue et apprise facilement.`}
 Mettre en gras uniquement les dates, personnages, lieux, notions, mots-clés et expressions que l'élève devra restituer dans un texte à trous.
 Tous les éléments en gras doivent pouvoir être supprimés pour créer automatiquement un texte à trous.
 Ne jamais mettre en gras un détail secondaire ou anecdotique.
@@ -6417,29 +6437,19 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-2xl">
                         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-6 py-4">
                             <div>
-                                <div className="text-xl font-black text-slate-900">Générer une fiche + vidéo NotebookLM</div>
-                                <div className="text-sm font-bold text-slate-500">Un seul prompt crée la fiche, son QCM et le Google Docs source 1 ; les slides deviennent la source 2 visuelle de NotebookLM.</div>
+                                <div className="text-xl font-black text-slate-900">Générer une fiche générale</div>
+                                <div className="text-sm font-bold text-slate-500">Le prompt crée la fiche et son QCM. La préparation de la vidéo se fait dans « Vidéo générale ».</div>
                             </div>
                             <button
                                 type="button"
                                 className="v84-res-btn upload ml-auto !border-violet-300 !bg-violet-50 !text-violet-800"
                                 onClick={copyGeminiSuperSheetPrompt}
                             >📋 Copier le prompt fiche + Google Docs et ouvrir Gemini</button>
-                            <button
-                                type="button"
-                                className="v84-res-btn upload !border-sky-300 !bg-sky-50 !text-sky-800"
-                                onClick={copyNotebookLmSlidesSource}
-                            >🖼️ Source 2 : slides</button>
-                            <button
-                                type="button"
-                                className="v84-res-btn upload !border-emerald-300 !bg-emerald-50 !text-emerald-800"
-                                onClick={copyNotebookLmVideoPrompt}
-                            >🎬 Prompt vidéo</button>
                             <button className="v84-close-btn" onClick={() => setShowGeneralSheetBuilder(false)}>✕</button>
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
-                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. Dans NotebookLM : Google Docs = <b>source 1</b>, Google Slides = <b>source 2</b>, puis colle le prompt vidéo.
+                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. La préparation des sources NotebookLM et du prompt vidéo se fait ensuite dans <b>Vidéo générale</b>.
                             </div>
                             <div className="mb-4 rounded-2xl border-2 border-violet-200 bg-violet-50 p-4">
                                 <div className="font-black text-violet-900">🎵 Chanson / audio de la fiche générale</div>
@@ -6460,6 +6470,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                             <SheetRichTextEditor
                                 html={generalSheetHtml}
                                 plainText={generalSheetText}
+                                numberedIdeasPlain={usesPlainNumberedIdeas}
                                 onChange={({ html, text }) => {
                                     setGeneralSheetHtml(html);
                                     setGeneralSheetText(text);
@@ -6816,6 +6827,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                             key={`${step.id}:${step.generalSheetSyncVersion || 0}`}
                                             html={step.sheetTextHtml || ''}
                                             plainText={step.sheetText || ''}
+                                            numberedIdeasPlain={usesPlainNumberedIdeas}
                                             onChange={({ html, text }) => {
                                                 sheetDraftsRef.current.set(String(step.id || ''), { html, text });
                                                 updateStep(activeStep, {

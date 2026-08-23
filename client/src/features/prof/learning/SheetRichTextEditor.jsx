@@ -194,7 +194,7 @@ const serializePlainText = (root) => {
     .replace(/\n$/, '');
 };
 
-const applySheetHeadingColors = (root) => {
+const applySheetHeadingColors = (root, numberedIdeasPlain = false) => {
   if (!root) return false;
   const blockTags = new Set(['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
   const styleLine = (line) => {
@@ -205,6 +205,17 @@ const applySheetHeadingColors = (root) => {
       return true;
     }
     if (/^\d{1,2}\s*-\s+.+/.test(text)) {
+      if (numberedIdeasPlain) {
+        // En 5e/6e, les idées 1-, 2-… structurent la leçon mais ne sont pas
+        // des sous-titres : elles restent noires et normales. Les <strong>
+        // internes gardent naturellement le rôle de mots-clés.
+        line.style.color = '#111827';
+        line.style.fontWeight = '400';
+        line.querySelectorAll('strong, b').forEach((keyword) => {
+          keyword.style.textDecoration = '';
+        });
+        return true;
+      }
       line.style.color = '#16a34a';
       line.style.fontWeight = '700';
       // Dans une idée principale, seuls les vrais <strong>/<b> sont des
@@ -254,7 +265,7 @@ const applySheetHeadingColors = (root) => {
   return changed;
 };
 
-export default function SheetRichTextEditor({ html = '', plainText = '', onChange }) {
+export default function SheetRichTextEditor({ html = '', plainText = '', onChange, numberedIdeasPlain = false }) {
   const editorRef = useRef(null);
   const displayedHtml = useMemo(
     () => normalizeExpectedHtml(String(html || '').trim() ? String(html) : escapeHtml(plainText)),
@@ -287,7 +298,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     const htmlFromClipboard = event.clipboardData?.getData('text/html') || '';
     const safeHtml = reformatImportedSheetStructure(htmlFromClipboard, text);
     document.execCommand('insertHTML', false, normalizeExpectedHtml(safeHtml));
-    applySheetHeadingColors(editorRef.current);
+    applySheetHeadingColors(editorRef.current, numberedIdeasPlain);
     emitChange();
   };
 
@@ -334,7 +345,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     // La structure et la numérotation fournies par NotebookLM doivent rester
     // strictement inchangées. La renumérotation reste disponible via le bouton
     // manuel « 1- Numéroter » lorsque le professeur en a réellement besoin.
-    applySheetHeadingColors(editorRef.current);
+    applySheetHeadingColors(editorRef.current, numberedIdeasPlain);
     emitChange();
   };
 
