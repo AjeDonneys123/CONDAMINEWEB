@@ -20,6 +20,42 @@ const formatVideoTime = (seconds = 0) => {
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 };
 
+// Les fiches sont enregistrées à la fois en texte (navigation, zones) et en
+// HTML (mise en forme professeur). On retrouve les portions <strong>/<u>
+// dans le texte afin de ne jamais perdre gras ni soulignement côté élève.
+const collectSheetFormattingRanges = (html = '', plainText = '') => {
+    if (!html || !plainText || typeof DOMParser === 'undefined') return [];
+    try {
+        const doc = new DOMParser().parseFromString(String(html), 'text/html');
+        const walker = doc.createTreeWalker(doc.body, 4 /* NodeFilter.SHOW_TEXT */);
+        const ranges = [];
+        let searchFrom = 0;
+        let node;
+        while ((node = walker.nextNode())) {
+            const text = String(node.nodeValue || '').replace(/\u00a0/g, ' ');
+            if (!text.trim()) continue;
+            let start = plainText.indexOf(text, searchFrom);
+            let matchedText = text;
+            if (start < 0) {
+                const trimmed = text.trim();
+                if (!trimmed) continue;
+                start = plainText.indexOf(trimmed, searchFrom);
+                matchedText = trimmed;
+            }
+            if (start < 0) continue;
+            const end = start + matchedText.length;
+            searchFrom = end;
+            const parent = node.parentElement;
+            const bold = Boolean(parent?.closest('strong, b'));
+            const underline = Boolean(parent?.closest('u'));
+            if (bold || underline) ranges.push({ start, end, bold, underline });
+        }
+        return ranges;
+    } catch (_) {
+        return [];
+    }
+};
+
 const normalizeRanges = (ranges = [], textLen = 0) => {
     const clean = (ranges || [])
         .map((r) => ({
@@ -653,6 +689,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         const qcmAt = source.search(/(?:^|\n)\s*(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i);
         return qcmAt >= 0 ? source.slice(0, qcmAt).trim() : source;
     })();
+    const sheetFormattingRanges = useMemo(
+        () => collectSheetFormattingRanges(currentStep?.sheetTextHtml || '', sheetText),
+        [currentStep?.sheetTextHtml, sheetText]
+    );
     const sheetPinkRanges = useMemo(() => normalizeRanges(currentStep?.sheetPinkRanges || [], sheetText.length), [currentStep?.sheetPinkRanges, sheetText.length]);
     const sheetZoneMarkers = useMemo(() => {
         if (Array.isArray(currentStep?.sheetZoneMarkers) && currentStep.sheetZoneMarkers.length > 0) {
@@ -2062,28 +2102,40 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         return Math.max(0, stepIndex - 1);
     };
 
-    const evaluateFillBlankAnswers = (item, values = []) => {
-        const expected = parseFillBlankText(item?.question || '').blanks;
-        if (expected.length === 0) return false;
+    const evaluateFillBlankAnswer = (blank, value = '') => {
         const normalizeBlank = (value = '') => normalize(value)
             .replace(/['-]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+        // Les articles et la ponctuation ne doivent jamais transformer une
+        // réponse historiquement juste en erreur : « la Triple-Entente »,
+        // « Triple Entente » et « Triple-Entente » sont équivalents.
+        const normalizeWithoutArticles = (value = '') => normalizeBlank(value)
+            .split(' ')
+            .filter((word) => !['le', 'la', 'les', 'un', 'une', 'des', 'du', 'l', 'd', 'au', 'aux'].includes(word))
+            .join(' ')
+            .trim();
         const containsItem = (studentValue, rawItem) => String(rawItem || '')
             .split(/[=/]/)
-            .map((variant) => normalizeBlank(variant))
+            .map((variant) => normalizeWithoutArticles(variant))
             .filter(Boolean)
             .some((variant) => (` ${studentValue} `).includes(` ${variant} `));
-        return expected.every((blank, index) => {
-            const studentValue = normalizeBlank(values[index] || '');
-            if (!studentValue) return false;
-            if (blank.type === 'exact') return containsItem(studentValue, blank.items[0]) && blank.items.some((item) => normalizeBlank(item) === studentValue || containsItem(studentValue, item));
-            const matched = blank.items.filter((item) => containsItem(studentValue, item)).length;
-            const required = blank.type === 'list_strict'
-                ? blank.items.length
-                : Math.max(1, blank.items.length - 2);
-            return matched >= required;
+        const studentValue = normalizeWithoutArticles(value);
+        if (!studentValue || !blank) return false;
+        if (blank.type === 'exact') return blank.items.some((item) => {
+            const expectedValue = normalizeWithoutArticles(item);
+            return studentValue === expectedValue || containsItem(studentValue, item);
         });
+        const matched = blank.items.filter((item) => containsItem(studentValue, item)).length;
+        const required = blank.type === 'list_strict'
+            ? blank.items.length
+            : Math.max(1, blank.items.length - 2);
+        return matched >= required;
+    };
+
+    const evaluateFillBlankAnswers = (item, values = []) => {
+        const expected = parseFillBlankText(item?.question || '').blanks;
+        return expected.length > 0 && expected.every((blank, index) => evaluateFillBlankAnswer(blank, values[index] || ''));
     };
 
     const verifyQuestionPage = async () => {
@@ -2474,11 +2526,20 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             .filter((r) => r.start < segment.end && r.end > segment.start)
             .map((r) => ({ start: Math.max(0, r.start - base), end: Math.min(source.length, r.end - base) }))
             .filter((r) => r.end > r.start);
+        const localFormatting = sheetFormattingRanges
+            .filter((r) => r.start < segment.end && r.end > segment.start)
+            .map((r) => ({
+                start: Math.max(0, r.start - base),
+                end: Math.min(source.length, r.end - base),
+                bold: r.bold === true,
+                underline: r.underline === true
+            }))
+            .filter((r) => r.end > r.start);
         const lineCuts = [];
         source.split('').forEach((character, index) => {
             if (character === '\n') lineCuts.push(index + 1);
         });
-        const cuts = [0, source.length, ...lineCuts, ...localRanges.flatMap((r) => [r.start, r.end])];
+        const cuts = [0, source.length, ...lineCuts, ...localRanges.flatMap((r) => [r.start, r.end]), ...localFormatting.flatMap((r) => [r.start, r.end])];
         const points = [...new Set(cuts)].sort((a, b) => a - b);
         const out = [];
         for (let i = 0; i < points.length - 1; i += 1) {
@@ -2497,8 +2558,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             const hierarchyStyle = romanHeading
                 ? { color: '#dc2626', fontWeight: 800 }
                 : mainPoint ? { color: '#16a34a', fontWeight: 800 } : undefined;
-            if (!inPink) out.push(<span key={`t_${segment.index}_${start}`} style={hierarchyStyle}>{chunk}</span>);
-            else out.push(<mark key={`p_${segment.index}_${start}`} className="bg-pink-200 rounded px-[2px]" style={hierarchyStyle || { color: '#831843' }}>{chunk}</mark>);
+            const formatting = localFormatting.find((r) => start >= r.start && end <= r.end);
+            const contentStyle = {
+                ...(hierarchyStyle || {}),
+                ...(formatting?.bold ? { fontWeight: 800 } : {}),
+                ...(formatting?.underline ? { textDecoration: 'underline', textUnderlineOffset: '2px' } : {})
+            };
+            if (!inPink) out.push(<span key={`t_${segment.index}_${start}`} style={contentStyle}>{chunk}</span>);
+            else out.push(<mark key={`p_${segment.index}_${start}`} className="bg-pink-200 rounded px-[2px]" style={{ ...(contentStyle || {}), color: contentStyle.color || '#831843' }}>{chunk}</mark>);
         }
         return out;
     };
@@ -2784,6 +2851,10 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 const fillBlank = isFillBlanks ? parseFillBlankText(item.question) : { parts: [], answers: [] };
                                 const expected = String(item.expectedAnswer || item.expectedKeywords?.join(' / ') || '').trim();
                                 const showFillCorrection = isFillBlanks && currentQuizState.stage === 'correction' && isIncorrect;
+                                const blankValues = currentQuizState.blankAnswers?.[item.id] || [];
+                                const blankResults = isFillBlanks
+                                    ? fillBlank.blanks.map((blank, blankIndex) => evaluateFillBlankAnswer(blank, blankValues[blankIndex] || ''))
+                                    : [];
                                 const isThisRecording = recording && String(recordingQuestionIdRef.current) === String(item.id);
                                 return (
                                     <article
@@ -2808,15 +2879,19 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                         <span>{part}</span>
                                                         {blankIndex < fillBlank.answers.length && (
                                                             <>
-                                                            <input
-                                                                className={`learning-fill-input ${showFillCorrection ? 'is-expected' : ''}`}
-                                                                value={showFillCorrection
+                                                            {(() => {
+                                                                const blankIsCorrect = blankResults[blankIndex] === true;
+                                                                const showExpectedForBlank = showFillCorrection && !blankIsCorrect;
+                                                                return <input
+                                                                className={`learning-fill-input ${showExpectedForBlank ? 'is-expected' : ''} ${showFillCorrection && blankIsCorrect ? 'is-correct-answer' : ''}`}
+                                                                value={showExpectedForBlank
                                                                     ? (fillBlank.answers[blankIndex] || '')
-                                                                    : (currentQuizState.blankAnswers?.[item.id]?.[blankIndex] || '')}
+                                                                    : (blankValues[blankIndex] || '')}
                                                                 disabled={!canEdit}
                                                                 aria-label={`Trou ${blankIndex + 1}`}
                                                                 onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
-                                                            />
+                                                            />;
+                                                            })()}
                                                             <button
                                                                 type="button"
                                                                 className="learning-quiz-mic learning-fill-mic"

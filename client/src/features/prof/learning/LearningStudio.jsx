@@ -47,6 +47,98 @@ const renderFillBlankDetectionPreview = (value = '', placeholder = '') => {
     return { nodes, detected };
 };
 
+// Aperçu professeur : même syntaxe que le texte à trous élève, sans devoir
+// sauvegarder ou ouvrir l'apprentissage dans un second onglet.
+const parseFillBlankForTest = (value = '') => {
+    const source = String(value || '');
+    const parts = [];
+    const blanks = [];
+    let cursor = 0;
+    const quoteAt = (position) => {
+        const match = source.slice(position).match(/^["“«]([^"”»]+)["”»]/);
+        return match ? { content: String(match[1] || '').trim(), end: position + match[0].length } : null;
+    };
+    while (cursor < source.length) {
+        const offset = source.slice(cursor).search(/["“«]/);
+        if (offset < 0) break;
+        const start = cursor + offset;
+        const first = quoteAt(start);
+        if (!first) { cursor = start + 1; continue; }
+        const items = [first.content];
+        let sequenceEnd = first.end;
+        while (source[sequenceEnd] === '+') {
+            const next = quoteAt(sequenceEnd + 1);
+            if (!next) break;
+            items.push(next.content);
+            sequenceEnd = next.end;
+        }
+        parts.push(source.slice(cursor, start));
+        if (items.length > 1) {
+            blanks.push({ type: 'list_flexible', items, raw: items.join('+') });
+            cursor = sequenceEnd;
+        } else if (first.content.includes('+')) {
+            const strictItems = first.content.split('+').map((item) => item.trim()).filter(Boolean);
+            blanks.push({ type: 'list_strict', items: strictItems, raw: first.content });
+            cursor = first.end;
+        } else {
+            blanks.push({ type: 'exact', items: [first.content], raw: first.content });
+            cursor = first.end;
+        }
+    }
+    parts.push(source.slice(cursor));
+    return { parts, blanks };
+};
+
+const normalizeFillBlankForTest = (value = '') => String(value || '')
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’`´]/g, "'")
+    .replace(/[‐‑‒–—-]/g, ' ')
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word && !['le', 'la', 'les', 'un', 'une', 'des', 'du', 'l', 'd', 'au', 'aux'].includes(word))
+    .join(' ')
+    .trim();
+
+const FillBlankStudentTester = ({ question = '', onClose }) => {
+    const parsed = parseFillBlankForTest(question);
+    const [answers, setAnswers] = useState(() => parsed.blanks.map(() => ''));
+    const [checked, setChecked] = useState(false);
+    const isCorrect = (answer, blank) => {
+        const given = normalizeFillBlankForTest(answer);
+        if (!given || !blank) return false;
+        const contains = (item) => String(item || '').split('=').map(normalizeFillBlankForTest).filter(Boolean)
+            .some((variant) => given === variant || (` ${given} `).includes(` ${variant} `));
+        if (blank.type === 'exact') return blank.items.some(contains);
+        const matched = blank.items.filter(contains).length;
+        return matched >= (blank.type === 'list_strict' ? blank.items.length : Math.max(1, blank.items.length - 2));
+    };
+    return (
+        <div className="mt-2 rounded-xl border-2 border-violet-300 bg-violet-50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase text-violet-800">
+                <span>👁 Test élève</span>
+                <button type="button" className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[10px]" onClick={onClose}>Fermer</button>
+            </div>
+            <div className="whitespace-pre-wrap text-[14px] font-bold leading-8 text-slate-800">
+                {parsed.parts.map((part, index) => {
+                    const right = isCorrect(answers[index], parsed.blanks[index]);
+                    const showExpected = checked && !right;
+                    return <React.Fragment key={`test_blank_${index}`}><span>{part}</span>{index < parsed.blanks.length && <input
+                        className={`mx-1 inline-block min-w-[120px] max-w-full rounded-md border-2 px-2 py-1 text-center outline-none ${checked ? (right ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-red-500 bg-red-50 text-red-700') : 'border-blue-300 bg-white text-slate-800'}`}
+                        value={showExpected ? parsed.blanks[index].raw : (answers[index] || '')}
+                        disabled={checked}
+                        onChange={(event) => setAnswers((previous) => previous.map((answer, answerIndex) => answerIndex === index ? event.target.value : answer))}
+                        aria-label={`Trou ${index + 1}`}
+                    />}</React.Fragment>;
+                })}
+            </div>
+            <button type="button" className="mt-3 rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-black uppercase text-white" onClick={() => setChecked(true)}>Vérifier comme l’élève</button>
+            {checked && <span className="ml-2 text-[11px] font-bold text-slate-600">Vert : juste · Rouge : réponse attendue.</span>}
+        </div>
+    );
+};
+
 const FillBlankSyntaxTextarea = ({ value, onChange, onKeyDown, placeholder, rows = 3 }) => {
     const previewRef = useRef(null);
     const preview = renderFillBlankDetectionPreview(value, placeholder);
@@ -1005,6 +1097,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [savingStepData, setSavingStepData] = useState(false);
     const [importingSheet, setImportingSheet] = useState(false);
     const [recordingQuestionCell, setRecordingQuestionCell] = useState(null); // { rowIdx, field, zoneIdx? }
+    const [testingFillBlankKey, setTestingFillBlankKey] = useState('');
     const [sourcePickerKind, setSourcePickerKind] = useState(''); // '' | 'video' | 'sheet'
     const [sourcePickerExistingUrl, setSourcePickerExistingUrl] = useState('');
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
@@ -4449,6 +4542,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                             1-2-3 Renuméroter
                         </button>
                     )}
+                    {q?.validationType === 'fill_blanks' && (
+                        <button
+                            type="button"
+                            className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-black uppercase text-violet-700 hover:bg-violet-600 hover:text-white"
+                            onClick={() => setTestingFillBlankKey((current) => current === `zone-${sectionIdx}-${i}` ? '' : `zone-${sectionIdx}-${i}`)}
+                        >
+                            👁 Tester élève
+                        </button>
+                    )}
                 </div>
                 <div className="flex gap-1">
                     {q?.validationType === 'fill_blanks' ? (
@@ -4488,6 +4590,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                         🎙️
                     </button>
                 </div>
+                {q?.validationType === 'fill_blanks' && testingFillBlankKey === `zone-${sectionIdx}-${i}` && (
+                    <FillBlankStudentTester key={`test_zone_${sectionIdx}_${i}_${questionValue}`} question={questionValue} onClose={() => setTestingFillBlankKey('')} />
+                )}
                 {q?.validationType !== 'fill_blanks' && <div className="mt-3">
                     <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Réponses attendues</div>
                     <div className="space-y-2">
@@ -7309,6 +7414,15 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                                                                 1-2-3 Renuméroter
                                                                             </button>
                                                                         )}
+                                                                        {pair?.validationType === 'fill_blanks' && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-black uppercase text-violet-700 hover:bg-violet-600 hover:text-white"
+                                                                                onClick={() => setTestingFillBlankKey((current) => current === `pair-${i}` ? '' : `pair-${i}`)}
+                                                                            >
+                                                                                👁 Tester élève
+                                                                            </button>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex gap-1">
                                                                         {pair?.validationType === 'fill_blanks' ? (
@@ -7348,6 +7462,9 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                                                             🎙️
                                                                         </button>
                                                                     </div>
+                                                                    {pair?.validationType === 'fill_blanks' && testingFillBlankKey === `pair-${i}` && (
+                                                                        <FillBlankStudentTester key={`test_pair_${i}_${questionValue}`} question={questionValue} onClose={() => setTestingFillBlankKey('')} />
+                                                                    )}
                                                                     {pair?.validationType !== 'fill_blanks' && <div className="mt-3">
                                                                         <div className="text-[11px] font-black uppercase text-slate-400 mb-1">Réponses attendues</div>
                                                                         <div className="space-y-2">
