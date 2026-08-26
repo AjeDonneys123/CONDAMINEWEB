@@ -41,6 +41,12 @@
 .dil-word-pair{display:flex;align-items:center;gap:9px;min-width:0;color:#1e1b4b;font-size:22px;font-weight:800;line-height:1.25}
 .dil-word-pair b{font-size:24px;white-space:nowrap}
 .dil-word-pair span{color:#64748b;font-weight:900}
+.dil-word-main{min-width:0;flex:1}
+.dil-focus-hint{margin:7px 0 5px;color:#64748b;font-size:13px;font-weight:750}
+.dil-focus-picker{display:flex;flex-wrap:wrap;gap:6px}
+.dil-focus-picker button{border:1px solid #c7d2fe;border-radius:9px;background:#f8f7ff;color:#4338ca;padding:4px 7px;font-size:14px;font-weight:800;cursor:pointer}
+.dil-focus-picker button.selected{background:#dcfce7;border-color:#22c55e;color:#166534}
+.dil-focus-words{margin-top:5px;color:#4338ca;font-size:14px;font-weight:800}
 .dil-word-results{display:flex;align-items:center;gap:8px;font-weight:900}
 .dil-word-results .correct{border-radius:10px;background:#dcfce7;color:#15803d;padding:7px 9px}
 .dil-word-results .wrong{border-radius:10px;background:#fee2e2;color:#dc2626;padding:7px 9px}

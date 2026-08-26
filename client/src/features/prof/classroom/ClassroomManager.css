@@ -119,6 +119,45 @@
     height: 30px;
     border-radius: 999px;
 }
+.french-mode-btn, .french-validate-btn {
+    height: 34px;
+    border-radius: 10px;
+    border: 2px solid #c7d2fe;
+    background: #fff;
+    color: #3730a3;
+    padding: 0 10px;
+    font-size: .72rem;
+    font-weight: 950;
+    cursor: pointer;
+}
+.french-mode-btn.active { background: #3730a3; border-color: #3730a3; color: #fff; box-shadow: 0 5px 12px rgba(55,48,163,.25); }
+.french-validate-btn { border-color: #16a34a; background: #16a34a; color: #fff; }
+.french-validate-btn:disabled { opacity: .45; cursor: not-allowed; }
+.french-mode-hint { margin: -2px 0 12px; color: #3730a3; font-size: .75rem; font-weight: 800; }
+.french-assignment-panel {
+    margin: 0 0 12px;
+    padding: 11px 13px;
+    border: 2px solid #c7d2fe;
+    border-radius: 14px;
+    background: #eef2ff;
+    color: #312e81;
+}
+.french-assignment-heading { font-size: .82rem; font-weight: 950; }
+.french-assignment-heading span { color: #64748b; }
+.french-assignment-panel p { margin: 5px 0 8px; color: #475569; font-size: .73rem; font-weight: 700; }
+.french-keyword-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.french-keyword-list button {
+    border: 1px solid #a5b4fc;
+    border-radius: 999px;
+    background: #fff;
+    color: #3730a3;
+    padding: 5px 8px;
+    font-size: .75rem;
+    font-weight: 850;
+    cursor: pointer;
+}
+.french-keyword-list button.selected { background: #dcfce7; border-color: #22c55e; color: #166534; }
+.french-assignment-panel small { display: block; margin-top: 7px; color: #166534; font-size: .72rem; font-weight: 850; }
 .plan-matches-list {
     max-height: 150px;
     overflow-y: auto;
@@ -238,6 +277,10 @@
     border: 3px solid #dc2626;
     background: #fff1f2;
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+}
+.student-card-drag.french-selected {
+    border: 3px solid #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, .18), 0 4px 8px rgba(220, 38, 38, .18);
 }
 .student-card-drag.work-incomplete { background: #fef9c3; border-color: #eab308; }
 .student-card-drag.has-note { background: #ffedd5; border-color: #f97316; }

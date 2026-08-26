@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
 import StarshipWrapper from './starship/StarshipWrapper';
 import ProtectedGameSurface from './ProtectedGameSurface';
+import { awardStudentStars } from '../utils/studentStars';
 
 const youtubeEmbed = (url = '') => {
   const source = String(url || '').trim();
@@ -42,6 +43,7 @@ export default function LearningArcadeGame({ user, gameData, onExit }) {
       gameData,
       onClose: onExit,
       onFinish: (success) => {
+        if (success) awardStudentStars(user, { category: 'game', points: 5 });
         if (success && levelIndex < levels.length - 1) {
           setLevelIndex((index) => index + 1);
           setStarted(false);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './LearningWorkspace.css';
 import { resolveBackendAssetUrl, resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
+import { awardStudentStars } from '../utils/studentStars';
 
 const normalize = (txt = '') =>
     String(txt || '')
@@ -654,19 +655,27 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const studentClassForGpt = String(user?.currentClass || user?.className || user?.classe || '').trim();
     const studentGptUrl = import.meta.env?.VITE_STUDENT_GPT_URL || 'https://chatgpt.com/';
 
-    const awardLearningStars = (activity, amount) => {
+    const awardLearningStars = (activity, amount, category = 'learning') => {
         if (typeof window === 'undefined' || !amount) return;
-        const rewardId = `${String(module?._id || module?.id || module?.title || 'module')}:${String(activity)}`;
+        const dayKey = new Intl.DateTimeFormat('en-CA').format(new Date());
+        const rewardId = `${dayKey}:${String(module?._id || module?.id || module?.title || 'module')}:${String(activity)}`;
         try {
             const saved = JSON.parse(window.localStorage.getItem(studentRewardKey) || '{}') || {};
             const awarded = saved.learningAwards || {};
             if (awarded[rewardId]) return;
-            const next = { ...saved, points: Math.max(0, Number(saved.points || 0)) + Number(amount), learningAwards: { ...awarded, [rewardId]: true } };
+            const next = { ...saved, points: Math.max(0, Number(saved.points || 0)), learningAwards: { ...awarded, [rewardId]: true } };
             window.localStorage.setItem(studentRewardKey, JSON.stringify(next));
-            setLearningStars(next.points);
-            setStarGain(Number(amount));
-            window.clearTimeout(starGainTimerRef.current);
-            starGainTimerRef.current = window.setTimeout(() => setStarGain(0), 1800);
+            awardStudentStars(user, { category, points: amount }).then((result) => {
+                if (!result) return;
+                const updated = { ...next, points: Math.max(0, Number(result.trainingStars) || 0) };
+                try { window.localStorage.setItem(studentRewardKey, JSON.stringify(updated)); } catch (_) {}
+                setLearningStars(updated.points);
+                if (result.awardedStars > 0) {
+                    setStarGain(result.awardedStars);
+                    window.clearTimeout(starGainTimerRef.current);
+                    starGainTimerRef.current = window.setTimeout(() => setStarGain(0), 1800);
+                }
+            });
         } catch (_) {}
     };
 
@@ -1434,7 +1443,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
             setVideoUnlocked(true);
             setGateHint('');
-            awardLearningStars(`video:${currentStep.id || stepIndex}`, 5);
+            awardLearningStars(`video:${currentStep.id || stepIndex}`, 5, 'video');
             if (!videoCongratsShown) {
                 setVideoCongratsShown(true);
                 speakAiText('Bravo, séquence terminée.');
@@ -2675,8 +2684,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 <aside key={media.id} className="learning-sheet-media" aria-label={`Chanson ${media.name || ''}`}>
                                     <div className="learning-sheet-media-title">🎵 {media.name || 'Chanson / audio'}</div>
                                     <div className="learning-sheet-media-subtitle">{media.endSec > media.startSec ? `Extrait : ${media.startSec}s à ${media.endSec}s` : 'Écoute complète'}</div>
-                                    {isVideo ? <video src={media.url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`media:${currentStep.id || stepIndex}:${media.id}`, 2)} onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />
-                                        : <audio src={media.url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`media:${currentStep.id || stepIndex}:${media.id}`, 2)} onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />}
+                                    {isVideo ? <video src={media.url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`media:${currentStep.id || stepIndex}:${media.id}`, 2, 'video')} onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />
+                                        : <audio src={media.url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`media:${currentStep.id || stepIndex}:${media.id}`, 2, 'video')} onLoadedMetadata={(e) => { if (media.startSec > 0) e.currentTarget.currentTime = media.startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, media)} />}
                                     <a className="learning-sheet-media-download" href={media.url} download={media.name || 'chanson.mp3'}>
                                         ⬇ Télécharger la chanson
                                     </a>
@@ -2808,7 +2817,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                         {moduleSongItems.length > 0 && (
                             <div className="learning-sheet-media">
                                 <div className="learning-sheet-media-title">🎵 {moduleSongItems[0].name || 'Chanson de la séquence'}</div>
-                                <audio src={moduleSongItems[0].url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`module-song:${moduleSongItems[0].id}`, 2)} onLoadedMetadata={(e) => { if (moduleSongItems[0].startSec > 0) e.currentTarget.currentTime = moduleSongItems[0].startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, moduleSongItems[0])} />
+                                <audio src={moduleSongItems[0].url} controls className="learning-sheet-media-player" onPlay={() => awardLearningStars(`module-song:${moduleSongItems[0].id}`, 2, 'video')} onLoadedMetadata={(e) => { if (moduleSongItems[0].startSec > 0) e.currentTarget.currentTime = moduleSongItems[0].startSec; }} onTimeUpdate={(e) => enforceSheetMediaBounds(e.currentTarget, moduleSongItems[0])} />
                                 <a className="learning-sheet-media-download" href={moduleSongItems[0].url} download={moduleSongItems[0].name || 'chanson.mp3'}>⬇ Télécharger la chanson</a>
                             </div>
                         )}

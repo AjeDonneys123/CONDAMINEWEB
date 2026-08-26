@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import HomeworkList from '../homework/HomeworkList';
+import { awardStudentStars } from '../utils/studentStars';
 import './ExamTrainingHub.css';
 
 const TRAINING_SCORE_EVENT = 'condaweb:training-score';
@@ -38,16 +39,6 @@ function TrainingPointsBadge({ user }) {
     });
   }, [savedTrainingStars, storageKey]);
 
-  const saveStarsForTeacher = (points) => {
-    const studentId = String(user?._id || user?.id || '').trim();
-    if (!studentId) return;
-    fetch('/api/eleve/auth/training-stars', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId, points })
-    }).catch(() => {});
-  };
-
   useEffect(() => {
     const onScore = (event) => {
       const detail = event?.detail || {};
@@ -60,27 +51,32 @@ function TrainingPointsBadge({ user }) {
         const earned = newlyCorrect * 10 + perfectBonus;
         if (!earned) return previous;
         const next = {
-          points: previous.points + earned,
+          points: previous.points,
           best: { ...previous.best, [detail.exerciseId]: nextBest }
         };
         try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {}
-        saveStarsForTeacher(next.points);
-        setGain(earned);
-        window.setTimeout(() => setGain(0), 1800);
+        awardStudentStars(user, { category: 'exercise', points: earned }).then((result) => {
+          if (!result) return;
+          setProgress((current) => {
+            const updated = { ...current, points: Math.max(0, Number(result.trainingStars) || 0) };
+            try { window.localStorage.setItem(storageKey, JSON.stringify(updated)); } catch (_) {}
+            return updated;
+          });
+          if (result.awardedStars > 0) {
+            setGain(result.awardedStars);
+            window.setTimeout(() => setGain(0), 1800);
+          }
+        });
         return next;
       });
     };
     window.addEventListener(TRAINING_SCORE_EVENT, onScore);
     return () => window.removeEventListener(TRAINING_SCORE_EVENT, onScore);
-  }, [storageKey]);
+  }, [storageKey, user]);
 
-  return (
-    <div className="fixed right-5 top-4 z-[900] flex items-center gap-2 rounded-2xl border-2 border-amber-300 bg-white/95 px-4 py-3 font-black text-amber-700 shadow-xl backdrop-blur">
-      <span className="text-xl">⭐</span>
-      <span>{progress.points} points</span>
-      {gain > 0 && <span className="animate-pulse rounded-xl bg-emerald-100 px-2 py-1 text-xs text-emerald-700">+{gain}</span>}
-    </div>
-  );
+  // Le grand compteur global est rendu par EleveHeader. Ce composant conserve
+  // seulement l'écoute des résultats et la synchronisation des étoiles.
+  return null;
 }
 
 const normalizeClass = (value = '') => String(value || '')

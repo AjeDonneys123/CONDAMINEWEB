@@ -11,6 +11,7 @@ import EleveChatWorkspace from './chat/EleveChatWorkspace';
 import EleveCoursesList from './courses/EleveCoursesList';
 import ExamTrainingHub from './training/ExamTrainingHub';
 import DilWorkspace from './dil/DilWorkspace';
+import { STUDENT_STARS_EVENT } from './utils/studentStars';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
@@ -44,6 +45,15 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       const interval = setInterval(fetchFreshData, 5000);
       return () => clearInterval(interval);
   }, [user]);
+
+  useEffect(() => {
+      const onStarsUpdated = (event) => {
+          const trainingStars = Number(event?.detail?.trainingStars);
+          if (Number.isFinite(trainingStars)) setFreshUser(prev => ({ ...prev, trainingStars }));
+      };
+      window.addEventListener(STUDENT_STARS_EVENT, onStarsUpdated);
+      return () => window.removeEventListener(STUDENT_STARS_EVENT, onStarsUpdated);
+  }, []);
 
   // L'information DIL peut arriver avec le rafraîchissement du profil après
   // la connexion : on bascule alors une seule fois depuis l'écran d'accueil.
@@ -154,6 +164,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 onActivityHandled={clearPendingIfMatch}
               />
             )}
+            {tab === 'francais' && <DilWorkspace user={freshUser} frenchMode />}
             {tab === 'comment' && (
               <CommentsList
                 user={freshUser}

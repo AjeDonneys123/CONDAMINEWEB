@@ -122,7 +122,10 @@ const StudentSchema = new mongoose.Schema({
     isTestAccount: { type: Boolean, default: false },
     isDil: { type: Boolean, default: false },
     // Total d'étoiles gagnées dans les entraînements élèves.
-    trainingStars: { type: Number, default: 0, min: 0 }
+    trainingStars: { type: Number, default: 0, min: 0 },
+    // Compteurs journaliers anti-abus, indexés par date puis par activité.
+    // Exemple : { "2026-08-26": { exercise: 20, video: 5 } }
+    starDailyRewards: { type: mongoose.Schema.Types.Mixed, default: () => ({}) }
 }, { timestamps: true });
 
 StudentSchema.pre('save', function forceSharedEmailForTestAccount(next) {
@@ -702,6 +705,8 @@ const Models = {
         studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
         french: { type: String, required: true, trim: true },
         spanish: { type: String, required: true, trim: true },
+        // Mots ciblés dans une phrase ajoutée par le professeur.
+        focusWords: { type: [String], default: [] },
         correctCount: { type: Number, default: 0 },
         wrongCount: { type: Number, default: 0 },
         correctStreak: { type: Number, default: 0 },

@@ -14,6 +14,11 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [viewMode, setViewMode] = useState('PLAN');
     const [searchTerm, setSearchTerm] = useState("");
     const [planFinder, setPlanFinder] = useState("");
+    const [frenchMode, setFrenchMode] = useState(false);
+    const [frenchStudentIds, setFrenchStudentIds] = useState([]);
+    const [frenchExpression, setFrenchExpression] = useState("");
+    const [frenchKeywords, setFrenchKeywords] = useState([]);
+    const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
     const [placementStudent, setPlacementStudent] = useState(null);
@@ -138,7 +143,10 @@ export default function ClassroomManager({ globalClassId, user }) {
                 .join(' ')
                 .trim();
             if (!transcript) return;
-            if (currentViewModeRef.current === 'PLAN') {
+            if (frenchMode) {
+                setFrenchExpression(transcript);
+                setFrenchKeywords([]);
+            } else if (currentViewModeRef.current === 'PLAN') {
                 setPlanFinder(transcript);
                 lastVoiceValueRef.current.PLAN = transcript;
             } else {
@@ -170,14 +178,16 @@ export default function ClassroomManager({ globalClassId, user }) {
             try { recognition.onresult = null; recognition.onend = null; recognition.onerror = null; recognition.stop(); } catch (_) {}
             speechRecognitionRef.current = null;
         };
-    }, []);
+    }, [frenchMode]);
 
     const toggleVoiceFinder = () => {
         if (!voiceSupported || !speechRecognitionRef.current) return;
         if (voiceListening) {
             keepListeningRef.current = false;
             try { speechRecognitionRef.current.stop(); } catch (_) {}
-            if (currentViewModeRef.current === 'PLAN') {
+            if (frenchMode) {
+                lastVoiceValueRef.current.PLAN = String(frenchExpression || '');
+            } else if (currentViewModeRef.current === 'PLAN') {
                 setPlanFinder('');
                 lastVoiceValueRef.current.PLAN = '';
             } else {
@@ -187,7 +197,9 @@ export default function ClassroomManager({ globalClassId, user }) {
             setVoiceListening(false);
             return;
         }
-        if (currentViewModeRef.current === 'PLAN') {
+        if (frenchMode) {
+            lastVoiceValueRef.current.PLAN = String(frenchExpression || '');
+        } else if (currentViewModeRef.current === 'PLAN') {
             lastVoiceValueRef.current.PLAN = String(planFinder || '');
         } else {
             lastVoiceValueRef.current.LIST = String(searchTerm || '');
@@ -412,8 +424,15 @@ export default function ClassroomManager({ globalClassId, user }) {
     const planFinderCount = students.filter(isPlanFinderMatch).length;
     const selectedPlanStudents = students.filter(isPlanFinderMatch);
     const listFinderCount = students.filter(isListFinderMatch).length;
+    const frenchSelectedStudents = students.filter((student) => frenchStudentIds.includes(String(student._id)));
 
     const handleOpenStudent = (stu) => {
+        if (frenchMode) {
+            const id = String(stu?._id || '');
+            if (!id) return;
+            setFrenchStudentIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+            return;
+        }
         if (placementStudent && String(placementStudent?._id || '') === String(stu?._id || '')) {
             setPlacementStudent(null);
         }
@@ -432,10 +451,75 @@ export default function ClassroomManager({ globalClassId, user }) {
             return;
         }
         setSelectedStudent(stu);
+        // En mode FR, le clic sert uniquement à choisir le destinataire de
+        // l'expression : il ne doit jamais ouvrir le panneau inférieur de notes.
+        if (frenchMode) return;
         setCurrentNote(stu.myNote || "");
         setCurrentNickname(stu.nickname || "");
         setShowNoteInput(false);
         setIsEditingNickname(false);
+    };
+
+    const saveFrenchExpression = async () => {
+        const expression = String(frenchExpression || '').trim().replace(/\s+/g, ' ');
+        if (!expression) return alert('Écris ou dicte un mot ou une expression.');
+        const recipientIds = frenchStudentIds.length ? frenchStudentIds : students.map((student) => String(student._id)).filter(Boolean);
+        if (!recipientIds.length) return alert('Aucun élève dans cette classe.');
+        setFrenchSaving(true);
+        try {
+            const responses = await Promise.all(recipientIds.map(async (studentId) => {
+                const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ french: expression, spanish: expression, focusWords: frenchKeywords, source: 'teacher-french' })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.error || 'Enregistrement impossible.');
+                return data;
+            }));
+            setFrenchExpression('');
+            setFrenchKeywords([]);
+            alert(`Ajouté à la liste de ${responses.length} élève${responses.length > 1 ? 's' : ''}.`);
+        } catch (error) {
+            alert(error.message || 'Enregistrement impossible.');
+        } finally {
+            setFrenchSaving(false);
+        }
+    };
+
+    const toggleFrenchMode = () => {
+        setFrenchMode((value) => !value);
+        setFrenchStudentIds([]);
+        setVoiceListening(false);
+        keepListeningRef.current = false;
+        try { speechRecognitionRef.current?.stop(); } catch (_) {}
+    };
+
+    const normaliseFrenchKeyword = (value) => String(value || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const toggleFrenchKeyword = (word) => {
+        const key = normaliseFrenchKeyword(word);
+        if (!key) return;
+        setFrenchKeywords((items) => items.some((item) => normaliseFrenchKeyword(item) === key)
+            ? items.filter((item) => normaliseFrenchKeyword(item) !== key)
+            : [...items, word]);
+    };
+
+    const renderFrenchAssignmentPanel = () => {
+        if (!frenchMode) return null;
+        const words = String(frenchExpression || '').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
+        return (
+            <div className="french-assignment-panel">
+                <div className="french-assignment-heading">🇫🇷 Ajout de français {frenchSelectedStudents.length ? <strong>pour {frenchSelectedStudents.map(getDisplayName).join(', ')}</strong> : <span>pour toute la classe</span>}</div>
+                <p>Écris ou dicte un mot, une expression ou une phrase. Clique sur les mots à travailler pour les repérer ensuite dans un texte à trous. Sans élève sélectionné, l’ajout est envoyé à toute la classe.</p>
+                {!!words.length && <div className="french-keyword-list">{words.map((word, index) => {
+                    const selected = frenchKeywords.some((item) => normaliseFrenchKeyword(item) === normaliseFrenchKeyword(word));
+                    return <button type="button" key={`${word}-${index}`} className={selected ? 'selected' : ''} onClick={() => toggleFrenchKeyword(word)}>{selected ? '✓ ' : ''}{word}</button>;
+                })}</div>}
+                {!!frenchKeywords.length && <small>Mots repérés : {frenchKeywords.join(' · ')}</small>}
+            </div>
+        );
     };
 
     const startDrawerActionHold = () => {
@@ -702,7 +786,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
@@ -750,22 +834,25 @@ export default function ClassroomManager({ globalClassId, user }) {
         return (
             <div className="list-container custom-scrollbar alphabetic-layout">
                 <div className="list-finder-row">
-                    <input className="plan-finder-input" placeholder="🔎 Trouver un élève de la classe..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <input className="plan-finder-input" placeholder={frenchMode ? (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…') : '🔎 Trouver un élève de la classe...'} value={frenchMode ? frenchExpression : searchTerm} onChange={e => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([])) : setSearchTerm(e.target.value)} />
                     <div className="plan-finder-count-wrap">
-                        <span className="plan-finder-count" title={searchTerm.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
+                        {!frenchMode && <span className="plan-finder-count" title={searchTerm.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
                             {searchTerm.trim() ? listFinderCount : students.length}
-                        </span>
-                        {searchTerm.trim() && (
+                        </span>}
+                        <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
+                        {(frenchMode ? frenchExpression : searchTerm).trim() && (
                             <button
                                 className="finder-clear-btn"
-                                onClick={() => setSearchTerm('')}
+                                onClick={() => frenchMode ? (setFrenchExpression(''), setFrenchKeywords([])) : setSearchTerm('')}
                                 title="Effacer la recherche"
                             >
                                 ✕
                             </button>
                         )}
+                        {frenchMode && <button className="french-validate-btn" onClick={saveFrenchExpression} disabled={frenchSaving || !frenchExpression.trim()}>{frenchSaving ? '…' : 'VALIDER'}</button>}
                     </div>
                 </div>
+                {renderFrenchAssignmentPanel()}
                 <div className="alpha-plan-board">
                     <div className="grid-header-row alpha-header-row" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>
                         {Array.from({ length: gridSize.cols }).map((_, x) => <div key={x} className="col-header-cell">COL {x + 1}</div>)}
@@ -796,7 +883,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     style={{ gridColumn: col + 1, gridRow: row + 1 }}
                                 >
                                     <div
-                                        className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`}
+                                        className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`}
                                         onClick={() => handleOpenStudent(student)}
                                     >
                                         {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
@@ -881,7 +968,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
                         onClick={toggleVoiceFinder}
                         disabled={!voiceSupported}
-                        title={voiceSupported ? 'Recherche vocale élève' : 'Reconnaissance vocale non disponible'}
+                        title={voiceSupported ? (frenchMode ? 'Dicter un mot ou une expression' : 'Recherche vocale élève') : 'Reconnaissance vocale non disponible'}
                     >
                         {voiceListening ? '🎙️ ON' : '🎙️'}
                     </button>
@@ -915,25 +1002,33 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div className="plan-finder-row">
                         <input
                             className="plan-finder-input"
-                            placeholder="🔎 Trouver un élève de la classe..."
-                            value={planFinder}
-                            onChange={(e) => setPlanFinder(e.target.value)}
+                            placeholder={frenchMode ? (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…') : '🔎 Trouver un élève de la classe...'}
+                            value={frenchMode ? frenchExpression : planFinder}
+                            onChange={(e) => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([])) : setPlanFinder(e.target.value)}
                         />
                         <div className="plan-finder-count-wrap">
-                            <span className="plan-finder-count" title={planFinder.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
+                            {!frenchMode && <span className="plan-finder-count" title={planFinder.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
                                 {planFinder.trim() ? planFinderCount : students.length}
-                            </span>
-                            {planFinder.trim() && (
+                            </span>}
+                            <button
+                                className={`french-mode-btn ${frenchMode ? 'active' : ''}`}
+                                onClick={toggleFrenchMode}
+                                title="Mode français : choisis un élève puis ajoute un mot ou une expression"
+                            >FR</button>
+                            {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
                                     className="finder-clear-btn"
-                                    onClick={() => setPlanFinder('')}
-                                    title="Effacer la recherche"
+                                    onClick={() => frenchMode ? (setFrenchExpression(''), setFrenchKeywords([])) : setPlanFinder('')}
+                                    title={frenchMode ? 'Effacer le mot ou l’expression' : 'Effacer la recherche'}
                                 >
-                                    ✕
+                                ✕
                                 </button>
                             )}
+                            {frenchMode && <button className="french-validate-btn" onClick={saveFrenchExpression} disabled={frenchSaving || !frenchExpression.trim()}>{frenchSaving ? '…' : 'VALIDER'}</button>}
                         </div>
                     </div>
+                    {frenchMode && <div className="french-mode-hint">🇫🇷 Clique un élève dans le plan, puis écris ou dicte le mot / l’expression à ajouter à sa liste personnelle.</div>}
+                    {renderFrenchAssignmentPanel()}
                     {placementStudent && (
                         <div className="placement-hint">
                             Placement actif pour <strong>{placementStudent.lastName} {getDisplayName(placementStudent)}</strong>. Clique ensuite sur une case vide du plan.
@@ -954,8 +1049,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                 </>
             ) : renderList()}
             
-            <div className={`action-drawer ${selectedStudent ? 'open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
-                {selectedStudent && (
+            <div className={`action-drawer ${selectedStudent && !frenchMode ? 'open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
+                {selectedStudent && !frenchMode && (
                     <>
                         <div className="drawer-header">
                             {isEditingNickname ? (

@@ -386,21 +386,67 @@ router.get('/student-fresh/:id', async (req, res) => {
     res.json(student.toObject());
 });
 
-// Le navigateur conserve le détail des exercices, mais le total est aussi
-// sauvegardé ici pour être visible par le professeur dans le plan de classe.
+// Ancienne route conservée pour les onglets déjà ouverts : elle ne modifie plus
+// le score. Les gains passent obligatoirement par la route plafonnée ci-dessous.
 router.post('/training-stars', async (req, res) => {
     try {
         const studentId = String(req.body?.studentId || '').trim();
-        const points = Math.max(0, Math.floor(Number(req.body?.points) || 0));
         if (!studentId) return res.status(400).json({ error: 'Élève manquant.' });
         const student = await Student.findById(studentId);
         if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
-        // Un ancien onglet ne doit jamais pouvoir faire redescendre le score.
-        student.trainingStars = Math.max(Number(student.trainingStars || 0), points);
-        await student.save();
         res.json({ trainingStars: student.trainingStars });
     } catch (error) {
         res.status(500).json({ error: error.message || 'Sauvegarde des étoiles impossible.' });
+    }
+});
+
+// Chaque activité reste rejouable, mais ses étoiles sont plafonnées pour la
+// journée. Les compteurs sont automatiquement séparés au changement de date.
+const STAR_DAILY_CAPS = Object.freeze({
+    exercise: 40,
+    learning: 35,
+    video: 10,
+    game: 20
+});
+
+router.post('/star-rewards', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const category = String(req.body?.category || '').trim();
+        const requested = Math.max(0, Math.min(50, Math.floor(Number(req.body?.points) || 0)));
+        if (!studentId) return res.status(400).json({ error: 'Élève manquant.' });
+        if (!Object.prototype.hasOwnProperty.call(STAR_DAILY_CAPS, category)) return res.status(400).json({ error: 'Catégorie d’étoiles invalide.' });
+
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
+
+        const dayKey = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Guayaquil', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(new Date());
+        const allDays = (student.starDailyRewards && typeof student.starDailyRewards === 'object')
+            ? { ...student.starDailyRewards } : {};
+        const today = (allDays[dayKey] && typeof allDays[dayKey] === 'object') ? { ...allDays[dayKey] } : {};
+        const cap = STAR_DAILY_CAPS[category];
+        const alreadyEarned = Math.max(0, Math.min(cap, Math.floor(Number(today[category]) || 0)));
+        const awardedStars = Math.max(0, Math.min(requested, cap - alreadyEarned));
+        today[category] = alreadyEarned + awardedStars;
+        allDays[dayKey] = today;
+        // On ne conserve qu'une semaine de compteurs techniques.
+        Object.keys(allDays).sort().slice(0, -7).forEach((key) => delete allDays[key]);
+
+        student.starDailyRewards = allDays;
+        student.trainingStars = Math.max(0, Number(student.trainingStars) || 0) + awardedStars;
+        student.markModified('starDailyRewards');
+        await student.save();
+        res.json({
+            trainingStars: student.trainingStars,
+            awardedStars,
+            dailyCap: cap,
+            dailyEarned: today[category],
+            dailyRemaining: cap - today[category]
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Attribution des étoiles impossible.' });
     }
 });
 

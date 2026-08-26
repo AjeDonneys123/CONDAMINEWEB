@@ -105,6 +105,10 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 
   return (
     <div className="header-wrapper">
+      <div className="student-global-stars" aria-label={`${Math.max(0, Math.floor(Number(user?.trainingStars) || 0))} points`}>
+        <span>⭐</span>
+        <strong>{Math.max(0, Math.floor(Number(user?.trainingStars) || 0))} points</strong>
+      </div>
       
       {punishmentAlert}
 
@@ -141,7 +145,9 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         <div className="nav-tabs">
             <button onClick={() => onTabChange('status')} className={`tab-item ${activeTab === 'status' ? 'tab-active' : ''}`}>📊 STATUS</button>
             <button onClick={() => onTabChange('courses')} className={`tab-item ${activeTab === 'courses' ? 'tab-active' : ''}`}>📚 COURS</button>
-            <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
+            {user.isDil === true
+                ? <button onClick={() => onTabChange('controles')} className={`tab-item ${activeTab === 'controles' ? 'tab-active' : ''}`}>📝 RÉCUP CONTRÔLE</button>
+                : <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-active' : ''}`}>🇫🇷 FRANÇAIS</button>}
             <button onClick={() => onTabChange('training')} className={`tab-item ${activeTab === 'training' ? 'tab-active' : ''}`}>{trainingTabLabel}</button>
             {hasDilMode && <button onClick={() => onTabChange('dil')} className={`tab-item ${activeTab === 'dil' ? 'tab-active' : ''}`}>🌍 DIL</button>}
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>

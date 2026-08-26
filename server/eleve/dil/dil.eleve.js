@@ -8,6 +8,11 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 const cleanWord = (value = '') => String(value || '').trim().replace(/\s+/g, ' ').slice(0, 120);
 const normalise = (value = '') => cleanWord(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const cleanFocusWords = (value) => (Array.isArray(value) ? value : [])
+    .map((word) => cleanWord(word).slice(0, 60))
+    .filter((word) => /[\p{L}\p{N}]/u.test(word))
+    .filter((word, index, list) => list.findIndex((item) => normalise(item) === normalise(word)) === index)
+    .slice(0, 30);
 
 router.get('/:studentId/vocabulary', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
@@ -18,17 +23,22 @@ router.get('/:studentId/vocabulary', async (req, res) => {
 router.post('/:studentId/vocabulary', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
     const french = cleanWord(req.body?.french);
-    const spanish = cleanWord(req.body?.spanish);
+    // Les professeurs peuvent ajouter un mot ou une expression de français à
+    // apprendre : dans ce cas il n'y a pas de traduction imposée et l'entrée
+    // est volontairement conservée telle quelle des deux côtés.
+    const spanish = cleanWord(req.body?.spanish) || french;
+    const focusWords = cleanFocusWords(req.body?.focusWords);
     if (!french || !spanish || !/[\p{L}]/u.test(french)) return res.status(400).json({ error: 'Mot à traduire invalide.' });
     const student = await Student.findById(req.params.studentId, '_id isDil').lean();
     if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
     const existing = await DilVocabulary.findOne({ studentId: student._id, french: new RegExp(`^${french.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
     if (existing) {
         existing.spanish = spanish;
+        existing.focusWords = focusWords;
         await existing.save();
         return res.json(existing);
     }
-    res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish }));
+    res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish, focusWords }));
 });
 
 router.delete('/:studentId/vocabulary/:wordId', async (req, res) => {
