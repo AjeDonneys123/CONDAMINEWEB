@@ -172,12 +172,15 @@ class MiniGame extends MiniGameBase {
 
             // 3. CINÉMATIQUE D'ÉJECTION
             if (this.bossDefeated && this.BOSS) {
-                this.BOSS.x += 4; // Vole à droite
-                this.BOSS.y -= 4; // Vole en haut
-                this.BOSS.direction += 20; // Tourbillonne
+                // Éjection visible : le boss part derrière Mario en tournoyant
+                // et se réduit progressivement jusqu'à disparaître au loin.
+                this.BOSS.x += 1.8;
+                this.BOSS.y -= 1.25;
+                this.BOSS.direction += 26;
+                this.BOSS.scale = Math.max(0.05, Number(this.BOSS.scale || this.normalScale) * 0.94);
                 
                 // Quand il disparaît de l'écran -> Fin du niveau
-                if (this.BOSS.x > 130 || this.BOSS.y < -30) {
+                if (this.BOSS.x > 138 || this.BOSS.y < -38 || this.BOSS.scale <= 0.06) {
                     this.isStopped = true;
                     if (this.game.nextQuestion) this.game.nextQuestion();
                     this.resetInternalState();

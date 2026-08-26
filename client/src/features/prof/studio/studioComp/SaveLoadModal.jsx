@@ -3,6 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../../../services/api';
 import './SaveLoadModal.css';
 
+// Les jeux importés/de la bibliothèque peuvent être ouverts et activés, mais
+// ne doivent jamais être supprimables depuis la fenêtre « Charger ».
+const BUILT_IN_GAME_PATTERN = /\b(jumper|starship|zombie|tapping|pok[eé]mon|cr[eé]atures|for[êe]t|wispguard|gardien|multiplication)\b/i;
+const isBuiltInGame = (project) => Boolean(
+    project?.isBuiltInGame || project?.isExternalGame || project?.isReadOnly ||
+    BUILT_IN_GAME_PATTERN.test(String(project?.title || ''))
+);
+
 /**
  * 📂 MODALE DE GESTION DE PROJETS V500
  * - Chargement avec bouton suppression (X) sauf sur le premier fichier.
@@ -44,6 +52,7 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
 
     const handleDeleteProject = async (e, project) => {
         e.stopPropagation();
+        if (isBuiltInGame(project)) return;
         if (!confirm("Déplacer ce projet dans la corbeille ?")) return;
         try {
             await patchProject(project, { isTrashed: true });
@@ -82,7 +91,9 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
         }
     };
 
-    const activeProjects = projects.filter(p => !p.isTrashed);
+    const activeProjects = projects
+        .filter(p => !p.isTrashed)
+        .sort((a, b) => Number(isBuiltInGame(b)) - Number(isBuiltInGame(a)));
     const trashedProjects = projects.filter(p => !!p.isTrashed);
 
     return (
@@ -116,16 +127,19 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
                                 <div className="text-center text-slate-400 font-bold p-4 animate-pulse">Chargement...</div>
                             ) : (
                                 <div className="flex flex-col gap-2">
-                                    {!showTrash && activeProjects.map((p) => (
-                                        <div key={p._id} className="sl-project-item group" onClick={() => onLoad(p)}>
+                                    {!showTrash && activeProjects.map((p) => {
+                                        const builtIn = isBuiltInGame(p);
+                                        return (
+                                        <div key={p._id} className="sl-project-item group" onClick={() => !p.isVirtualBuiltin && onLoad(p)}>
                                             <div className="flex flex-col">
                                                 <div className="flex items-center gap-2">
                                                     <span className="sl-p-name">{p.title}</span>
                                                     <span className={`sl-p-status ${p.isProduction ? 'prod' : 'ready'}`}>
-                                                        {p.isProduction ? 'PRODUCTION' : 'PRÊT'}
+                                                        {p.isProduction ? 'ACTIF' : 'INACTIF'}
                                                     </span>
+                                                    {builtIn && <span className="sl-p-library">JEU INTÉGRÉ</span>}
                                                 </div>
-                                                <span className="sl-p-date">{new Date(p.updatedAt).toLocaleDateString()}</span>
+                                                <span className="sl-p-date">{p.isVirtualBuiltin ? 'Jeu élève · visibilité contrôlée ici' : new Date(p.updatedAt).toLocaleDateString()}</span>
                                             </div>
 
                                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -136,20 +150,21 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
                                                             : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                     }`}
                                                     onClick={(e) => handleToggleProjectStatus(e, p)}
-                                                    title={p.isProduction ? "Passer en PRÊT" : "Passer en PRODUCTION"}
+                                                    title={p.isProduction ? "Rendre le jeu inactif" : "Rendre le jeu actif"}
                                                 >
-                                                    {p.isProduction ? '-> PRÊT' : '-> PROD'}
+                                                    {p.isProduction ? 'DÉSACTIVER' : 'ACTIVER'}
                                                 </button>
-                                                <button
+                                                {!builtIn && <button
                                                     className="w-8 h-8 rounded-full bg-red-50 text-red-500 font-black text-xs border border-red-100 hover:bg-red-500 hover:text-white"
                                                     onClick={(e) => handleDeleteProject(e, p)}
                                                     title="Déplacer dans la corbeille"
                                                 >
                                                     ✕
-                                                </button>
+                                                </button>}
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
 
                                     {showTrash && trashedProjects.map((p) => (
                                         <div key={p._id} className="sl-project-item sl-project-item-trash group">

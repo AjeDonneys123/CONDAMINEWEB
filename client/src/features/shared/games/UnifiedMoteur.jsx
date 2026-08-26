@@ -271,7 +271,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     // --- NOUVEAU : GESTION DES ERREURS DE SCRIPT ---
     const [scriptError, setScriptError] = useState(null);
     const forceTypingMode = gameData?.forceTypingMode === true;
-    const isStudioTapping = gameData?.isStudioTapping === true || /tapping/i.test(String(gameData?.title || ''));
+    // Tapping est un mode spécifique : il ne doit jamais être déduit du titre.
+    // Sinon un projet rechargé/renommé (notamment Jumper) peut récupérer les
+    // règles de Tapping au lieu de son propre moteur.
+    const isStudioTapping = gameData?.isStudioTapping === true;
     const tappingStorageKey = `conda_tapping_${String(user?._id || user?.id || 'local')}_${String(gameData?._id || 'project')}`;
     const [tappingTrophyRank, setTappingTrophyRank] = useState(() => {
         if (typeof window === 'undefined') return 0;

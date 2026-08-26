@@ -2,6 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
+
+const BUILT_IN_GAME_KEYS = ['jumper', 'starship', 'zombie', 'creatures', 'forest', 'guardian'];
 
 /**
  * 🎮 BLOC ÉLÈVE : JEUX & UNIVERS (V99 PROTECTED)
@@ -34,6 +38,32 @@ function matchesClassTargets(itemTargets, targetKeys) {
     return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
 }
 const academicLevel = (value = '') => (normalizeTargetKey(value).match(/^(6|5|4|3|2|1)/) || [])[1] || '';
+
+// Les jeux natifs React (créatures, forêt, gardien) n'étaient pas des projets
+// Studio. Cette route expose donc leur état de visibilité choisi dans Studio.
+router.get('/builtin-settings', async (_req, res) => {
+    try {
+        const StudioProject = mongoose.model('StudioProject');
+        const settings = await StudioProject.find({
+            title: { $regex: /^__builtin_game__/ },
+            isTrashed: { $ne: true }
+        }, 'title isProduction updatedAt').sort({ updatedAt: -1 }).lean();
+        const enabled = Object.fromEntries(BUILT_IN_GAME_KEYS.map((key) => [key, true]));
+        // Le premier élément est le plus récent : ne jamais laisser une ancienne
+        // sauvegarde réactiver un jeu qui vient d'être désactivé.
+        settings.forEach((setting) => {
+            const key = String(setting.title || '').replace('__builtin_game__', '');
+            if (Object.prototype.hasOwnProperty.call(enabled, key) && enabled[`__seen_${key}`] !== true) {
+                enabled[key] = setting.isProduction !== false;
+                enabled[`__seen_${key}`] = true;
+            }
+        });
+        Object.keys(enabled).filter((key) => key.startsWith('__seen_')).forEach((key) => delete enabled[key]);
+        res.json(enabled);
+    } catch (e) {
+        res.json(Object.fromEntries(BUILT_IN_GAME_KEYS.map((key) => [key, true])));
+    }
+});
 
 async function buildStudentClassTargets(student) {
     const Classroom = mongoose.model('Classroom');
@@ -113,13 +143,11 @@ router.get('/list/:studentId', async (req, res) => {
             isEnabled: { $ne: false }, // 🛡️ VERROU ANTI-BROUILLON
             ...(isVisitor ? {} : { $or: [
                 { isAllClass: true },
-                { assignedStudents: student._id },
-                { title: /tapping/i }
+                { assignedStudents: student._id }
             ] })
         }).sort({ createdAt: -1 }).lean();
         let games = rawGames.filter(g => {
             if (isVisitor) return (g.targetClassrooms || []).some((target) => academicLevel(target) === visitorLevel);
-            if (/tapping/i.test(String(g?.title || ''))) return true;
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!g.isAllClass) return false;
@@ -211,7 +239,7 @@ router.get('/skins', async (req, res) => {
         // Ils doivent rester accessibles aux élèves comme au professeur visiteur,
         // même lorsqu'aucun GameLevel classique ne leur est directement assigné.
         const arcadeSkins = await StudioProject.find({
-            title: { $regex: /^(ZOMBIE|Starship)$/i },
+            title: { $regex: /^(ZOMBIE|Starship|Jumper)$/i },
             isTrashed: { $ne: true }
         }, 'title scenes generatedCode')
             .sort({ updatedAt: -1, createdAt: -1 })
@@ -221,7 +249,14 @@ router.get('/skins', async (req, res) => {
             const key = String(skin?.title || '').trim().toLowerCase();
             if (key && !canonicalByTitle.has(key)) canonicalByTitle.set(key, skin);
         });
-        const canonicalSkins = [...canonicalByTitle.values()];
+        const canonicalSkins = [...canonicalByTitle.values()].map((skin) => {
+            // Jumper dispose d'un moteur local maintenu à part du code BDD.
+            // Il doit rester la source élève canonique, comme dans le Studio.
+            if (String(skin?.title || '').trim().toLowerCase() !== 'jumper') return skin;
+            const localPath = path.join(process.cwd(), 'studio-games', `${skin._id}.js`);
+            if (!fs.existsSync(localPath)) return skin;
+            return { ...skin, generatedCode: fs.readFileSync(localPath, 'utf8') };
+        });
 
         if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json(canonicalSkins);
 
@@ -238,12 +273,10 @@ router.get('/skins', async (req, res) => {
             isEnabled: { $ne: false },
             $or: [
                 { isAllClass: true },
-                { assignedStudents: student._id },
-                { title: /tapping/i }
+                { assignedStudents: student._id }
             ]
         }, 'title teacherId assignedStudents isAllClass targetClassrooms').lean();
         const assignedGames = rawAssignedGames.filter(g => {
-            if (/tapping/i.test(String(g?.title || ''))) return true;
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!g.isAllClass) return false;

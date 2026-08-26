@@ -65,6 +65,62 @@
     font-weight: 800;
 }
 
+.course-source-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.course-source-modal {
+    width: min(620px, 100%);
+    border: 0;
+    border-radius: 22px;
+    padding: 24px;
+    background: #fff;
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.32);
+}
+
+.course-source-modal-heading,
+.course-source-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.course-source-modal-heading span,
+.course-source-modal label > span,
+.course-source-scope legend {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+}
+
+.course-source-modal h2 { margin: 4px 0 0; font-size: 24px; }
+.course-source-modal-heading button { border: 0; background: #f1f5f9; border-radius: 50%; width: 38px; height: 38px; color: #475569; font-size: 25px; cursor: pointer; }
+.course-source-modal > label { display: block; margin-top: 22px; }
+.course-source-modal > label > span { display: block; margin-bottom: 8px; }
+.course-source-modal input[type="text"], .course-source-modal input:not([type]) { width: 100%; box-sizing: border-box; border: 2px solid #cbd5e1; border-radius: 12px; padding: 13px 14px; font: inherit; font-weight: 700; outline: none; }
+.course-source-modal input:focus { border-color: #7c3aed; }
+
+.course-source-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 22px 0; padding: 0; border: 0; }
+.course-source-scope legend { grid-column: 1 / -1; margin-bottom: 2px; }
+.course-source-scope label { display: flex; flex-direction: column; gap: 3px; min-height: 82px; box-sizing: border-box; border: 2px solid #dbe2ea; border-radius: 14px; padding: 14px 14px 14px 42px; position: relative; cursor: pointer; color: #334155; }
+.course-source-scope label.selected { border-color: #7c3aed; background: #f5f3ff; }
+.course-source-scope input { position: absolute; left: 14px; top: 19px; accent-color: #7c3aed; }
+.course-source-scope strong { font-size: 15px; }
+.course-source-scope small { color: #64748b; font-weight: 700; }
+
+@media (max-width: 560px) {
+    .course-source-modal { padding: 18px; }
+    .course-source-scope { grid-template-columns: 1fr; }
+}
+
 .course-editor {
     display: grid;
     grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
@@ -420,6 +476,25 @@
     border-color: #172033;
     background: #172033;
     color: #fff;
+}
+
+.course-compact-actions .course-enabled-button {
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+
+.course-compact-actions .course-enabled-button.active {
+    border-color: #86efac;
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.course-compact-actions .course-source-pencil {
+    min-width: 38px;
+    padding: 0;
+    background: #172033;
+    border-color: #172033;
+    font-size: 16px;
 }
 
 .course-compact-actions .course-delete-x {

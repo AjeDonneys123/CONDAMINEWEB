@@ -17,6 +17,16 @@ const upload = multer({ dest: tempDir });
 const localGamesDir = path.join(process.cwd(), 'studio-games');
 if (!fs.existsSync(localGamesDir)) fs.mkdirSync(localGamesDir, { recursive: true });
 
+const BUILT_IN_GAMES = [
+    ['jumper', 'Jumper'],
+    ['starship', 'Starship'],
+    ['zombie', 'ZOMBIE'],
+    ['creatures', 'Le monde des créatures'],
+    ['forest', 'La forêt des savoirs'],
+    ['guardian', 'La légende du Gardien']
+];
+const builtInSettingTitle = (key) => `__builtin_game__${key}`;
+
 const sanitizeProjectKey = (raw) => String(raw || '')
     .trim()
     .replace(/[^a-zA-Z0-9_-]/g, '')
@@ -27,14 +37,40 @@ router.get('/projects/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
         if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return res.json([]);
-        const projects = await StudioProject.find({ teacherId: userId }).sort({ isTrashed: 1, updatedAt: -1 }).lean();
-        res.json(projects);
+        const saved = await StudioProject.find({ teacherId: userId }).sort({ isTrashed: 1, updatedAt: -1 }).lean();
+        const settingsByKey = new Map(saved
+            .filter((project) => String(project.title || '').startsWith('__builtin_game__'))
+            .map((project) => [String(project.title).replace('__builtin_game__', ''), project]));
+        const projects = saved.filter((project) => !String(project.title || '').startsWith('__builtin_game__'));
+        const library = BUILT_IN_GAMES.map(([key, title]) => {
+            const setting = settingsByKey.get(key);
+            return {
+                _id: `builtin:${key}`,
+                title,
+                teacherId: userId,
+                builtInKey: key,
+                isBuiltInGame: true,
+                isVirtualBuiltin: true,
+                isProduction: setting ? setting.isProduction !== false : true,
+                isTrashed: false,
+                updatedAt: setting?.updatedAt || new Date(0)
+            };
+        });
+        res.json([...library, ...projects]);
     } catch (e) { res.json([]); }
 });
 
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
+        if (data?.isVirtualBuiltin && data?.builtInKey && data?.teacherId) {
+            const result = await StudioProject.findOneAndUpdate(
+                { teacherId: data.teacherId, title: builtInSettingTitle(data.builtInKey) },
+                { $set: { isProduction: data.isProduction !== false, isTrashed: false } },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            );
+            return res.json(result);
+        }
         if (data._id === "null" || data._id === "") delete data._id;
         let result;
         if (data._id) result = await StudioProject.findByIdAndUpdate(data._id, data, { new: true });

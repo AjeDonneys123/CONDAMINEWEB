@@ -42,6 +42,8 @@ const normalizeCourse = (body = {}) => {
         teacherId: body.teacherId || null,
         targetClassroomId,
         targetClassroomName: String(body.targetClassroomName || '').trim(),
+        targetScope: String(body.targetScope || 'LEVEL').toUpperCase() === 'CLASS' ? 'CLASS' : 'LEVEL',
+        targetLevel: String(body.targetLevel || '').trim(),
         isEnabled: body.isEnabled !== false,
         courseSectionId: String(body.courseSectionId || '').trim(),
         order: Math.max(0, Number(body.order || 0)),

@@ -14,6 +14,7 @@ import { buildGameLearningContext } from './rpg/gameLearningContext';
  */
 export default function GamesGrid({ user }) {
   const [skins, setSkins] = useState([]);
+  const [builtInGameSettings, setBuiltInGameSettings] = useState({});
   const [playingGame, setPlayingGame] = useState(null);
   const [playingMultiplicationRpg, setPlayingMultiplicationRpg] = useState(false);
   const [playingWispguard, setPlayingWispguard] = useState(false);
@@ -63,7 +64,7 @@ export default function GamesGrid({ user }) {
     return ({
       ...skin,
       _id: `learning-${family}-${chapter.id}`,
-      title: family === 'starship' ? 'Starship' : 'Zombie',
+      title: family === 'starship' ? 'Starship' : family === 'jumper' ? 'Jumper' : 'Zombie',
       type: family,
       isLearningGame: true,
       selectedChapter: chapter,
@@ -98,17 +99,21 @@ export default function GamesGrid({ user }) {
     setLoading(true);
     try {
         const sId = user._id || user.id;
-        const [skinRes, learningRes] = await Promise.all([
+        const [skinRes, learningRes, builtInSettingsRes] = await Promise.all([
             fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json()),
-            fetch(`/api/eleve/learning/list/${sId}?forGames=1&level=${encodeURIComponent(user.currentClass || '')}`).then(r => r.ok ? r.json() : [])
+            fetch(`/api/eleve/learning/list/${sId}?forGames=1&level=${encodeURIComponent(user.currentClass || '')}`).then(r => r.ok ? r.json() : []),
+            fetch('/api/eleve/games/builtin-settings').then(r => r.ok ? r.json() : {})
         ]);
         setSkins(skinRes || []);
         setLearningModules(Array.isArray(learningRes) ? learningRes : []);
+        setBuiltInGameSettings(builtInSettingsRes || {});
     } catch(e) { console.error("Load Games Error", e); }
     setLoading(false);
   };
 
   useEffect(() => { loadData(); }, [user]);
+
+  const isBuiltInGameEnabled = (key) => builtInGameSettings[key] !== false;
 
   if (playingGame) {
       return (
@@ -141,14 +146,17 @@ export default function GamesGrid({ user }) {
     <div className="flex flex-col gap-4 animate-in">
         <h2 className="text-base md:text-xl font-black text-slate-800 uppercase px-1 md:px-4">Jeux pédagogiques</h2>
         <div className="mx-1 grid gap-4 md:mx-4 md:grid-cols-2">
-            <button type="button" onClick={() => requestLaunch('learning-game', 'zombie')} className="rounded-[26px] border-4 border-lime-500 bg-gradient-to-br from-slate-950 via-emerald-950 to-lime-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
+            {isBuiltInGameEnabled('zombie') && <button type="button" onClick={() => requestLaunch('learning-game', 'zombie')} className="rounded-[26px] border-4 border-lime-500 bg-gradient-to-br from-slate-950 via-emerald-950 to-lime-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
                 <div className="text-5xl">🧟</div><div className="mt-3 text-3xl font-black uppercase">Zombie</div><div className="mt-2 font-bold text-lime-100">Les parties de la fiche deviennent les niveaux du jeu.</div>
-            </button>
-            <button type="button" onClick={() => requestLaunch('learning-game', 'starship')} className="rounded-[26px] border-4 border-cyan-400 bg-gradient-to-br from-slate-950 via-indigo-950 to-cyan-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
+            </button>}
+            {isBuiltInGameEnabled('starship') && <button type="button" onClick={() => requestLaunch('learning-game', 'starship')} className="rounded-[26px] border-4 border-cyan-400 bg-gradient-to-br from-slate-950 via-indigo-950 to-cyan-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
                 <div className="text-5xl">🚀</div><div className="mt-3 text-3xl font-black uppercase">Starship</div><div className="mt-2 font-bold text-cyan-100">Révise les QCM de chaque partie dans l’espace.</div>
-            </button>
+            </button>}
+            {isBuiltInGameEnabled('jumper') && <button type="button" onClick={() => requestLaunch('learning-game', 'jumper')} className="rounded-[26px] border-4 border-violet-400 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
+                <div className="text-5xl">🦘</div><div className="mt-3 text-3xl font-black uppercase">Jumper</div><div className="mt-2 font-bold text-violet-100">Saute sur la bonne plateforme puis affronte le boss.</div>
+            </button>}
         </div>
-        <button
+        {isBuiltInGameEnabled('creatures') && <button
             type="button"
             onClick={() => requestLaunch('monster')}
             className="mx-1 md:mx-4 overflow-hidden rounded-[26px] border-4 border-blue-800 bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-800 px-6 py-6 text-left shadow-xl shadow-blue-200/60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
@@ -164,8 +172,8 @@ export default function GamesGrid({ user }) {
                 </div>
                 <div className="rounded-2xl bg-yellow-300 px-7 py-4 text-center text-xl font-black uppercase text-blue-950 shadow-lg">Tester</div>
             </div>
-        </button>
-        <button
+        </button>}
+        {isBuiltInGameEnabled('guardian') && <button
             type="button"
             onClick={() => requestLaunch('wispguard')}
             className="mx-1 md:mx-4 overflow-hidden rounded-[26px] border-4 border-amber-700 bg-gradient-to-br from-slate-950 via-emerald-950 to-amber-900 px-6 py-6 text-left shadow-xl shadow-amber-200/60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
@@ -181,8 +189,8 @@ export default function GamesGrid({ user }) {
                 </div>
                 <div className="rounded-2xl bg-amber-300 px-7 py-4 text-center text-xl font-black uppercase text-amber-950 shadow-lg">Tester</div>
             </div>
-        </button>
-        <button
+        </button>}
+        {isBuiltInGameEnabled('forest') && <button
             type="button"
             onClick={() => requestLaunch('multiplication')}
             className="mx-1 md:mx-4 overflow-hidden rounded-[26px] border-4 border-emerald-800 bg-gradient-to-br from-emerald-700 via-emerald-600 to-lime-600 px-6 py-6 text-left shadow-xl shadow-emerald-200/70 transition-transform hover:scale-[1.01] active:scale-[0.99]"
@@ -198,7 +206,7 @@ export default function GamesGrid({ user }) {
                 </div>
                 <div className="rounded-2xl bg-white px-7 py-4 text-center text-xl font-black uppercase text-emerald-800 shadow-lg">Jouer</div>
             </div>
-        </button>
+        </button>}
         {pendingLaunch && (
             <div className="fixed inset-0 z-[11000] grid place-items-center bg-slate-950/90 p-4 backdrop-blur-md">
                 <section className="w-full max-w-5xl rounded-[30px] bg-white p-5 shadow-2xl md:p-8">

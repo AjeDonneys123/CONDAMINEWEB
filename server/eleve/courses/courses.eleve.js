@@ -75,9 +75,10 @@ router.get('/list/:studentId', async (req, res) => {
             .filter((course) => {
                 const targetId = String(course?.targetClassroomId || '').trim();
                 const targetName = course?.targetClassroomName || classNameById.get(targetId) || '';
-                if (isVisitor) return Boolean(visitorLevel) && academicLevel(targetName) === visitorLevel;
+                const targetScope = String(course?.targetScope || 'LEVEL').toUpperCase();
+                if (isVisitor) return targetScope === 'LEVEL' && Boolean(visitorLevel) && academicLevel(course?.targetLevel || targetName) === visitorLevel;
                 const exactClassMatch = classIds.has(targetId) || classKeys.has(normalizeClassKey(targetName));
-                const sameAcademicLevel = Boolean(studentLevel) && academicLevel(targetName) === studentLevel;
+                const sameAcademicLevel = targetScope === 'LEVEL' && Boolean(studentLevel) && academicLevel(course?.targetLevel || targetName) === studentLevel;
                 return exactClassMatch || sameAcademicLevel;
             })
             .map((course) => ({

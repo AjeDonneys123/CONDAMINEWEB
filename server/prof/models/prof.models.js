@@ -301,6 +301,8 @@ const Models = {
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', default: null },
         targetClassroomId: { type: String, required: true, index: true },
         targetClassroomName: { type: String, default: '', trim: true },
+        targetScope: { type: String, enum: ['CLASS', 'LEVEL'], default: 'LEVEL' },
+        targetLevel: { type: String, default: '', trim: true },
         isEnabled: { type: Boolean, default: true },
         courseSectionId: { type: String, default: '', index: true },
         order: { type: Number, default: 0 },

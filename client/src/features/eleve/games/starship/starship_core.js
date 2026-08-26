@@ -86,6 +86,7 @@ export function initStarshipGame(root, api, onExit) {
     let projectiles = []; 
     let enemies = []; 
     let spawnInterval;
+    let invaderStartTimeout;
     let isPaused = false;
     let frameId;
     let lastUpdateTime = performance.now();
@@ -248,49 +249,43 @@ export function initStarshipGame(root, api, onExit) {
 
     const startInvaderPhase = () => {
         const qData = questionsList[currentQIndex];
-        const opts = qData.options;
+        const opts = Array.isArray(qData?.options) ? qData.options : [];
         const laneCount = Math.max(1, opts.length);
-        let nextLane = 0;
-        spawnInterval = setInterval(() => {
-            if (isPaused || enemies.length >= laneCount) return;
-            let laneIndex = nextLane % laneCount;
-            nextLane++;
-            for (let offset = 0; offset < laneCount; offset++) {
-                const candidate = (laneIndex + offset) % laneCount;
-                if (!enemies.some((enemy) => enemy.type === 'invader' && enemy.laneIndex === candidate)) {
-                    laneIndex = candidate;
-                    break;
-                }
-            }
-            if (enemies.some((enemy) => enemy.type === 'invader' && enemy.laneIndex === laneIndex)) return;
-            const rIdx = laneIndex;
-            const isCorrect = (rIdx === qData.a);
-            const el = document.createElement('div');
-            el.className = isCorrect ? 's-enemy s-correct-target' : 's-enemy';
-            const fullLabel = String(opts[rIdx] || '');
-            el.innerText = formatOptionLabel(fullLabel, 10, 3);
-            el.title = fullLabel;
-            const startX = ((laneIndex + 0.5) / laneCount) * 100;
-            el.style.left = startX + '%';
-            const startY = Math.max(34, Math.min(110, els.area.clientHeight * 0.16));
-            el.style.top = `${startY}px`;
-            el.style.setProperty('--lane-count', String(laneCount));
-            els.eLayer.appendChild(el);
-            fitTextInBox(el, { maxFont: 18, minFont: 8, lineHeight: 1.1 });
-            enemies.push({
-                div: el,
-                xPct: startX,
-                y: startY,
-                laneIndex,
-                speed: (1.5 + (Math.random() * 1)) * STARSHIP_FALL_SPEED_MULTIPLIER,
-                isCorrect: isCorrect,
-                type: 'invader'
+        // La question doit d'abord être lisible : les quatre réponses apparaissent
+        // ensemble, chacune dans son couloir, deux secondes plus tard.
+        invaderStartTimeout = setTimeout(() => {
+            if (isPaused || currentQ !== qData) return;
+            opts.forEach((option, laneIndex) => {
+                const isCorrect = laneIndex === qData.a;
+                const el = document.createElement('div');
+                el.className = isCorrect ? 's-enemy s-correct-target' : 's-enemy';
+                const fullLabel = String(option || '');
+                el.innerText = formatOptionLabel(fullLabel, 10, 3);
+                el.title = fullLabel;
+                const startX = ((laneIndex + 0.5) / laneCount) * 100;
+                el.style.left = `${startX}%`;
+                const startY = Math.max(34, Math.min(110, els.area.clientHeight * 0.16));
+                el.style.top = `${startY}px`;
+                el.style.setProperty('--lane-count', String(laneCount));
+                els.eLayer.appendChild(el);
+                fitTextInBox(el, { maxFont: 18, minFont: 8, lineHeight: 1.1 });
+                enemies.push({
+                    div: el,
+                    xPct: startX,
+                    y: startY,
+                    laneIndex,
+                    speed: (1.5 + (Math.random() * 1)) * STARSHIP_FALL_SPEED_MULTIPLIER,
+                    isCorrect,
+                    type: 'invader'
+                });
             });
-        }, 1500);
+        }, 2000);
     };
 
     const clearLevel = () => {
         clearInterval(spawnInterval);
+        clearTimeout(invaderStartTimeout);
+        invaderStartTimeout = null;
         enemies.forEach(e => e.div.remove()); enemies = [];
         projectiles.forEach(p => p.div.remove()); projectiles = [];
     };
@@ -419,7 +414,7 @@ export function initStarshipGame(root, api, onExit) {
     root.addEventListener('touchstart', wakeGameLoop, { passive: true });
 
     return { destroy: () => {
-        cancelAnimationFrame(frameId); clearInterval(spawnInterval); clearInterval(loopWatchdog);
+        cancelAnimationFrame(frameId); clearInterval(spawnInterval); clearTimeout(invaderStartTimeout); clearInterval(loopWatchdog);
         ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.removeEventListener(type, wakeGameLoop));
         root.removeEventListener('touchstart', wakeGameLoop);
         stopMobileHold(); removeMobileRouter(); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey);

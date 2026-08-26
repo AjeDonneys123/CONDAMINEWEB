@@ -29,7 +29,7 @@ const getEditUrl = (value = '') => {
         : '';
 };
 
-export default function CoursesManager({ globalClass, globalClassId = '', user = {} }) {
+export default function CoursesManager({ globalClass, globalClassId = '', globalLevel = '', user = {} }) {
     const [courses, setCourses] = useState([]);
     const [courseSections, setCourseSections] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -44,6 +44,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
     const [progressSavingId, setProgressSavingId] = useState('');
     const [draggedCourseId, setDraggedCourseId] = useState('');
     const [openCourseSections, setOpenCourseSections] = useState({});
+    const [sourceEditor, setSourceEditor] = useState(null);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
@@ -174,6 +175,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     teacherId: user.id || user._id || null,
                     targetClassroomId: globalClassId,
                     targetClassroomName: globalClass,
+                    targetScope: previousCourse?.targetScope || 'LEVEL',
+                    targetLevel: previousCourse?.targetLevel || globalLevel,
                     publishedUntilSlide: previousCourse?.publishedUntilSlide || 0,
                     overlays: previousCourse?.overlays || [],
                     courseSectionId: previousCourse?.courseSectionId || '',
@@ -235,6 +238,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     teacherId: course.teacherId || user.id || user._id || null,
                     targetClassroomId: course.targetClassroomId || globalClassId,
                     targetClassroomName: course.targetClassroomName || globalClass,
+                    targetScope: course.targetScope || 'LEVEL',
+                    targetLevel: course.targetLevel || globalLevel,
                     publishedUntilSlide: course.publishedUntilSlide || 0,
                     overlays: course.overlays || [],
                     courseSectionId: course.courseSectionId || '',
@@ -266,6 +271,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     teacherId: course.teacherId || user.id || user._id || null,
                     targetClassroomId: course.targetClassroomId || globalClassId,
                     targetClassroomName: course.targetClassroomName || globalClass,
+                    targetScope: course.targetScope || 'LEVEL',
+                    targetLevel: course.targetLevel || globalLevel,
                     publishedUntilSlide: course.publishedUntilSlide || 0,
                     overlays: course.overlays || [],
                     courseSectionId: course.courseSectionId || '',
@@ -281,15 +288,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         }
     };
 
-    const changeCourseSource = async (course) => {
-        const slidesUrl = window.prompt('Nouvelle URL de la présentation Google Slides :', String(course.slidesUrl || ''));
-        if (slidesUrl === null) return;
-        const normalizedUrl = String(slidesUrl || '').trim();
+    const changeCourseSource = (course) => {
+        setSourceEditor({
+            course,
+            slidesUrl: String(course.slidesUrl || ''),
+            targetScope: course.targetScope === 'CLASS' ? 'CLASS' : 'LEVEL'
+        });
+        setError('');
+    };
+
+    const saveCourseSource = async () => {
+        const course = sourceEditor?.course;
+        if (!course) return;
+        const normalizedUrl = String(sourceEditor.slidesUrl || '').trim();
         if (!getEmbedUrl(normalizedUrl)) {
             setError('Le lien Google Slides est invalide.');
             return;
         }
-        if (normalizedUrl === String(course.slidesUrl || '').trim()) return;
         setError('');
         try {
             const response = await fetch(`/api/courses/${course._id}`, {
@@ -303,6 +318,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                     teacherId: course.teacherId || user.id || user._id || null,
                     targetClassroomId: course.targetClassroomId || globalClassId,
                     targetClassroomName: course.targetClassroomName || globalClass,
+                    targetScope: sourceEditor.targetScope,
+                    targetLevel: globalLevel,
                     publishedUntilSlide: course.publishedUntilSlide || 0,
                     overlays: course.overlays || [],
                     courseSectionId: course.courseSectionId || '',
@@ -312,9 +329,29 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Modification de la source impossible');
             setCourses((current) => current.map((item) => String(item._id) === String(data._id) ? data : item));
+            setSourceEditor(null);
         } catch (updateError) {
             setError(updateError.message);
             await loadCourses();
+        }
+    };
+
+    const toggleCourseEnabled = async (course) => {
+        const courseId = String(course?._id || '');
+        if (!courseId) return;
+        const isEnabled = course.isEnabled === false;
+        setError('');
+        try {
+            const response = await fetch(`/api/courses/${courseId}/enabled`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isEnabled })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Modification de visibilité impossible');
+            setCourses((current) => current.map((item) => String(item._id) === courseId ? data : item));
+        } catch (updateError) {
+            setError(updateError.message);
         }
     };
 
@@ -395,6 +432,43 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
 
     return (
         <section className="courses-manager">
+            {sourceEditor && (
+                <div className="course-source-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="course-source-modal-title">
+                    <form className="course-source-modal" onSubmit={(event) => { event.preventDefault(); saveCourseSource(); }}>
+                        <div className="course-source-modal-heading">
+                            <div>
+                                <span>✏️ SOURCE GOOGLE SLIDES</span>
+                                <h2 id="course-source-modal-title">Modifier la présentation</h2>
+                            </div>
+                            <button type="button" onClick={() => setSourceEditor(null)} aria-label="Fermer">×</button>
+                        </div>
+                        <label>
+                            <span>URL DE LA PRÉSENTATION</span>
+                            <input
+                                autoFocus
+                                value={sourceEditor.slidesUrl}
+                                onChange={(event) => setSourceEditor((current) => ({ ...current, slidesUrl: event.target.value }))}
+                                placeholder="https://docs.google.com/presentation/d/..."
+                            />
+                        </label>
+                        <fieldset className="course-source-scope">
+                            <legend>VISIBLE POUR</legend>
+                            <label className={sourceEditor.targetScope === 'CLASS' ? 'selected' : ''}>
+                                <input type="radio" name="course-target-scope" value="CLASS" checked={sourceEditor.targetScope === 'CLASS'} onChange={() => setSourceEditor((current) => ({ ...current, targetScope: 'CLASS' }))} />
+                                <strong>Cette classe</strong><small>{globalClass || 'Classe actuelle'}</small>
+                            </label>
+                            <label className={sourceEditor.targetScope === 'LEVEL' ? 'selected' : ''}>
+                                <input type="radio" name="course-target-scope" value="LEVEL" checked={sourceEditor.targetScope === 'LEVEL'} onChange={() => setSourceEditor((current) => ({ ...current, targetScope: 'LEVEL' }))} />
+                                <strong>Tout le niveau</strong><small>{globalLevel || 'Niveau actuel'}</small>
+                            </label>
+                        </fieldset>
+                        <div className="course-source-modal-actions">
+                            <button type="button" className="courses-secondary-button" onClick={() => setSourceEditor(null)}>ANNULER</button>
+                            <button type="submit" className="courses-save-button">ENREGISTRER</button>
+                        </div>
+                    </form>
+                </div>
+            )}
             <header className="courses-heading">
                 <div>
                     <span className="courses-kicker">{globalClass || 'CLASSE'}</span>
@@ -521,8 +595,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                                 </div>
                                 <div className="course-compact-actions">
                                     <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>
-                                    <button type="button" onClick={() => changeCourseSource(course)}>SOURCE</button>
                                     <button type="button" onClick={() => openModification(course)}>MODIFIER</button>
+                                    <button type="button" className={`course-enabled-button ${course.isEnabled !== false ? 'active' : ''}`} onClick={() => toggleCourseEnabled(course)} title={course.isEnabled !== false ? 'Masquer cette présentation aux élèves' : 'Rendre cette présentation visible aux élèves'}>{course.isEnabled !== false ? 'ACTIF' : 'INACTIF'}</button>
+                                    <button type="button" className="course-source-pencil" onClick={() => changeCourseSource(course)} title="Modifier la source Google Slides" aria-label="Modifier la source Google Slides">✏️</button>
                                     <button className="course-delete-x" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>×</button>
                                 </div>
                             </article>

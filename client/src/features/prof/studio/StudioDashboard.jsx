@@ -317,12 +317,27 @@ export default function StudioDashboard({ user }) {
         setSelectedActorId(null);
         setShowSaveLoadModal(false);
     };
-    const handleLoadProject = (p) => {
+    const handleLoadProject = async (p) => {
         const hydrated = hydrateWithLocalSession(p);
         setProject(hydrated.project);
         setCode(hydrated.code || "");
         if (hydrated.project?.scenes?.[0]?.actors?.[0]) setSelectedActorId(hydrated.project.scenes[0].actors[0].id);
         setShowSaveLoadModal(false);
+
+        // Un jeu peut avoir un script local dédié (par exemple Jumper). Il doit
+        // primer sur un ancien script enregistré en BDD afin de ne pas charger
+        // par erreur le comportement d'un autre jeu, comme Tapping.
+        const projectKey = String(p?._id || '').trim();
+        if (!projectKey) return;
+        try {
+            const response = await fetch(`/api/studio/local-code/${encodeURIComponent(projectKey)}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const localCode = String(data?.code || '').trim();
+            if (localCode) setCode(localCode);
+        } catch (e) {
+            // Pas de script local : le code du projet chargé reste la source.
+        }
     };
 
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
