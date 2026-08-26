@@ -389,6 +389,9 @@ export default function ClassroomManager({ globalClassId, user }) {
             learning: Number.isFinite(learning) ? learning : 0
         };
     };
+    const getStudentStars = (stu) => Math.max(0, Math.floor(Number(stu?.trainingStars) || 0));
+    const topTrainingStars = students.reduce((highest, student) => Math.max(highest, getStudentStars(student)), 0);
+    const isTrainingStarLeader = (student) => topTrainingStars > 0 && getStudentStars(student) === topTrainingStars;
     const normalizeText = (val) => String(val || '')
         .toLowerCase()
         .normalize('NFD')
@@ -699,7 +702,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                                {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
+                                <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
                                 <div className="sc-realizations sc-realizations-inline">
@@ -791,9 +796,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     style={{ gridColumn: col + 1, gridRow: row + 1 }}
                                 >
                                     <div
-                                        className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`}
+                                        className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''}`}
                                         onClick={() => handleOpenStudent(student)}
                                     >
+                                        {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
+                                        <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                         <div className="alpha-grid-topline">
                                             {aTotals.homework > 0 && <span className="alpha-mini-stat hw">{aStats.homework}</span>}
                                             {aTotals.game > 0 && <span className="alpha-mini-stat game">{aStats.game}</span>}

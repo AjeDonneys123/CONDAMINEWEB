@@ -610,6 +610,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [sheetSlidesLoading, setSheetSlidesLoading] = useState(false);
     const [sheetSlidesError, setSheetSlidesError] = useState('');
     const [sheetSlidesIdx, setSheetSlidesIdx] = useState(0);
+    const [activeBlankMic, setActiveBlankMic] = useState('');
 
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
@@ -1324,11 +1325,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return;
         }
         const recognition = new SpeechRecognition();
+        const micKey = `${String(questionId || '')}:${Number(blankIndex)}`;
         recognition.lang = 'fr-FR';
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
+        recognition.onstart = () => setActiveBlankMic(micKey);
         recognition.onresult = (event) => updateBlankAnswer(questionId, blankIndex, event.results?.[0]?.[0]?.transcript || '');
         recognition.onerror = () => setGateHint('Micro indisponible : écris la réponse au clavier.');
+        recognition.onend = () => setActiveBlankMic((current) => current === micKey ? '' : current);
         try { recognition.start(); } catch (_) {}
     };
     const appendQuizAnswer = (quizKey, questionId, addition) => {
@@ -2894,11 +2898,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                             })()}
                                                             <button
                                                                 type="button"
-                                                                className="learning-quiz-mic learning-fill-mic"
+                                                                className={`learning-quiz-mic learning-fill-mic ${activeBlankMic === `${item.id}:${blankIndex}` ? 'is-recording' : ''}`}
                                                                 disabled={!canEdit}
-                                                                title="Dicter ce trou"
+                                                                title={activeBlankMic === `${item.id}:${blankIndex}` ? 'Enregistrement en cours' : 'Dicter ce trou'}
                                                                 onClick={() => dictateBlank(item.id, blankIndex)}
                                                             >🎙️</button>
+                                                            {canEdit && String(blankValues[blankIndex] || '') && !showFillCorrection && (
+                                                                <button type="button" className="learning-answer-erase" title="Effacer ce trou" aria-label={`Effacer le trou ${blankIndex + 1}`} onClick={() => updateBlankAnswer(item.id, blankIndex, '')}>×</button>
+                                                            )}
                                                             </>
                                                         )}
                                                     </React.Fragment>
@@ -2944,6 +2951,12 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                             >
                                                 {isThisRecording ? '■' : '🎙️'}
                                             </button>
+                                            {canEdit && String(currentQuizState.answers?.[item.id] || '') && (
+                                                <button type="button" className="learning-answer-erase" title="Effacer la réponse dictée ou écrite" aria-label="Effacer la réponse" onClick={() => {
+                                                    setAnswerText('');
+                                                    updateQuizAnswer(item.id, '');
+                                                }}>×</button>
+                                            )}
                                         </div>
                                         )}
                                         {currentQuizState.stage === 'correction' && isIncorrect && !isFillBlanks && (

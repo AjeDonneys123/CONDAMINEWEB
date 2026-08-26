@@ -560,7 +560,7 @@ const escapeGeneralSheetHtml = (value = '') => String(value || '')
 // de toute la ligne : sinon chaque mot d'un titre deviendrait une réponse du
 // texte à trous. Cette fonction est également utilisée pendant la découpe en
 // sous-fiches, afin que ces styles ne disparaissent pas à la sauvegarde.
-const formatGeneratedSheetBlock = (text = '', innerHtml = '') => {
+const formatGeneratedSheetBlock = (text = '', innerHtml = '', numberedIdeasPlain = false) => {
     const line = String(text || '').replace(/\u00a0/g, ' ').trim();
     const romanHeading = /^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(line);
     const mainHeading = /^\d{1,2}\s*-\s+.+/.test(line);
@@ -572,19 +572,29 @@ const formatGeneratedSheetBlock = (text = '', innerHtml = '') => {
         try {
             const doc = new DOMParser().parseFromString(`<div id="sheet-block">${content}</div>`, 'text/html');
             const root = doc.getElementById('sheet-block');
-            root?.querySelectorAll('strong, b').forEach((keyword) => {
-                if (keyword.closest('u') || String(keyword.style.textDecoration || '').includes('underline')) return;
-                const underline = doc.createElement('u');
-                keyword.parentNode?.insertBefore(underline, keyword);
-                underline.appendChild(keyword);
-            });
+            if (numberedIdeasPlain) {
+                // Les mini-fiches de 5e/6e ne doivent pas récupérer le vert,
+                // le gras hiérarchique ou le soulignement du format 3e.
+                root?.querySelectorAll('*').forEach((element) => {
+                    element.style.color = '';
+                    if (!['STRONG', 'B'].includes(element.tagName)) element.style.fontWeight = '';
+                    if (!['STRONG', 'B'].includes(element.tagName)) element.style.textDecoration = '';
+                });
+            } else {
+                root?.querySelectorAll('strong, b').forEach((keyword) => {
+                    if (keyword.closest('u') || String(keyword.style.textDecoration || '').includes('underline')) return;
+                    const underline = doc.createElement('u');
+                    keyword.parentNode?.insertBefore(underline, keyword);
+                    underline.appendChild(keyword);
+                });
+            }
             content = root?.innerHTML || content;
         } catch (_) {}
     }
 
     const style = romanHeading
         ? 'color:#dc2626;font-weight:700'
-        : mainHeading
+        : mainHeading && !numberedIdeasPlain
             ? 'color:#16a34a;font-weight:700'
             : '';
     return `<div${style ? ` style="${style}"` : ''}>${content}</div>`;
@@ -594,7 +604,7 @@ const formatGeneratedSheetBlock = (text = '', innerHtml = '') => {
 // englobantes. Un éditeur contenteditable peut produire par exemple
 // `<strong>ligne 1<br>ligne 2</strong>` : un simple split sur BR faisait perdre
 // le gras de la ligne 2 et donc les mots-clés des fiches de sous-sections.
-const generalSheetHtmlToBlocks = (richHtml = '') => {
+const generalSheetHtmlToBlocks = (richHtml = '', numberedIdeasPlain = false) => {
     if (!String(richHtml || '').trim() || typeof DOMParser === 'undefined') return [];
     const doc = new DOMParser().parseFromString(`<div id="general-sheet-root">${String(richHtml)}</div>`, 'text/html');
     const root = doc.getElementById('general-sheet-root');
@@ -606,7 +616,7 @@ const generalSheetHtmlToBlocks = (richHtml = '') => {
     const flush = () => {
         const text = textParts.join('').replace(/\u00a0/g, ' ').trim();
         const html = htmlParts.join('').trim();
-        if (text) blocks.push({ text, html: formatGeneratedSheetBlock(text, html) });
+        if (text) blocks.push({ text, html: formatGeneratedSheetBlock(text, html, numberedIdeasPlain) });
         textParts = [];
         htmlParts = [];
     };
@@ -748,15 +758,15 @@ const normalizeGeneralSheetLessonBlocks = (sourceBlocks = []) => {
         });
 };
 
-const splitGeneralSheetIntoParts = (plainText = '', richHtml = '') => {
+const splitGeneralSheetIntoParts = (plainText = '', richHtml = '', numberedIdeasPlain = false) => {
     const fallbackLines = String(plainText || '').replace(/\r/g, '').split('\n');
     let blocks = fallbackLines.map((text) => ({
         text,
-        html: formatGeneratedSheetBlock(text, escapeGeneralSheetHtml(text))
+        html: formatGeneratedSheetBlock(text, escapeGeneralSheetHtml(text), numberedIdeasPlain)
     }));
     if (String(richHtml || '').trim() && typeof DOMParser !== 'undefined') {
         try {
-            const parsed = generalSheetHtmlToBlocks(richHtml);
+            const parsed = generalSheetHtmlToBlocks(richHtml, numberedIdeasPlain);
             if (parsed.some((row) => row.text)) blocks = parsed;
         } catch (_) {}
     }
@@ -5151,13 +5161,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const importText = startIndex >= 0 && endIndex > startIndex
             ? rawGeneralText.slice(startIndex + startMarker.length, endIndex).trim()
             : rawGeneralText.trim();
-        const rawBlocks = generalSheetHtmlToBlocks(generalSheetHtml);
+        const rawBlocks = generalSheetHtmlToBlocks(generalSheetHtml, usesPlainNumberedIdeas);
         const htmlStartIndex = rawBlocks.findIndex((block) => String(block?.text || '').trim().toUpperCase() === startMarker);
         const htmlEndIndex = rawBlocks.findIndex((block, index) => index > htmlStartIndex && String(block?.text || '').trim().toUpperCase() === endMarker);
         const importHtml = htmlStartIndex >= 0 && htmlEndIndex > htmlStartIndex
             ? rawBlocks.slice(htmlStartIndex + 1, htmlEndIndex).map((block) => block.html).join('')
             : String(generalSheetHtml || '').trim();
-        const parsed = splitGeneralSheetIntoParts(importText, importHtml);
+        const parsed = splitGeneralSheetIntoParts(importText, importHtml, usesPlainNumberedIdeas);
         if (!parsed.parts.length) {
             alert('Aucune grande partie détectée. Utilise des titres comme « 1. Titre », « 2. Titre » ou « I. Titre », « II. Titre ».');
             return;
@@ -5212,7 +5222,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const planSection = createSection(0, 'Introduction');
         const planSectionId = planSection.id;
         sections.push(planSection);
-        const allGeneralBlocks = generalSheetHtmlToBlocks(importHtml);
+        const allGeneralBlocks = generalSheetHtmlToBlocks(importHtml, usesPlainNumberedIdeas);
         const qcmBlockIndex = allGeneralBlocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block?.text || '').trim()));
         const generalQuizBlocks = qcmBlockIndex >= 0 ? allGeneralBlocks.slice(qcmBlockIndex) : [];
         const previousMaster = (formData.steps || []).find((candidate) => candidate?.type === 'sheet' && candidate?.isGeneralSheetMaster === true);

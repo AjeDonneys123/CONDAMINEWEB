@@ -60,6 +60,7 @@ export default function DilWorkspace({ user }) {
   const [manualWordId, setManualWordId] = useState('');
   const [manualSaved, setManualSaved] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
+  const [manualListening, setManualListening] = useState(false);
   const [manualError, setManualError] = useState('');
   const fileRef = useRef(null);
 
@@ -226,16 +227,34 @@ export default function DilWorkspace({ user }) {
     if (!SpeechRecognition) return setManualError('La dictée vocale n’est pas disponible sur cet appareil.');
     const recognition = new SpeechRecognition();
     recognition.lang = manualLanguage === 'fr' ? 'fr-FR' : 'es-ES'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.onstart = () => setManualListening(true);
     recognition.onresult = (event) => {
       const value = event.results?.[0]?.[0]?.transcript?.trim() || '';
       setManualWord(value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId('');
       translateManualWord(value);
     };
     recognition.onerror = () => setManualError('La dictée n’a pas pu démarrer.');
+    recognition.onend = () => setManualListening(false);
     recognition.start();
   };
   const current = words[trainingIndex % Math.max(1, words.length)];
-  const known = useMemo(() => words.filter((word) => word.mastered).length, [words]);
+  const learnedWords = useMemo(() => words
+    .filter((word) => Number(word.correctStreak || 0) >= 4)
+    .sort((left, right) => String(left.french || '').localeCompare(String(right.french || ''), 'fr')), [words]);
+  const known = learnedWords.length;
+  const addedThisHour = useMemo(() => {
+    const hourAgo = Date.now() - (60 * 60 * 1000);
+    return words.filter((word) => new Date(word.createdAt || 0).getTime() >= hourAgo).length;
+  }, [words]);
+  const wordsByNeed = useMemo(() => [...words].sort((left, right) => {
+    const leftWrong = Number(left.wrongCount || 0);
+    const rightWrong = Number(right.wrongCount || 0);
+    if (rightWrong !== leftWrong) return rightWrong - leftWrong;
+    const leftCorrect = Number(left.correctCount || 0);
+    const rightCorrect = Number(right.correctCount || 0);
+    if (leftCorrect !== rightCorrect) return leftCorrect - rightCorrect;
+    return String(left.french || '').localeCompare(String(right.french || ''), 'fr');
+  }), [words]);
   const hasTranscription = Boolean(String(documentTitle || text).trim());
   const checkAnswer = async (event) => {
     event.preventDefault(); if (!current) return;
@@ -247,8 +266,8 @@ export default function DilWorkspace({ user }) {
   };
 
   return <section className="dil-workspace">
-    <div className="dil-heading"><div><span>DIL · ESPAGNOL</span><h2>Comprendre et apprendre</h2><p>Les mots consultés sont gardés pour ton entraînement.</p></div><div className="dil-known">{known} mot{known > 1 ? 's' : ''} connu{known > 1 ? 's' : ''}</div></div>
-    <div className="dil-tabs"><button className={mode === 'translation' ? 'active' : ''} onClick={() => setMode('translation')}>📷 TRADUCTION</button><button className={mode === 'training' ? 'active' : ''} onClick={() => setMode('training')}>✍️ ENTRAÎNEMENT</button></div>
+    <div className="dil-heading"><div><span>DIL · ESPAGNOL</span><h2>Comprendre et apprendre</h2><p>Les mots consultés sont gardés pour ton entraînement.</p></div><div className="dil-heading-stats"><div className="dil-known">{known} mot{known > 1 ? 's' : ''} connu{known > 1 ? 's' : ''}</div><div className="dil-added-hour">{addedThisHour} mot{addedThisHour > 1 ? 's' : ''} ajouté{addedThisHour > 1 ? 's' : ''} cette heure</div></div></div>
+    <div className="dil-tabs"><button className={mode === 'translation' ? 'active' : ''} onClick={() => setMode('translation')}>📷 TRADUCTION</button><button className={mode === 'words' ? 'active' : ''} onClick={() => setMode('words')}>📚 MES MOTS</button><button className={mode === 'training' ? 'active' : ''} onClick={() => setMode('training')}>✍️ ENTRAÎNEMENT</button><button className={mode === 'learned' ? 'active' : ''} onClick={() => setMode('learned')}>🏆 MOTS APPRIS</button></div>
     {mode === 'translation' ? <div className="dil-card">
       <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={selectPhoto} />
       <div className="dil-actions"><button onClick={() => fileRef.current?.click()} disabled={photoBusy}>📷 {hasTranscription ? 'NOUVELLE PHOTO' : 'PRENDRE / CHOISIR UNE PHOTO'}</button><button className="dil-new-word-trigger" onClick={() => setManualOpen((value) => !value)}>➕ NOUVEAU MOT</button>{!hasTranscription && <span>Cadre la zone utile, puis lance la lecture.</span>}</div>
@@ -256,7 +275,7 @@ export default function DilWorkspace({ user }) {
         <div className="dil-manual-heading"><b>Ajouter un mot sans photo</b></div>
         <p>Écris ou dicte un mot en français ou en espagnol : son équivalent pourra être ajouté à ta liste.</p>
         <div className="dil-language-switch" aria-label="Langue du mot à traduire"><button type="button" className={manualLanguage === 'fr' ? 'active' : ''} onClick={() => { setManualLanguage('fr'); setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }}>🇫🇷 Français</button><button type="button" className={manualLanguage === 'es' ? 'active' : ''} onClick={() => { setManualLanguage('es'); setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }}>🇪🇸 Espagnol</button></div>
-        <div className="dil-manual-word-row"><div className="dil-manual-input"><input value={manualWord} onChange={(event) => { setManualWord(event.target.value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); translateManualWord(); } }} placeholder={manualLanguage === 'fr' ? 'Mot français' : 'Mot espagnol'} />{manualWord && <button type="button" className="dil-manual-erase" aria-label="Effacer le mot" onClick={() => { setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualWordId(''); setManualSaved(false); setManualError(''); }}>×</button>}</div><button type="button" className="dil-manual-mic" onClick={dictateManualWord} aria-label="Dicter un mot">🎙️</button><button type="button" onClick={() => translateManualWord()} disabled={manualBusy}>{manualBusy ? 'TRADUCTION…' : 'TRADUIRE'}</button></div>
+        <div className="dil-manual-word-row"><div className="dil-manual-input"><input value={manualWord} onChange={(event) => { setManualWord(event.target.value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); translateManualWord(); } }} placeholder={manualLanguage === 'fr' ? 'Mot français' : 'Mot espagnol'} />{manualWord && <button type="button" className="dil-manual-erase" aria-label="Effacer le mot dicté ou écrit" onClick={() => { setManualWord(''); setManualFrench(''); setManualSpanish(''); setManualWordId(''); setManualSaved(false); setManualError(''); }}>×</button>}</div><button type="button" className={`dil-manual-mic ${manualListening ? 'is-recording' : ''}`} onClick={dictateManualWord} aria-label={manualListening ? 'Enregistrement en cours' : 'Dicter un mot'} title={manualListening ? 'Enregistrement en cours' : 'Dicter un mot'}>{manualListening ? '■' : '🎙️'}</button><button type="button" onClick={() => translateManualWord()} disabled={manualBusy}>{manualBusy ? 'TRADUCTION…' : 'TRADUIRE'}</button></div>
         {manualSpanish && manualFrench && <div className={`dil-manual-translation ${manualSaved ? 'saved' : ''}`}><span>🇪🇸 <b>{manualSpanish}</b> <strong>→</strong> 🇫🇷 <b>{manualFrench}</b></span><div className="dil-manual-translation-actions"><button type="button" className="dil-pronounce" onClick={() => pronounceFrench(manualFrench)} aria-label={`Réécouter ${manualFrench}`}>🔊 Réécouter</button><button type="button" onClick={toggleManualWord}>{manualSaved ? '✓ AJOUTÉ À MA LISTE' : '+ AJOUTER À MA LISTE'}</button></div></div>}
         {manualError && <small className="dil-manual-error">{manualError}</small>}
       </div>}
@@ -264,9 +283,16 @@ export default function DilWorkspace({ user }) {
       <input className="dil-title-input" value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="Titre du document (détecté automatiquement)" />
       <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Le texte du document apparaîtra ici. Clique ensuite sur un mot français pour le traduire." />
       <div className="dil-text" aria-label="Texte à traduire">{documentTitle && <h3>{tokenise(documentTitle).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === `title-${index}` ? 'selected' : ''} ${selected?.index === `title-${index}` && selected?.saved ? 'saved' : ''}`} key={`title-${index}`}><button onClick={() => selectOrToggleWord(part, `title-${index}`)}>{part}</button>{selected?.index === `title-${index}` && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>🇪🇸 {selected.spanish} → 🇫🇷 {selected.french}<button type="button" className="dil-pronounce" aria-label={`Réécouter ${selected.french}`} onClick={(event) => { event.stopPropagation(); pronounceFrench(selected.french); }}>🔊</button><b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : part)}</h3>}{tokenise(text).map((part, index) => isWord(part) ? <span className={`dil-word ${selected?.index === index ? 'selected' : ''} ${selected?.index === index && selected?.saved ? 'saved' : ''}`} key={`${part}-${index}`}><button onClick={() => selectOrToggleWord(part, index)}>{part}</button>{selected?.index === index && <small className="dil-translation-toggle" role="button" tabIndex="0" onClick={toggleSelectedWord}>🇪🇸 {selected.spanish} → 🇫🇷 {selected.french}<button type="button" className="dil-pronounce" aria-label={`Réécouter ${selected.french}`} onClick={(event) => { event.stopPropagation(); pronounceFrench(selected.french); }}>🔊</button><b className="dil-save-word">{selected.saved ? '✓' : '+'}</b>{selected.saveError && <i>{selected.saveError}</i>}</small>}</span> : <span key={index}>{part}</span>)}</div>
+    </div> : mode === 'words' ? <div className="dil-card dil-my-words">
+      <h3>📚 Mes mots</h3>
+      <p>Du moins connu au plus connu : les mots avec le plus d’erreurs sont proposés en premier.</p>
+      {!wordsByNeed.length ? <p className="dil-empty">Ajoute des mots dans l’onglet Traduction pour les retrouver ici.</p> : <div className="dil-my-words-list">{wordsByNeed.map((word) => <article key={word._id || word.french} className={Number(word.correctStreak || 0) >= 4 ? 'known' : ''}><div className="dil-word-pair">🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><span className="wrong">✕ {Number(word.wrongCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
+    </div> : mode === 'learned' ? <div className="dil-card dil-my-words">
+      <h3>🏆 Mots appris</h3>
+      <p>Un mot apparaît ici après 4 bonnes réponses consécutives, sans erreur.</p>
+      {!learnedWords.length ? <p className="dil-empty">Continue l’entraînement : il faut 4 bonnes réponses de suite pour apprendre un mot.</p> : <div className="dil-my-words-list">{learnedWords.map((word) => <article key={word._id || word.french} className="known"><div className="dil-word-pair">🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
     </div> : <div className="dil-card dil-training">
       {!current ? <p className="dil-empty">Traduis d’abord des mots dans l’onglet Traduction : ils apparaîtront ici.</p> : <form onSubmit={checkAnswer}><div className="dil-instruction">TRADUISEZ EN FRANÇAIS</div><div className="dil-spanish">{current.spanish}</div><input autoFocus value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Écris le mot français" /><button type="submit">VÉRIFIER</button>{feedback && <p className="dil-feedback">{feedback}</p>}</form>}
-      {words.length > 0 && <div className="dil-word-list"><b>Mes mots</b>{words.map((word) => <span key={word._id || word.french} className={word.mastered ? 'known' : ''}>🇪🇸 {word.spanish} → 🇫🇷 {word.french}<button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></span>)}</div>}
     </div>}
   </section>;
 }

@@ -11,7 +11,7 @@ const normalise = (value = '') => cleanWord(value).normalize('NFD').replace(/[\u
 
 router.get('/:studentId/vocabulary', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
-    const words = await DilVocabulary.find({ studentId: req.params.studentId }).sort({ mastered: 1, updatedAt: -1 }).lean();
+    const words = await DilVocabulary.find({ studentId: req.params.studentId }).sort({ wrongCount: -1, correctCount: 1, createdAt: -1 }).lean();
     res.json(words);
 });
 
@@ -46,10 +46,15 @@ router.post('/:studentId/answer', async (req, res) => {
     const correct = normalise(req.body?.answer) === normalise(word.french);
     if (correct) {
         word.correctCount = Number(word.correctCount || 0) + 1;
-        word.mastered = true;
+        word.correctStreak = Number(word.correctStreak || 0) + 1;
+        word.mastered = Number(word.correctStreak || 0) >= 4;
         word.lastCorrectAt = new Date();
-        await word.save();
+    } else {
+        word.wrongCount = Number(word.wrongCount || 0) + 1;
+        word.correctStreak = 0;
+        word.mastered = false;
     }
+    await word.save();
     res.json({ correct, word });
 });
 

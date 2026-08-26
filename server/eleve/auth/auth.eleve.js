@@ -386,4 +386,22 @@ router.get('/student-fresh/:id', async (req, res) => {
     res.json(student.toObject());
 });
 
+// Le navigateur conserve le détail des exercices, mais le total est aussi
+// sauvegardé ici pour être visible par le professeur dans le plan de classe.
+router.post('/training-stars', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const points = Math.max(0, Math.floor(Number(req.body?.points) || 0));
+        if (!studentId) return res.status(400).json({ error: 'Élève manquant.' });
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
+        // Un ancien onglet ne doit jamais pouvoir faire redescendre le score.
+        student.trainingStars = Math.max(Number(student.trainingStars || 0), points);
+        await student.save();
+        res.json({ trainingStars: student.trainingStars });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Sauvegarde des étoiles impossible.' });
+    }
+});
+
 module.exports = router;

@@ -281,6 +281,43 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
         }
     };
 
+    const changeCourseSource = async (course) => {
+        const slidesUrl = window.prompt('Nouvelle URL de la présentation Google Slides :', String(course.slidesUrl || ''));
+        if (slidesUrl === null) return;
+        const normalizedUrl = String(slidesUrl || '').trim();
+        if (!getEmbedUrl(normalizedUrl)) {
+            setError('Le lien Google Slides est invalide.');
+            return;
+        }
+        if (normalizedUrl === String(course.slidesUrl || '').trim()) return;
+        setError('');
+        try {
+            const response = await fetch(`/api/courses/${course._id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: course.title || 'Cours',
+                    description: course.description || '',
+                    slidesUrl: normalizedUrl,
+                    isEnabled: course.isEnabled !== false,
+                    teacherId: course.teacherId || user.id || user._id || null,
+                    targetClassroomId: course.targetClassroomId || globalClassId,
+                    targetClassroomName: course.targetClassroomName || globalClass,
+                    publishedUntilSlide: course.publishedUntilSlide || 0,
+                    overlays: course.overlays || [],
+                    courseSectionId: course.courseSectionId || '',
+                    order: course.order || 0
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Modification de la source impossible');
+            setCourses((current) => current.map((item) => String(item._id) === String(data._id) ? data : item));
+        } catch (updateError) {
+            setError(updateError.message);
+            await loadCourses();
+        }
+    };
+
     const updatePublishedUntilSlide = async (course, nextValue) => {
         const nextSlide = Math.max(0, Math.floor(Number(nextValue || 0)));
         const courseId = String(course?._id || '');
@@ -484,6 +521,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', user =
                                 </div>
                                 <div className="course-compact-actions">
                                     <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>
+                                    <button type="button" onClick={() => changeCourseSource(course)}>SOURCE</button>
                                     <button type="button" onClick={() => openModification(course)}>MODIFIER</button>
                                     <button className="course-delete-x" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>×</button>
                                 </div>

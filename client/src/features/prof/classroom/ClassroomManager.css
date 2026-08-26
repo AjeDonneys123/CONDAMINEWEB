@@ -242,6 +242,31 @@
 .student-card-drag.work-incomplete { background: #fef9c3; border-color: #eab308; }
 .student-card-drag.has-note { background: #ffedd5; border-color: #f97316; }
 .student-card-drag.punished { border-color: #dc2626; background: #fee2e2; }
+.sc-training-stars {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 40;
+    border-radius: 999px;
+    background: #fffbeb;
+    color: #a16207;
+    border: 1px solid #fcd34d;
+    padding: 2px 5px;
+    font-size: 0.56rem;
+    font-weight: 950;
+    line-height: 1;
+}
+.sc-training-leader {
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    z-index: 55;
+    color: #f59e0b;
+    font-size: 1.15rem;
+    line-height: 1;
+    filter: drop-shadow(0 1px 0 #fff);
+}
+.student-card-drag.has-training-leader .sc-realizations { left: 23px; }
 
 /* --- REALIZATIONS BADGES --- */
 .sc-realizations { 
@@ -457,6 +482,9 @@
     .class-score-btn { padding: 6px 7px; font-size: 0.58rem; }
     .sc-realizations { gap: 1px; left: 2px; top: 4px; transform: none; }
     .sc-realizations-inline { width: calc(100% - 4px); gap: 2px; }
+    .sc-training-stars { top: 2px; right: 2px; padding: 1px 3px; font-size: 0.42rem; }
+    .sc-training-leader { top: 2px; left: 2px; font-size: 0.72rem; }
+    .student-card-drag.has-training-leader .sc-realizations { left: 15px; }
     .sc-real-badge { min-width: 22px; height: 11px; font-size: 0.38rem; padding: 0 2px; }
     .sc-badge { display: block !important; padding: 1px 3px; font-size: 0.45rem; top: 2px; right: 2px; border-width: 1px; }
     .sc-badge-inline { position: static; font-size: 0.4rem; padding: 1px 3px; }

@@ -360,11 +360,30 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
   };
 
   const handleStructuredTab = (event) => {
-    if (event.key !== 'Tab' || event.shiftKey || !editorRef.current) return;
+    if (!editorRef.current) return;
     const selection = window.getSelection?.();
     if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return;
     const range = selection.getRangeAt(0);
     if (!editorRef.current.contains(range.startContainer)) return;
+
+    // Sur les fiches 5e/6e, Entrée après une idée numérotée crée
+    // systématiquement une précision sur une nouvelle ligne avec un tiret.
+    // Cela évite les comportements variables des contenteditables mobiles.
+    if (event.key === 'Enter' && numberedIdeasPlain) {
+      const beforeCaret = range.cloneRange();
+      beforeCaret.selectNodeContents(editorRef.current);
+      beforeCaret.setEnd(range.startContainer, range.startOffset);
+      const holder = document.createElement('div');
+      holder.appendChild(beforeCaret.cloneContents());
+      const currentLine = String(serializePlainText(holder) || '').split(/\r?\n/).pop() || '';
+      event.preventDefault();
+      event.stopPropagation();
+      document.execCommand('insertHTML', false, /^\s*\d+\s*[-.)]\s*/.test(currentLine) ? '<br>-&nbsp;' : '<br>');
+      emitChange();
+      return;
+    }
+
+    if (event.key !== 'Tab' || event.shiftKey) return;
     const blockSelector = 'div,p,li,h1,h2,h3,h4,h5,h6';
     const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
       ? range.startContainer

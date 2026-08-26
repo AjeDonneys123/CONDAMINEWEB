@@ -15,7 +15,9 @@ import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
 export default function ElevePage({ user, onLogout, onBackToProf }) {
-  const [tab, setTab] = useState('status');
+  // Les élèves DIL arrivent directement sur leur espace de traduction.
+  // Les autres profils conservent l'ouverture habituelle sur le statut.
+  const [tab, setTab] = useState(() => (user?.isDil === true ? 'dil' : 'status'));
   const [pendingActivity, setPendingActivity] = useState(null);
   const [freshUser, setFreshUser] = useState(user);
   const [showPunishmentSplash, setShowPunishmentSplash] = useState(false);
@@ -42,6 +44,14 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       const interval = setInterval(fetchFreshData, 5000);
       return () => clearInterval(interval);
   }, [user]);
+
+  // L'information DIL peut arriver avec le rafraîchissement du profil après
+  // la connexion : on bascule alors une seule fois depuis l'écran d'accueil.
+  useEffect(() => {
+      if (freshUser?.isDil === true) {
+          setTab(currentTab => (currentTab === 'status' ? 'dil' : currentTab));
+      }
+  }, [freshUser?.isDil]);
 
   useEffect(() => {
       const active = freshUser?.punishmentStatus === 'PENDING' || freshUser?.punishmentStatus === 'LATE';

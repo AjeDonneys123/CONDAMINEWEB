@@ -18,14 +18,35 @@ const reportTrainingScore = (exerciseId, correct, total) => {
 function TrainingPointsBadge({ user }) {
   const studentKey = String(user?._id || user?.id || user?.name || 'student').replace(/[^a-zA-Z0-9_-]/g, '_');
   const storageKey = `condaweb-training-points-v1:${studentKey}`;
+  const savedTrainingStars = Math.max(0, Number(user?.trainingStars) || 0);
   const [progress, setProgress] = useState(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
-      if (saved && typeof saved === 'object') return { points: Number(saved.points) || 0, best: saved.best || {} };
+      if (saved && typeof saved === 'object') return { points: Math.max(Number(saved.points) || 0, savedTrainingStars), best: saved.best || {} };
     } catch (_) {}
-    return { points: 0, best: {} };
+    return { points: savedTrainingStars, best: {} };
   });
   const [gain, setGain] = useState(0);
+
+  useEffect(() => {
+    setProgress((previous) => {
+      const points = Math.max(Number(previous.points) || 0, savedTrainingStars);
+      if (points === previous.points) return previous;
+      const next = { ...previous, points };
+      try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  }, [savedTrainingStars, storageKey]);
+
+  const saveStarsForTeacher = (points) => {
+    const studentId = String(user?._id || user?.id || '').trim();
+    if (!studentId) return;
+    fetch('/api/eleve/auth/training-stars', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, points })
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     const onScore = (event) => {
@@ -43,6 +64,7 @@ function TrainingPointsBadge({ user }) {
           best: { ...previous.best, [detail.exerciseId]: nextBest }
         };
         try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {}
+        saveStarsForTeacher(next.points);
         setGain(earned);
         window.setTimeout(() => setGain(0), 1800);
         return next;
@@ -5310,6 +5332,188 @@ function FifthGradeMiniMap({ title, legend, scale, orientation = true }) {
   );
 }
 
+const FIFTH_GRADE_CENTURY_ROMAN_QUESTIONS = [
+  { id: 'roman-2', prompt: 'IIe siècle', accepted: ['deuxieme siecle', '2e siecle', '2eme siecle'] },
+  { id: 'roman-4', prompt: 'IVe siècle', accepted: ['quatrieme siecle', '4e siecle', '4eme siecle'] },
+  { id: 'roman-9', prompt: 'IXe siècle', accepted: ['neuvieme siecle', '9e siecle', '9eme siecle'] }
+];
+
+const FIFTH_GRADE_CENTURY_DATE_QUESTIONS = [
+  { id: 'date-1750', prompt: '1750', answer: 'XVIIIe siècle', accepted: ['xviiie siecle', '18e siecle', '18eme siecle'] },
+  { id: 'date-53', prompt: '53', answer: 'Ier siècle', accepted: ['ier siecle', '1er siecle', '1e siecle', '1eme siecle'] },
+  { id: 'date--235', prompt: '-235', answer: 'IIIe siècle av. J.-C.', accepted: ['iiie siecle av jc', '3e siecle av jc', '3eme siecle av jc', 'iiie av jc', '3e av jc'] },
+  { id: 'date-730', prompt: '730', answer: 'VIIIe siècle', accepted: ['viiie siecle', '8e siecle', '8eme siecle'] }
+];
+
+const FIFTH_GRADE_TIMELINE_EVENTS = [
+  { id: 'babylon', date: '-587', title: 'Exil des Juifs à Babylone', year: -587 },
+  { id: 'marathon', date: '-490', title: 'Bataille de Marathon', year: -490 },
+  { id: 'hadrian', date: '122', title: "Construction du mur d’Hadrien", year: 122 },
+  { id: 'rome', date: '476', title: "Chute de l’Empire romain d’Occident", year: 476 }
+];
+
+const FIFTH_GRADE_TIMELINE_CENTURIES = [
+  { id: 'bce-6', label: 'VIe siècle av. J.-C.' },
+  { id: 'bce-5', label: 'Ve siècle av. J.-C.' },
+  { id: 'bce-4', label: 'IVe siècle av. J.-C.' },
+  { id: 'bce-3', label: 'IIIe siècle av. J.-C.' },
+  { id: 'bce-2', label: 'IIe siècle av. J.-C.' },
+  { id: 'bce-1', label: 'Ier siècle av. J.-C.' },
+  { id: 'ce-1', label: 'Ier siècle' },
+  { id: 'ce-2', label: 'IIe siècle' },
+  { id: 'ce-3', label: 'IIIe siècle' },
+  { id: 'ce-4', label: 'IVe siècle' },
+  { id: 'ce-5', label: 'Ve siècle' },
+  { id: 'ce-6', label: 'VIe siècle' }
+];
+
+const FIFTH_GRADE_TIMELINE_TARGETS = {
+  babylon: 'bce-6',
+  marathon: 'bce-5',
+  hadrian: 'ce-2',
+  rome: 'ce-5'
+};
+
+const normalizeCenturyInput = (value = '') => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, '');
+
+function FifthGradeDatesTimelineTraining() {
+  const [romanAnswers, setRomanAnswers] = useState({});
+  const [dateAnswers, setDateAnswers] = useState({});
+  const [timelineSlots, setTimelineSlots] = useState({});
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [checked, setChecked] = useState(false);
+
+  const placedEventIds = new Set(Object.values(timelineSlots).filter(Boolean));
+  const remainingEvents = FIFTH_GRADE_TIMELINE_EVENTS.filter((event) => !placedEventIds.has(event.id));
+  const centuryAnswerIsCorrect = (value, accepted) => {
+    const answer = normalizeCenturyInput(value);
+    return accepted.some((candidate) => normalizeCenturyInput(candidate) === answer);
+  };
+  const romanCorrect = FIFTH_GRADE_CENTURY_ROMAN_QUESTIONS.filter((question) => centuryAnswerIsCorrect(romanAnswers[question.id], question.accepted)).length;
+  const dateCorrect = FIFTH_GRADE_CENTURY_DATE_QUESTIONS.filter((question) => centuryAnswerIsCorrect(dateAnswers[question.id], question.accepted)).length;
+  const timelineCorrect = FIFTH_GRADE_TIMELINE_EVENTS.filter((event) => timelineSlots[FIFTH_GRADE_TIMELINE_TARGETS[event.id]] === event.id).length;
+  const correct = romanCorrect + dateCorrect + timelineCorrect;
+  const total = FIFTH_GRADE_CENTURY_ROMAN_QUESTIONS.length + FIFTH_GRADE_CENTURY_DATE_QUESTIONS.length + FIFTH_GRADE_TIMELINE_EVENTS.length;
+
+  const placeEvent = (eventId, centuryId) => {
+    if (!eventId && !selectedEventId) return;
+    const id = eventId || selectedEventId;
+    setTimelineSlots((previous) => {
+      const next = Object.fromEntries(Object.entries(previous).filter(([, current]) => current !== id));
+      next[centuryId] = id;
+      return next;
+    });
+    setSelectedEventId('');
+    setChecked(false);
+  };
+
+  const reset = () => {
+    setRomanAnswers({});
+    setDateAnswers({});
+    setTimelineSlots({});
+    setSelectedEventId('');
+    setChecked(false);
+  };
+
+  return (
+    <article className="rounded-3xl border border-amber-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-wider text-amber-600">Histoire · repères chronologiques</div>
+          <h3 className="m-0 text-2xl font-black text-slate-900">Dates et frise</h3>
+          <p className="mt-2 text-sm font-bold text-slate-500">Lis les siècles, retrouve le siècle d’une date puis range les événements dans l’ordre du temps.</p>
+        </div>
+        <button type="button" onClick={reset} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-black text-slate-600">↻ Recommencer</button>
+      </div>
+
+      <section className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+        <h4 className="m-0 text-lg font-black text-amber-950">Partie 1 · Les chiffres romains</h4>
+        <p className="mt-1 text-sm font-bold text-amber-800">Écris le siècle en toutes lettres.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          {FIFTH_GRADE_CENTURY_ROMAN_QUESTIONS.map((question) => {
+            const correctAnswer = centuryAnswerIsCorrect(romanAnswers[question.id], question.accepted);
+            return <label key={question.id} className={`rounded-2xl border bg-white p-4 ${checked ? (correctAnswer ? 'border-emerald-400' : 'border-red-300') : 'border-amber-200'}`}>
+              <span className="block text-xl font-black text-slate-900">{question.prompt}</span>
+              <input value={romanAnswers[question.id] || ''} onChange={(event) => { setRomanAnswers((previous) => ({ ...previous, [question.id]: event.target.value })); setChecked(false); }} placeholder="ex. deuxième siècle" className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-amber-500" />
+              {checked && !correctAnswer && <span className="mt-2 block text-xs font-black text-red-600">Réponse : {question.accepted[0]}</span>}
+            </label>;
+          })}
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+        <h4 className="m-0 text-lg font-black text-sky-950">Partie 2 · Les dates</h4>
+        <p className="mt-1 text-sm font-bold text-sky-800">Écris le siècle correspondant en chiffres romains.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {FIFTH_GRADE_CENTURY_DATE_QUESTIONS.map((question) => {
+            const correctAnswer = centuryAnswerIsCorrect(dateAnswers[question.id], question.accepted);
+            return <label key={question.id} className={`rounded-2xl border bg-white p-4 ${checked ? (correctAnswer ? 'border-emerald-400' : 'border-red-300') : 'border-sky-200'}`}>
+              <span className="block text-2xl font-black text-slate-900">{question.prompt}</span>
+              <input value={dateAnswers[question.id] || ''} onChange={(event) => { setDateAnswers((previous) => ({ ...previous, [question.id]: event.target.value })); setChecked(false); }} placeholder="ex. XVIIIe siècle" className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-sky-500" />
+              {checked && !correctAnswer && <span className="mt-2 block text-xs font-black text-red-600">Réponse : {question.answer}</span>}
+            </label>;
+          })}
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+        <h4 className="m-0 text-lg font-black text-violet-950">Partie 3 · La frise chronologique</h4>
+        <p className="mt-1 text-sm font-bold text-violet-800">Les dates sont indiquées : place chaque événement dans le bon siècle. Sur téléphone, touche un événement puis le siècle correspondant.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {remainingEvents.map((event) => <button key={event.id} type="button" draggable onDragStart={(dragEvent) => dragEvent.dataTransfer.setData('text/plain', event.id)} onClick={() => setSelectedEventId(event.id)} className={`rounded-2xl border px-4 py-3 text-left text-sm font-black shadow-sm ${selectedEventId === event.id ? 'border-violet-700 bg-violet-600 text-white' : 'border-violet-200 bg-white text-violet-900'}`}><span className="mr-2 rounded-lg bg-violet-100 px-2 py-1 text-xs text-violet-700">{event.date}</span>{event.title}</button>)}
+          {remainingEvents.length === 0 && <span className="rounded-xl bg-emerald-100 px-4 py-3 text-sm font-black text-emerald-700">Tous les événements sont placés.</span>}
+        </div>
+        <div className="mt-6 overflow-x-auto pb-3">
+          <div className="min-w-[1800px] rounded-3xl border border-violet-100 bg-white p-6">
+            <div className="relative h-[390px]">
+              <div className="absolute left-0 right-0 top-[210px] h-1 bg-slate-900" aria-hidden="true" />
+              <div className="absolute right-[-40px] top-[196px] h-0 w-0 border-y-[16px] border-l-[40px] border-y-transparent border-l-slate-900" aria-hidden="true" />
+              {Array.from({ length: 61 }, (_, index) => {
+                const isCenturyBoundary = index % 5 === 0;
+                return <div key={`tick-${index}`} className={`absolute bg-slate-500 ${isCenturyBoundary ? 'h-14 w-[2px]' : 'h-7 w-px'}`} style={{ left: `${(index / 60) * 100}%`, top: isCenturyBoundary ? 182 : 195 }} aria-hidden="true" />;
+              })}
+              <div className="absolute inset-x-0 top-0 grid h-full grid-cols-12">
+                {FIFTH_GRADE_TIMELINE_CENTURIES.map((century, index) => {
+                  const eventId = timelineSlots[century.id];
+                  const event = FIFTH_GRADE_TIMELINE_EVENTS.find((item) => item.id === eventId);
+                  const isCorrect = checked && eventId && FIFTH_GRADE_TIMELINE_TARGETS[eventId] === century.id;
+                  const isWrong = checked && eventId && !isCorrect;
+                  const cardTop = index % 2 === 0 ? 54 : 280;
+                  const lineTop = index % 2 === 0 ? cardTop + 96 : 214;
+                  const lineHeight = index % 2 === 0 ? 60 : 66;
+                  return <div key={century.id} className="relative">
+                    <button type="button" aria-label={`Placer un événement au ${century.label}`} onDragOver={(dragEvent) => dragEvent.preventDefault()} onDrop={(dragEvent) => placeEvent(dragEvent.dataTransfer.getData('text/plain'), century.id)} onClick={() => placeEvent('', century.id)} className={`absolute inset-x-1 top-0 h-full rounded-xl transition ${selectedEventId ? 'hover:bg-violet-50' : ''}`} />
+                    <div className="pointer-events-none absolute inset-x-1 top-[228px] text-center text-[12px] font-black leading-tight text-violet-800">{century.label}</div>
+                    <div className="pointer-events-none absolute left-1/2 top-[201px] z-10 h-5 w-5 -translate-x-1/2 rounded-full border-4 border-white bg-violet-700 shadow" />
+                    {index === 5 && <div className="pointer-events-none absolute -right-3 top-[225px] z-20 rounded bg-violet-700 px-1.5 py-1 text-[10px] font-black text-white">0</div>}
+                    {event ? <div className="absolute left-1/2 z-20 w-[136px] -translate-x-1/2" style={{ top: cardTop }}>
+                      <button type="button" draggable onDragStart={(dragEvent) => dragEvent.dataTransfer.setData('text/plain', event.id)} onClick={(clickEvent) => { clickEvent.stopPropagation(); setTimelineSlots((previous) => { const next = { ...previous }; delete next[century.id]; return next; }); setChecked(false); }} className={`min-h-[96px] w-full rounded-2xl border p-3 text-center shadow-sm ${isCorrect ? 'border-emerald-400 bg-emerald-50' : isWrong ? 'border-red-400 bg-red-50' : 'border-violet-200 bg-white'}`}>
+                        <span className="block text-base font-black text-slate-900">{event.date}</span>
+                        <span className="mt-1 block text-[11px] font-bold leading-tight text-slate-700">{event.title}</span>
+                        <span className="mt-1 block text-[9px] font-black text-slate-400">clic = retirer</span>
+                      </button>
+                      <div className="pointer-events-none absolute left-1/2 w-[2px] -translate-x-1/2 bg-violet-500" style={{ top: lineTop - cardTop, height: lineHeight }} />
+                    </div> : selectedEventId ? <span className="pointer-events-none absolute left-1/2 top-[229px] -translate-x-1/2 whitespace-nowrap text-[10px] font-black text-violet-400">Dépose ici</span> : null}
+                  </div>;
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="font-black text-slate-700">{checked ? `${correct} / ${total} bonnes réponses` : 'Réponds aux trois parties puis vérifie.'}</div>
+        <button type="button" onClick={() => { setChecked(true); reportTrainingScore('5e-history-dates-frise', correct, total); }} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow">✓ Vérifier</button>
+      </div>
+    </article>
+  );
+}
+
 function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = false }) {
   const [view, setView] = useState('learn');
   const [checked, setChecked] = useState(false);
@@ -5882,14 +6086,14 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
     <section className="training-responsive mx-3 flex flex-col gap-4 pb-10">
       <TrainingPointsBadge user={user} />
       <header className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-sky-50 p-5 shadow-sm">
-        <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600">5e · Géographie</div>
+        <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600">5e · Géographie et histoire</div>
         <h2 className="m-0 text-3xl font-black text-slate-900">Entraînement</h2>
-        <p className="mt-2 text-sm font-bold text-slate-600">Apprends à lire une carte, puis vérifie tes repères avec les quatre ateliers.</p>
+        <p className="mt-2 text-sm font-bold text-slate-600">Apprends à lire une carte et entraîne-toi aussi aux dates, aux siècles et aux frises.</p>
         <nav className="mt-4 flex flex-wrap gap-2">
           {[
             ['learn', '📖 Apprendre'], ['world', '🌍 Continents et océans'], ['compass', '🧭 Points cardinaux'],
             ['attributes', '🗺️ Attributs de la carte'], ['scales', '🔎 Échelles géographiques'],
-            ['curves', '📈 Courbes démographiques']
+            ['curves', '📈 Courbes démographiques'], ['dates', '📅 Dates et frise']
           ].map(([key, label]) => (
             <button key={key} type="button" onClick={() => resetCheck(key)} className={`rounded-2xl border px-4 py-3 text-sm font-black ${view === key ? 'border-emerald-700 bg-emerald-600 text-white' : 'border-white bg-white text-slate-700 shadow-sm'}`}>{label}</button>
           ))}
@@ -5898,30 +6102,52 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
 
       {view === 'learn' && (
         <div className="grid gap-4 xl:grid-cols-2">
+          <article className="rounded-3xl border border-amber-200 bg-white p-5 xl:col-span-2">
+            <div className="text-[11px] font-black uppercase tracking-wider text-amber-600">Histoire · dates et siècles</div>
+            <h3 className="m-0 mt-1 text-xl font-black text-slate-900">Repérer les siècles</h3>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl bg-amber-50 p-4">
+                <h4 className="m-0 text-base font-black text-amber-950">1. Lire les chiffres romains</h4>
+                <p className="mt-1 text-sm font-bold text-slate-600">Un chiffre romain permet d’écrire le numéro du siècle.</p>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm font-black">
+                  {[['I', '1er'], ['II', '2e'], ['III', '3e'], ['IV', '4e'], ['V', '5e'], ['VI', '6e'], ['IX', '9e'], ['X', '10e'], ['XI', '11e'], ['XIV', '14e'], ['XV', '15e'], ['XVI', '16e']].map(([roman, number]) => <div key={roman} className="rounded-xl border border-amber-200 bg-white px-2 py-2 text-amber-900"><span>{roman}</span><span className="mx-1 text-amber-400">→</span><span>{number}</span></div>)}
+                </div>
+              </div>
+              <div className="rounded-2xl bg-sky-50 p-4">
+                <h4 className="m-0 text-base font-black text-sky-950">2. Trouver le siècle d’une date</h4>
+                <p className="mt-1 text-sm font-bold text-slate-600">Prends les chiffres avant les deux derniers, puis ajoute 1. Pour une date qui finit par <strong>00</strong>, n’ajoute pas 1.</p>
+                <div className="mt-3 grid gap-2 text-sm font-bold text-slate-700">
+                  <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">1350</strong> : 13 + 1 = <strong className="text-sky-800">XIVe siècle</strong>.</div>
+                  <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">-312</strong> : 3 + 1 = <strong className="text-sky-800">IVe siècle av. J.-C.</strong></div>
+                  <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">1700</strong> : la date finit par 00, donc <strong className="text-sky-800">XVIIe siècle</strong>.</div>
+                </div>
+              </div>
+            </div>
+          </article>
           <article className="rounded-3xl border border-sky-200 bg-white p-5">
-            <h3 className="m-0 text-xl font-black text-slate-900">1. Continents et océans</h3>
+            <h3 className="m-0 text-xl font-black text-slate-900">3. Continents et océans</h3>
             <p className="text-sm font-bold text-slate-500">Vert : les continents · Bleu : les océans.</p>
             <FifthGradeWorldMap learning imageUrl={worldMapPreview} markers={worldMarkerPositions} />
           </article>
           <article className="rounded-3xl border border-amber-200 bg-white p-5">
-            <h3 className="m-0 text-xl font-black text-slate-900">2. Les points cardinaux</h3>
+            <h3 className="m-0 text-xl font-black text-slate-900">4. Les points cardinaux</h3>
             <p className="text-sm font-bold text-slate-500">Nord en haut, Est à droite, Sud en bas, Ouest à gauche.</p>
             <FifthGradeCompass learning />
           </article>
           <article className="rounded-3xl border border-violet-200 bg-white p-5">
-            <h3 className="m-0 text-xl font-black text-slate-900">3. Les attributs indispensables</h3>
+            <h3 className="m-0 text-xl font-black text-slate-900">5. Les attributs indispensables</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[['Titre', 'Il indique le sujet de la carte.'], ['Légende', 'Elle explique les couleurs et les symboles.'], ['Échelle', 'Elle relie la distance sur la carte à la distance réelle.'], ['Orientation', 'Elle indique le Nord et permet de se repérer.']].map(([title, text]) => <div key={title} className="rounded-2xl bg-violet-50 p-4"><div className="font-black text-violet-800">{title}</div><div className="mt-1 text-sm font-bold text-slate-600">{text}</div></div>)}
             </div>
           </article>
           <article className="rounded-3xl border border-indigo-200 bg-white p-5">
-            <h3 className="m-0 text-xl font-black text-slate-900">4. Les échelles géographiques</h3>
+            <h3 className="m-0 text-xl font-black text-slate-900">6. Les échelles géographiques</h3>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-2">
               {FIFTH_GRADE_SCALE_LEVELS.map((level) => <div key={level.id} className="rounded-2xl bg-indigo-50 p-3"><div className="text-xl">{level.icon}</div><div className="text-sm font-black text-indigo-900">{level.label}</div><div className="text-[11px] font-bold text-slate-500">{level.example}</div></div>)}
             </div>
           </article>
           <article className="rounded-3xl border border-fuchsia-200 bg-white p-5 xl:col-span-2">
-            <h3 className="m-0 text-xl font-black text-slate-900">5. Lire une courbe démographique</h3>
+            <h3 className="m-0 text-xl font-black text-slate-900">7. Lire une courbe démographique</h3>
             <div className="mt-4 grid items-center gap-4 lg:grid-cols-[1fr_1.1fr]">
               <FifthGradeDemographicCurve item={FIFTH_GRADE_DEMOGRAPHIC_CURVES[0]} compact />
               <div className="grid gap-2 text-sm font-bold text-slate-600">
@@ -5934,6 +6160,8 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
           </article>
         </div>
       )}
+
+      {view === 'dates' && <FifthGradeDatesTimelineTraining />}
 
       {view === 'world' && (
         <article className="rounded-3xl border border-sky-200 bg-white p-5">
@@ -5971,7 +6199,8 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
                       placeholder={marker.kind === 'ocean' ? "Nom de l'océan" : 'Nom du continent'}
                       onChange={(event) => { setWorldAnswers((old) => ({ ...old, [marker.id]: event.target.value })); setChecked(false); }}
                     />
-                    <button type="button" onClick={() => startWorldDictation(marker.id)} title="Répondre avec le micro" aria-label={`Dicter la réponse ${marker.id}`} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${activeWorldMic === marker.id ? 'animate-pulse bg-red-500 text-white' : 'bg-sky-100 text-sky-700'}`}>{activeWorldMic === marker.id ? '■' : '🎙️'}</button>
+                    <button type="button" onClick={() => startWorldDictation(marker.id)} title={activeWorldMic === marker.id ? 'Enregistrement en cours' : 'Répondre avec le micro'} aria-label={`Dicter la réponse ${marker.id}`} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${activeWorldMic === marker.id ? 'animate-pulse bg-emerald-600 text-white' : 'bg-red-500 text-white'}`}>{activeWorldMic === marker.id ? '■' : '🎙️'}</button>
+                    {worldAnswers[marker.id] && <button type="button" onClick={() => { setWorldAnswers((previous) => ({ ...previous, [marker.id]: '' })); setChecked(false); }} title="Effacer la réponse" aria-label={`Effacer la réponse ${marker.id}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-xl font-black text-red-600 hover:bg-red-200">×</button>}
                   </div>
                   {checked && !isCorrect && <div className="mt-1 pl-10 text-[10px] font-black text-red-600">Réponse attendue : {marker.answer}</div>}
                 </div>;

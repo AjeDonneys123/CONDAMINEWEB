@@ -120,7 +120,9 @@ const StudentSchema = new mongoose.Schema({
         updatedAt: { type: Date, default: null }
     },
     isTestAccount: { type: Boolean, default: false },
-    isDil: { type: Boolean, default: false }
+    isDil: { type: Boolean, default: false },
+    // Total d'étoiles gagnées dans les entraînements élèves.
+    trainingStars: { type: Number, default: 0, min: 0 }
 }, { timestamps: true });
 
 StudentSchema.pre('save', function forceSharedEmailForTestAccount(next) {
@@ -701,6 +703,8 @@ const Models = {
         french: { type: String, required: true, trim: true },
         spanish: { type: String, required: true, trim: true },
         correctCount: { type: Number, default: 0 },
+        wrongCount: { type: Number, default: 0 },
+        correctStreak: { type: Number, default: 0 },
         mastered: { type: Boolean, default: false, index: true },
         lastCorrectAt: { type: Date, default: null }
     }),
