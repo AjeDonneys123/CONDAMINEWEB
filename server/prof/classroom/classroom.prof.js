@@ -198,7 +198,11 @@ router.post('/import-plan', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
     try {
         console.log(`📂 [CLASSROOM-ROUTE] File: ${req.file.path}, ClassId: ${req.body.classId}`);
-        const result = await ClassroomExpert.applyPlanFromImage(req.body.classId, req.file);
+        const isTextPlan = /(?:csv|tab-separated-values|text\/plain)/i.test(String(req.file.mimetype || ''))
+            || /\.(?:csv|tsv|txt)$/i.test(String(req.file.originalname || ''));
+        const result = isTextPlan
+            ? await ClassroomExpert.applyPlanFromGridText(req.body.classId, fs.readFileSync(req.file.path, 'utf8'))
+            : await ClassroomExpert.applyPlanFromImage(req.body.classId, req.file);
         console.log(`✅ [CLASSROOM-ROUTE] Result success, count: ${result?.length}`);
         // Nettoyage local après traitement
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -207,6 +211,15 @@ router.post('/import-plan', upload.single('file'), async (req, res) => {
         console.error("💥 [CLASSROOM-ROUTE] ERROR:", e.stack || e.message);
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/import-plan-sheet', async (req, res) => {
+    try {
+        const result = await ClassroomExpert.applyPlanFromSheetUrl(req.body.classId, req.body.sheetUrl);
+        res.json({ ok: true, count: result.length, message: `${result.length} élève(s) placé(s) depuis Google Sheets.` });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
     }
 });
 

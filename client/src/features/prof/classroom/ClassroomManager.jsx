@@ -9,6 +9,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [iaLoading, setIaLoading] = useState(false);
+    const [importPanelOpen, setImportPanelOpen] = useState(false);
+    const [sheetUrl, setSheetUrl] = useState('');
     
     // UI STATES
     const [viewMode, setViewMode] = useState('PLAN');
@@ -228,7 +230,42 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDragStart = (e, sId) => { setDraggingId(sId); e.dataTransfer.setData("text/plain", sId); e.dataTransfer.effectAllowed = "move"; };
     const handleDragOver = (e, x, y) => { e.preventDefault(); setDragOverCell(`${x}-${y}`); };
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
-    const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
+    const handleFileSelect = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!confirm(`Analyser et appliquer le plan « ${file.name} » ?`)) return;
+        setIaLoading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('classId', globalClassId);
+        try {
+            const response = await fetch('/api/classroom/import-plan', { method: 'POST', body: formData });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Import impossible.');
+            setImportPanelOpen(false);
+            await loadData();
+            alert(data?.message || `Plan importé : ${data?.count || 0} élève(s) placé(s).`);
+        } catch(error) { alert(error.message || 'Erreur pendant l’import du plan.'); }
+        setIaLoading(false);
+        e.target.value = null;
+    };
+    const handleSheetImport = async () => {
+        if (!sheetUrl.trim()) return alert('Colle le lien Google Sheets.');
+        setIaLoading(true);
+        try {
+            const response = await fetch('/api/classroom/import-plan-sheet', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ classId: globalClassId, sheetUrl: sheetUrl.trim() })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Import Google Sheets impossible.');
+            setSheetUrl('');
+            setImportPanelOpen(false);
+            await loadData();
+            alert(data.message || 'Plan Google Sheets importé.');
+        } catch (error) { alert(error.message || 'Import Google Sheets impossible.'); }
+        setIaLoading(false);
+    };
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { scores: [] }; return stu.behaviorRecords.find(r => String(r.teacherId) === String(myId)) || { scores: [] }; };
     const getStudentGrades = (stu) => {
         const stats = getMyStats(stu);
@@ -425,6 +462,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const selectedPlanStudents = students.filter(isPlanFinderMatch);
     const listFinderCount = students.filter(isListFinderMatch).length;
     const frenchSelectedStudents = students.filter((student) => frenchStudentIds.includes(String(student._id)));
+    const effectivePlanRows = Math.max(gridSize.rows, Math.ceil(students.length / Math.max(1, gridSize.cols)));
 
     const handleOpenStudent = (stu) => {
         if (frenchMode) {
@@ -761,10 +799,42 @@ export default function ClassroomManager({ globalClassId, user }) {
     if (!globalClassId) return <div className="p-10 text-center text-slate-400 font-black">SÉLECTIONNEZ UNE CLASSE</div>;
 
     const renderGrid = () => {
+        const validSeats = students.filter((student) => Number.isInteger(student.seatX) && Number.isInteger(student.seatY)
+            && student.seatX >= 0 && student.seatX < gridSize.cols && student.seatY >= 0 && student.seatY < effectivePlanRows);
+        const uniqueSeats = new Set(validSeats.map((student) => `${student.seatX}-${student.seatY}`));
+        const hasMeaningfulPlan = uniqueSeats.size > 1 || students.length <= 1;
+        const occupied = new Set();
+        const placedIds = new Set();
+        const displayedStudents = [];
+        if (hasMeaningfulPlan) {
+            validSeats.forEach((student) => {
+                const seatKey = `${student.seatX}-${student.seatY}`;
+                if (occupied.has(seatKey)) return;
+                occupied.add(seatKey);
+                placedIds.add(String(student._id));
+                displayedStudents.push(student);
+            });
+        }
+        const unplacedStudents = students.filter((student) => !placedIds.has(String(student._id)))
+            .sort((a, b) => {
+                const first = String(a.firstName || '').localeCompare(String(b.firstName || ''), 'fr', { sensitivity: 'base' });
+                return first || String(a.lastName || '').localeCompare(String(b.lastName || ''), 'fr', { sensitivity: 'base' });
+            });
+        let nextCell = 0;
+        unplacedStudents.forEach((student) => {
+            while (occupied.has(`${nextCell % gridSize.cols}-${Math.floor(nextCell / gridSize.cols)}`)) nextCell += 1;
+            const seatX = nextCell % gridSize.cols;
+            const seatY = Math.floor(nextCell / gridSize.cols);
+            if (seatY < effectivePlanRows) {
+                occupied.add(`${seatX}-${seatY}`);
+                displayedStudents.push({ ...student, seatX, seatY });
+            }
+            nextCell += 1;
+        });
         const cells = [];
-        for (let y = 0; y < gridSize.rows; y++) {
+        for (let y = 0; y < effectivePlanRows; y++) {
             for (let x = 0; x < gridSize.cols; x++) {
-                const student = students.find(s => s.seatX === x && s.seatY === y);
+                const student = displayedStudents.find(s => s.seatX === x && s.seatY === y);
                 const isOver = dragOverCell === `${x}-${y}`;
                 const hasSep = separators.includes(x);
                 cells.push(
@@ -954,7 +1024,7 @@ export default function ClassroomManager({ globalClassId, user }) {
 
     return (
         <div className="classroom-wrapper" style={{ '--grid-cols': gridSize.cols }}>
-            <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*" onChange={handleFileSelect} />
+            <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*,.csv,.tsv,.txt,text/csv,text/tab-separated-values" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
             
             <div className="cm-header">
@@ -1036,15 +1106,32 @@ export default function ClassroomManager({ globalClassId, user }) {
                     )}
                     {renderPlanMatchesList()}
                     <div className="cm-toolbar hidden md:flex">
-                        <button className="cm-btn purple" onClick={() => fileInputRef.current.click()}>🔮 IMPORT IA</button>
+                        <button className="cm-btn purple" onClick={() => setImportPanelOpen((open) => !open)}>📥 IMPORTER UN PLAN</button>
                         <div className="w-px h-6 bg-slate-200 mx-2"></div>
                         <span className="text-[10px] font-bold text-slate-400">COLS:</span><button className="cm-btn slate" onClick={() => changeGrid(-1, 0)}>-</button><span className="font-bold">{gridSize.cols}</span><button className="cm-btn slate" onClick={() => changeGrid(1, 0)}>+</button>
                         <span className="text-[10px] font-bold text-slate-400 ml-2">ROWS:</span><button className="cm-btn slate" onClick={() => changeGrid(0, -1)}>-</button><span className="font-bold">{gridSize.rows}</span><button className="cm-btn slate" onClick={() => changeGrid(0, 1)}>+</button>
                     </div>
+                    {importPanelOpen && (
+                        <div className="plan-import-panel">
+                            <div>
+                                <strong>Image ou fichier</strong>
+                                <span>Photo/capture analysée par l’IA, ou grille CSV/TSV exportée depuis Sheets.</span>
+                                <button type="button" onClick={() => fileInputRef.current?.click()}>Choisir un fichier</button>
+                            </div>
+                            <div>
+                                <strong>Google Sheets</strong>
+                                <span>Le document doit être partagé en lecture avec le lien.</span>
+                                <div className="plan-sheet-row">
+                                    <input value={sheetUrl} onChange={(event) => setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" />
+                                    <button type="button" onClick={handleSheetImport} disabled={iaLoading || !sheetUrl.trim()}>Importer</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     
                     <div className="grid-container custom-scrollbar">
                         <div className="grid-header-row" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>{renderHeaders()}</div>
-                        <div className="interactive-grid" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${gridSize.rows}, var(--cell-size, 100px))` }}>{renderGrid()}</div>
+                        <div className="interactive-grid" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${effectivePlanRows}, var(--cell-size, 100px))` }}>{renderGrid()}</div>
                     </div>
                 </>
             ) : renderList()}

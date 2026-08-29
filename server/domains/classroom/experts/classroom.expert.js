@@ -1,6 +1,46 @@
 const mongoose = require('mongoose');
 const ClassroomAI = require('../ai/plan.ai');
 
+const normalizePlanText = (value = '') => String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const parseDelimitedPlan = (rawText = '') => {
+    const text = String(rawText || '').replace(/^\uFEFF/, '');
+    const firstLine = text.split(/\r?\n/, 1)[0] || '';
+    const delimiter = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') ? ';' : ',');
+    const rows = [];
+    let row = [], cell = '', quoted = false;
+    for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        if (char === '"') {
+            if (quoted && text[index + 1] === '"') { cell += '"'; index += 1; }
+            else quoted = !quoted;
+        } else if (char === delimiter && !quoted) {
+            row.push(cell.trim()); cell = '';
+        } else if ((char === '\n' || char === '\r') && !quoted) {
+            if (char === '\r' && text[index + 1] === '\n') index += 1;
+            row.push(cell.trim());
+            if (row.some(Boolean)) rows.push(row);
+            row = []; cell = '';
+        } else cell += char;
+    }
+    row.push(cell.trim());
+    if (row.some(Boolean)) rows.push(row);
+    return rows;
+};
+
+const googleSheetCsvUrl = (rawUrl = '') => {
+    const url = new URL(String(rawUrl || '').trim());
+    if (!/(^|\.)docs\.google\.com$/i.test(url.hostname) || !url.pathname.includes('/spreadsheets/d/')) {
+        throw new Error('Colle un lien Google Sheets valide.');
+    }
+    const match = url.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+    if (!match?.[1]) throw new Error('Identifiant Google Sheets introuvable.');
+    const gid = url.searchParams.get('gid') || String(url.hash || '').match(/gid=(\d+)/)?.[1] || '0';
+    return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gid}`;
+};
+
 const ClassroomExpert = {
     getClassroomData: async (classId, teacherId) => {
         const Student = mongoose.model('Student');
@@ -156,11 +196,67 @@ const ClassroomExpert = {
         }
 
         if (updates.length > 0) {
+            await Student.updateMany(
+                { _id: { $in: dbStudents.map((student) => student._id) } },
+                { $unset: { seatX: 1, seatY: 1 } }
+            );
             await Promise.all(updates);
         }
 
         console.log(`✅ Mise à jour terminée : ${matchCount} élèves placés.`);
         return updates;
+    },
+
+    applyPlanFromGridText: async (classId, rawText) => {
+        const Student = mongoose.model('Student');
+        const Classroom = mongoose.model('Classroom');
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) throw new Error('Classe/Groupe introuvable');
+        const students = await Student.find(cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id }).lean();
+        const rows = parseDelimitedPlan(rawText);
+        if (!rows.length) throw new Error('Le document ne contient aucune grille lisible.');
+
+        const used = new Set();
+        const placements = [];
+        rows.forEach((cells, y) => cells.forEach((cell, x) => {
+            const needle = normalizePlanText(cell);
+            if (!needle || needle.length < 2) return;
+            const matches = students
+                .filter((student) => !used.has(String(student._id)))
+                .map((student) => {
+                    const first = normalizePlanText(student.firstName);
+                    const last = normalizePlanText(student.lastName);
+                    const full = normalizePlanText(`${student.firstName} ${student.lastName}`);
+                    const reverse = normalizePlanText(`${student.lastName} ${student.firstName}`);
+                    const score = needle === full || needle === reverse ? 4
+                        : (needle.includes(full) || needle.includes(reverse) ? 3
+                        : (first && last && needle.includes(first) && needle.includes(last) ? 2
+                        : (first && needle === first ? 1 : 0)));
+                    return { student, score };
+                })
+                .filter((entry) => entry.score > 0)
+                .sort((a, b) => b.score - a.score);
+            if (!matches.length) return;
+            const student = matches[0].student;
+            used.add(String(student._id));
+            placements.push({ studentId: student._id, x, y });
+        }));
+        if (!placements.length) throw new Error("Aucun nom du document ne correspond aux élèves de la classe.");
+        await Student.updateMany(
+            { _id: { $in: students.map((student) => student._id) } },
+            { $unset: { seatX: 1, seatY: 1 } }
+        );
+        await Promise.all(placements.map((entry) => Student.findByIdAndUpdate(entry.studentId, { seatX: entry.x, seatY: entry.y })));
+        const cols = Math.max(2, ...placements.map((entry) => entry.x + 1));
+        const planRows = Math.max(2, ...placements.map((entry) => entry.y + 1));
+        await Classroom.findByIdAndUpdate(classId, { $set: { 'layout.cols': cols, 'layout.rows': planRows } });
+        return placements;
+    },
+
+    applyPlanFromSheetUrl: async (classId, sheetUrl) => {
+        const response = await fetch(googleSheetCsvUrl(sheetUrl), { redirect: 'follow' });
+        if (!response.ok) throw new Error(`Google Sheets inaccessible (${response.status}). Vérifie que le lien est partagé en lecture.`);
+        return ClassroomExpert.applyPlanFromGridText(classId, await response.text());
     },
 
     applyWeeklyRedemption: async (cid, tid) => { const S = mongoose.model('Student'); const sts = await S.find({classId:cid}); let c=0; for(const s of sts){if(!s.behaviorRecords)continue;const r=s.behaviorRecords.find(x=>x.teacherId===String(tid));if(r&&r.crosses>0){r.weeksToRedemption=(r.weeksToRedemption||3)-1;if(r.weeksToRedemption<=0){r.crosses=Math.max(0,r.crosses-1);r.weeksToRedemption=3;}s.markModified('behaviorRecords');await s.save();c++;}} return {ok:true,count:c}; },
