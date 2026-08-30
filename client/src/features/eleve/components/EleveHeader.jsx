@@ -30,9 +30,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   const grades = Array.isArray(primaryRecord.scores) && primaryRecord.scores.length
     ? primaryRecord.scores
     : [{ id: 'legacy', value: Number(primaryRecord.baseScore ?? 15) + Number(primaryRecord.bonuses || 0) * 0.5 - Number(primaryRecord.crosses || 0) }];
-  const visibleGrades = primaryRecord.forcedSix
-    ? [...grades, { id: 'forced-six', value: 6, forced: true }]
-    : grades;
+  const debtScoreId = String(primaryRecord.forcedSixScoreId || primaryRecord.selectedScoreId || '');
+  const visibleGrades = grades.map((grade) => ({
+    ...grade,
+    forced: Boolean(primaryRecord.forcedSix) && String(grade.id) === debtScoreId
+  }));
 
   useEffect(() => {
     const needsPunishTimer = user.punishmentStatus === 'PENDING' && user.punishmentDueDate;

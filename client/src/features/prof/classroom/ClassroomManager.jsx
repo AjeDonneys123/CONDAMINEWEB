@@ -410,6 +410,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         const stats = getMyStats(stu);
         return Math.max(0, Number(stats.forcedSixCount || (stats.forcedSix ? 1 : 0)));
     };
+    const hasScoreDebt = (stu) => Boolean(getMyStats(stu).forcedSix || getForcedSixCount(stu) > 0);
     const getStudentStateClass = (stu) => {
         if (stu?.punishmentStatus && stu.punishmentStatus !== 'NONE') return 'punished';
         if (stu?.myNote) return 'has-note';
@@ -736,12 +737,34 @@ export default function ClassroomManager({ globalClassId, user }) {
                 r.forcedSixCount = r.forcedSix ? Math.max(1, Number(r.forcedSixCount || 0)) : 0;
             }
             if (type === 'ADD_FORCED_SIX') {
-                r.forcedSixCount = Math.max(0, Number(r.forcedSixCount || (r.forcedSix ? 1 : 0))) + 1;
-                r.forcedSix = true;
+                if (!r.forcedSix) {
+                    const requestedId = extra?.scoreId || r.selectedScoreId || scores[scores.length - 1].id;
+                    const selected = scores.find(g => String(g.id) === String(requestedId)) || scores[scores.length - 1];
+                    scores = scores.map(g => String(g.id) === String(selected.id)
+                        ? { ...g, value: Math.max(0, Math.min(20, Number(g.value || 0) - 9)) }
+                        : g
+                    );
+                    r.selectedScoreId = selected.id;
+                    r.forcedSixScoreId = String(selected.id);
+                    r.forcedSixDebtAmount = 9;
+                    r.forcedSixCount = 1;
+                    r.forcedSix = true;
+                }
             }
             if (type === 'REMOVE_FORCED_SIX') {
-                r.forcedSixCount = Math.max(0, Number(r.forcedSixCount || (r.forcedSix ? 1 : 0)) - 1);
-                r.forcedSix = r.forcedSixCount > 0;
+                if (r.forcedSix) {
+                    const requestedId = r.forcedSixScoreId || r.selectedScoreId || scores[scores.length - 1].id;
+                    const selected = scores.find(g => String(g.id) === String(requestedId)) || scores[scores.length - 1];
+                    scores = scores.map(g => String(g.id) === String(selected.id)
+                        ? { ...g, value: Math.max(0, Math.min(20, Number(g.value || 0) + Number(r.forcedSixDebtAmount || 9))) }
+                        : g
+                    );
+                    r.selectedScoreId = selected.id;
+                }
+                r.forcedSixCount = 0;
+                r.forcedSix = false;
+                r.forcedSixScoreId = '';
+                r.forcedSixDebtAmount = 0;
             }
             if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !r.workIncomplete;
             r.scores = scores;
@@ -870,7 +893,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 </div>
                                 <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
-                                <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className="sc-score positive">{formatScore(g.value)}</span>)}{Array.from({ length: getForcedSixCount(student) }).map((_, idx) => <span key={`six-${idx}`} className="sc-score forced">6</span>)}</div>
+                                <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className={`sc-score positive ${hasScoreDebt(student) && String(g.id) === String(getMyStats(student).forcedSixScoreId || getSelectedGrade(student)?.id) ? 'debt' : ''}`}>{formatScore(g.value)}</span>)}</div>
                             </div>
                         ) : ( <div className={`grid-cell-empty ${isOver ? 'drag-over' : ''}`}>+</div> )}
                     </div>
@@ -1169,8 +1192,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         </div>
                         <div className="drawer-grid-complex">
                             <div className="drawer-grade-list">
-                                {getStudentGrades(selectedStudent).map(g => <button key={g.id} className={`drawer-grade-chip ${String(getSelectedGrade(selectedStudent)?.id) === String(g.id) ? 'selected' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'SELECT_SCORE', {scoreId:g.id}, {keepDrawerOpen:true})}>{formatScore(g.value)}</button>)}
-                                {Array.from({ length: getForcedSixCount(selectedStudent) }).map((_, idx) => <span key={`six-${idx}`} className="drawer-grade-chip forced">6</span>)}
+                                {getStudentGrades(selectedStudent).map(g => <button key={g.id} className={`drawer-grade-chip ${String(getSelectedGrade(selectedStudent)?.id) === String(g.id) ? 'selected' : ''} ${hasScoreDebt(selectedStudent) && String(g.id) === String(getMyStats(selectedStudent).forcedSixScoreId || getSelectedGrade(selectedStudent)?.id) ? 'debt' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'SELECT_SCORE', {scoreId:g.id}, {keepDrawerOpen:true})}>{formatScore(g.value)}</button>)}
                             </div>
                             <button className="act-btn btn-note" onClick={() => addBehavior(selectedStudent._id, 'ADD_SCORE', null, {keepDrawerOpen:true})}>+ AJOUTER NOTE</button>
                             <button
@@ -1180,8 +1202,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                             >SUPPRIMER NOTE</button>
                             {[-0.5,0.5].map(delta => <button key={delta} className={`act-btn ${delta < 0 ? 'btn-cross' : 'btn-bonus'}`} {...scoreHoldProps(selectedStudent, delta)}>{delta > 0 ? '+' : ''}{delta}</button>)}
                             <div className="forced-six-actions">
-                                <button className="act-btn grade-toggle" onClick={() => addBehavior(selectedStudent._id, 'ADD_FORCED_SIX', null, {keepDrawerOpen:true})}>METTRE 6</button>
-                                <button className="act-btn grade-toggle remove" disabled={getForcedSixCount(selectedStudent) === 0} onClick={() => addBehavior(selectedStudent._id, 'REMOVE_FORCED_SIX', null, {keepDrawerOpen:true})}>ENLEVER 6</button>
+                                <button className="act-btn grade-toggle" disabled={hasScoreDebt(selectedStudent)} onClick={() => addBehavior(selectedStudent._id, 'ADD_FORCED_SIX', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>METTRE 6/20 · −9</button>
+                                <button className="act-btn grade-toggle remove" disabled={!hasScoreDebt(selectedStudent)} onClick={() => addBehavior(selectedStudent._id, 'REMOVE_FORCED_SIX', null, {keepDrawerOpen:true})}>DETTE RÉGLÉE · +9</button>
                             </div>
                             <div className="student-alert-actions">
                                 <button className={`act-btn ${getMyStats(selectedStudent).workIncomplete ? 'grade-toggle active' : 'grade-toggle'}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_INCOMPLETE', null, {keepDrawerOpen:true})}>{getMyStats(selectedStudent).workIncomplete ? 'TRAVAIL COMPLET' : 'TRAVAIL INCOMPLET'}</button>

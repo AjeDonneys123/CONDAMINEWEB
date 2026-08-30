@@ -223,6 +223,24 @@ router.post('/import-plan-sheet', async (req, res) => {
     }
 });
 
+router.get('/debts/:classId', async (req, res) => {
+    try {
+        const teacherId = String(req.query.teacherId || '').trim();
+        const { clsObj, students } = await getStudentsForClassOrGroup(req.params.classId);
+        if (!clsObj) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
+        const debts = students.filter((student) => {
+            const record = (student.behaviorRecords || []).find((item) => String(item?.teacherId || '') === teacherId);
+            return Boolean(record?.forcedSix || Number(record?.forcedSixCount || 0) > 0);
+        }).map((student) => ({
+            id: student._id,
+            name: `${String(student.nickname || student.firstName || '').trim()} ${String(student.lastName || '').trim()}`.trim()
+        })).sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+        res.json(debts);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // 2. RÉCUPÉRATION INFOS CLASSE
 router.get('/:classId', async (req, res) => {
     try {
@@ -404,12 +422,30 @@ router.post('/behavior', async (req, res) => {
             r.forcedSixCount = r.forcedSix ? Math.max(1, Number(r.forcedSixCount || 0)) : 0;
         }
         if (type === 'ADD_FORCED_SIX') {
-            r.forcedSixCount = Math.max(0, Number(r.forcedSixCount || (r.forcedSix ? 1 : 0))) + 1;
-            r.forcedSix = r.forcedSixCount > 0;
+            const scores = ensureScores();
+            if (!r.forcedSix) {
+                const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
+                const score = scores.find(x => String(x.id) === scoreId) || scores[scores.length - 1];
+                score.value = Math.max(0, Math.min(20, Number(score.value || 0) - 9));
+                r.selectedScoreId = score.id;
+                r.forcedSixScoreId = String(score.id);
+                r.forcedSixDebtAmount = 9;
+                r.forcedSixCount = 1;
+                r.forcedSix = true;
+            }
         }
         if (type === 'REMOVE_FORCED_SIX') {
-            r.forcedSixCount = Math.max(0, Number(r.forcedSixCount || (r.forcedSix ? 1 : 0)) - 1);
-            r.forcedSix = r.forcedSixCount > 0;
+            const scores = ensureScores();
+            if (r.forcedSix) {
+                const scoreId = String(r.forcedSixScoreId || r.selectedScoreId || scores[scores.length - 1].id);
+                const score = scores.find(x => String(x.id) === scoreId) || scores[scores.length - 1];
+                score.value = Math.max(0, Math.min(20, Number(score.value || 0) + Math.max(0, Number(r.forcedSixDebtAmount || 9))));
+                r.selectedScoreId = score.id;
+            }
+            r.forcedSixCount = 0;
+            r.forcedSix = false;
+            r.forcedSixScoreId = '';
+            r.forcedSixDebtAmount = 0;
         }
         if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !Boolean(r.workIncomplete);
         if (type === 'CROSS') {

@@ -2,6 +2,31 @@ const express = require('express');
 const router = express.Router();
 const { Course, CourseSection } = require('../models/prof.models');
 
+const normalizeClassKey = (value = '') => String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+const academicLevel = (value = '') => normalizeClassKey(value).match(/^(6|5|4|3|2|1)/)?.[1] || '';
+
+const logicalSectionId = ({ level = '', classId = '', name = '' } = {}) => {
+    const sectionKey = normalizeClassKey(name) || 'SECTION';
+    return level
+        ? `level:${level}:${sectionKey}`
+        : `class:${String(classId || '')}:${sectionKey}`;
+};
+
+const classroomsForLevel = async (Classroom, selectedClass) => {
+    const level = academicLevel(selectedClass?.level || selectedClass?.name);
+    if (!level) return { level: '', classroomIds: [String(selectedClass?._id || '')].filter(Boolean) };
+    const classrooms = await Classroom.find({}, '_id name level').lean();
+    return {
+        level,
+        classroomIds: classrooms
+            .filter((row) => academicLevel(row.level || row.name) === level)
+            .map((row) => String(row._id))
+    };
+};
+
 const extractPresentationId = (value = '') => {
     const text = String(value || '').trim();
     if (!text) return '';
@@ -55,9 +80,37 @@ const normalizeCourse = (body = {}) => {
 router.get('/', async (req, res) => {
     try {
         const classId = String(req.query.classId || '').trim();
-        const query = classId ? { targetClassroomId: classId } : {};
-        const rows = await Course.find(query).sort({ date: -1, createdAt: -1 }).lean();
-        res.json(rows);
+        if (!classId) {
+            return res.json(await Course.find({}).sort({ date: -1, createdAt: -1 }).lean());
+        }
+        const Classroom = require('mongoose').model('Classroom');
+        const selectedClass = await Classroom.findById(classId, 'name level').lean();
+        if (!selectedClass) return res.status(404).json({ error: 'Classe introuvable' });
+        const selectedLevel = academicLevel(selectedClass.level || selectedClass.name);
+        const [rows, sections] = await Promise.all([
+            Course.find({}).sort({ date: -1, createdAt: -1 }).lean(),
+            CourseSection.find({}).lean()
+        ]);
+        const sectionById = new Map(sections.map((section) => [String(section._id), section]));
+        const visible = rows.filter((course) => {
+            if (String(course.targetClassroomId || '') === classId) return true;
+            if (String(course.targetScope || 'LEVEL').toUpperCase() !== 'LEVEL') return false;
+            return Boolean(selectedLevel) && academicLevel(course.targetLevel || course.targetClassroomName) === selectedLevel;
+        }).map((course) => {
+            const storedSectionId = String(course.courseSectionId || '');
+            if (!storedSectionId) return { ...course, courseSectionId: '' };
+            if (storedSectionId.startsWith('level:') || storedSectionId.startsWith('class:')) {
+                return { ...course, courseSectionId: storedSectionId };
+            }
+            const legacySection = sectionById.get(storedSectionId);
+            return {
+                ...course,
+                courseSectionId: legacySection
+                    ? logicalSectionId({ level: selectedLevel, classId, name: legacySection.name })
+                    : ''
+            };
+        });
+        res.json(visible);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -66,8 +119,26 @@ router.get('/', async (req, res) => {
 router.get('/sections/list', async (req, res) => {
     try {
         const classId = String(req.query.classId || '').trim();
-        const rows = await CourseSection.find(classId ? { targetClassroomId: classId } : {}).sort({ order: 1, createdAt: 1 }).lean();
-        res.json(rows);
+        if (!classId) {
+            return res.json(await CourseSection.find({}).sort({ order: 1, createdAt: 1 }).lean());
+        }
+        const Classroom = require('mongoose').model('Classroom');
+        const selectedClass = await Classroom.findById(classId, 'name level').lean();
+        if (!selectedClass) return res.status(404).json({ error: 'Classe introuvable' });
+        const { level, classroomIds } = await classroomsForLevel(Classroom, selectedClass);
+        const rows = await CourseSection.find({ targetClassroomId: { $in: classroomIds } }).sort({ order: 1, createdAt: 1 }).lean();
+        const sectionsByKey = new Map();
+        rows.forEach((row) => {
+            const key = normalizeClassKey(row.name);
+            if (!key || sectionsByKey.has(key)) return;
+            sectionsByKey.set(key, {
+                ...row,
+                _id: logicalSectionId({ level, classId, name: row.name }),
+                sourceSectionId: String(row._id),
+                sharedLevel: level
+            });
+        });
+        res.json([...sectionsByKey.values()]);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -78,9 +149,29 @@ router.post('/sections', async (req, res) => {
         const name = String(req.body?.name || '').trim();
         const targetClassroomId = String(req.body?.targetClassroomId || '').trim();
         if (!name || !targetClassroomId) return res.status(400).json({ error: 'Nom et classe requis' });
+        const Classroom = require('mongoose').model('Classroom');
+        const selectedClass = await Classroom.findById(targetClassroomId, 'name level').lean();
+        if (!selectedClass) return res.status(404).json({ error: 'Classe introuvable' });
+        const { level, classroomIds } = await classroomsForLevel(Classroom, selectedClass);
+        const levelSections = await CourseSection.find({ targetClassroomId: { $in: classroomIds } }).lean();
+        const existing = levelSections.find((row) => normalizeClassKey(row.name) === normalizeClassKey(name));
+        if (existing) {
+            return res.json({
+                ...existing,
+                _id: logicalSectionId({ level, classId: targetClassroomId, name: existing.name }),
+                sourceSectionId: String(existing._id),
+                sharedLevel: level
+            });
+        }
         const count = await CourseSection.countDocuments({ targetClassroomId });
         const row = await CourseSection.create({ name, targetClassroomId, order: count });
-        res.status(201).json(row);
+        const plainRow = row.toObject();
+        res.status(201).json({
+            ...plainRow,
+            _id: logicalSectionId({ level, classId: targetClassroomId, name }),
+            sourceSectionId: String(plainRow._id),
+            sharedLevel: level
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

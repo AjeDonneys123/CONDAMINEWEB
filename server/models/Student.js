@@ -14,6 +14,8 @@ const BehaviorRecordSchema = new mongoose.Schema({
     selectedScoreId: { type: String, default: '' },
     forcedSix: { type: Boolean, default: false },
     forcedSixCount: { type: Number, default: 0, min: 0 },
+    forcedSixScoreId: { type: String, default: '' },
+    forcedSixDebtAmount: { type: Number, default: 0, min: 0 },
     workIncomplete: { type: Boolean, default: false }
 }, { _id: false });
 

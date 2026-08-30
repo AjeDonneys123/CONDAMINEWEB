@@ -10,9 +10,11 @@ export default function BehaviorTimer({ studentData }) {
     const grades = Array.isArray(activeRecord.scores) && activeRecord.scores.length
         ? activeRecord.scores
         : [{ id: 'legacy', value: Number(activeRecord.baseScore ?? 15) + Number(activeRecord.bonuses || 0) * 0.5 - Number(activeRecord.crosses || 0) }];
-    const visibleGrades = activeRecord.forcedSix
-        ? [...grades, { id: 'forced-six', value: 6, forced: true }]
-        : grades;
+    const debtScoreId = String(activeRecord.forcedSixScoreId || activeRecord.selectedScoreId || '');
+    const visibleGrades = grades.map((grade) => ({
+        ...grade,
+        forced: Boolean(activeRecord.forcedSix) && String(grade.id) === debtScoreId
+    }));
 
     return (
         <div className="behavior-timer-wrapper">

@@ -271,6 +271,87 @@
     padding-top: 28px;
 }
 
+.active-course-shelf {
+    max-width: 1080px;
+    margin-bottom: 22px;
+    padding: 14px;
+    border: 1px solid #bbf7d0;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #f0fdf4, #ffffff);
+    box-shadow: 0 10px 26px rgba(22, 163, 74, 0.08);
+}
+
+.active-course-shelf-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: #166534;
+}
+
+.active-course-shelf-heading > span {
+    color: #22c55e;
+    font-size: 10px;
+}
+
+.active-course-shelf-heading strong {
+    font-size: 12px;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+}
+
+.active-course-shelf-heading small {
+    display: grid;
+    min-width: 22px;
+    height: 22px;
+    place-items: center;
+    border-radius: 999px;
+    background: #dcfce7;
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.active-course-shelf-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+.active-course-shelf-list button {
+    display: flex;
+    min-width: 230px;
+    flex: 1 1 280px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 1px solid #d1fae5;
+    border-radius: 11px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #334155;
+    text-align: left;
+    cursor: pointer;
+}
+
+.active-course-shelf-list button:hover {
+    border-color: #86efac;
+    background: #f7fee7;
+}
+
+.active-course-shelf-list button span {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.active-course-shelf-list button strong {
+    color: #16a34a;
+    font-size: 10px;
+    font-weight: 950;
+}
+
 .courses-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -899,6 +980,55 @@
     pointer-events: none;
     transition: all 0.3s ease;
 }
+
+.course-debt-panel {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 101;
+    width: min(220px, calc(100% - 32px));
+    padding: 7px;
+    border: 2px solid #9ca3af;
+    border-radius: 11px;
+    background: rgba(243, 244, 246, .94);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .2);
+    pointer-events: auto;
+}
+.course-debt-title {
+    margin: 0 4px 4px;
+    color: #374151;
+    font-size: .58rem;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+.course-debt-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 7px;
+    margin-top: 4px;
+    padding: 5px 6px 5px 8px;
+    border-radius: 8px;
+    background: #fff;
+    color: #4b5563;
+    font-size: .7rem;
+    font-weight: 950;
+}
+.course-debt-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.course-debt-name button {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border: 0;
+    border-radius: 999px;
+    background: #e5e7eb;
+    color: #4b5563;
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1;
+    cursor: pointer;
+}
+.course-debt-name button:hover { background: #d1d5db; color: #111827; }
 
 .live-student-highlight {
     position: absolute;

@@ -8,6 +8,26 @@ const EMPTY_FORM = {
     isEnabled: true
 };
 
+const COURSE_DEBT_DISMISS_KEY = 'conda-course-debt-dismissals-v1';
+
+const readDebtDismissals = (classId = '') => {
+    try {
+        const now = Date.now();
+        const raw = JSON.parse(window.localStorage.getItem(COURSE_DEBT_DISMISS_KEY) || '{}');
+        const next = {};
+        Object.entries(raw || {}).forEach(([key, expiresAt]) => {
+            if (Number(expiresAt || 0) > now) next[key] = Number(expiresAt);
+        });
+        window.localStorage.setItem(COURSE_DEBT_DISMISS_KEY, JSON.stringify(next));
+        const prefix = `${String(classId || '')}:`;
+        return Object.fromEntries(Object.entries(next)
+            .filter(([key]) => key.startsWith(prefix))
+            .map(([key, expiresAt]) => [key.slice(prefix.length), expiresAt]));
+    } catch (_) {
+        return {};
+    }
+};
+
 const extractPresentationId = (value = '') => {
     const text = String(value || '').trim();
     const pathMatch = text.match(/docs\.google\.com\/presentation\/d\/([a-zA-Z0-9_-]+)/i);
@@ -29,6 +49,16 @@ const getEditUrl = (value = '') => {
         : '';
 };
 
+const mergeCourseForCurrentView = (currentCourse, serverCourse) => {
+    const currentSectionId = String(currentCourse?.courseSectionId || '');
+    const serverSectionId = String(serverCourse?.courseSectionId || '');
+    const hasLogicalSection = currentSectionId.startsWith('level:') || currentSectionId.startsWith('class:');
+    const serverHasLogicalSection = serverSectionId.startsWith('level:') || serverSectionId.startsWith('class:');
+    return hasLogicalSection && !serverHasLogicalSection
+        ? { ...serverCourse, courseSectionId: currentSectionId }
+        : serverCourse;
+};
+
 export default function CoursesManager({ globalClass, globalClassId = '', globalLevel = '', user = {} }) {
     const [courses, setCourses] = useState([]);
     const [courseSections, setCourseSections] = useState([]);
@@ -45,22 +75,57 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [draggedCourseId, setDraggedCourseId] = useState('');
     const [openCourseSections, setOpenCourseSections] = useState({});
     const [sourceEditor, setSourceEditor] = useState(null);
+    const [debtStudents, setDebtStudents] = useState([]);
+    const [dismissedDebtIds, setDismissedDebtIds] = useState({});
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
+    const activeCourses = useMemo(() => courses
+        .filter((course) => course.isEnabled !== false)
+        .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'fr', { numeric: true, sensitivity: 'base' })), [courses]);
+    const visibleDebtStudents = useMemo(() => {
+        const now = Date.now();
+        return debtStudents.filter((student) => Number(dismissedDebtIds[String(student.id)] || 0) <= now);
+    }, [debtStudents, dismissedDebtIds]);
+
+    useEffect(() => {
+        setDismissedDebtIds(readDebtDismissals(globalClassId));
+    }, [globalClassId]);
+
+    const dismissDebtForCurrentHour = (studentId) => {
+        const id = String(studentId || '');
+        if (!id || !globalClassId) return;
+        const nextHour = new Date();
+        nextHour.setMinutes(60, 0, 0);
+        const expiresAt = nextHour.getTime();
+        setDismissedDebtIds((current) => ({ ...current, [id]: expiresAt }));
+        try {
+            const raw = JSON.parse(window.localStorage.getItem(COURSE_DEBT_DISMISS_KEY) || '{}');
+            window.localStorage.setItem(COURSE_DEBT_DISMISS_KEY, JSON.stringify({
+                ...(raw && typeof raw === 'object' ? raw : {}),
+                [`${globalClassId}:${id}`]: expiresAt
+            }));
+        } catch (_) {}
+    };
 
     useEffect(() => {
         if (!playingCourse || !globalClassId) {
             setLiveClassroom(null);
+            setDebtStudents([]);
             return undefined;
         }
 
         const fetchLiveStatus = async () => {
             try {
-                const res = await fetch(`/api/classroom/${globalClassId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setLiveClassroom(data);
+                const teacherId = user.id || user._id || '';
+                const [res, studentsRes] = await Promise.all([
+                    fetch(`/api/classroom/${globalClassId}`),
+                    fetch(`/api/classroom/debts/${globalClassId}?teacherId=${encodeURIComponent(teacherId)}`)
+                ]);
+                if (res.ok) setLiveClassroom(await res.json());
+                if (studentsRes.ok) {
+                    const rows = await studentsRes.json();
+                    setDebtStudents(Array.isArray(rows) ? rows : []);
                 }
             } catch (e) {
                 console.error("Live polling error:", e);
@@ -70,7 +135,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         fetchLiveStatus(); // immediate call
         const interval = setInterval(fetchLiveStatus, 2000);
         return () => clearInterval(interval);
-    }, [playingCourse, globalClassId]);
+    }, [playingCourse, globalClassId, user.id, user._id]);
 
     const isHighlightActive = useMemo(() => {
         if (!liveClassroom?.activeStudentHighlight || !liveClassroom?.activeStudentHighlightTime) return false;
@@ -349,7 +414,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Modification de visibilité impossible');
-            setCourses((current) => current.map((item) => String(item._id) === courseId ? data : item));
+            setCourses((current) => current.map((item) => String(item._id) === courseId ? mergeCourseForCurrentView(item, data) : item));
         } catch (updateError) {
             setError(updateError.message);
         }
@@ -369,8 +434,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Mise à jour du marqueur impossible');
-            setCourses((current) => current.map((item) => String(item._id) === courseId ? data : item));
-            setPlayingCourse((current) => String(current?._id || '') === courseId ? data : current);
+            setCourses((current) => current.map((item) => String(item._id) === courseId ? mergeCourseForCurrentView(item, data) : item));
+            setPlayingCourse((current) => String(current?._id || '') === courseId ? mergeCourseForCurrentView(current, data) : current);
         } catch (progressError) {
             setError(progressError.message);
         } finally {
@@ -398,7 +463,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const response = await fetch('/api/courses/sections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: String(name).trim(), targetClassroomId: globalClassId }) });
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Création impossible');
-            setCourseSections((current) => [...current, data]);
+            setCourseSections((current) => current.some((section) => String(section._id) === String(data._id))
+                ? current
+                : [...current, data]);
             setOpenCourseSections((current) => ({ ...current, [String(data._id)]: true }));
         } catch (sectionError) {
             setError(sectionError.message);
@@ -553,6 +620,24 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <strong>AUCUN COURS</strong>
                     </div>
                 ) : (
+                    <>
+                    {activeCourses.length > 0 && (
+                        <section className="active-course-shelf" aria-label="Présentations actives">
+                            <div className="active-course-shelf-heading">
+                                <span>●</span>
+                                <strong>PRÉSENTATIONS ACTIVES</strong>
+                                <small>{activeCourses.length}</small>
+                            </div>
+                            <div className="active-course-shelf-list">
+                                {activeCourses.map((course) => (
+                                    <button key={course._id} type="button" onClick={() => openPresentation(course)}>
+                                        <span>{course.title}</span>
+                                        <strong>PRÉSENTER</strong>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
                     <div className="course-sections-stack">
                         {[{ _id: '', name: 'SANS SECTION' }, ...[...courseSections].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true, sensitivity: 'base' }))].map((section) => {
                             const sectionId = String(section._id || '');
@@ -605,6 +690,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </section>;
                         })}
                     </div>
+                    </>
                 )}
             </div>
 
@@ -627,6 +713,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <div className="live-class-points">
                             🏆 Score Classe : {classPoints} pts
                         </div>
+
+                        {visibleDebtStudents.length > 0 && (
+                            <div className="course-debt-panel">
+                                <div className="course-debt-title">À régler</div>
+                                {visibleDebtStudents.map((student) => (
+                                    <div key={student.id} className="course-debt-name">
+                                        <span>{student.name}</span>
+                                        <button type="button" onClick={() => dismissDebtForCurrentHour(student.id)} title="Masquer jusqu’à la prochaine heure" aria-label={`Masquer ${student.name} jusqu’à la prochaine heure`}>×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* NOM DE L'ELEVE EN ROUGE DANS UN COIN (BAS GAUCHE) */}
                         {isHighlightActive && (
