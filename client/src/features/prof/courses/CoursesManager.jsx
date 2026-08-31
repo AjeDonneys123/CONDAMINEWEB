@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './CoursesManager.css';
 
 const EMPTY_FORM = {
@@ -9,6 +9,7 @@ const EMPTY_FORM = {
 };
 
 const COURSE_DEBT_DISMISS_KEY = 'conda-course-debt-dismissals-v1';
+const WEB5E_STUDIO_URL = String(import.meta.env.VITE_WEB5E_URL || '').trim();
 
 const readDebtDismissals = (classId = '') => {
     try {
@@ -49,6 +50,36 @@ const getEditUrl = (value = '') => {
         : '';
 };
 
+const normalizeSuggestedChapterTitle = (value = '', fallbackIndex = 1) => {
+    const raw = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return `H${fallbackIndex} Chapitre ${fallbackIndex}`;
+    if (/^[HGE]\s*\d+\b/i.test(raw)) {
+        return raw.replace(/^([HGE])\s*(\d+)\s*[:.\-–—]?\s*/i, (_match, subject, number) => `${subject.toUpperCase()}${number} `).trim();
+    }
+    const match = raw.match(/^(histoire|g[ée]ographie|g[ée]o|emc|enseignement\s+moral(?:\s+et\s+civique)?)\s*[-–—:]?\s*(?:chapitre|chap\.?|ch\.?)?\s*(\d+)\s*[:.\-–—]?\s*(.*)$/i);
+    if (!match) return raw.slice(0, 140);
+    const normalizedSubject = match[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const prefix = normalizedSubject.startsWith('histoire') ? 'H' : normalizedSubject.startsWith('g') ? 'G' : 'E';
+    const name = String(match[3] || '').trim();
+    return `${prefix}${match[2]}${name ? ` ${name}` : ''}`.slice(0, 140);
+};
+
+function CourseSlideThumbnail({ slide }) {
+    const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
+    return <span className="course-split-thumb-frame">
+        {!loaded && <span className="course-split-slide-fallback">SLIDE {slide.slideNumber}</span>}
+        {!failed && <img
+            className={loaded ? 'loaded' : ''}
+            src={slide.thumbnailProxyUrl || slide.thumbnailPublicUrl}
+            alt={`Slide ${slide.slideNumber}`}
+            loading="lazy"
+            onLoad={() => setLoaded(true)}
+            onError={() => setFailed(true)}
+        />}
+    </span>;
+}
+
 const mergeCourseForCurrentView = (currentCourse, serverCourse) => {
     const currentSectionId = String(currentCourse?.courseSectionId || '');
     const serverSectionId = String(serverCourse?.courseSectionId || '');
@@ -75,13 +106,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [draggedCourseId, setDraggedCourseId] = useState('');
     const [openCourseSections, setOpenCourseSections] = useState({});
     const [sourceEditor, setSourceEditor] = useState(null);
+    const [splitEditor, setSplitEditor] = useState(null);
+    const [splittingCourse, setSplittingCourse] = useState(false);
     const [debtStudents, setDebtStudents] = useState([]);
     const [dismissedDebtIds, setDismissedDebtIds] = useState({});
+    const [animationEditor, setAnimationEditor] = useState(null);
+    const [savingAnimation, setSavingAnimation] = useState(false);
+    const animationFrameRef = useRef(null);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
     const activeCourses = useMemo(() => courses
-        .filter((course) => course.isEnabled !== false)
+        .filter((course) => course.isEnabled !== false && !course.isSourcePresentation)
         .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'fr', { numeric: true, sensitivity: 'base' })), [courses]);
     const visibleDebtStudents = useMemo(() => {
         const now = Date.now();
@@ -401,6 +437,161 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
     };
 
+    const openCourseSplitter = async (course) => {
+        if (!course?.slidesUrl) return;
+        setSourceEditor(null);
+        setSplitEditor({
+            course,
+            sourceSlidesUrl: course.slidesUrl,
+            chapters: [],
+            draftTitle: '',
+            draftStart: 1,
+            draftEnd: 1,
+            editingChapterIndex: null,
+            slides: [],
+            loadingSlides: true,
+            selectionStart: null,
+            error: ''
+        });
+        try {
+            const response = await fetch('/api/learning/slides/manifest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ presentationUrl: course.slidesUrl, outlineOnly: true })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Chargement des slides impossible');
+            const existingChildren = courses
+                .filter((item) => String(item.sourceCourseId || '') === String(course._id))
+                .map((item) => {
+                    const slides = Array.isArray(data.slides) ? data.slides : [];
+                    const resolveAnchor = (anchor) => {
+                        const objectIndex = slides.findIndex((slide) => String(slide.objectId || '') === String(anchor?.objectId || ''));
+                        if (objectIndex >= 0) return objectIndex + 1;
+                        const excerpt = String(anchor?.textExcerpt || '').trim().toLocaleLowerCase('fr');
+                        const textIndex = excerpt ? slides.findIndex((slide) => String(slide.text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('fr').startsWith(excerpt)) : -1;
+                        return textIndex >= 0 ? textIndex + 1 : Number(anchor?.originalSlideNumber || 0);
+                    };
+                    return {
+                        title: item.title,
+                        startSlide: resolveAnchor(item.sourceStartAnchor),
+                        endSlide: resolveAnchor(item.sourceEndAnchor)
+                    };
+                })
+                .filter((item) => item.startSlide > 0 && item.endSlide >= item.startSlide)
+                .sort((a, b) => a.startSlide - b.startSlide);
+            const detectedStarts = (data.slides || []).filter((slide) => /(?:^|\s)(?:chapitre|ch\s*\d+|h\s*\d+|g\s*\d+|e\s*\d+)\b/i.test(String(slide.text || '')));
+            const suggestedChapters = detectedStarts.map((slide, index) => {
+                const next = detectedStarts[index + 1];
+                const rawTitle = String(slide.text || '').replace(/\s+/g, ' ').trim();
+                return {
+                    title: normalizeSuggestedChapterTitle(rawTitle, index + 1),
+                    startSlide: Number(slide.slideNumber),
+                    endSlide: next ? Number(next.slideNumber) - 1 : (data.slides || []).length
+                };
+            });
+            const initialChapters = existingChildren.length ? existingChildren : suggestedChapters;
+            setSplitEditor((current) => current ? {
+                ...current,
+                sourceSlidesUrl: data.sourcePresentationUrl || course.slidesUrl,
+                slides: data.slides || [],
+                loadingSlides: false,
+                chapters: initialChapters,
+                draftStart: initialChapters.length ? Math.min((data.slides || []).length, initialChapters.at(-1).endSlide + 1) : 1,
+                draftEnd: initialChapters.length ? Math.min((data.slides || []).length, initialChapters.at(-1).endSlide + 1) : 1
+            } : current);
+        } catch (loadError) {
+            setSplitEditor((current) => current ? { ...current, loadingSlides: false, error: loadError.message } : current);
+        }
+    };
+
+    const selectSplitSlide = (slideNumber) => {
+        setSplitEditor((current) => {
+            if (!current) return current;
+            if (!current.selectionStart) return { ...current, selectionStart: slideNumber, draftStart: slideNumber, draftEnd: slideNumber };
+            const start = Math.min(current.selectionStart, slideNumber);
+            const end = Math.max(current.selectionStart, slideNumber);
+            return { ...current, selectionStart: null, draftStart: start, draftEnd: end };
+        });
+    };
+
+    const addSplitChapter = () => {
+        setSplitEditor((current) => {
+            if (!current) return current;
+            const startSlide = Math.max(1, Math.floor(Number(current.draftStart || 0)));
+            const endSlide = Math.max(1, Math.floor(Number(current.draftEnd || 0)));
+            if (!startSlide || !endSlide || endSlide < startSlide) return { ...current, error: 'La plage de slides est invalide.' };
+            const editingIndex = Number.isInteger(current.editingChapterIndex) ? current.editingChapterIndex : null;
+            const overlaps = current.chapters.some((chapter, index) => index !== editingIndex && startSlide <= chapter.endSlide && endSlide >= chapter.startSlide);
+            if (overlaps) return { ...current, error: 'Cette plage recouvre déjà un autre chapitre.' };
+            const title = String(current.draftTitle || `Chapitre ${current.chapters.length + 1}`).trim();
+            const nextChapter = { title, startSlide, endSlide };
+            const chapters = editingIndex === null
+                ? [...current.chapters, nextChapter]
+                : current.chapters.map((chapter, index) => index === editingIndex ? nextChapter : chapter);
+            return {
+                ...current,
+                chapters: chapters.sort((a, b) => a.startSlide - b.startSlide),
+                draftTitle: '',
+                draftStart: endSlide + 1,
+                draftEnd: endSlide + 1,
+                editingChapterIndex: null,
+                error: ''
+            };
+        });
+    };
+
+    const editSplitChapter = (chapter, index) => {
+        setSplitEditor((current) => current ? {
+            ...current,
+            draftTitle: chapter.title,
+            draftStart: chapter.startSlide,
+            draftEnd: chapter.endSlide,
+            editingChapterIndex: index,
+            error: ''
+        } : current);
+    };
+
+    const clearSplitChapterEditing = () => {
+        setSplitEditor((current) => {
+            if (!current || !Number.isInteger(current.editingChapterIndex)) return current;
+            const nextSlide = Math.max(0, ...current.chapters.map((chapter) => Number(chapter.endSlide || 0))) + 1;
+            return {
+                ...current,
+                draftTitle: '',
+                draftStart: nextSlide,
+                draftEnd: nextSlide,
+                editingChapterIndex: null,
+                error: ''
+            };
+        });
+    };
+
+    const createSplitCourses = async () => {
+        if (!splitEditor?.course || splitEditor.chapters.length < 1) {
+            setSplitEditor((current) => current ? { ...current, error: 'Ajoute au moins un chapitre.' } : current);
+            return;
+        }
+        if (!window.confirm(`Créer ou mettre à jour ${splitEditor.chapters.length} présentations depuis « ${splitEditor.course.title} » ? La source restera intacte.`)) return;
+        setSplittingCourse(true);
+        setSplitEditor((current) => current ? { ...current, error: '' } : current);
+        try {
+            const response = await fetch(`/api/courses/${splitEditor.course._id}/split`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chapters: splitEditor.chapters, presentationUrl: splitEditor.sourceSlidesUrl || splitEditor.course.slidesUrl })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Découpage impossible');
+            setSplitEditor(null);
+            await loadCourses();
+        } catch (splitError) {
+            setSplitEditor((current) => current ? { ...current, error: splitError.message } : current);
+        } finally {
+            setSplittingCourse(false);
+        }
+    };
+
     const toggleCourseEnabled = async (course) => {
         const courseId = String(course?._id || '');
         if (!courseId) return;
@@ -417,6 +608,54 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setCourses((current) => current.map((item) => String(item._id) === courseId ? mergeCourseForCurrentView(item, data) : item));
         } catch (updateError) {
             setError(updateError.message);
+        }
+    };
+
+    const openMascotAnimationStudio = () => {
+        if (!playingCourse) return;
+        const suggested = Math.max(1, Number(playingCourse.publishedUntilSlide || 1));
+        const raw = window.prompt('Sur quelle slide ajouter ou modifier la mascotte ?', String(suggested));
+        if (raw === null) return;
+        const slideNumber = Math.max(1, Math.floor(Number(raw || 1)));
+        const existing = (playingCourse.presentationAnimations || []).find((row) => Number(row?.slideNumber) === slideNumber)?.animationBlock || null;
+        const isLocal = ['localhost', '127.0.0.1'].includes(String(window.location.hostname || '').toLowerCase());
+        const studioUrl = WEB5E_STUDIO_URL || (isLocal ? 'http://localhost:5174' : '/projet-5e');
+        setAnimationEditor({ course: playingCourse, slideNumber, animationBlock: existing, studioUrl: `${studioUrl.replace(/\/$/, '')}/?embeddedAnimation=1` });
+    };
+
+    useEffect(() => {
+        if (!animationEditor) return undefined;
+        const receiveAnimation = (event) => {
+            if (event.source !== animationFrameRef.current?.contentWindow) return;
+            if (event.data?.type === 'conda-mascot-animation-ready' && animationEditor.animationBlock) {
+                animationFrameRef.current.contentWindow.postMessage({ type: 'conda-mascot-animation-load', animationBlock: animationEditor.animationBlock }, '*');
+            }
+            if (event.data?.type === 'conda-mascot-animation-change') {
+                setAnimationEditor((current) => current ? { ...current, animationBlock: event.data.animationBlock } : current);
+            }
+        };
+        window.addEventListener('message', receiveAnimation);
+        return () => window.removeEventListener('message', receiveAnimation);
+    }, [animationEditor?.course?._id, animationEditor?.slideNumber]);
+
+    const saveMascotAnimation = async () => {
+        if (!animationEditor?.course?._id || !animationEditor.animationBlock) return;
+        setSavingAnimation(true);
+        try {
+            const response = await fetch(`/api/courses/${animationEditor.course._id}/animation`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slideNumber: animationEditor.slideNumber, animationBlock: animationEditor.animationBlock })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Enregistrement de l’animation impossible');
+            setCourses((current) => current.map((course) => String(course._id) === String(data._id) ? mergeCourseForCurrentView(course, data) : course));
+            setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationAnimations: data.presentationAnimations || [] } : current);
+            setAnimationEditor(null);
+        } catch (animationError) {
+            setError(animationError.message);
+        } finally {
+            setSavingAnimation(false);
         }
     };
 
@@ -489,6 +728,40 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
     };
 
+    const reorderCourse = async (draggedId, targetCourse, placeAfter = false) => {
+        const id = String(draggedId || '');
+        const targetId = String(targetCourse?._id || '');
+        if (!id || !targetId || id === targetId) return setDraggedCourseId('');
+        const destinationSectionId = String(targetCourse.courseSectionId || '');
+        const destination = courses
+            .filter((course) => String(course.courseSectionId || '') === destinationSectionId && String(course._id) !== id)
+            .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+        const targetIndex = destination.findIndex((course) => String(course._id) === targetId);
+        if (targetIndex < 0) return setDraggedCourseId('');
+        const draggedCourse = courses.find((course) => String(course._id) === id);
+        if (!draggedCourse) return setDraggedCourseId('');
+        destination.splice(targetIndex + (placeAfter ? 1 : 0), 0, { ...draggedCourse, courseSectionId: destinationSectionId });
+        const placements = destination.map((course, order) => ({ id: String(course._id), courseSectionId: destinationSectionId, order }));
+        const previous = courses;
+        setCourses((current) => current.map((course) => {
+            const placement = placements.find((item) => item.id === String(course._id));
+            return placement ? { ...course, courseSectionId: placement.courseSectionId, order: placement.order } : course;
+        }));
+        setDraggedCourseId('');
+        try {
+            const response = await fetch('/api/courses/placements/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ placements })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Réorganisation impossible');
+        } catch (moveError) {
+            setCourses(previous);
+            setError(moveError.message);
+        }
+    };
+
     const askPublishedSlideFromMarker = () => {
         if (!playingCourse) return;
         const currentValue = Math.max(0, Number(playingCourse.publishedUntilSlide || 0));
@@ -530,10 +803,69 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </label>
                         </fieldset>
                         <div className="course-source-modal-actions">
+                            <button type="button" className="course-split-open-button" onClick={() => openCourseSplitter(sourceEditor.course)}>✂ DÉCOUPER</button>
                             <button type="button" className="courses-secondary-button" onClick={() => setSourceEditor(null)}>ANNULER</button>
                             <button type="submit" className="courses-save-button">ENREGISTRER</button>
                         </div>
                     </form>
+                </div>
+            )}
+            {splitEditor && (
+                <div className="course-source-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="course-split-modal-title">
+                    <div className="course-split-modal" onDoubleClick={(event) => {
+                        if (event.target.closest('input, button, .course-split-chapters > div')) return;
+                        clearSplitChapterEditing();
+                    }}>
+                        <div className="course-source-modal-heading">
+                            <div>
+                                <span>✂ DÉCOUPAGE GOOGLE SLIDES</span>
+                                <h2 id="course-split-modal-title">Créer une présentation par chapitre</h2>
+                            </div>
+                            <button type="button" onClick={() => !splittingCourse && setSplitEditor(null)} aria-label="Fermer">×</button>
+                        </div>
+                        <p className="course-split-help">Clique sur la première puis la dernière miniature d’un chapitre. La présentation mère restera intacte dans Sources.</p>
+                        {splitEditor.error && <div className="course-split-error" role="alert"><span>{splitEditor.error}</span></div>}
+                        <div className="course-split-workspace">
+                            <div className="course-split-picker" aria-label="Miniatures de la présentation source">
+                                {splitEditor.loadingSlides && <div className="course-split-placeholder">CHARGEMENT DES MINIATURES…</div>}
+                                {!splitEditor.loadingSlides && splitEditor.slides.map((slide) => {
+                                    const number = Number(slide.slideNumber);
+                                    const selected = number >= Number(splitEditor.draftStart) && number <= Number(splitEditor.draftEnd);
+                                    const assigned = splitEditor.chapters.some((chapter, index) => index !== splitEditor.editingChapterIndex && number >= chapter.startSlide && number <= chapter.endSlide);
+                                    return <button type="button" key={slide.objectId || number} className={`${selected ? 'selected' : ''} ${assigned ? 'assigned' : ''}`} onClick={() => !assigned && selectSplitSlide(number)}>
+                                        <CourseSlideThumbnail slide={slide} />
+                                        <strong>SLIDE {number}</strong>
+                                    </button>;
+                                })}
+                            </div>
+                            <aside className="course-split-sidebar">
+                                <label>
+                                    <span>TITRE DU CHAPITRE</span>
+                                    <input type="text" value={splitEditor.draftTitle} onChange={(event) => setSplitEditor((current) => ({ ...current, draftTitle: event.target.value }))} placeholder="Ex. La Méditerranée antique" />
+                                </label>
+                                <div className="course-split-range-fields">
+                                    <label><span>DE LA SLIDE</span><input type="number" min="1" value={splitEditor.draftStart} onChange={(event) => setSplitEditor((current) => ({ ...current, draftStart: event.target.value }))} /></label>
+                                    <label><span>À LA SLIDE</span><input type="number" min="1" value={splitEditor.draftEnd} onChange={(event) => setSplitEditor((current) => ({ ...current, draftEnd: event.target.value }))} /></label>
+                                </div>
+                                <div className="course-split-selection">{splitEditor.selectionStart ? `Début choisi : slide ${splitEditor.selectionStart}. Clique la dernière slide.` : 'Clique deux miniatures pour choisir la plage.'}</div>
+                                <button type="button" className="course-split-add-button" onClick={addSplitChapter}>{Number.isInteger(splitEditor.editingChapterIndex) ? '✓ ENREGISTRER LES MODIFICATIONS' : '＋ AJOUTER CE CHAPITRE'}</button>
+                                {Number.isInteger(splitEditor.editingChapterIndex) && <button type="button" className="course-split-cancel-edit" onClick={clearSplitChapterEditing}>ANNULER LA MODIFICATION</button>}
+                                <div className="course-split-chapters">
+                                    <div className="course-split-chapters-heading">CHAPITRES AJOUTÉS <strong>{splitEditor.chapters.length}</strong></div>
+                                    {splitEditor.chapters.map((chapter, index) => (
+                                        <div key={`${chapter.startSlide}-${chapter.endSlide}`} className={splitEditor.editingChapterIndex === index ? 'selected' : ''} role="button" tabIndex="0" onClick={() => editSplitChapter(chapter, index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') editSplitChapter(chapter, index); }}>
+                                            <span><strong>{index + 1}. {chapter.title}</strong><small>Slides {chapter.startSlide}–{chapter.endSlide}</small></span>
+                                            <button type="button" onClick={(event) => { event.stopPropagation(); setSplitEditor((current) => ({ ...current, chapters: current.chapters.filter((_item, itemIndex) => itemIndex !== index), editingChapterIndex: current.editingChapterIndex === index ? null : (Number.isInteger(current.editingChapterIndex) && current.editingChapterIndex > index ? current.editingChapterIndex - 1 : current.editingChapterIndex) })); }} aria-label={`Retirer ${chapter.title}`}>×</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </aside>
+                        </div>
+                        <div className="course-split-actions">
+                            <button type="button" className="courses-secondary-button" onClick={() => setSplitEditor(null)} disabled={splittingCourse}>ANNULER</button>
+                            <button type="button" className={`courses-save-button ${splittingCourse ? 'is-working' : ''}`} onClick={createSplitCourses} disabled={splittingCourse || splitEditor.chapters.length < 1}>{splittingCourse ? 'CRÉATION GOOGLE SLIDES EN COURS…' : splitEditor.chapters.length ? `CRÉER ${splitEditor.chapters.length} PRÉSENTATION${splitEditor.chapters.length > 1 ? 'S' : ''}` : 'AJOUTE UN CHAPITRE CI-DESSUS'}</button>
+                        </div>
+                    </div>
                 </div>
             )}
             <header className="courses-heading">
@@ -630,35 +962,52 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                             <div className="active-course-shelf-list">
                                 {activeCourses.map((course) => (
-                                    <button key={course._id} type="button" onClick={() => openPresentation(course)}>
-                                        <span>{course.title}</span>
-                                        <strong>PRÉSENTER</strong>
-                                    </button>
+                                    <div className="active-course-shelf-item" key={course._id}>
+                                        <button type="button" className="active-course-present" onClick={() => openPresentation(course)}>
+                                            <span>{course.title}</span>
+                                            <strong>PRÉSENTER</strong>
+                                        </button>
+                                        <button type="button" className="active-course-disable" onClick={() => toggleCourseEnabled(course)} title="Inactiver cette présentation" aria-label={`Inactiver ${course.title}`}>×</button>
+                                    </div>
                                 ))}
                             </div>
                         </section>
                     )}
                     <div className="course-sections-stack">
-                        {[{ _id: '', name: 'SANS SECTION' }, ...[...courseSections].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true, sensitivity: 'base' }))].map((section) => {
+                        {[{ _id: '', name: 'SANS SECTION' }, ...[...courseSections].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true, sensitivity: 'base' })), { _id: 'sources', name: 'SOURCES' }].map((section) => {
                             const sectionId = String(section._id || '');
                             const rows = courses
                                 .filter((course) => String(course.courseSectionId || '') === sectionId)
                                 .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+                            const normalizedSectionName = String(section.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
                             const sectionStateKey = sectionId || 'unsectioned';
                             const isOpen = openCourseSections[sectionStateKey] === true;
+                            if (normalizedSectionName === 'HISTOIRE' && rows.length === 0) return null;
                             if (!sectionId && rows.length === 0 && courseSections.length > 0) return null;
+                            if (sectionId === 'sources' && rows.length === 0) return null;
                             return <section
                                 key={sectionId || 'unsectioned'}
                                 className={`course-drop-section ${draggedCourseId ? 'is-dragging' : ''}`}
                                 onDragOver={(event) => event.preventDefault()}
                                 onDrop={(event) => { event.preventDefault(); moveCourseToSection(draggedCourseId, sectionId); }}
                             >
-                                <button type="button" className="course-section-heading" onClick={() => setOpenCourseSections((current) => ({ ...current, [sectionStateKey]: !isOpen }))} aria-expanded={isOpen}>
+                                <button type="button" className={`course-section-heading ${sectionId === 'sources' && rows.some((row) => Number(row.uncoveredSlideCount || 0) > 0) ? 'has-uncovered-slides' : ''}`} onClick={() => setOpenCourseSections((current) => ({ ...current, [sectionStateKey]: !isOpen }))} aria-expanded={isOpen}>
                                     <span className="course-section-folder">{isOpen ? '📂' : '📁'}</span><strong>{section.name}</strong><small>{rows.length} présentation{rows.length > 1 ? 's' : ''}</small><span className="course-section-chevron">{isOpen ? '⌃' : '⌄'}</span>
                                 </button>
                                 {isOpen && <div className="courses-grid courses-grid-compact">{rows.map((course) => (
-                            <article className="course-compact-row" key={course._id}>
-                                <span className="course-drag-handle" draggable onDragStart={() => setDraggedCourseId(String(course._id))} onDragEnd={() => setDraggedCourseId('')} title="Glisser dans une section">⋮⋮</span>
+                            <article
+                                className={`course-compact-row ${course.isSourcePresentation && Number(course.uncoveredSlideCount || 0) > 0 ? 'source-has-gaps' : ''}`}
+                                key={course._id}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    const draggedId = event.dataTransfer.getData('text/plain') || draggedCourseId;
+                                    const bounds = event.currentTarget.getBoundingClientRect();
+                                    reorderCourse(draggedId, course, event.clientY > bounds.top + bounds.height / 2);
+                                }}
+                            >
+                                <span className="course-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(course._id)); setDraggedCourseId(String(course._id)); }} onDragEnd={() => setDraggedCourseId('')} title="Glisser pour réordonner ou changer de section">⋮⋮</span>
                                 <div className="course-compact-copy">
                                     <input
                                         className="course-inline-title"
@@ -668,20 +1017,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         onBlur={(event) => updateCourseTitle(course, event.target.value)}
                                         onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
                                     />
-                                    <textarea
+                                    {!course.isSourcePresentation && <textarea
                                         className="course-inline-description"
                                         defaultValue={course.description || ''}
                                         key={`${course._id}-${course.description || 'empty'}`}
                                         aria-label="Informations complémentaires"
-                                        placeholder="Ajoute ici quelques informations sur ce cours…"
+                                        placeholder="Notes facultatives…"
+                                        title="Notes facultatives — ce champ peut rester vide"
                                         rows="2"
                                         onBlur={(event) => updateCourseDescription(course, event.target.value)}
-                                    />
+                                    />}
+                                    {course.isSourcePresentation && Number(course.uncoveredSlideCount || 0) > 0 && <small className="course-source-warning">{course.uncoveredSlideCount} slide{course.uncoveredSlideCount > 1 ? 's' : ''} hors chapitre</small>}
                                 </div>
                                 <div className="course-compact-actions">
-                                    <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>
-                                    <button type="button" onClick={() => openModification(course)}>MODIFIER</button>
-                                    <button type="button" className={`course-enabled-button ${course.isEnabled !== false ? 'active' : ''}`} onClick={() => toggleCourseEnabled(course)} title={course.isEnabled !== false ? 'Masquer cette présentation aux élèves' : 'Rendre cette présentation visible aux élèves'}>{course.isEnabled !== false ? 'ACTIF' : 'INACTIF'}</button>
+                                    {!course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>}
+                                    {!course.isSourcePresentation && <button type="button" onClick={() => openModification(course)}>MODIFIER</button>}
+                                    {!course.isSourcePresentation && <button type="button" className={`course-enabled-button ${course.isEnabled !== false ? 'active' : ''}`} onClick={() => toggleCourseEnabled(course)} title={course.isEnabled !== false ? 'Masquer cette présentation aux élèves' : 'Rendre cette présentation visible aux élèves'}>{course.isEnabled !== false ? 'ACTIF' : 'INACTIF'}</button>}
+                                    {course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openCourseSplitter(course)}>↻ METTRE À JOUR</button>}
                                     <button type="button" className="course-source-pencil" onClick={() => changeCourseSource(course)} title="Modifier la source Google Slides" aria-label="Modifier la source Google Slides">✏️</button>
                                     <button className="course-delete-x" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>×</button>
                                 </div>
@@ -718,8 +1070,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <div className="course-debt-panel">
                                 <div className="course-debt-title">À régler</div>
                                 {visibleDebtStudents.map((student) => (
-                                    <div key={student.id} className="course-debt-name">
-                                        <span>{student.name}</span>
+                                    <div key={student.id} className={`course-debt-name ${student.status || 'incomplete'}`}>
+                                        <span>{student.status === 'punishment' ? 'Punition · ' : student.status === 'warning' ? 'Avertissement · ' : 'Travail incomplet · '}{student.name}</span>
                                         <button type="button" onClick={() => dismissDebtForCurrentHour(student.id)} title="Masquer jusqu’à la prochaine heure" aria-label={`Masquer ${student.name} jusqu’à la prochaine heure`}>×</button>
                                     </div>
                                 ))}
@@ -780,6 +1132,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             className="active"
                             onClick={() => setPlayerMode((current) => current === 'presentation' ? 'edit' : 'presentation')}
                         >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
+                        <button type="button" className="course-animation-button" onClick={openMascotAnimationStudio}>🎭 ANIMATION</button>
+                    </div>
+                </div>
+            )}
+            {animationEditor && (
+                <div className="course-animation-editor-backdrop" role="dialog" aria-modal="true" aria-label="Créateur de mascotte animée">
+                    <div className="course-animation-editor-window">
+                        <div className="course-animation-editor-heading">
+                            <div><strong>ANIMATION — SLIDE {animationEditor.slideNumber}</strong><span>{animationEditor.course.title}</span></div>
+                            <button type="button" onClick={() => !savingAnimation && setAnimationEditor(null)} aria-label="Fermer">×</button>
+                        </div>
+                        <iframe ref={animationFrameRef} src={animationEditor.studioUrl} title="Éditeur de mascotte animée" allow="microphone; clipboard-read; clipboard-write" />
+                        <div className="course-animation-editor-actions">
+                            <button type="button" className="courses-secondary-button" onClick={() => setAnimationEditor(null)} disabled={savingAnimation}>ANNULER</button>
+                            <button type="button" className="courses-save-button" onClick={saveMascotAnimation} disabled={savingAnimation || !animationEditor.animationBlock}>{savingAnimation ? 'ENREGISTREMENT…' : 'ENREGISTRER L’ANIMATION'}</button>
+                        </div>
                     </div>
                 </div>
             )}

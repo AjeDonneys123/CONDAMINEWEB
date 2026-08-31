@@ -228,13 +228,20 @@ router.get('/debts/:classId', async (req, res) => {
         const teacherId = String(req.query.teacherId || '').trim();
         const { clsObj, students } = await getStudentsForClassOrGroup(req.params.classId);
         if (!clsObj) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
-        const debts = students.filter((student) => {
+        const debts = students.map((student) => {
             const record = (student.behaviorRecords || []).find((item) => String(item?.teacherId || '') === teacherId);
-            return Boolean(record?.forcedSix || Number(record?.forcedSixCount || 0) > 0);
-        }).map((student) => ({
-            id: student._id,
-            name: `${String(student.nickname || student.firstName || '').trim()} ${String(student.lastName || '').trim()}`.trim()
-        })).sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+            const scores = Array.isArray(record?.scores) ? record.scores : [];
+            const punishment = scores.some((score) => Boolean(score?.punishment)) || (student.punishmentStatus && student.punishmentStatus !== 'NONE');
+            const workIncomplete = scores.some((score) => Boolean(score?.workIncomplete)) || Boolean(record?.workIncomplete);
+            const boardWarning = scores.some((score) => Boolean(score?.boardWarning));
+            const legacyDebt = Boolean(record?.forcedSix || Number(record?.forcedSixCount || 0) > 0);
+            if (!punishment && !workIncomplete && !boardWarning && !legacyDebt) return null;
+            return {
+                id: student._id,
+                name: `${String(student.nickname || student.firstName || '').trim()} ${String(student.lastName || '').trim()}`.trim(),
+                status: punishment ? 'punishment' : (workIncomplete || legacyDebt ? 'incomplete' : 'warning')
+            };
+        }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
         res.json(debts);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -291,6 +298,19 @@ router.get('/plan/:classId', async (req, res) => {
             Submission.find({}).lean(),
             GameProgress.find({}).lean()
         ]);
+        let nextLearningReference = learnings.reduce((max, learning) => Math.max(max, Number(learning.referenceNumber || 0)), 0) + 1;
+        const missingLearningReferences = learnings
+            .filter((learning) => Number(learning.referenceNumber || 0) < 1)
+            .sort((a, b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0));
+        if (missingLearningReferences.length) {
+            missingLearningReferences.forEach((learning) => {
+                learning.referenceNumber = nextLearningReference;
+                nextLearningReference += 1;
+            });
+            await LearningModule.bulkWrite(missingLearningReferences.map((learning) => ({
+                updateOne: { filter: { _id: learning._id }, update: { $set: { referenceNumber: learning.referenceNumber } } }
+            })), { ordered: false });
+        }
 
         const studentsWithIndicators = students.map(s => {
             const indicators = [];
@@ -303,6 +323,7 @@ router.get('/plan/:classId', async (req, res) => {
             let learningAssigned = 0;
             let learningOpened = 0;
             let learningFullyValidated = 0;
+            const learningReferences = [];
             hws.forEach(hw => {
                 const isAssigned = hw.isAllClass || (hw.assignedStudents || []).some(id => String(id) === sId);
                 if (isAssigned) {
@@ -334,7 +355,16 @@ router.get('/plan/:classId', async (req, res) => {
                 learningProgressValue += Math.max(0, Number(completion?.currentStep || 0));
                 if (completion) learningOpened += 1;
                 const validatedCount = Array.isArray(completion?.validatedStepIndexes) ? completion.validatedStepIndexes.length : 0;
-                if (completion?.completedAt || (m.steps || []).length > 0 && validatedCount >= (m.steps || []).length) learningFullyValidated += 1;
+                const totalSteps = Math.max(1, (m.steps || []).length);
+                const percent = completion?.completedAt ? 100 : Math.min(100, Math.round((validatedCount / totalSteps) * 100));
+                if (percent >= 100) learningFullyValidated += 1;
+                learningReferences.push({
+                    id: String(m._id),
+                    number: Number(m.referenceNumber || 0),
+                    title: String(m.title || 'Apprentissage'),
+                    percent,
+                    status: percent <= 0 ? 'red' : percent < 60 ? 'yellow' : percent < 100 ? 'light-green' : 'dark-green'
+                });
             });
             const hwAvg = hwNotes.length > 0
                 ? Math.round((hwNotes.reduce((a, b) => a + b, 0) / hwNotes.length) * 10) / 10
@@ -355,6 +385,7 @@ router.get('/plan/:classId', async (req, res) => {
                 learningStatus: learningAssigned === 0 || learningOpened === 0
                     ? 'yellow'
                     : (learningFullyValidated >= learningAssigned ? 'green' : 'orange'),
+                learningReferences: learningReferences.sort((a, b) => a.number - b.number),
                 myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || ""
             };
         });
@@ -414,6 +445,43 @@ router.post('/behavior', async (req, res) => {
                 if (remaining.length > 0 && remaining.length < scores.length) {
                     r.scores = remaining;
                     r.selectedScoreId = remaining[remaining.length - 1].id;
+                }
+            }
+        }
+        if (['TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'TOGGLE_SCORE_WARNING'].includes(type)) {
+            const scores = ensureScores();
+            const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
+            const score = scores.find(x => String(x.id) === scoreId) || scores[scores.length - 1];
+            r.selectedScoreId = score.id;
+            if (type === 'TOGGLE_SCORE_WARNING') {
+                score.boardWarning = !Boolean(score.boardWarning);
+            } else {
+                const field = type === 'TOGGLE_SCORE_PUNISHMENT' ? 'punishment' : 'workIncomplete';
+                const hadPenaltyReason = Boolean(score.punishment || score.workIncomplete);
+                score[field] = !Boolean(score[field]);
+                const hasPenaltyReason = Boolean(score.punishment || score.workIncomplete);
+                if (!hadPenaltyReason && hasPenaltyReason) {
+                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) - 9));
+                    score.penaltyAmount = 9;
+                } else if (hadPenaltyReason && !hasPenaltyReason) {
+                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) + Math.max(0, Number(score.penaltyAmount || 9))));
+                    score.penaltyAmount = 0;
+                }
+                r.workIncomplete = scores.some((item) => Boolean(item?.workIncomplete));
+                if (type === 'TOGGLE_SCORE_PUNISHMENT') {
+                    const hasAnyPunishment = scores.some((item) => Boolean(item?.punishment));
+                    if (hasAnyPunishment) {
+                        const assigned = await assignPunishmentTemplate(s, teacherId);
+                        if (!assigned) {
+                            s.punishmentStatus = 'PENDING';
+                            s.punishmentDueDate = new Date(Date.now() + PUNISHMENT_DUE_MS);
+                            resetLateMailState(s);
+                        }
+                    } else {
+                        s.punishmentStatus = 'NONE';
+                        s.punishmentDueDate = null;
+                        resetLateMailState(s);
+                    }
                 }
             }
         }

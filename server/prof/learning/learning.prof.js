@@ -916,9 +916,16 @@ router.post('/slides/manifest', async (req, res) => {
         const slideSelection = String(req.body?.slideSelection || '').trim();
         const filterCondition = String(req.body?.filterCondition || '').trim();
         const includeThumbnails = req.body?.includeThumbnails !== false;
+        const outlineOnly = req.body?.outlineOnly === true;
         if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
         const selectedSlides = parseSlideSelection(slideSelection);
-        const manifest = await ProfDrive.getGoogleSlidesManifest(presentationUrl, selectedSlides, filterCondition, includeThumbnails);
+        const preparedSource = outlineOnly
+            ? await ProfDrive.ensureNativeGoogleSlides(presentationUrl)
+            : null;
+        const sourcePresentationUrl = preparedSource?.editUrl || presentationUrl;
+        const manifest = outlineOnly
+            ? await ProfDrive.getGoogleSlidesOutline(sourcePresentationUrl)
+            : await ProfDrive.getGoogleSlidesManifest(presentationUrl, selectedSlides, filterCondition, includeThumbnails);
         const presentationId = String(manifest.presentationId || '');
         const slides = (Array.isArray(manifest.slides) ? manifest.slides : []).map((s) => ({
             ...s,
@@ -930,6 +937,8 @@ router.post('/slides/manifest', async (req, res) => {
             ok: true,
             presentationId,
             title: manifest.title,
+            sourcePresentationUrl,
+            convertedFromOffice: preparedSource?.converted === true,
             slides
         });
     } catch (e) {
@@ -1053,9 +1062,15 @@ router.get('/slides/thumbnail', async (req, res) => {
 
 router.get('/all', async (_req, res) => {
     try {
-        const rows = await LearningModule.find({}).sort({ createdAt: -1 }).lean();
+        const rows = await LearningModule.find({}).sort({ createdAt: 1, date: 1, _id: 1 }).lean();
         const updates = [];
+        let nextReferenceNumber = rows.reduce((max, row) => Math.max(max, Number(row.referenceNumber || 0)), 0) + 1;
         rows.forEach((row) => {
+            if (!Number.isInteger(Number(row.referenceNumber)) || Number(row.referenceNumber) < 1) {
+                row.referenceNumber = nextReferenceNumber;
+                nextReferenceNumber += 1;
+                updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { referenceNumber: row.referenceNumber } } } });
+            }
             if (typeof row.active !== 'boolean') {
                 row.active = row.isEnabled !== false;
                 updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { active: row.active, isEnabled: row.active } } } });
@@ -1066,7 +1081,7 @@ router.get('/all', async (_req, res) => {
             updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { steps: restored.steps } } } });
         });
         if (updates.length > 0) await LearningModule.bulkWrite(updates, { ordered: false });
-        res.json(rows);
+        res.json(rows.sort((a, b) => Number(b.referenceNumber || 0) - Number(a.referenceNumber || 0)));
     } catch (e) {
         res.status(500).json([]);
     }
@@ -1486,6 +1501,11 @@ router.post('/', async (req, res) => {
         data.generalSheetCourseDescription = String(data.generalSheetCourseDescription || '').trim().slice(0, 2000);
         if (!data.title) data.title = 'APPRENTISSAGE';
         await assertLearningChapterMatchesTargets(data);
+
+        if (!data._id && (!Number.isInteger(Number(data.referenceNumber)) || Number(data.referenceNumber) < 1)) {
+            const latest = await LearningModule.findOne({}).sort({ referenceNumber: -1 }).select('referenceNumber').lean();
+            data.referenceNumber = Math.max(0, Number(latest?.referenceNumber || 0)) + 1;
+        }
 
         const saved = data._id
             ? await LearningModule.findByIdAndUpdate(data._id, data, { new: true })

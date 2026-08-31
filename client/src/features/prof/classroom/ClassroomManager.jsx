@@ -2,6 +2,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ClassroomManager.css';
 
+const LearningReferenceBadges = ({ student }) => (Array.isArray(student?.learningReferences) ? student.learningReferences : []).map((learning) => (
+    <span
+        key={learning.id}
+        className={`learning-reference learning-reference-${learning.status || 'red'}`}
+        title={`${learning.number} — ${learning.title} : ${learning.percent}% validé`}
+    >{learning.number}</span>
+));
+
 export default function ClassroomManager({ globalClassId, user }) {
     const [students, setStudents] = useState([]);
     const [gridSize, setGridSize] = useState({ cols: 6, rows: 5 });
@@ -277,6 +285,10 @@ export default function ClassroomManager({ globalClassId, user }) {
         const selected = grades.find(g => String(g.id) === String(getMyStats(stu).selectedScoreId || ''));
         return selected || grades[grades.length - 1];
     };
+    const selectedGradeHas = (stu, field) => Boolean(getSelectedGrade(stu)?.[field]);
+    const getGradeStateClass = (grade) => grade?.punishment
+        ? 'punishment-debt'
+        : (grade?.workIncomplete ? 'incomplete-debt' : (grade?.boardWarning ? 'board-warning' : ''));
     const getStudentScore = (stu) => {
         const stats = getMyStats(stu);
         return Number(getSelectedGrade(stu)?.value ?? 15);
@@ -732,6 +744,31 @@ export default function ClassroomManager({ globalClassId, user }) {
                     r.selectedScoreId = remaining[remaining.length - 1].id;
                 }
             }
+            if (['TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'TOGGLE_SCORE_WARNING'].includes(type)) {
+                const requestedId = extra?.scoreId || r.selectedScoreId || scores[scores.length - 1].id;
+                const selected = scores.find(g => String(g.id) === String(requestedId)) || scores[scores.length - 1];
+                scores = scores.map((grade) => {
+                    if (String(grade.id) !== String(selected.id)) return grade;
+                    if (type === 'TOGGLE_SCORE_WARNING') return { ...grade, boardWarning: !Boolean(grade.boardWarning) };
+                    const field = type === 'TOGGLE_SCORE_PUNISHMENT' ? 'punishment' : 'workIncomplete';
+                    const hadPenaltyReason = Boolean(grade.punishment || grade.workIncomplete);
+                    const next = { ...grade, [field]: !Boolean(grade[field]) };
+                    const hasPenaltyReason = Boolean(next.punishment || next.workIncomplete);
+                    if (!hadPenaltyReason && hasPenaltyReason) {
+                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) - 9));
+                        next.penaltyAmount = 9;
+                    } else if (hadPenaltyReason && !hasPenaltyReason) {
+                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) + Number(next.penaltyAmount || 9)));
+                        next.penaltyAmount = 0;
+                    }
+                    return next;
+                });
+                r.selectedScoreId = selected.id;
+                r.workIncomplete = scores.some((grade) => Boolean(grade.workIncomplete));
+                if (type === 'TOGGLE_SCORE_PUNISHMENT') {
+                    newS.punishmentStatus = scores.some((grade) => Boolean(grade.punishment)) ? 'PENDING' : 'NONE';
+                }
+            }
             if (type === 'TOGGLE_FORCED_SIX') {
                 r.forcedSix = !r.forcedSix;
                 r.forcedSixCount = r.forcedSix ? Math.max(1, Number(r.forcedSixCount || 0)) : 0;
@@ -887,13 +924,13 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <div className="sc-realizations sc-realizations-inline">
                                     {getActivityTotals(student).homework > 0 && <span className="alpha-mini-stat hw" title="Devoir">{getActivityStats(student).homework}</span>}
                                     {getActivityTotals(student).game > 0 && <span className="alpha-mini-stat game" title="Jeu">{getActivityStats(student).game}</span>}
-                                    {getActivityTotals(student).learning > 0 && <span className={`alpha-mini-stat learning learning-${student.learningStatus || 'yellow'}`} title="Apprentissage : vert = tout validé, orange = partiel, jaune = non ouvert">{getActivityStats(student).learning}</span>}
+                                    <LearningReferenceBadges student={student} />
                                 </div>
                                 <div className="sc-avatar-row">
                                     <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 </div>
                                 <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
-                                <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className={`sc-score positive ${hasScoreDebt(student) && String(g.id) === String(getMyStats(student).forcedSixScoreId || getSelectedGrade(student)?.id) ? 'debt' : ''}`}>{formatScore(g.value)}</span>)}</div>
+                                <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className={`sc-score positive ${getGradeStateClass(g)} ${hasScoreDebt(student) && String(g.id) === String(getMyStats(student).forcedSixScoreId || getSelectedGrade(student)?.id) ? 'debt' : ''}`}>{formatScore(g.value)}</span>)}</div>
                             </div>
                         ) : ( <div className={`grid-cell-empty ${isOver ? 'drag-over' : ''}`}>+</div> )}
                     </div>
@@ -984,7 +1021,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                         <div className="alpha-grid-topline">
                                             {aTotals.homework > 0 && <span className="alpha-mini-stat hw">{aStats.homework}</span>}
                                             {aTotals.game > 0 && <span className="alpha-mini-stat game">{aStats.game}</span>}
-                                            {aTotals.learning > 0 && <span className={`alpha-mini-stat learning learning-${student.learningStatus || 'yellow'}`}>{aStats.learning}</span>}
+                                            <LearningReferenceBadges student={student} />
                                         </div>
                                         <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                         <div className={`sc-name ${stats.workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
@@ -1022,7 +1059,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     <span className="plan-match-real">
                                         {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
                                         {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
-                                        {aTotals.learning > 0 && <span className={`sc-real-badge learning learning-${s.learningStatus || 'yellow'}`}>{aStats.learning}</span>}
+                                        <LearningReferenceBadges student={s} />
                                     </span>
                                 </span>
                             </div>
@@ -1192,7 +1229,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         </div>
                         <div className="drawer-grid-complex">
                             <div className="drawer-grade-list">
-                                {getStudentGrades(selectedStudent).map(g => <button key={g.id} className={`drawer-grade-chip ${String(getSelectedGrade(selectedStudent)?.id) === String(g.id) ? 'selected' : ''} ${hasScoreDebt(selectedStudent) && String(g.id) === String(getMyStats(selectedStudent).forcedSixScoreId || getSelectedGrade(selectedStudent)?.id) ? 'debt' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'SELECT_SCORE', {scoreId:g.id}, {keepDrawerOpen:true})}>{formatScore(g.value)}</button>)}
+                                {getStudentGrades(selectedStudent).map(g => <button key={g.id} className={`drawer-grade-chip ${String(getSelectedGrade(selectedStudent)?.id) === String(g.id) ? 'selected' : ''} ${getGradeStateClass(g)} ${hasScoreDebt(selectedStudent) && String(g.id) === String(getMyStats(selectedStudent).forcedSixScoreId || getSelectedGrade(selectedStudent)?.id) ? 'debt' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'SELECT_SCORE', {scoreId:g.id}, {keepDrawerOpen:true})}>{formatScore(g.value)}</button>)}
                             </div>
                             <button className="act-btn btn-note" onClick={() => addBehavior(selectedStudent._id, 'ADD_SCORE', null, {keepDrawerOpen:true})}>+ AJOUTER NOTE</button>
                             <button
@@ -1201,14 +1238,15 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={() => addBehavior(selectedStudent._id, 'DELETE_SCORE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}
                             >SUPPRIMER NOTE</button>
                             {[-0.5,0.5].map(delta => <button key={delta} className={`act-btn ${delta < 0 ? 'btn-cross' : 'btn-bonus'}`} {...scoreHoldProps(selectedStudent, delta)}>{delta > 0 ? '+' : ''}{delta}</button>)}
-                            <div className="forced-six-actions">
-                                <button className="act-btn grade-toggle" disabled={hasScoreDebt(selectedStudent)} onClick={() => addBehavior(selectedStudent._id, 'ADD_FORCED_SIX', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>METTRE 6/20 · −9</button>
-                                <button className="act-btn grade-toggle remove" disabled={!hasScoreDebt(selectedStudent)} onClick={() => addBehavior(selectedStudent._id, 'REMOVE_FORCED_SIX', null, {keepDrawerOpen:true})}>DETTE RÉGLÉE · +9</button>
-                            </div>
                             <div className="student-alert-actions">
-                                <button className={`act-btn ${getMyStats(selectedStudent).workIncomplete ? 'grade-toggle active' : 'grade-toggle'}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_INCOMPLETE', null, {keepDrawerOpen:true})}>{getMyStats(selectedStudent).workIncomplete ? 'TRAVAIL COMPLET' : 'TRAVAIL INCOMPLET'}</button>
-                                <button className={`act-btn punishment-toggle ${selectedStudent.punishmentStatus !== 'NONE' ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, selectedStudent.punishmentStatus !== 'NONE' ? 'REMOVE_PUNISHMENT' : 'ADD_PUNISHMENT', null, {keepDrawerOpen:true})}>
-                                    {selectedStudent.punishmentStatus !== 'NONE' ? '⚖️ LEVER PUNITION' : '⚖️ PUNITION'}
+                                <button className={`act-btn grade-toggle ${selectedGradeHas(selectedStudent, 'workIncomplete') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_INCOMPLETE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                    {selectedGradeHas(selectedStudent, 'workIncomplete') ? '✓ TRAVAIL TERMINÉ · +9' : '🟨 TRAVAIL INCOMPLET · −9'}
+                                </button>
+                                <button className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                    {selectedGradeHas(selectedStudent, 'punishment') ? '✓ PUNITION FAITE · +9' : '🟥 PUNITION · −9'}
+                                </button>
+                                <button className={`act-btn board-warning-toggle ${selectedGradeHas(selectedStudent, 'boardWarning') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_WARNING', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                    {selectedGradeHas(selectedStudent, 'boardWarning') ? 'DÉSAVERTIR AU TABLEAU' : '⚠️ AVERTIR AU TABLEAU'}
                                 </button>
                             </div>
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>

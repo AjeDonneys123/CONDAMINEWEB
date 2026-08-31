@@ -456,6 +456,11 @@ function createAnimationBlockFromDraft(draft = {}) {
         frameUrlInput: '',
         soundUrl: String(draft.soundUrl || '').trim(),
         soundPitch: Math.max(0.5, Math.min(2, Number(draft.soundPitch || 1))),
+        speechCharacterDescription: '',
+        speechText: '',
+        speechVoiceURI: '',
+        speechRate: 1,
+        speechPitch: 1,
         startSec: 0,
         durationSec: Math.max(MIN_TIMELINE_ACTION_DURATION_SEC, Number(draft.durationSec || 2)),
         spritesOpen: false,
@@ -2771,6 +2776,7 @@ function AnimationBlockEditor({
   const recorderChunksRef = useRef([]);
   const audioTimelineRef = useRef(null);
   const timelineDragRef = useRef(null);
+  const timelineReorderRef = useRef({ actionId: '' });
   const actorDragStateRef = useRef(null);
   const actorResizeStateRef = useRef(null);
   const spriteResizeStateRef = useRef(null);
@@ -2810,6 +2816,8 @@ function AnimationBlockEditor({
   const [audioDurationSec, setAudioDurationSec] = useState(0);
   const [audioCurrentTimeSec, setAudioCurrentTimeSec] = useState(0);
   const [selectedActionId, setSelectedActionId] = useState('');
+  const [generatingSpeechActionId, setGeneratingSpeechActionId] = useState('');
+  const [speechGenerationError, setSpeechGenerationError] = useState('');
   const [loopFrameState, setLoopFrameState] = useState({ actionId: '', frameIndex: -1 });
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const actorDocked = block?.actorDocked !== false;
@@ -2905,7 +2913,8 @@ function AnimationBlockEditor({
 
   const actions = Array.isArray(block?.actions) && block.actions.length > 0
     ? normalizeTimelineActions(block.actions)
-    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', soundPitch: 1, startSec: 0, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
+    : [{ id: `action_${Date.now()}`, name: 'Parler', frames: [], frameUrlInput: '', soundUrl: '', soundPitch: 1, speechCharacterDescription: '', speechText: '', speechVoiceURI: '', speechRate: 1, speechPitch: 1, startSec: 0, durationSec: 2, spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }];
+  const [speechVoices, setSpeechVoices] = useState([]);
   const timelineTrackRef = useRef(null);
   const [timelineTrackWidth, setTimelineTrackWidth] = useState(0);
   const getOriginSpriteDimensions = () => ({
@@ -2924,6 +2933,13 @@ function AnimationBlockEditor({
     };
   };
   const baseAudioUrl = String(actions.find((action) => String(action?.soundUrl || '').trim())?.soundUrl || '').trim();
+  useEffect(() => {
+    if (!window.speechSynthesis) return undefined;
+    const loadVoices = () => setSpeechVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', loadVoices);
+  }, []);
   const totalTimelineSec = Math.max(
     1,
     Number(audioDurationSec || 0),
@@ -3278,6 +3294,17 @@ function AnimationBlockEditor({
   const updateRoot = (patch) => onChange?.({ ...block, ...patch, actions });
   const updateActions = (nextActions) => onChange?.({ ...block, actions: constrainTimelineActions(nextActions) });
 
+  const reorderTimelineAction = (draggedActionId, targetActionId) => {
+    const draggedIndex = actions.findIndex((action) => String(action.id || '') === String(draggedActionId || ''));
+    const targetIndex = actions.findIndex((action) => String(action.id || '') === String(targetActionId || ''));
+    if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) return;
+    const nextActions = actions.map((action) => ({ ...action }));
+    const [draggedAction] = nextActions.splice(draggedIndex, 1);
+    nextActions.splice(targetIndex, 0, draggedAction);
+    onChange?.({ ...block, actions: compactTimelineActions(nextActions) });
+    setSelectedActionId(String(draggedAction.id || ''));
+  };
+
   const flashNotice = (message) => {
     setImportNotice(message);
     window.setTimeout(() => setImportNotice(''), 1800);
@@ -3306,6 +3333,54 @@ function AnimationBlockEditor({
     updateActions(actions.map((action) => action.id === actionId ? { ...action, ...patch } : action));
   };
 
+  const generateAiSpeech = async (action) => {
+    const speechText = String(action?.speechText || '').trim();
+    if (!speechText) {
+      flashNotice('Ajoute d’abord le texte à prononcer.');
+      return;
+    }
+    setSpeechGenerationError('');
+    setGeneratingSpeechActionId(String(action.id || ''));
+    try {
+      const response = await fetch(resolveWeb5eApiUrl('/api/web5e/tts'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: speechText,
+          character: String(action.speechCharacterDescription || '').trim(),
+          voice: String(action.speechAiVoice || 'onyx')
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.audioUrl) throw new Error(data?.error || 'Génération vocale impossible.');
+      const audioUrl = resolveWeb5eAssetUrl(String(data.audioUrl || ''));
+      updateAction(action.id, { generatedSpeechUrl: audioUrl });
+      const preview = new Audio(audioUrl);
+      await preview.play();
+      flashNotice(data.cached ? 'Voix IA chargée.' : 'Voix IA générée et enregistrée.');
+    } catch (error) {
+      const message = String(error?.message || 'Génération vocale impossible.');
+      setSpeechGenerationError(message);
+      flashNotice(message);
+    } finally {
+      setGeneratingSpeechActionId('');
+    }
+  };
+
+  const playGeneratedSpeech = async (action) => {
+    const audioUrl = resolveWeb5eAssetUrl(String(action?.generatedSpeechUrl || '').trim());
+    if (!audioUrl) {
+      setSpeechGenerationError('Aucun MP3 IA n’est encore associé à cette action. Clique sur « Générer la voix IA ».');
+      return;
+    }
+    setSpeechGenerationError('');
+    try {
+      await new Audio(audioUrl).play();
+    } catch (_) {
+      setSpeechGenerationError('Le MP3 existe mais sa lecture a échoué. Régénère la voix.');
+    }
+  };
+
   const adjustSpriteSpeed = (actionId, delta) => {
     const action = actions.find((item) => item.id === actionId);
     if (!action) return;
@@ -3328,7 +3403,7 @@ function AnimationBlockEditor({
     const nextStartSec = Math.max(0, Number(lastAction?.startSec || 0) + Number(lastAction?.durationSec || 0));
     updateActions([
       ...actions,
-      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, frameDurationSec: 0.18, startSec: nextStartSec, durationSec: Math.max(2, MIN_TIMELINE_ACTION_DURATION_SEC), spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
+      { id: `action_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: `Action ${actions.length + 1}`, frames: [], frameUrlInput: '', soundUrl: baseAudioUrl || '', soundPitch: 1, speechCharacterDescription: '', speechText: '', speechVoiceURI: '', speechRate: 1, speechPitch: 1, frameDurationSec: 0.18, startSec: nextStartSec, durationSec: Math.max(2, MIN_TIMELINE_ACTION_DURATION_SEC), spritesOpen: false, spriteUrlOpen: false, spriteEditorOpen: false, selectedFrameIndex: 0 }
     ]);
   };
 
@@ -3755,7 +3830,7 @@ function AnimationBlockEditor({
           const ctx = canvas.getContext('2d');
           if (!ctx) return null;
           ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
-          return createSpriteFrame(canvas.toDataURL('image/png'));
+          return { ...createSpriteFrame(canvas.toDataURL('image/png')), width: rect.width, height: rect.height };
         })
         .filter(Boolean);
       if (!nextSlices.length) {
@@ -4289,6 +4364,7 @@ function AnimationBlockEditor({
         audio.pause();
       }
       setIsPlaying(false);
+      window.speechSynthesis?.cancel();
       sequencePlaybackRef.current = false;
       return;
     }
@@ -4317,14 +4393,39 @@ function AnimationBlockEditor({
         }, Math.max(50, Number(action.frameDurationSec || 0.18) * 1000));
       }
       let audio = null;
-      if (withAudio && action.soundUrl) {
+      const speechText = String(action.speechText || '').trim();
+      const generatedSpeechUrl = resolveWeb5eAssetUrl(String(action.generatedSpeechUrl || '').trim());
+      let speechPromise = null;
+      if (generatedSpeechUrl) {
+        try {
+          audio = new Audio(generatedSpeechUrl);
+          audio.play().catch(() => {});
+        } catch (_) {}
+      } else if (speechText && !String(action.speechCharacterDescription || '').trim() && window.speechSynthesis) {
+        speechPromise = new Promise((resolve) => {
+          const utterance = new SpeechSynthesisUtterance(speechText);
+          const selectedVoice = speechVoices.find((voice) => voice.voiceURI === String(action.speechVoiceURI || ''))
+            || speechVoices.find((voice) => String(voice.lang || '').toLowerCase().startsWith('fr'))
+            || speechVoices[0];
+          if (selectedVoice) utterance.voice = selectedVoice;
+          utterance.lang = selectedVoice?.lang || 'fr-FR';
+          utterance.rate = Math.max(0.5, Math.min(2, Number(action.speechRate || 1)));
+          utterance.pitch = Math.max(0.5, Math.min(2, Number(action.speechPitch || 1)));
+          utterance.onend = resolve;
+          utterance.onerror = resolve;
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        });
+      } else if (withAudio && action.soundUrl) {
         try {
           audio = new Audio(action.soundUrl);
           audio.playbackRate = Math.max(0.5, Math.min(2, Number(action.soundPitch || 1)));
           audio.play().catch(() => {});
         } catch (_) {}
       }
-      if (audio) {
+      if (speechPromise) {
+        await Promise.race([speechPromise, new Promise((resolve) => window.setTimeout(resolve, 30000))]);
+      } else if (audio) {
         await new Promise((resolve) => {
           const onEnded = () => resolve(0);
           audio.addEventListener('ended', onEnded, { once: true });
@@ -4605,7 +4706,7 @@ function AnimationBlockEditor({
                     });
                   }}
                 >
-                  Audio
+                  Voix
                 </button>
                 {audioMenuOpen ? (
                   <div className="animation-audio-menu">
@@ -4701,6 +4802,7 @@ function AnimationBlockEditor({
                   <div
                     key={`timeline_${action.id}`}
                     className={`animation-sequence-segment ${isActive ? 'active' : ''}`}
+                    draggable={!readOnly}
                     style={{
                       left: trackWidthPx > 0 ? `${leftPx}px` : `${(Number(action.startSec || 0) / Math.max(totalTimelineSec, 0.1)) * 100}%`,
                       width: trackWidthPx > 0 ? `${widthPx}px` : `${Math.max((Number(action.durationSec || MIN_TIMELINE_ACTION_DURATION_SEC) / Math.max(totalTimelineSec, 0.1)) * 100, 4)}%`,
@@ -4709,6 +4811,29 @@ function AnimationBlockEditor({
                     onClick={(event) => {
                       event.stopPropagation();
                       showActionFrame(action);
+                    }}
+                    onDragStart={(event) => {
+                      if (readOnly) return;
+                      timelineReorderRef.current = { actionId: String(action.id || '') };
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', String(action.id || ''));
+                      event.currentTarget.classList.add('dragging');
+                    }}
+                    onDragOver={(event) => {
+                      if (!timelineReorderRef.current.actionId) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const draggedActionId = timelineReorderRef.current.actionId || event.dataTransfer.getData('text/plain');
+                      reorderTimelineAction(draggedActionId, action.id);
+                      timelineReorderRef.current = { actionId: '' };
+                    }}
+                    onDragEnd={(event) => {
+                      event.currentTarget.classList.remove('dragging');
+                      timelineReorderRef.current = { actionId: '' };
                     }}
                   >
                     <span>{action.name || `Action ${index + 1}`}</span>
@@ -4749,6 +4874,47 @@ function AnimationBlockEditor({
                   }}
                   placeholder={`Action ${index + 1}`}
                 />
+              </div>
+              <div className="animation-speech-editor">
+                <label className="animation-character-description-label">
+                  <span>Description du personnage et de sa voix</span>
+                  <textarea
+                    value={String(action.speechCharacterDescription || '')}
+                    onChange={(event) => updateAction(action.id, { speechCharacterDescription: event.target.value, generatedSpeechUrl: '' })}
+                    placeholder="Ex. Jeune soldat français, fatigué mais courageux, voix naturelle, débit posé…"
+                    rows={2}
+                  />
+                </label>
+                <textarea
+                  value={String(action.speechText || '')}
+                  onChange={(event) => updateAction(action.id, { speechText: event.target.value, generatedSpeechUrl: '' })}
+                  placeholder="Colle ici le texte que cette mascotte doit dire…"
+                  rows={3}
+                />
+                <div className="animation-speech-controls">
+                  <select value={String(action.speechAiVoice || 'onyx')} onChange={(event) => updateAction(action.id, { speechAiVoice: event.target.value, generatedSpeechUrl: '' })}>
+                    <option value="onyx">Onyx — grave</option>
+                    <option value="echo">Echo — posé</option>
+                    <option value="fable">Fable — narratif</option>
+                    <option value="ash">Ash — énergique</option>
+                    <option value="alloy">Alloy — neutre</option>
+                    <option value="coral">Coral — chaleureuse</option>
+                    <option value="nova">Nova — vive</option>
+                    <option value="sage">Sage — calme</option>
+                    <option value="shimmer">Shimmer — claire</option>
+                    <option value="verse">Verse — expressive</option>
+                  </select>
+                  <label>Vitesse <input type="range" min="0.6" max="1.5" step="0.05" value={Number(action.speechRate || 1)} onChange={(event) => updateAction(action.id, { speechRate: Number(event.target.value) })} /></label>
+                  <label>Tonalité <input type="range" min="0.5" max="2" step="0.05" value={Number(action.speechPitch || 1)} onChange={(event) => updateAction(action.id, { speechPitch: Number(event.target.value) })} /></label>
+                  <button type="button" disabled={generatingSpeechActionId === String(action.id || '')} onClick={() => void generateAiSpeech(action)}>
+                    {generatingSpeechActionId === String(action.id || '') ? 'Génération…' : (action.generatedSpeechUrl ? 'Régénérer la voix IA' : 'Générer la voix IA')}
+                  </button>
+                </div>
+                <div className={`animation-generated-speech-status ${action.generatedSpeechUrl ? 'ready' : 'missing'}`}>
+                  <span>{action.generatedSpeechUrl ? '✓ MP3 IA enregistré pour cette action' : 'Aucun MP3 IA généré : Play ne lancera pas de voix robotique.'}</span>
+                  <button type="button" disabled={!action.generatedSpeechUrl} onClick={() => void playGeneratedSpeech(action)}>▶ Écouter le MP3 IA</button>
+                </div>
+                {speechGenerationError ? <div className="animation-speech-error">{speechGenerationError}</div> : null}
               </div>
               <div className="animation-action-toolbar-row">
                 <div className="animation-compact-actions">
@@ -5247,7 +5413,7 @@ function AnimationBlockEditor({
   );
 }
 
-export default function App() {
+function MainWeb5eApp() {
   const animationCreateFileInputRef = useRef(null);
   const pendingSaveRef = useRef(null);
   const autosaveIntervalRef = useRef(null);
@@ -6785,4 +6951,40 @@ export default function App() {
       </section>
     </div>
   );
+}
+
+function EmbeddedMascotAnimationStudio() {
+  const [block, setBlock] = useState(() => createBlock('animation'));
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.data?.type !== 'conda-mascot-animation-load' || !event.data?.animationBlock) return;
+      setBlock(event.data.animationBlock);
+    };
+    window.addEventListener('message', onMessage);
+    window.parent?.postMessage({ type: 'conda-mascot-animation-ready' }, '*');
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+  const update = (nextBlock) => {
+    setBlock(nextBlock);
+    window.parent?.postMessage({ type: 'conda-mascot-animation-change', animationBlock: nextBlock }, '*');
+  };
+  return (
+    <div className="embedded-mascot-studio">
+      <AnimationBlockEditor
+        block={block}
+        onChange={update}
+        onRemove={() => update(createBlock('animation'))}
+        readOnly={false}
+        sectionKey="courses"
+        tabKey="slides"
+      />
+    </div>
+  );
+}
+
+export default function App() {
+  const embeddedAnimation = (() => {
+    try { return new URLSearchParams(window.location.search).get('embeddedAnimation') === '1'; } catch (_) { return false; }
+  })();
+  return embeddedAnimation ? <EmbeddedMascotAnimationStudio /> : <MainWeb5eApp />;
 }

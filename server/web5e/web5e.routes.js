@@ -17,6 +17,8 @@ const {
 const router = express.Router();
 const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-mobile');
 fs.mkdirSync(uploadDir, { recursive: true });
+const ttsUploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-tts');
+fs.mkdirSync(ttsUploadDir, { recursive: true });
 const uploadBatch = multer({ dest: uploadDir });
 
 const normalizeSectionKey = (value = '') => String(value || '').trim().toLowerCase();
@@ -36,6 +38,53 @@ function canManageWeb5eEntries(req) {
     if (isNamedJpVuillet(firstName, lastName)) return true;
     return role === 'teacher' || role === 'prof' || role === 'admin';
 }
+
+router.post('/tts', async (req, res) => {
+    try {
+        const apiKey = String(process.env.OPENAI_API_KEY || '').trim();
+        if (!apiKey) return res.status(503).json({ ok: false, error: 'OPENAI_API_KEY manquante côté serveur.' });
+        const text = String(req.body?.text || '').trim();
+        const character = String(req.body?.character || '').trim();
+        const allowedVoices = new Set(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse']);
+        const voice = allowedVoices.has(String(req.body?.voice || '')) ? String(req.body.voice) : 'onyx';
+        if (!text) return res.status(400).json({ ok: false, error: 'Le texte à prononcer est vide.' });
+        if (text.length > 4000) return res.status(400).json({ ok: false, error: 'Le texte est trop long (4000 caractères maximum).' });
+        const instructions = [
+            'Parle en français naturel et fluide. Évite absolument un ton robotique.',
+            character ? `Interprète ce personnage : ${character}` : '',
+            'Respecte le sens du texte, articule clairement et joue le personnage sans caricature excessive.'
+        ].filter(Boolean).join(' ');
+        const cacheKey = crypto.createHash('sha256').update(JSON.stringify({ text, character, voice })).digest('hex');
+        const filename = `${cacheKey}.mp3`;
+        const outputPath = path.join(ttsUploadDir, filename);
+        const publicUrl = `/uploads/web5e-tts/${filename}`;
+        if (fs.existsSync(outputPath)) return res.json({ ok: true, audioUrl: publicUrl, cached: true });
+
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'gpt-4o-mini-tts',
+                voice,
+                input: text,
+                instructions,
+                response_format: 'mp3'
+            })
+        });
+        if (!response.ok) {
+            const details = await response.text().catch(() => '');
+            return res.status(response.status).json({ ok: false, error: `Génération vocale impossible. ${details}`.slice(0, 800) });
+        }
+        const audioBuffer = Buffer.from(await response.arrayBuffer());
+        fs.writeFileSync(outputPath, audioBuffer);
+        return res.json({ ok: true, audioUrl: publicUrl, cached: false });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
 
 function finalizeUpload(file) {
     const ext = path.extname(file.originalname || '') || '.jpg';

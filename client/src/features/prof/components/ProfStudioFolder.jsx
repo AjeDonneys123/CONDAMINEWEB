@@ -527,7 +527,15 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                         const chapItems = uniqueItems.filter((it) => {
                             if (String(it.chapterId) !== String(chap._id)) return false;
                             if (!classFilter || !Array.isArray(it.targetClassrooms) || it.targetClassrooms.length === 0) return true;
-                            return it.targetClassrooms.some((cls) => normalizeClassKey(cls) === normalizedClassFilter);
+                            const targetsCurrentClass = it.targetClassrooms.some((cls) => normalizeClassKey(cls) === normalizedClassFilter);
+                            if (targetsCurrentClass) return true;
+                            // Dans le tableau du professeur, un chapitre partagé au
+                            // niveau doit conserver toutes ses activités visibles,
+                            // même si leur distribution élève cible une autre classe
+                            // de ce niveau. La cible exacte reste affichée sur la carte.
+                            if (!chap.sharedLevel) return false;
+                            const chapterLevel = normalizeLevel(chap.sharedLevel);
+                            return it.targetClassrooms.some((cls) => normalizeLevel(inferLevelFromName(cls)) === chapterLevel);
                         });
                         const isOpen = openChaps[chap._id];
                         const chapterActive = typeof chapterActiveOverrides[String(chap._id)] === 'boolean'

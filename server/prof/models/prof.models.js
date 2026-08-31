@@ -85,7 +85,15 @@ const StudentSchema = new mongoose.Schema({
         bonuses: { type: Number, default: 0 },
         weeksToRedemption: { type: Number, default: 3 },
         nextCrossRemovalAt: { type: Date, default: null }
-        ,scores: { type: [{ id: String, value: { type: Number, default: 15 }, createdAt: { type: Date, default: Date.now } }], default: [] }
+        ,scores: { type: [{
+            id: String,
+            value: { type: Number, default: 15 },
+            createdAt: { type: Date, default: Date.now },
+            punishment: { type: Boolean, default: false },
+            workIncomplete: { type: Boolean, default: false },
+            boardWarning: { type: Boolean, default: false },
+            penaltyAmount: { type: Number, default: 0, min: 0 }
+        }], default: [] }
         ,selectedScoreId: { type: String, default: '' }
         ,forcedSix: { type: Boolean, default: false }
         ,forcedSixCount: { type: Number, default: 0, min: 0 }
@@ -212,6 +220,7 @@ const Models = {
 
     LearningModule: getModel('LearningModule', {
         title: { type: String, default: "APPRENTISSAGE" },
+        referenceNumber: { type: Number, default: 0, min: 0, index: true },
         subject: { type: String, default: "GÉNÉRAL" },
         chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId,
@@ -322,6 +331,13 @@ const Models = {
             }],
             default: []
         },
+        isSourcePresentation: { type: Boolean, default: false, index: true },
+        sourceCourseId: { type: String, default: '', index: true },
+        sourceDestinationSectionId: { type: String, default: '' },
+        sourceSlideCount: { type: Number, default: 0, min: 0 },
+        sourceStartAnchor: { type: mongoose.Schema.Types.Mixed, default: null },
+        sourceEndAnchor: { type: mongoose.Schema.Types.Mixed, default: null },
+        presentationAnimations: { type: [mongoose.Schema.Types.Mixed], default: [] },
         date: { type: Date, default: Date.now }
     }),
 

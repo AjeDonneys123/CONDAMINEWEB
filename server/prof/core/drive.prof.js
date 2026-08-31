@@ -352,7 +352,7 @@ const ProfDrive = {
         return { sourcePresentationId: presentationId, sourceTitle, chapters };
     },
 
-    createGoogleSlidesRange: async (presentationRef = '', startSlide = 1, endSlide = 1, title = '') => {
+    createGoogleSlidesRange: async (presentationRef = '', startSlide = 1, endSlide = 1, title = '', options = {}) => {
         if (!oauth2Client) throw new Error("Drive non connecté");
         const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
         if (!presentationId) throw new Error("ID présentation introuvable");
@@ -365,9 +365,12 @@ const ProfDrive = {
         if (!Number.isInteger(start) || !Number.isInteger(end) || start > end) {
             throw Object.assign(new Error(`Sélection invalide. Choisis une plage comprise entre 1 et ${slides.length}.`), { status: 400 });
         }
+        const nameSuffix = Object.prototype.hasOwnProperty.call(options || {}, 'nameSuffix')
+            ? String(options.nameSuffix || '')
+            : ' — NotebookLM';
         const copy = await drive.files.copy({
             fileId: presentationId,
-            requestBody: { name: `${String(title || `Slides ${start}-${end}`).trim()} — NotebookLM`.slice(0, 180) },
+            requestBody: { name: `${String(title || `Slides ${start}-${end}`).trim()}${nameSuffix}`.slice(0, 180) },
             fields: 'id,name'
         });
         const copyId = String(copy?.data?.id || '');
@@ -396,6 +399,39 @@ const ProfDrive = {
             startSlide: start,
             endSlide: end,
             slideCount: end - start + 1
+        };
+    },
+
+    ensureNativeGoogleSlides: async (presentationRef = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const metadata = await drive.files.get({ fileId: presentationId, fields: 'id,name,mimeType' });
+        const mimeType = String(metadata?.data?.mimeType || '');
+        if (mimeType === 'application/vnd.google-apps.presentation') {
+            return {
+                presentationId,
+                editUrl: `https://docs.google.com/presentation/d/${presentationId}/edit`,
+                converted: false
+            };
+        }
+        const originalName = String(metadata?.data?.name || 'Présentation').replace(/\.(pptx?|odp)$/i, '').trim();
+        const copy = await drive.files.copy({
+            fileId: presentationId,
+            requestBody: {
+                name: `${originalName} — Google Slides`.slice(0, 180),
+                mimeType: 'application/vnd.google-apps.presentation'
+            },
+            fields: 'id,name,mimeType'
+        });
+        const convertedId = String(copy?.data?.id || '');
+        if (!convertedId) throw new Error('Conversion PowerPoint vers Google Slides impossible');
+        return {
+            presentationId: convertedId,
+            editUrl: `https://docs.google.com/presentation/d/${convertedId}/edit`,
+            converted: true,
+            originalPresentationId: presentationId
         };
     },
 
@@ -601,6 +637,23 @@ const ProfDrive = {
             presentationId,
             title,
             slides: rows
+        };
+    },
+
+    getGoogleSlidesOutline: async (presentationRef = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        return {
+            presentationId,
+            title: String(pres?.data?.title || ''),
+            slides: (Array.isArray(pres?.data?.slides) ? pres.data.slides : []).map((slide, index) => ({
+                slideNumber: index + 1,
+                objectId: String(slide?.objectId || ''),
+                text: collectSlidesTextAndColors(slide?.pageElements || []).texts.join(' ').trim()
+            }))
         };
     },
 
