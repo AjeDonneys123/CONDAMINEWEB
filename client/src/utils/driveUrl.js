@@ -42,6 +42,7 @@ export function resolveDriveAssetUrl(url) {
     if (!raw) return "";
     if (raw.startsWith('blob:') || raw.startsWith('data:')) return raw;
     if (raw.startsWith('/api/proxy/')) return raw;
+    if (raw.startsWith('/uploads/')) return raw;
 
     const id = extractDriveFileId(raw);
     if (!id) {

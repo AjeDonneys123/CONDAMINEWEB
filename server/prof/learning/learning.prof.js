@@ -1692,18 +1692,34 @@ router.patch('/:id/enabled', async (req, res) => {
     }
 });
 
-router.post('/media/upload', learningMediaUpload.single('file'), (req, res) => {
+router.post('/media/upload', learningMediaUpload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Choisis un MP3 ou un fichier audio.' });
     const mimeType = String(req.file.mimetype || '');
-    if (!/^(audio|video)\//.test(mimeType) && !/\.(mp3|wav|m4a|aac|ogg|flac|mp4|webm)$/i.test(String(req.file.originalname || ''))) {
+    const displayName = String(req.file.originalname || 'Média').slice(0, 180);
+    if (!/^(audio|video)\//.test(mimeType) && !/\.(mp3|wav|m4a|aac|ogg|flac|mp4|webm)$/i.test(displayName)) {
         try { fs.unlinkSync(req.file.path); } catch (_) {}
         return res.status(400).json({ error: 'Seuls les fichiers audio et vidéo sont acceptés.' });
     }
-    res.json({
-        url: `/uploads/learning-media/${req.file.filename}`,
-        name: String(req.file.originalname || 'Média').slice(0, 180),
-        mimeType
-    });
+    try {
+        // Le disque de Render est éphémère : les médias pédagogiques doivent
+        // rester dans Drive, puis être diffusés par le proxy qui gère le Range.
+        const folderId = await ProfDrive.getOrCreateFolder('CONDA_LEARNING_MEDIA');
+        const driveFile = await ProfDrive.uploadFile(displayName, req.file.path, folderId);
+        return res.json({
+            url: `/api/proxy/${driveFile.id}`,
+            driveFileId: driveFile.id,
+            name: driveFile.name || displayName,
+            mimeType,
+            persistent: true
+        });
+    } catch (error) {
+        console.error('[LEARNING MEDIA] Upload Drive impossible:', error.message);
+        return res.status(503).json({
+            error: `Stockage durable impossible : ${error.message || 'Drive indisponible'}. Le fichier n’a pas été enregistré.`
+        });
+    } finally {
+        try { if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); } catch (_) {}
+    }
 });
 
 router.delete('/:id', async (req, res) => {
