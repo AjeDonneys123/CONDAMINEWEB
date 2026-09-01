@@ -105,26 +105,45 @@ export default function DilWorkspace({ user, frenchMode = false }) {
     const sourceUrl = URL.createObjectURL(photoFile);
     try {
       const image = await new Promise((resolve, reject) => { const node = new Image(); node.onload = () => resolve(node); node.onerror = reject; node.src = sourceUrl; });
-      // La fenêtre est maintenant rendue sur l'image elle-même. Une marge
-      // généreuse évite que la première lettre d'une ligne soit coupée.
-      const safety = 12;
-      const safeLeft = Math.max(0, crop.left - safety), safeTop = Math.max(0, crop.top - safety);
-      const safeRight = Math.max(0, crop.right - safety), safeBottom = Math.max(0, crop.bottom - safety);
-      const left = Math.round(image.width * safeLeft / 100), top = Math.round(image.height * safeTop / 100);
-      const width = Math.max(1, image.width - left - Math.round(image.width * safeRight / 100));
-      const height = Math.max(1, image.height - top - Math.round(image.height * safeBottom / 100));
-      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-      canvas.getContext('2d').drawImage(image, left, top, width, height, 0, 0, width, height);
-      return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      // Le cadre violet est exprimé en pourcentage de l'image rendue. Les
+      // mêmes pourcentages sont appliqués à ses dimensions naturelles : le
+      // JPEG envoyé à l'OCR ne contient ainsi QUE la zone visible du cadre.
+      const sourceWidth = Number(image.naturalWidth || image.width || 0);
+      const sourceHeight = Number(image.naturalHeight || image.height || 0);
+      if (!sourceWidth || !sourceHeight) throw new Error('Dimensions de la photo introuvables.');
+      const leftRatio = Math.max(0, Math.min(0.95, Number(crop.left || 0) / 100));
+      const rightRatio = Math.max(0, Math.min(0.95, Number(crop.right || 0) / 100));
+      const topRatio = Math.max(0, Math.min(0.95, Number(crop.top || 0) / 100));
+      const bottomRatio = Math.max(0, Math.min(0.95, Number(crop.bottom || 0) / 100));
+      const left = Math.round(sourceWidth * leftRatio);
+      const top = Math.round(sourceHeight * topRatio);
+      const right = Math.round(sourceWidth * (1 - rightRatio));
+      const bottom = Math.round(sourceHeight * (1 - bottomRatio));
+      const width = right - left;
+      const height = bottom - top;
+      if (width < 2 || height < 2) throw new Error('La zone cadrée est trop petite.');
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Création de la zone cadrée impossible.');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, left, top, width, height, 0, 0, width, height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.94));
+      if (!blob) throw new Error('Création de la photo recadrée impossible.');
+      return { blob, width, height };
     } finally { URL.revokeObjectURL(sourceUrl); }
   };
   const readPhoto = async () => {
     if (!photoFile) return;
     setPhotoBusy(true);
     try {
-      const image = await cropPhoto();
-      if (!image) throw new Error('Recadrage impossible.');
-      const form = new FormData(); form.append('image', image, 'document.jpg');
+      const cropped = await cropPhoto();
+      if (!cropped?.blob) throw new Error('Recadrage impossible.');
+      const croppedFile = new File([cropped.blob], `zone-${cropped.width}x${cropped.height}.jpg`, { type: 'image/jpeg' });
+      const form = new FormData(); form.append('image', croppedFile);
       const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId || 'preview')}/ocr`, { method: 'POST', body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error);
