@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
+const fetchNode = require('node-fetch');
+const FormData = require('form-data');
 const {
     Web5eSite,
     Web5eTab,
@@ -19,6 +21,8 @@ const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-mobile');
 fs.mkdirSync(uploadDir, { recursive: true });
 const ttsUploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-tts');
 fs.mkdirSync(ttsUploadDir, { recursive: true });
+const cutoutUploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-cutouts');
+fs.mkdirSync(cutoutUploadDir, { recursive: true });
 const uploadBatch = multer({ dest: uploadDir });
 
 const normalizeSectionKey = (value = '') => String(value || '').trim().toLowerCase();
@@ -38,6 +42,65 @@ function canManageWeb5eEntries(req) {
     if (isNamedJpVuillet(firstName, lastName)) return true;
     return role === 'teacher' || role === 'prof' || role === 'admin';
 }
+
+async function loadCutoutSource(imageUrl, req) {
+    const source = String(imageUrl || '').trim();
+    const dataMatch = source.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+    if (dataMatch) return { buffer: Buffer.from(dataMatch[2], 'base64'), mimeType: dataMatch[1] };
+
+    if (source.startsWith('/uploads/')) {
+        const publicRoot = path.resolve(process.cwd(), 'public');
+        const localPath = path.resolve(publicRoot, source.replace(/^\/+/, ''));
+        if (!localPath.startsWith(`${publicRoot}${path.sep}`) || !fs.existsSync(localPath)) {
+            throw new Error('Image locale introuvable.');
+        }
+        return { buffer: fs.readFileSync(localPath), mimeType: 'image/png' };
+    }
+
+    const absoluteUrl = source.startsWith('/')
+        ? `${req.protocol}://${req.get('host')}${source}`
+        : source;
+    if (!/^https?:\/\//i.test(absoluteUrl)) throw new Error('Format d’image non pris en charge.');
+    const response = await fetchNode(absoluteUrl);
+    if (!response.ok) throw new Error(`Image source inaccessible (${response.status}).`);
+    return {
+        buffer: await response.buffer(),
+        mimeType: String(response.headers.get('content-type') || 'image/png').split(';')[0]
+    };
+}
+
+router.post('/remove-background', async (req, res) => {
+    try {
+        const apiKey = String(process.env.REMOVE_BG_API_KEY || '').trim();
+        if (!apiKey) return res.status(503).json({ ok: false, error: 'REMOVE_BG_API_KEY manquante côté serveur.' });
+        const { buffer, mimeType } = await loadCutoutSource(req.body?.imageUrl, req);
+        if (!buffer.length) return res.status(400).json({ ok: false, error: 'Image vide.' });
+        if (buffer.length > 12 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'Image trop volumineuse (12 Mo maximum).' });
+
+        const cacheKey = crypto.createHash('sha256').update(buffer).digest('hex');
+        const filename = `${cacheKey}.png`;
+        const outputPath = path.join(cutoutUploadDir, filename);
+        const publicUrl = `/uploads/web5e-cutouts/${filename}`;
+        if (fs.existsSync(outputPath)) return res.json({ ok: true, imageUrl: publicUrl, cached: true });
+
+        const formData = new FormData();
+        formData.append('size', 'auto');
+        formData.append('image_file', buffer, { filename: 'sprite.png', contentType: mimeType });
+        const response = await fetchNode('https://api.remove.bg/v1.0/removebg', {
+            method: 'POST',
+            headers: { ...formData.getHeaders(), 'X-Api-Key': apiKey },
+            body: formData
+        });
+        if (!response.ok) {
+            const details = await response.text().catch(() => '');
+            return res.status(response.status).json({ ok: false, error: `Détourage IA impossible. ${details}`.slice(0, 800) });
+        }
+        fs.writeFileSync(outputPath, await response.buffer());
+        return res.json({ ok: true, imageUrl: publicUrl, cached: false });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message || 'Détourage IA impossible.' });
+    }
+});
 
 router.post('/tts', async (req, res) => {
     try {

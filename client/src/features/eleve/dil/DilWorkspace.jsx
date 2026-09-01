@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './DilWorkspace.css';
 import './DilCrop.css';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const tokenise = (text = '') => String(text || '').split(/(\s+|[^\p{L}\p{N}'’-]+)/u).filter(Boolean);
 const isWord = (value = '') => /[\p{L}]/u.test(value) && !/^\s+$/u.test(value);
@@ -64,7 +65,11 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   const [manualBusy, setManualBusy] = useState(false);
   const [manualListening, setManualListening] = useState(false);
   const [manualError, setManualError] = useState('');
+  const [newExpression, setNewExpression] = useState('');
+  const [newExpressionBusy, setNewExpressionBusy] = useState(false);
+  const [newExpressionError, setNewExpressionError] = useState('');
   const fileRef = useRef(null);
+  const manualSpeechRef = useRef(null);
 
   useEffect(() => {
     if (frenchMode) setMode('words');
@@ -229,19 +234,26 @@ export default function DilWorkspace({ user, frenchMode = false }) {
     setManualSaved(false); setManualWordId('');
   };
   const dictateManualWord = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return setManualError('La dictée vocale n’est pas disponible sur cet appareil.');
-    const recognition = new SpeechRecognition();
-    recognition.lang = manualLanguage === 'fr' ? 'fr-FR' : 'es-ES'; recognition.interimResults = false; recognition.maxAlternatives = 1;
-    recognition.onstart = () => setManualListening(true);
-    recognition.onresult = (event) => {
-      const value = event.results?.[0]?.[0]?.transcript?.trim() || '';
-      setManualWord(value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId('');
-      translateManualWord(value);
-    };
-    recognition.onerror = () => setManualError('La dictée n’a pas pu démarrer.');
-    recognition.onend = () => setManualListening(false);
-    recognition.start();
+    if (manualListening) {
+      manualSpeechRef.current?.stop?.();
+      manualSpeechRef.current = null;
+      setManualListening(false);
+      return;
+    }
+    setManualError('');
+    manualSpeechRef.current = startSpeechRecognitionWithFallback({
+      lang: manualLanguage === 'fr' ? 'fr-FR' : 'es-ES',
+      fallbackDurationMs: 5000,
+      onStart: () => setManualListening(true),
+      onFallbackStart: () => setManualError('Reconnaissance Google indisponible : transcription de secours en cours…'),
+      onResult: (value, meta) => {
+        if (meta?.source === 'native' && meta?.final === false) return;
+        setManualWord(value); setManualFrench(''); setManualSpanish(''); setManualSaved(false); setManualWordId(''); setManualError('');
+        translateManualWord(value);
+      },
+      onError: (error) => setManualError(error.message || 'La dictée a échoué.'),
+      onEnd: () => { setManualListening(false); manualSpeechRef.current = null; }
+    });
   };
   const current = words[trainingIndex % Math.max(1, words.length)];
   const learnedWords = useMemo(() => words
@@ -284,9 +296,37 @@ export default function DilWorkspace({ user, frenchMode = false }) {
     });
     if (response.ok) loadWords();
   };
+  const addStudentExpression = async (event) => {
+    event.preventDefault();
+    const french = String(newExpression || '').trim().replace(/\s+/g, ' ');
+    if (!french) return setNewExpressionError('Écris un mot ou une expression.');
+    setNewExpressionBusy(true);
+    setNewExpressionError('');
+    try {
+      if (preview || !studentId) {
+        const localWord = { _id: `preview_expression_${Date.now()}`, french, spanish: french, focusWords: [], mastered: false, createdAt: new Date().toISOString() };
+        setWords((previous) => [localWord, ...previous.filter((item) => normaliseExpressionWord(item.french) !== normaliseExpressionWord(french))]);
+      } else {
+        const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ french, spanish: french, focusWords: [] })
+        });
+        const saved = await response.json().catch(() => null);
+        if (!response.ok || !saved) throw new Error(saved?.error || 'Enregistrement impossible.');
+        setWords((previous) => [saved, ...previous.filter((item) => normaliseExpressionWord(item.french) !== normaliseExpressionWord(french))]);
+      }
+      setNewExpression('');
+      pronounceFrench(french);
+    } catch (error) {
+      setNewExpressionError(error.message || 'Enregistrement impossible.');
+    } finally {
+      setNewExpressionBusy(false);
+    }
+  };
 
   return <section className="dil-workspace">
-    <div className="dil-heading"><div><span>{frenchMode ? 'FRANÇAIS · MOTS ET EXPRESSIONS' : 'DIL · ESPAGNOL'}</span><h2>{frenchMode ? 'Lire et mémoriser' : 'Comprendre et apprendre'}</h2><p>{frenchMode ? 'Ton professeur peut ajouter des mots et expressions à cette liste.' : 'Les mots consultés sont gardés pour ton entraînement.'}</p></div><div className="dil-heading-stats"><div className="dil-known">{known} mot{known > 1 ? 's' : ''} connu{known > 1 ? 's' : ''}</div><div className="dil-added-hour">{addedThisHour} mot{addedThisHour > 1 ? 's' : ''} ajouté{addedThisHour > 1 ? 's' : ''} cette heure</div></div></div>
+    <div className="dil-heading"><div><span>{frenchMode ? 'FRANÇAIS · MOTS ET EXPRESSIONS' : 'DIL · ESPAGNOL'}</span><h2>{frenchMode ? 'Lire et mémoriser' : 'Comprendre et apprendre'}</h2><p>{frenchMode ? 'Ton professeur et toi pouvez ajouter des mots et expressions à cette liste.' : 'Les mots consultés sont gardés pour ton entraînement.'}</p></div><div className="dil-heading-stats"><div className="dil-known">{known} mot{known > 1 ? 's' : ''} connu{known > 1 ? 's' : ''}</div><div className="dil-added-hour">{addedThisHour} mot{addedThisHour > 1 ? 's' : ''} ajouté{addedThisHour > 1 ? 's' : ''} cette heure</div></div></div>
     <div className="dil-tabs">{!frenchMode && <button className={mode === 'translation' ? 'active' : ''} onClick={() => setMode('translation')}>📷 TRADUCTION</button>}<button className={mode === 'words' ? 'active' : ''} onClick={() => setMode('words')}>📚 {frenchMode ? 'MES MOTS ET EXPRESSIONS' : 'MES MOTS'}</button><button className={mode === 'training' ? 'active' : ''} onClick={() => setMode('training')}>✍️ ENTRAÎNEMENT</button><button className={mode === 'learned' ? 'active' : ''} onClick={() => setMode('learned')}>🏆 MOTS APPRIS</button></div>
     {mode === 'translation' ? <div className="dil-card">
       <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={selectPhoto} />
@@ -306,7 +346,12 @@ export default function DilWorkspace({ user, frenchMode = false }) {
     </div> : mode === 'words' ? <div className="dil-card dil-my-words">
       <h3>📚 Mes mots</h3>
       <p>Du moins connu au plus connu : les mots avec le plus d’erreurs sont proposés en premier.</p>
-      {!wordsByNeed.length ? <p className="dil-empty">Ajoute des mots dans l’onglet Traduction pour les retrouver ici.</p> : <div className="dil-my-words-list">{wordsByNeed.map((word) => <article key={word._id || word.french} className={Number(word.correctStreak || 0) >= 4 ? 'known' : ''}><div className="dil-word-main"><div className="dil-word-pair">{frenchMode ? <>🇫🇷 <b>{word.french}</b></> : <>🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></>}</div>{frenchMode && <><p className="dil-focus-hint">Clique les mots que tu veux réviser en texte à trous.</p><div className="dil-focus-picker">{expressionWords(word.french).map((token, index) => { const selectedFocus = (word.focusWords || []).some((item) => normaliseExpressionWord(item) === normaliseExpressionWord(token)); return <button type="button" className={selectedFocus ? 'selected' : ''} onClick={() => toggleExpressionFocus(word, token)} key={`${token}-${index}`}>{selectedFocus ? '✓ ' : ''}{token}</button>; })}</div></>}{frenchMode && Array.isArray(word.focusWords) && word.focusWords.length > 0 && <div className="dil-focus-words">À écrire : {word.focusWords.join(' · ')}</div>}</div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><span className="wrong">✕ {Number(word.wrongCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
+      {frenchMode && <form className="dil-add-expression" onSubmit={addStudentExpression}>
+        <label htmlFor="student-new-expression">Ajouter un mot ou une expression</label>
+        <div><input id="student-new-expression" value={newExpression} onChange={(event) => { setNewExpression(event.target.value); setNewExpressionError(''); }} placeholder="Ex. prendre son courage à deux mains" maxLength={120} /><button type="submit" disabled={newExpressionBusy || !newExpression.trim()}>{newExpressionBusy ? 'AJOUT…' : '+ AJOUTER'}</button></div>
+        {newExpressionError && <small>{newExpressionError}</small>}
+      </form>}
+      {!wordsByNeed.length ? <p className="dil-empty">{frenchMode ? 'Ajoute ton premier mot ou ta première expression ci-dessus.' : 'Ajoute des mots dans l’onglet Traduction pour les retrouver ici.'}</p> : <div className="dil-my-words-list">{wordsByNeed.map((word) => <article key={word._id || word.french} className={Number(word.correctStreak || 0) >= 4 ? 'known' : ''}><div className="dil-word-main"><div className="dil-word-pair">{frenchMode ? <>🇫🇷 <b>{word.french}</b></> : <>🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></>}</div>{frenchMode && <><p className="dil-focus-hint">Clique les mots que tu veux réviser en texte à trous.</p><div className="dil-focus-picker">{expressionWords(word.french).map((token, index) => { const selectedFocus = (word.focusWords || []).some((item) => normaliseExpressionWord(item) === normaliseExpressionWord(token)); return <button type="button" className={selectedFocus ? 'selected' : ''} onClick={() => toggleExpressionFocus(word, token)} key={`${token}-${index}`}>{selectedFocus ? '✓ ' : ''}{token}</button>; })}</div></>}{frenchMode && Array.isArray(word.focusWords) && word.focusWords.length > 0 && <div className="dil-focus-words">À écrire : {word.focusWords.join(' · ')}</div>}</div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><span className="wrong">✕ {Number(word.wrongCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
     </div> : mode === 'learned' ? <div className="dil-card dil-my-words">
       <h3>🏆 Mots appris</h3>
       <p>Un mot apparaît ici après 4 bonnes réponses consécutives, sans erreur.</p>

@@ -3,6 +3,7 @@ import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 import { resolveBackendAssetUrl, resolveDriveAssetUrl } from '../../../utils/driveUrl';
 import SheetRichTextEditor from './SheetRichTextEditor';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const uid = () => `st_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const inferLearningLevelFromClass = (value = '') => {
@@ -1899,25 +1900,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
     const startQuestionCellDictation = (rowIdx = 0, field = 'question', zoneIdx = null) => {
         if (typeof window === 'undefined') return;
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            alert("Micro non disponible dans ce navigateur. Essaie Chrome.");
-            return;
-        }
         const keywordMatch = String(field || '').match(/^expectedKeyword:(\d+)$/);
         const keywordIdx = keywordMatch ? Number(keywordMatch[1]) : null;
         const targetField = keywordMatch ? 'expectedKeyword' : (field === 'answer' ? 'answer' : 'question');
-        const rec = new SpeechRecognition();
-        rec.lang = 'fr-FR';
-        rec.interimResults = false;
-        rec.continuous = false;
         setRecordingQuestionCell({ rowIdx, field: targetField, zoneIdx });
-        rec.onresult = (event) => {
-            const transcript = Array.from(event.results || [])
-                .map((result) => String(result?.[0]?.transcript || '').trim())
-                .filter(Boolean)
-                .join(' ')
-                .trim();
+        startSpeechRecognitionWithFallback({
+          lang: 'fr-FR', fallbackDurationMs: 8000,
+          onResult: (transcript) => {
             if (!transcript) return;
             if (zoneIdx !== null && Number.isFinite(Number(zoneIdx))) {
                 const map = getCurrentSectionQuestionsMap();
@@ -1962,16 +1951,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 [targetField]: `${previous}${separator}${transcript}`
             };
             updateQuestionPairsDraft(rows);
-        };
-        rec.onerror = () => {
+          },
+          onError: () => {
             alert("Dictée micro impossible. Vérifie l'autorisation du micro.");
-        };
-        rec.onend = () => setRecordingQuestionCell(null);
-        try {
-            rec.start();
-        } catch (_) {
-            setRecordingQuestionCell(null);
-        }
+          },
+          onEnd: () => setRecordingQuestionCell(null)
+        });
     };
 
     const handleAnnotMouseDown = (e) => {

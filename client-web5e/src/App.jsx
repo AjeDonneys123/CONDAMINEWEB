@@ -784,6 +784,79 @@ async function autoRemoveBgFromDataUrl(dataUrl) {
   });
 }
 
+async function removeConnectedEdgeBackground(dataUrl) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx || !canvas.width || !canvas.height) return resolve(dataUrl);
+      try {
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const { width, height } = canvas;
+        const buckets = new Map();
+        const addEdgeSample = (x, y) => {
+          const offset = ((y * width) + x) * 4;
+          if (pixels.data[offset + 3] < 20) return;
+          const r = pixels.data[offset];
+          const g = pixels.data[offset + 1];
+          const b = pixels.data[offset + 2];
+          const key = `${Math.round(r / 24)},${Math.round(g / 24)},${Math.round(b / 24)}`;
+          const row = buckets.get(key) || { count: 0, r: 0, g: 0, b: 0 };
+          row.count += 1; row.r += r; row.g += g; row.b += b;
+          buckets.set(key, row);
+        };
+        for (let x = 0; x < width; x += Math.max(1, Math.floor(width / 160))) {
+          addEdgeSample(x, 0); addEdgeSample(x, height - 1);
+        }
+        for (let y = 0; y < height; y += Math.max(1, Math.floor(height / 160))) {
+          addEdgeSample(0, y); addEdgeSample(width - 1, y);
+        }
+        const dominant = [...buckets.values()].sort((a, b) => b.count - a.count)[0];
+        if (!dominant) return resolve(dataUrl);
+        const target = { r: dominant.r / dominant.count, g: dominant.g / dominant.count, b: dominant.b / dominant.count };
+        const visited = new Uint8Array(width * height);
+        const queue = [];
+        const isBackground = (index) => {
+          const offset = index * 4;
+          if (pixels.data[offset + 3] < 20) return true;
+          const dr = pixels.data[offset] - target.r;
+          const dg = pixels.data[offset + 1] - target.g;
+          const db = pixels.data[offset + 2] - target.b;
+          return Math.sqrt((dr * dr) + (dg * dg) + (db * db)) <= 82;
+        };
+        const enqueue = (index) => {
+          if (index < 0 || index >= visited.length || visited[index] || !isBackground(index)) return;
+          visited[index] = 1; queue.push(index);
+        };
+        for (let x = 0; x < width; x += 1) { enqueue(x); enqueue(((height - 1) * width) + x); }
+        for (let y = 0; y < height; y += 1) { enqueue(y * width); enqueue((y * width) + width - 1); }
+        for (let cursor = 0; cursor < queue.length; cursor += 1) {
+          const index = queue[cursor];
+          const x = index % width;
+          if (x > 0) enqueue(index - 1);
+          if (x < width - 1) enqueue(index + 1);
+          if (index >= width) enqueue(index - width);
+          if (index < width * (height - 1)) enqueue(index + width);
+        }
+        for (let index = 0; index < visited.length; index += 1) {
+          if (visited[index]) pixels.data[(index * 4) + 3] = 0;
+        }
+        ctx.putImageData(pixels, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (_) {
+        resolve(dataUrl);
+      }
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
+
 function buildDirectStudentProfile({ firstName = '', lastName = '', className = '' } = {}) {
   const safeFirst = String(firstName || '').trim();
   const safeLast = String(lastName || '').trim();
@@ -2818,6 +2891,8 @@ function AnimationBlockEditor({
   const [selectedActionId, setSelectedActionId] = useState('');
   const [generatingSpeechActionId, setGeneratingSpeechActionId] = useState('');
   const [speechGenerationError, setSpeechGenerationError] = useState('');
+  const [aiCutoutActionId, setAiCutoutActionId] = useState('');
+  const [openSpriteEditorActionId, setOpenSpriteEditorActionId] = useState('');
   const [loopFrameState, setLoopFrameState] = useState({ actionId: '', frameIndex: -1 });
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const actorDocked = block?.actorDocked !== false;
@@ -3517,9 +3592,8 @@ function AnimationBlockEditor({
   };
 
   const toggleSpriteEditorOpen = (actionId) => {
-    updateActions(actions.map((action) => (
-      action.id === actionId ? { ...action, spriteEditorOpen: !action.spriteEditorOpen } : action
-    )));
+    setOpenSpriteEditorActionId((current) => String(current) === String(actionId) ? '' : String(actionId));
+    setEraserActive(false);
   };
 
   const selectFrame = (actionId, frameIndex) => {
@@ -3629,10 +3703,10 @@ function AnimationBlockEditor({
     if (!action) return;
     const nextFrames = await Promise.all((action.frames || []).map(async (frame) => {
       const normalizedFrame = typeof frame === 'string' ? createSpriteFrame(frame) : frame;
-      const nextUrl = await autoRemoveBgFromDataUrl(String(normalizedFrame?.url || ''));
+      const nextUrl = await removeConnectedEdgeBackground(String(normalizedFrame?.url || ''));
       return { ...normalizedFrame, url: nextUrl };
     }));
-    const nextActorUrl = block?.actorImageUrl ? await autoRemoveBgFromDataUrl(String(block.actorImageUrl || '')) : block?.actorImageUrl;
+    const nextActorUrl = block?.actorImageUrl ? await removeConnectedEdgeBackground(String(block.actorImageUrl || '')) : block?.actorImageUrl;
     onChange?.({
       ...block,
       actorImageUrl: nextActorUrl || '',
@@ -3643,7 +3717,7 @@ function AnimationBlockEditor({
     if (Number(action.selectedFrameIndex) === -1 && nextActorUrl) {
       setActorState((prev) => ({ ...prev, frameUrl: nextActorUrl }));
     }
-    flashNotice('Detourage applique');
+    flashNotice(`${nextFrames.length + (nextActorUrl ? 1 : 0)} sprites détourés`);
   };
 
   const autoCutoutSelectedSprite = async (actionId) => {
@@ -3664,6 +3738,62 @@ function AnimationBlockEditor({
     if (!nextUrl) return;
     updateFrame(actionId, selectedIndex, { url: nextUrl });
     flashNotice('Sprite detoure');
+  };
+
+  const aiCutoutSelectedSprite = async (actionId) => {
+    const action = actions.find((item) => item.id === actionId);
+    if (!action || aiCutoutActionId) return;
+    const sourceFrames = (action.frames || []).map((frame) => (
+      typeof frame === 'string' ? createSpriteFrame(frame) : frame
+    )).filter((frame) => String(frame?.url || '').trim());
+    const actorSourceUrl = String(block?.actorImageUrl || '').trim();
+    const total = sourceFrames.length + (actorSourceUrl ? 1 : 0);
+    if (!total) {
+      flashNotice('Aucun sprite à détourer');
+      return;
+    }
+    setAiCutoutActionId(String(actionId));
+    try {
+      let completed = 0;
+      let usedFallback = false;
+      const cutoutOne = async (sourceUrl) => {
+        setImportNotice(`Détourage ${completed + 1}/${total}…`);
+        try {
+          const response = await fetch(resolveWeb5eApiUrl('/api/web5e/remove-background'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl: sourceUrl })
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data?.imageUrl) return resolveWeb5eAssetUrl(data.imageUrl);
+        } catch (_) {}
+        usedFallback = true;
+        return removeConnectedEdgeBackground(sourceUrl);
+      };
+
+      let nextActorUrl = actorSourceUrl;
+      if (actorSourceUrl) {
+        nextActorUrl = await cutoutOne(actorSourceUrl);
+        completed += 1;
+      }
+      const nextFrames = [];
+      for (const frame of sourceFrames) {
+        const nextUrl = await cutoutOne(String(frame.url || ''));
+        nextFrames.push({ ...frame, url: nextUrl });
+        completed += 1;
+      }
+      onChange?.({
+        ...block,
+        actorImageUrl: nextActorUrl,
+        actions: actions.map((item) => item.id === actionId ? { ...item, frames: nextFrames } : item)
+      });
+      if (nextActorUrl) setActorState((prev) => ({ ...prev, frameUrl: nextActorUrl }));
+      flashNotice(`${total} sprites détourés${usedFallback ? ' automatiquement' : ' par IA'}`);
+    } catch (error) {
+      flashNotice(String(error?.message || 'Détourage impossible'));
+    } finally {
+      setAiCutoutActionId('');
+    }
   };
 
   const startSpriteResize = (event, actionId, frameIndex, corner) => {
@@ -5044,13 +5174,26 @@ function AnimationBlockEditor({
                       Ciseaux
                     </button>
                     <button type="button" onClick={() => toggleSpriteEditorOpen(action.id)}>Edition</button>
-                    <button type="button" onClick={() => void autoCutoutSelectedSprite(action.id)}>Detourer</button>
+                    <button type="button" onClick={() => void autoCutoutActionSprites(action.id)}>Détourer tout</button>
+                    <button
+                      type="button"
+                      className="animation-ai-cutout-button"
+                      disabled={Boolean(aiCutoutActionId)}
+                      onClick={() => void aiCutoutSelectedSprite(action.id)}
+                    >
+                      {aiCutoutActionId === String(action.id) ? 'Détourage IA…' : '✨ Détourer tout IA'}
+                    </button>
                   </div>
                   <input ref={(node) => { actionFileInputRefs.current[action.id] = node; }} type="file" accept="image/*" multiple className="hidden-file-input" onChange={(e) => void appendFrames(action.id, e.target.files)} />
                 </div>
               )}
-              {!readOnly && action.spriteEditorOpen ? (
-                <div className="animation-editor-detached-shell">
+              {!readOnly && String(openSpriteEditorActionId) === String(action.id) ? (
+                <div className="animation-editor-detached-shell" onClick={() => setOpenSpriteEditorActionId('')}>
+                  <div className="animation-editor-detached-window" onClick={(event) => event.stopPropagation()}>
+                    <div className="animation-editor-detached-head">
+                      <strong>Édition du sprite</strong>
+                      <button type="button" onClick={() => setOpenSpriteEditorActionId('')}>×</button>
+                    </div>
                   {(() => {
                 const isOriginalSelected = Number(action.selectedFrameIndex) === -1;
                 const selectedFrame = isOriginalSelected ? null : action.frames?.[action.selectedFrameIndex || 0];
@@ -5214,6 +5357,7 @@ function AnimationBlockEditor({
                   </div>
                 );
                   })()}
+                  </div>
                 </div>
               ) : null}
             </div>

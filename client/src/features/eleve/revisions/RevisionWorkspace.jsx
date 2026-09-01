@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import '../fiches/FicheWorkspace.css';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const normalize = (txt = '') =>
     String(txt || '')
@@ -151,22 +152,14 @@ export default function RevisionWorkspace({ revision, user, onQuit }) {
             stopRecording();
             return;
         }
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) return alert("Micro non disponible. Utilise la saisie clavier.");
-        const rec = new SR();
-        rec.lang = 'fr-FR';
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.onresult = (event) => {
-            let full = '';
-            for (let i = 0; i < event.results.length; i += 1) full += `${event.results[i][0].transcript} `;
-            setAnswerText(full.trim());
-        };
-        rec.onerror = () => setRecording(false);
-        rec.onend = () => setRecording(false);
+        const rec = startSpeechRecognitionWithFallback({
+            lang: 'fr-FR', continuous: true, interimResults: true, fallbackDurationMs: 10000,
+            onResult: (text) => setAnswerText(text),
+            onError: () => setRecording(false),
+            onEnd: () => setRecording(false)
+        });
         recogRef.current = rec;
         setRecording(true);
-        rec.start();
     };
 
     const validateCurrentAnswer = async () => {

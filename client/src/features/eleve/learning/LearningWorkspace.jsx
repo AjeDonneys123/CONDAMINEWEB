@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './LearningWorkspace.css';
 import { resolveBackendAssetUrl, resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
 import { awardStudentStars } from '../utils/studentStars';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const normalize = (txt = '') =>
     String(txt || '')
@@ -1328,21 +1329,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         });
     };
     const dictateBlank = (questionId, blankIndex) => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            setGateHint('La dictée n’est pas disponible dans ce navigateur.');
-            return;
-        }
-        const recognition = new SpeechRecognition();
         const micKey = `${String(questionId || '')}:${Number(blankIndex)}`;
-        recognition.lang = 'fr-FR';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-        recognition.onstart = () => setActiveBlankMic(micKey);
-        recognition.onresult = (event) => updateBlankAnswer(questionId, blankIndex, event.results?.[0]?.[0]?.transcript || '');
-        recognition.onerror = () => setGateHint('Micro indisponible : écris la réponse au clavier.');
-        recognition.onend = () => setActiveBlankMic((current) => current === micKey ? '' : current);
-        try { recognition.start(); } catch (_) {}
+        startSpeechRecognitionWithFallback({
+            lang: 'fr-FR', fallbackDurationMs: 5000,
+            onStart: () => setActiveBlankMic(micKey),
+            onResult: (text) => updateBlankAnswer(questionId, blankIndex, text),
+            onError: (error) => setGateHint(error.message || 'Micro indisponible : écris la réponse au clavier.'),
+            onEnd: () => setActiveBlankMic((current) => current === micKey ? '' : current)
+        });
     };
     const appendQuizAnswer = (quizKey, questionId, addition) => {
         const key = String(quizKey || '');
@@ -1997,34 +1991,25 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
     };
 
     const startStudyMic = () => {
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) {
-            setStudyMicError("Reconnaissance vocale non disponible.");
-            return;
-        }
         if (studyMicRecording || isAiSpeaking || !studyMicEnabled || !studyChatOpen) return;
         setStudyMicError('');
-        const rec = new SR();
-        rec.lang = 'fr-FR';
-        rec.interimResults = true;
-        rec.continuous = true;
-        rec.onresult = (event) => {
-            const text = Array.from(event.results).map((r) => r[0]?.transcript || '').join(' ').trim();
-            setStudyQuestion(text);
-        };
-        rec.onerror = () => {
+        const rec = startSpeechRecognitionWithFallback({
+            lang: 'fr-FR', interimResults: true, continuous: true, fallbackDurationMs: 10000,
+            onStart: () => setStudyMicRecording(true),
+            onResult: (text) => setStudyQuestion(text),
+            onError: (error) => {
             setStudyMicRecording(false);
-            setStudyMicError("Micro refusé ou indisponible.");
-        };
-        rec.onend = () => {
+            setStudyMicError(error.message || "Micro refusé ou indisponible.");
+            },
+            onEnd: () => {
             setStudyMicRecording(false);
             if (studyMicEnabled && studyChatOpen && !isAiSpeaking) {
                 setTimeout(() => {
                     startStudyMic();
                 }, 120);
             }
-        };
-        rec.start();
+            }
+        });
         studyRecognitionRef.current = rec;
         setStudyMicRecording(true);
     };

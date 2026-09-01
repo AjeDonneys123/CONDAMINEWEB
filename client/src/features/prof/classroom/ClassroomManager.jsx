@@ -1,6 +1,7 @@
 // @signatures: ClassroomManager, addBehavior, changeGrid, getMyStats, handleDragOver, handleDragStart, handleDrop, handleFileSelect, handleOpenStudent, loadData, moveStudentTo, renderGrid, renderHeaders, renderList, toggleSeparator
 import React, { useState, useEffect, useRef } from 'react';
 import './ClassroomManager.css';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const LearningReferenceBadges = ({ student }) => (Array.isArray(student?.learningReferences) ? student.learningReferences : []).map((learning) => (
     <span
@@ -135,63 +136,12 @@ export default function ClassroomManager({ globalClassId, user }) {
     }, [viewMode]);
 
     useEffect(() => {
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) {
-            setVoiceSupported(false);
-            return;
-        }
-        setVoiceSupported(true);
-        const recognition = new SR();
-        recognition.lang = 'fr-FR';
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-
-        recognition.onresult = (event) => {
-            const transcript = Array.from(event.results || [])
-                .map((r) => String(r?.[0]?.transcript || ''))
-                .join(' ')
-                .trim();
-            if (!transcript) return;
-            if (frenchMode) {
-                setFrenchExpression(transcript);
-                setFrenchKeywords([]);
-            } else if (currentViewModeRef.current === 'PLAN') {
-                setPlanFinder(transcript);
-                lastVoiceValueRef.current.PLAN = transcript;
-            } else {
-                setSearchTerm(transcript);
-                lastVoiceValueRef.current.LIST = transcript;
-            }
-        };
-
-        recognition.onerror = () => {
-            setVoiceListening(false);
-        };
-
-        recognition.onend = () => {
-            if (keepListeningRef.current) {
-                try {
-                    recognition.start();
-                    setVoiceListening(true);
-                } catch (_) {
-                    setVoiceListening(false);
-                }
-            } else {
-                setVoiceListening(false);
-            }
-        };
-
-        speechRecognitionRef.current = recognition;
-        return () => {
-            keepListeningRef.current = false;
-            try { recognition.onresult = null; recognition.onend = null; recognition.onerror = null; recognition.stop(); } catch (_) {}
-            speechRecognitionRef.current = null;
-        };
-    }, [frenchMode]);
+        setVoiceSupported(Boolean((window.SpeechRecognition || window.webkitSpeechRecognition) || (navigator?.mediaDevices?.getUserMedia && window.MediaRecorder)));
+        return () => { speechRecognitionRef.current?.stop?.(); speechRecognitionRef.current = null; };
+    }, []);
 
     const toggleVoiceFinder = () => {
-        if (!voiceSupported || !speechRecognitionRef.current) return;
+        if (!voiceSupported) return;
         if (voiceListening) {
             keepListeningRef.current = false;
             try { speechRecognitionRef.current.stop(); } catch (_) {}
@@ -215,12 +165,17 @@ export default function ClassroomManager({ globalClassId, user }) {
             lastVoiceValueRef.current.LIST = String(searchTerm || '');
         }
         keepListeningRef.current = true;
-        try {
-            speechRecognitionRef.current.start();
-            setVoiceListening(true);
-        } catch (_) {
-            setVoiceListening(false);
-        }
+        speechRecognitionRef.current = startSpeechRecognitionWithFallback({
+            lang: 'fr-FR', continuous: true, interimResults: true, fallbackDurationMs: 8000,
+            onStart: () => setVoiceListening(true),
+            onResult: (transcript) => {
+                if (frenchMode) { setFrenchExpression(transcript); setFrenchKeywords([]); }
+                else if (currentViewModeRef.current === 'PLAN') { setPlanFinder(transcript); lastVoiceValueRef.current.PLAN = transcript; }
+                else { setSearchTerm(transcript); lastVoiceValueRef.current.LIST = transcript; }
+            },
+            onError: () => setVoiceListening(false),
+            onEnd: () => { setVoiceListening(false); speechRecognitionRef.current = null; }
+        });
     };
 
     const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, separators: newSeps }) }); } catch(e){} };

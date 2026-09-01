@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveBackendAssetUrl } from '../../../utils/driveUrl';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const SUCCESS_MESSAGE = "Bravo, vous avez terminé le processus de récupération. Votre travail est en cours de validation par le professeur.";
 
@@ -159,32 +160,27 @@ export default function ControlRecoveryWorkspace({ user, item, onQuit, onSaved }
   };
 
   const startDictation = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Micro non disponible. Utilise la saisie clavier.");
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
-    const rec = new SpeechRecognition();
-    rec.lang = 'fr-FR';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.onresult = (event) => {
-      const text = Array.from(event.results || []).map((r) => r?.[0]?.transcript || '').join(' ').trim();
+    const rec = startSpeechRecognitionWithFallback({
+      lang: 'fr-FR', continuous: true, interimResults: true, fallbackDurationMs: 10000,
+      onResult: (text) => {
       if (!text) return;
       updateQuestion(questionCursor, { studentAnswer: text });
-    };
-    rec.onerror = () => {
+      },
+      onError: () => {
       recognitionRef.current = null;
       setRecording(false);
       setMicMutedByUser(true);
-    };
-    rec.onend = () => {
+      },
+      onEnd: () => {
       recognitionRef.current = null;
       setRecording(false);
-    };
+      }
+    });
     recognitionRef.current = rec;
-    rec.start();
     setRecording(true);
   };
 

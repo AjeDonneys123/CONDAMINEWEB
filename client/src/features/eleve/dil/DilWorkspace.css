@@ -35,6 +35,13 @@
 .dil-manual-error{display:block;margin-top:8px;color:#dc2626;font-weight:800}
 .dil-my-words h3{margin:0;color:#312e81;font-size:25px}
 .dil-my-words>p{color:#64748b;font-weight:700}
+.dil-add-expression{margin:16px 0 20px;padding:15px;border:2px solid #c4b5fd;border-radius:16px;background:#faf8ff}
+.dil-add-expression label{display:block;margin-bottom:8px;color:#4c1d95;font-weight:900}
+.dil-add-expression>div{display:flex;gap:9px}
+.dil-add-expression input{flex:1;min-width:0;border:2px solid #ddd6fe;border-radius:11px;padding:11px 12px;font:inherit;font-weight:750;color:#1e1b4b}
+.dil-add-expression button{border:0;border-radius:11px;padding:11px 16px;background:#6d28d9;color:#fff;font-weight:900;cursor:pointer}
+.dil-add-expression button:disabled{opacity:.5;cursor:not-allowed}
+.dil-add-expression small{display:block;margin-top:7px;color:#dc2626;font-weight:800}
 .dil-my-words-list{display:grid;gap:10px}
 .dil-my-words-list article{display:flex;align-items:center;justify-content:space-between;gap:14px;border:2px solid #ddd6fe;border-radius:15px;padding:13px 15px;background:#fff}
 .dil-my-words-list article.known{border-color:#86efac;background:#f0fdf4}
@@ -82,5 +89,6 @@
 .dil-actions{align-items:flex-start;flex-direction:column}
 .dil-manual-word-row,.dil-manual-translation{align-items:stretch;flex-wrap:wrap}
 .dil-manual-input{width:100%;flex-basis:100%}
+.dil-add-expression>div{align-items:stretch;flex-direction:column}
 .dil-spanish{font-size:30px}
 }

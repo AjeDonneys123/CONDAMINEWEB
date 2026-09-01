@@ -1062,7 +1062,8 @@ router.post('/transcribe-audio', learningAudioUpload.single('audio'), async (req
         const model = String(process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe').trim();
         const form = new FormData();
         form.append('model', model);
-        form.append('language', 'fr');
+        const requestedLanguage = String(req.body?.language || 'fr').trim().toLowerCase();
+        form.append('language', /^[a-z]{2}$/.test(requestedLanguage) ? requestedLanguage : 'fr');
         form.append('response_format', 'json');
         const uploadedMime = String(req.file.mimetype || 'audio/webm').split(';')[0] || 'audio/webm';
         form.append('file', fs.createReadStream(tempPath), {

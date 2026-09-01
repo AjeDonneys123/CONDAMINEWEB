@@ -1,6 +1,7 @@
 // @signatures: HomeworkWorkspace, getModalConfig, handleInputCheck, handleModalAction, handleMouseDown, handleMouseMove, handleMouseUp, handleZoom, resolveSource, submitToIA
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Homework.css';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 // CORRECTION V380 : Résolution d'URL Intelligente
 const resolveSource = (url) => {
@@ -430,7 +431,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   }, [windowAction]);
 
   useEffect(() => {
-    const supportsSpeech = typeof window !== 'undefined' && (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+    const supportsSpeech = typeof window !== 'undefined' && Boolean((window.SpeechRecognition || window.webkitSpeechRecognition) || (navigator?.mediaDevices?.getUserMedia && window.MediaRecorder));
     setSpeechStatus({ supported: supportsSpeech, listening: false });
   }, []);
 
@@ -1011,21 +1012,13 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       setVerifyOralEvidence((prev) => ({ ...prev, used: true }));
       return;
     }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-    const rec = new SR();
-    rec.lang = 'fr-FR';
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.onstart = () => setSpeechStatus((prev) => ({ ...prev, listening: true }));
-    rec.onend = () => setSpeechStatus((prev) => ({ ...prev, listening: false }));
-    rec.onresult = (event) => {
-      const transcript = event?.results?.[0]?.[0]?.transcript || '';
-      if (!transcript) return;
-      handleTranscriptSignal(transcript);
-    };
-    rec.onerror = () => setSpeechStatus((prev) => ({ ...prev, listening: false }));
-    rec.start();
+    startSpeechRecognitionWithFallback({
+      lang: 'fr-FR', fallbackDurationMs: 8000,
+      onStart: () => setSpeechStatus((prev) => ({ ...prev, listening: true })),
+      onResult: (transcript) => handleTranscriptSignal(transcript),
+      onError: () => setSpeechStatus((prev) => ({ ...prev, listening: false })),
+      onEnd: () => setSpeechStatus((prev) => ({ ...prev, listening: false }))
+    });
   };
   const handleTranscriptSignal = (transcript = '') => {
     if (!transcript) return;
@@ -1042,38 +1035,26 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   };
   const startContinuousSpeechMonitor = () => {
     if (!oralRequired) return false;
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return false;
     try {
       if (monitorRecognitionRef.current) {
         try { monitorRecognitionRef.current.stop(); } catch (e) {}
         monitorRecognitionRef.current = null;
       }
-      const rec = new SR();
-      rec.lang = 'fr-FR';
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.maxAlternatives = 1;
-      rec.onstart = () => setSpeechStatus((prev) => ({ ...prev, listening: true }));
-      rec.onresult = (event) => {
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          if (!event.results[i].isFinal) continue;
-          const t = event.results[i]?.[0]?.transcript || '';
-          handleTranscriptSignal(t);
-        }
-      };
-      rec.onerror = () => setSpeechStatus((prev) => ({ ...prev, listening: false }));
-      rec.onend = () => {
+      const rec = startSpeechRecognitionWithFallback({
+        lang: 'fr-FR', continuous: true, fallbackDurationMs: 10000,
+        onStart: () => setSpeechStatus((prev) => ({ ...prev, listening: true })),
+        onResult: (text) => handleTranscriptSignal(text),
+        onError: () => setSpeechStatus((prev) => ({ ...prev, listening: false })),
+        onEnd: () => {
         setSpeechStatus((prev) => ({ ...prev, listening: false }));
         if (!monitorActiveRef.current) return;
         setTimeout(() => {
-          if (!monitorActiveRef.current || !monitorRecognitionRef.current) return;
-          try { monitorRecognitionRef.current.start(); } catch (e) {}
+          if (monitorActiveRef.current) startContinuousSpeechMonitor();
         }, 300);
-      };
+        }
+      });
       monitorRecognitionRef.current = rec;
       monitorActiveRef.current = true;
-      rec.start();
       return true;
     } catch (e) {
       monitorActiveRef.current = false;

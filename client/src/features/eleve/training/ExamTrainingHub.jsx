@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import HomeworkList from '../homework/HomeworkList';
 import { awardStudentStars } from '../utils/studentStars';
+import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 import './ExamTrainingHub.css';
 
 const TRAINING_SCORE_EVENT = 'condaweb:training-score';
@@ -6008,34 +6009,27 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
     setChecked(false);
   };
   const startWorldDictation = (markerId) => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      window.alert('Micro non disponible. Utilise Chrome ou écris la réponse au clavier.');
-      return;
-    }
     try { worldRecognitionRef.current?.stop?.(); } catch (_) {}
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'fr-FR';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results || []).map((result) => result?.[0]?.transcript || '').join(' ').replace(/\s+/g, ' ').trim();
+    const recognition = startSpeechRecognitionWithFallback({
+      lang: 'fr-FR',
+      interimResults: true,
+      fallbackDurationMs: 5000,
+      onResult: (transcript) => {
       if (!transcript) return;
       setWorldAnswers((previous) => ({ ...previous, [markerId]: transcript }));
       setChecked(false);
-    };
-    recognition.onerror = () => {
+      },
+      onError: () => {
       setActiveWorldMic(null);
       worldRecognitionRef.current = null;
-    };
-    recognition.onend = () => {
+      },
+      onEnd: () => {
       setActiveWorldMic(null);
       worldRecognitionRef.current = null;
-    };
+      }
+    });
     worldRecognitionRef.current = recognition;
     setActiveWorldMic(markerId);
-    recognition.start();
   };
 
   const compassExpected = { top: 'Nord', right: 'Est', bottom: 'Sud', left: 'Ouest' };
@@ -6111,11 +6105,11 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
               </div>
               <div className="rounded-2xl bg-sky-50 p-4">
                 <h4 className="m-0 text-base font-black text-sky-950">2. Trouver le siècle d’une date</h4>
-                <p className="mt-1 text-sm font-bold text-slate-600">Prends les chiffres avant les deux derniers, puis ajoute 1. Pour une date qui finit par <strong>00</strong>, n’ajoute pas 1.</p>
+                <p className="mt-1 text-sm font-bold text-slate-600">Prends les chiffres avant les deux derniers, puis ajoute 1. Pour une date qui finit par <strong>00</strong>, n’ajoute pas 1 : un nouveau siècle commence toujours avec l’année qui finit par <strong>01</strong>.</p>
                 <div className="mt-3 grid gap-2 text-sm font-bold text-slate-700">
                   <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">1350</strong> : 13 + 1 = <strong className="text-sky-800">XIVe siècle</strong>.</div>
                   <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">-312</strong> : 3 + 1 = <strong className="text-sky-800">IVe siècle av. J.-C.</strong></div>
-                  <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">1700</strong> : la date finit par 00, donc <strong className="text-sky-800">XVIIe siècle</strong>.</div>
+                  <div className="rounded-xl border border-sky-200 bg-white p-3"><strong className="text-sky-800">1700</strong> : dernière année du <strong className="text-sky-800">XVIIe siècle</strong>. Le XVIIIe siècle commence en <strong className="text-sky-800">1701</strong>.</div>
                 </div>
               </div>
             </div>
