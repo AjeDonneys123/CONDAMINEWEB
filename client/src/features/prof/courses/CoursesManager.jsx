@@ -50,6 +50,26 @@ const getEditUrl = (value = '') => {
         : '';
 };
 
+const normalizeVideoScenes = (course = {}) => {
+    const savedScenes = Array.isArray(course.presentationVideoScenes) ? course.presentationVideoScenes : [];
+    if (savedScenes.length) return savedScenes.map((scene, sceneIndex) => ({
+        id: String(scene?.id || `scene_${sceneIndex}`), name: String(scene?.name || `Scène ${sceneIndex + 1}`),
+        sequences: Array.isArray(scene?.sequences) ? scene.sequences.map((item) => ({ ...item })) : []
+    }));
+    const legacy = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
+    return [{ id: `scene_${Date.now()}`, name: 'Scène 1', sequences: legacy.map((item) => ({ ...item })) }];
+};
+
+const groupSceneSequences = (scene = {}) => {
+    const groups = [];
+    (Array.isArray(scene?.sequences) ? scene.sequences : []).forEach((video) => {
+        const group = groups[groups.length - 1];
+        if (group && group[group.length - 1]?.mergeWithNext === true) group.push(video);
+        else groups.push([video]);
+    });
+    return groups;
+};
+
 const normalizeSuggestedChapterTitle = (value = '', fallbackIndex = 1) => {
     const raw = String(value || '').replace(/\s+/g, ' ').trim();
     if (!raw) return `H${fallbackIndex} Chapitre ${fallbackIndex}`;
@@ -116,7 +136,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [uploadingSequenceVideos, setUploadingSequenceVideos] = useState(false);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [projectedControl, setProjectedControl] = useState(null);
+    const [presentationRemote, setPresentationRemote] = useState(null);
+    const [slideManifest, setSlideManifest] = useState([]);
+    const [playingVideoIndex, setPlayingVideoIndex] = useState(0);
     const animationFrameRef = useRef(null);
+    const sequenceVideoRef = useRef(null);
+    const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
@@ -236,6 +261,71 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [playingCourse]);
+
+    useEffect(() => {
+        if (!globalClassId) return undefined;
+        const poll = async () => {
+            try {
+                const response = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
+                const data = await response.json();
+                setPresentationRemote(data?.active ? data : null);
+            } catch (_) {}
+        };
+        poll();
+        const interval = window.setInterval(poll, 650);
+        return () => window.clearInterval(interval);
+    }, [globalClassId]);
+
+    useEffect(() => {
+        if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return undefined;
+        fetch(`/api/courses/${playingCourse._id}/presentation-remote/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ classId: globalClassId }) }).catch(() => {});
+        fetch('/api/learning/slides/manifest', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
+        }).then((response) => response.json()).then((data) => setSlideManifest(Array.isArray(data?.slides) ? data.slides : [])).catch(() => setSlideManifest([]));
+        return undefined;
+    }, [isPhone, playingCourse?._id, playerMode, globalClassId]);
+
+    const sendPresentationCommand = async (action, remoteData = presentationRemote) => {
+        const courseId = String(remoteData?.courseId || playingCourse?._id || '');
+        if (!courseId) return;
+        const scenes = remoteData?.scenes?.length ? remoteData.scenes : normalizeVideoScenes(playingCourse || {});
+        const sceneIndex = Math.min(scenes.length - 1, Math.max(0, Number(remoteData?.remote?.sceneIndex || 0)));
+        const sequenceTotal = Math.max(1, groupSceneSequences(scenes[sceneIndex]).length);
+        const response = await fetch(`/api/courses/${courseId}/presentation-remote/command`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, slideTotal: Math.max(1, slideManifest.length || 100), sceneTotal: Math.max(1, scenes.length), sequenceTotal })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, scenes, remote: data.remote }));
+    };
+
+    const closePresentation = () => {
+        if (playingCourse?._id && !isPhone) fetch(`/api/courses/${playingCourse._id}/presentation-remote/stop`, { method: 'POST' }).catch(() => {});
+        setPlayingCourse(null);
+        setPresentationRemote(null);
+    };
+
+    const projectedScenes = normalizeVideoScenes(playingCourse || {});
+    const projectedSceneIndex = Math.min(projectedScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)));
+    const projectedGroups = groupSceneSequences(projectedScenes[projectedSceneIndex]);
+    const projectedSequenceIndex = Math.max(0, Math.min(projectedGroups.length - 1, Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0))));
+    const projectedVideo = projectedGroups[projectedSequenceIndex]?.[playingVideoIndex] || projectedGroups[projectedSequenceIndex]?.[0];
+    const projectedSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
+    const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || '').trim();
+    const projectedSlidesUrl = projectedSlideObjectId
+        ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
+        : getEmbedUrl(playingCourse?.slidesUrl);
+
+    useEffect(() => { setPlayingVideoIndex(0); }, [projectedSceneIndex, projectedSequenceIndex]);
+    useEffect(() => {
+        if (!presentationRemote?.remote?.playVersion || presentationRemote.remote.animationVisible === false) return;
+        setPlayingVideoIndex(0);
+        window.setTimeout(() => sequenceVideoRef.current?.play().catch(() => {}), 0);
+    }, [presentationRemote?.remote?.playVersion]);
+    useEffect(() => {
+        if (playingVideoIndex > 0) sequenceVideoRef.current?.play().catch(() => {});
+    }, [playingVideoIndex]);
 
     const openNewCourse = () => {
         setEditingId('');
@@ -620,13 +710,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (!playingCourse) return;
         setVideoSequencer({
             course: playingCourse,
-            sequences: Array.isArray(playingCourse.presentationVideoSequences)
-                ? playingCourse.presentationVideoSequences.map((item) => ({ ...item }))
-                : []
+            scenes: normalizeVideoScenes(playingCourse)
         });
     };
 
-    const uploadSequenceVideos = async (fileList) => {
+    const uploadSequenceVideos = async (fileList, sceneIndex) => {
         const files = Array.from(fileList || []).filter((file) => String(file.type || '').startsWith('video/'));
         if (!files.length) return;
         setUploadingSequenceVideos(true);
@@ -640,7 +728,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 if (!response.ok || !data.url) throw new Error(data.error || `Import impossible : ${file.name}`);
                 uploaded.push({ id: `video_${Date.now()}_${uploaded.length}`, name: file.name.replace(/\.mp4$/i, ''), url: data.url, driveFileId: data.driveFileId || '', mergeWithNext: false });
             }
-            setVideoSequencer((current) => current ? { ...current, sequences: [...current.sequences, ...uploaded] } : current);
+            setVideoSequencer((current) => current ? { ...current, scenes: current.scenes.map((scene, index) => index === sceneIndex ? { ...scene, sequences: [...scene.sequences, ...uploaded] } : scene) } : current);
         } catch (uploadError) {
             setError(uploadError.message);
         } finally {
@@ -654,12 +742,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         try {
             const response = await fetch(`/api/courses/${videoSequencer.course._id}/video-sequences`, {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sequences: videoSequencer.sequences })
+                body: JSON.stringify({ scenes: videoSequencer.scenes })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Enregistrement impossible');
             setCourses((current) => current.map((course) => String(course._id) === String(data._id) ? mergeCourseForCurrentView(course, data) : course));
-            setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationVideoSequences: data.presentationVideoSequences || [] } : current);
+            setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationVideoScenes: data.presentationVideoScenes || [] } : current);
             setVideoSequencer(null);
         } catch (saveError) {
             setError(saveError.message);
@@ -840,6 +928,29 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (raw === null) return;
         updatePublishedUntilSlide(playingCourse, raw);
     };
+
+    if (isPhone) {
+        const phoneScenes = presentationRemote?.scenes?.length
+            ? presentationRemote.scenes
+            : [{ id: 'scene_1', name: 'Scène 1', sequences: presentationRemote?.sequences || [] }];
+        const phoneSceneIndex = Math.min(phoneScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)));
+        const phoneGroups = groupSceneSequences(phoneScenes[phoneSceneIndex]);
+        const phoneSequenceIndex = Math.min(Math.max(0, phoneGroups.length - 1), Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0)));
+        return <section className="course-phone-remote">
+            {!presentationRemote ? <div className="course-phone-remote-empty"><span>🎬</span><strong>AUCUNE PRÉSENTATION ACTIVE</strong><p>Ouvre un cours sur l’ordinateur du tableau. Les commandes apparaîtront automatiquement ici.</p></div> : <>
+                <div className="course-phone-remote-head"><small>COURS AU TABLEAU</small><strong>{presentationRemote.title}</strong><div><span>SCÈNE <b>{phoneSceneIndex + 1}</b></span><span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span></div></div>
+                <div className="course-phone-controls">
+                    <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
+                    <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
+                    <button className={presentationRemote.remote?.animationVisible ? 'active' : ''} onClick={() => void sendPresentationCommand('animation_toggle')}><span>🎞</span>{presentationRemote.remote?.animationVisible ? 'Désactiver animation' : 'Activer animation'}</button>
+                    <button className="play" onClick={() => void sendPresentationCommand('play')}><span>▶</span>Play</button>
+                    <button onClick={() => void sendPresentationCommand('sequence_next')}><span>⏭</span>Séquence suivante</button>
+                    <button onClick={() => void sendPresentationCommand('scene_previous')}><span>⏮</span>Scène précédente</button>
+                    <button onClick={() => void sendPresentationCommand('scene_next')}><span>⏭</span>Scène suivante</button>
+                </div>
+            </>}
+        </section>;
+    }
 
     return (
         <section className="courses-manager">
@@ -1121,16 +1232,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 <div className="course-player-backdrop" role="dialog" aria-modal="true" aria-label={playingCourse.title}>
                     <div className="course-player-toolbar">
                         <strong>{playingCourse.title}</strong>
-                        <button type="button" onClick={() => setPlayingCourse(null)} aria-label="Fermer">×</button>
+                        <button type="button" onClick={closePresentation} aria-label="Fermer">×</button>
                     </div>
                     <div className="course-player-stage">
                         <iframe
                             title={playingCourse.title}
                             src={playerMode === 'presentation'
-                                ? getEmbedUrl(playingCourse.slidesUrl)
+                                ? projectedSlidesUrl
                                 : `${getEditUrl(playingCourse.slidesUrl)}?usp=sharing&editor=${playingCourse.editorNonce || Date.now()}`}
                             allowFullScreen
                         />
+                        {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
+                        {presentationRemote?.remote?.animationVisible && projectedVideo && <div className="course-sequence-video-layer"><video key={projectedVideo.id || projectedVideo.url} ref={sequenceVideoRef} src={projectedVideo.url} playsInline preload="metadata" onEnded={() => {
+                            const group = projectedGroups[projectedSequenceIndex] || [];
+                            if (playingVideoIndex < group.length - 1) setPlayingVideoIndex((index) => index + 1);
+                            else void sendPresentationCommand('sequence_finished');
+                        }} /></div>}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">
@@ -1241,22 +1358,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" onClick={() => !savingAnimation && setVideoSequencer(null)} aria-label="Fermer">×</button>
                         </div>
                         <div className="course-video-sequencer-body">
-                            <label className="course-video-upload-button">
-                                {uploadingSequenceVideos ? 'IMPORT EN COURS…' : '＋ IMPORTER DES VIDÉOS MP4'}
-                                <input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files)} />
-                            </label>
-                            {videoSequencer.sequences.length === 0 ? <div className="course-video-empty">Importe les vidéos dans leur ordre de lecture.</div> : null}
-                            <div className="course-video-sequence-list">
-                                {videoSequencer.sequences.map((sequence, index) => (
-                                    <div className="course-video-sequence-row" key={sequence.id || index}>
-                                        <span className="course-video-sequence-number">{index + 1}</span>
-                                        <video src={sequence.url} preload="metadata" controls />
-                                        <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, sequences: current.sequences.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) }))} />
-                                        {index < videoSequencer.sequences.length - 1 ? <label className="course-video-merge"><input type="checkbox" checked={sequence.mergeWithNext === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, sequences: current.sequences.map((item, itemIndex) => itemIndex === index ? { ...item, mergeWithNext: event.target.checked } : item) }))} /> Fusionner avec la suivante</label> : null}
-                                        <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, sequences: current.sequences.filter((_, itemIndex) => itemIndex !== index) }))}>×</button>
-                                    </div>
-                                ))}
-                            </div>
+                            <button type="button" className="course-video-add-scene" onClick={() => setVideoSequencer((current) => ({ ...current, scenes: [...current.scenes, { id: `scene_${Date.now()}`, name: `Scène ${current.scenes.length + 1}`, sequences: [] }] }))}>＋ AJOUTER UNE SCÈNE</button>
+                            {videoSequencer.scenes.map((scene, sceneIndex) => <section className="course-video-scene" key={scene.id}>
+                                <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MP4'}<input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencer.scenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.filter((_, index) => index !== sceneIndex) }))}>×</button> : null}</div>
+                                {scene.sequences.length === 0 ? <div className="course-video-empty">Importe les vidéos de cette scène.</div> : null}
+                                <div className="course-video-sequence-list">{scene.sequences.map((sequence, index) => <div className="course-video-sequence-row" key={sequence.id || index}>
+                                    <span className="course-video-sequence-number">{index + 1}</span><video src={sequence.url} preload="metadata" controls />
+                                    <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: item.sequences.map((video, vIndex) => vIndex === index ? { ...video, name: event.target.value } : video) } : item) }))} />
+                                    {index < scene.sequences.length - 1 ? <label className="course-video-merge"><input type="checkbox" checked={sequence.mergeWithNext === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: item.sequences.map((video, vIndex) => vIndex === index ? { ...video, mergeWithNext: event.target.checked } : video) } : item) }))} /> Fusionner avec la suivante</label> : null}
+                                    <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: item.sequences.filter((_, vIndex) => vIndex !== index) } : item) }))}>×</button>
+                                </div>)}</div>
+                            </section>)}
                         </div>
                         <div className="course-animation-editor-actions">
                             <button type="button" className="courses-secondary-button" onClick={() => setVideoSequencer(null)} disabled={savingAnimation}>ANNULER</button>

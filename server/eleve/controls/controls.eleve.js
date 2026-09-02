@@ -207,4 +207,50 @@ router.post('/:id/contest', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.post('/:id/cheat-alert', async (req, res) => {
+    try {
+        const Control = mongoose.model('AssessmentControl');
+        const Student = mongoose.model('Student');
+        const row = await Control.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
+
+        let bodyData = req.body || {};
+        if (typeof bodyData === 'string') {
+            try { bodyData = JSON.parse(bodyData); } catch (_) { bodyData = {}; }
+        }
+
+        const reqStudentId = String(bodyData?.studentId || '').trim();
+        let rawStudentName = String(bodyData?.studentName || '').trim();
+        const reason = String(bodyData?.reason || "Sortie du plein écran / Changement d'application sur mobile").trim();
+
+        if (!rawStudentName && mongoose.Types.ObjectId.isValid(reqStudentId)) {
+            const student = await Student.findById(reqStudentId, 'firstName lastName').lean();
+            if (student) {
+                rawStudentName = `${student.firstName} ${student.lastName}`.trim();
+            }
+        }
+
+        const alertObj = {
+            id: `alert_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            studentName: rawStudentName || 'Élève (Nom non renseigné)',
+            studentId: mongoose.Types.ObjectId.isValid(reqStudentId) ? reqStudentId : null,
+            reason,
+            timestamp: new Date(),
+            controlId: String(row._id),
+            controlTitle: row.title,
+            acknowledged: false
+        };
+
+        row.alerts = Array.isArray(row.alerts) ? row.alerts : [];
+        row.alerts.push(alertObj);
+        row.markModified('alerts');
+        await row.save();
+
+        res.json({ ok: true, alert: alertObj });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;
+

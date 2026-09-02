@@ -2,13 +2,13 @@ import React from 'react';
 
 export default function ProfNav({ activeTab, onTabChange, user }) {
   const allTabs = {
-      activities: { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+      activities: { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600', hideOnMobile: true },
       exposes: { id: 'exposes', label: '📚 COURS', color: 'bg-rose-600' },
       classroom: { id: 'classroom', label: '🎓 CLASSE', color: 'bg-emerald-600' },
       scans: { id: 'scans', label: '📸 SCAN', color: 'bg-orange-500' },
       studio: { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600', hideOnMobile: true }, 
-      students: { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600', hideOnMobile: true },
-      admin: { id: 'admin', label: '⚙️ DEV', color: 'bg-slate-900' }
+      students: { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
+      admin: { id: 'admin', label: '⚙️ DEV', color: 'bg-slate-900', hideOnMobile: true }
   };
 
   let tabs = [];

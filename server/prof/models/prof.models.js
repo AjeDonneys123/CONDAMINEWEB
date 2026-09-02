@@ -278,6 +278,7 @@ const Models = {
         active: { type: Boolean, default: true },
         items: { type: [mongoose.Schema.Types.Mixed], default: [] },
         submissions: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        alerts: { type: [mongoose.Schema.Types.Mixed], default: [] },
         date: { type: Date, default: Date.now }
     }),
 
@@ -354,6 +355,8 @@ const Models = {
         sourceEndAnchor: { type: mongoose.Schema.Types.Mixed, default: null },
         presentationAnimations: { type: [mongoose.Schema.Types.Mixed], default: [] },
         presentationVideoSequences: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        presentationVideoScenes: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        presentationRemote: { type: mongoose.Schema.Types.Mixed, default: null },
         date: { type: Date, default: Date.now }
     }),
 

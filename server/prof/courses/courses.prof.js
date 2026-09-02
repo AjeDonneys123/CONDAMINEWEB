@@ -444,7 +444,7 @@ router.patch('/:id/animation', async (req, res) => {
 
 router.patch('/:id/video-sequences', async (req, res) => {
     try {
-        const sequences = (Array.isArray(req.body?.sequences) ? req.body.sequences : [])
+        const normalizeSequences = (value = []) => (Array.isArray(value) ? value : [])
             .map((item, index) => ({
                 id: String(item?.id || `video_${Date.now()}_${index}`),
                 name: String(item?.name || `Vidéo ${index + 1}`).trim().slice(0, 160),
@@ -453,13 +453,83 @@ router.patch('/:id/video-sequences', async (req, res) => {
                 mergeWithNext: item?.mergeWithNext === true
             }))
             .filter((item) => item.url);
+        const sequences = normalizeSequences(req.body?.sequences);
+        const scenes = (Array.isArray(req.body?.scenes) ? req.body.scenes : [])
+            .map((scene, sceneIndex) => ({
+                id: String(scene?.id || `scene_${Date.now()}_${sceneIndex}`),
+                name: String(scene?.name || `Scène ${sceneIndex + 1}`).trim().slice(0, 160),
+                sequences: normalizeSequences(scene?.sequences)
+            }));
         const row = await Course.findByIdAndUpdate(
             req.params.id,
-            { $set: { presentationVideoSequences: sequences } },
+            { $set: { presentationVideoSequences: sequences, presentationVideoScenes: scenes } },
             { new: true, runValidators: true }
         ).lean();
         if (!row) return res.status(404).json({ error: 'Cours introuvable' });
         return res.json(row);
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/presentation-remote/active', async (req, res) => {
+    try {
+        const classId = String(req.query.classId || '').trim();
+        if (!classId) return res.json({ ok: true, active: false });
+        const course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
+            .sort({ 'presentationRemote.updatedAt': -1 }).lean();
+        if (!course) return res.json({ ok: true, active: false });
+        return res.json({ ok: true, active: true, courseId: String(course._id), title: course.title, scenes: course.presentationVideoScenes || [], sequences: course.presentationVideoSequences || [], remote: course.presentationRemote || {} });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/presentation-remote/start', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const classId = String(req.body?.classId || course.targetClassroomId || '').trim();
+        await Course.updateMany({ 'presentationRemote.classId': classId, _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
+        course.presentationRemote = { active: true, classId, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, playVersion: 0, version: Date.now(), updatedAt: new Date() };
+        await course.save();
+        return res.json({ ok: true, remote: course.presentationRemote });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/presentation-remote/stop', async (req, res) => {
+    try {
+        await Course.findByIdAndUpdate(req.params.id, { $set: { 'presentationRemote.active': false, 'presentationRemote.updatedAt': new Date() } });
+        return res.json({ ok: true });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/presentation-remote/command', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const remote = { active: true, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, playVersion: 0, ...(course.presentationRemote || {}) };
+        const action = String(req.body?.action || '');
+        const slideTotal = Math.max(1, Number(req.body?.slideTotal || 1));
+        const sequenceTotal = Math.max(1, Number(req.body?.sequenceTotal || 1));
+        const sceneTotal = Math.max(1, Number(req.body?.sceneTotal || 1));
+        if (action === 'slide_previous') remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1);
+        if (action === 'slide_next') remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1);
+        if (action === 'animation_toggle') remote.animationVisible = !remote.animationVisible;
+        if (action === 'play') { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; }
+        if (action === 'sequence_next' || action === 'sequence_finished') remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1);
+        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; }
+        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; }
+        remote.version = Date.now();
+        remote.updatedAt = new Date();
+        course.presentationRemote = remote;
+        course.markModified('presentationRemote');
+        await course.save();
+        return res.json({ ok: true, remote });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }

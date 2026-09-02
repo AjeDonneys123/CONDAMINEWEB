@@ -305,4 +305,64 @@ router.delete('/:id', async (req, res) => {
     catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.get('/live-alerts', async (_req, res) => {
+    try {
+        const controls = await AssessmentControl.find({ active: { $ne: false } }, 'title alerts updatedAt').lean();
+        const unackedAlerts = [];
+        (controls || []).forEach(ctrl => {
+            (ctrl.alerts || []).forEach(alert => {
+                if (alert && alert.acknowledged !== true) {
+                    unackedAlerts.push({
+                        ...alert,
+                        controlId: String(ctrl._id),
+                        controlTitle: ctrl.title || 'Contrôle'
+                    });
+                }
+            });
+        });
+        unackedAlerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        res.json(unackedAlerts);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/alerts/:alertId/ack', async (req, res) => {
+    try {
+        const { alertId } = req.params;
+        const controls = await AssessmentControl.find({ 'alerts.id': alertId });
+        for (const ctrl of controls) {
+            let modified = false;
+            ctrl.alerts = (ctrl.alerts || []).map(a => {
+                if (String(a.id) === String(alertId)) {
+                    modified = true;
+                    return { ...a, acknowledged: true };
+                }
+                return a;
+            });
+            if (modified) {
+                ctrl.markModified('alerts');
+                await ctrl.save();
+            }
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/alerts/clear-all', async (_req, res) => {
+    try {
+        const controls = await AssessmentControl.find({ 'alerts.acknowledged': { $ne: true } });
+        for (const ctrl of controls) {
+            ctrl.alerts = (ctrl.alerts || []).map(a => ({ ...a, acknowledged: true }));
+            ctrl.markModified('alerts');
+            await ctrl.save();
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;

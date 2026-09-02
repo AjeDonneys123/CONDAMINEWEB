@@ -15,6 +15,7 @@ import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
   const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
+  const isPhone = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769;
   const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'studio', 'students', 'admin'];
   const urlParams = new URLSearchParams(window.location.search);
   const requestedTab = String(urlParams.get('profTab') || '').trim();
@@ -23,7 +24,7 @@ export default function ProfPage({ user, onLogout }) {
   const requestedScanTitle = String(urlParams.get('scanTitle') || '').trim();
 
   const [liveUser, setLiveUser] = useState(getInitialUser());
-  const [tab, setTab] = useState('activities');
+  const [tab, setTab] = useState(() => isPhone ? 'exposes' : 'activities');
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -47,7 +48,7 @@ export default function ProfPage({ user, onLogout }) {
         const isDeveloper = freshProfile?.isDeveloper === true;
         setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper }));
         const preferredTab = String(uiState?.lastProfTab || freshProfile?.lastProfTab || '').trim();
-        if (allowedTabs.includes(preferredTab)) {
+        if (allowedTabs.includes(preferredTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students'].includes(preferredTab))) {
             const blockedForRole = (!isDeveloper && (preferredTab === 'studio' || preferredTab === 'admin'));
             if (!blockedForRole) setTab(preferredTab);
         }
@@ -110,7 +111,7 @@ export default function ProfPage({ user, onLogout }) {
   } : null;
 
   useEffect(() => {
-    if (requestedTab && allowedTabs.includes(requestedTab)) {
+    if (requestedTab && allowedTabs.includes(requestedTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students'].includes(requestedTab))) {
       const blockedForRole = (!liveUser.isDeveloper && (requestedTab === 'studio' || requestedTab === 'admin'));
       if (!blockedForRole) setTab(requestedTab);
     }
