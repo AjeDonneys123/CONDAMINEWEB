@@ -50,6 +50,55 @@ const getEditUrl = (value = '') => {
         : '';
 };
 
+const getYoutubeVideoId = (value = '') => {
+    const text = String(value || '').trim();
+    try {
+        const url = new URL(text);
+        if (url.hostname.includes('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || '';
+        if (url.hostname.includes('youtube.com')) return url.searchParams.get('v') || url.pathname.match(/\/(?:embed|shorts)\/([^/?]+)/)?.[1] || '';
+    } catch (_) {}
+    return '';
+};
+
+const getYoutubeEmbedUrl = (value = '') => {
+    const id = getYoutubeVideoId(value);
+    return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?rel=0&playsinline=1` : '';
+};
+
+function YoutubeSequencePlayer({ video, playVersion, onEnded }) {
+    const hostRef = useRef(null);
+    const playerRef = useRef(null);
+    useEffect(() => {
+        let cancelled = false;
+        const create = () => {
+            if (cancelled || !hostRef.current || !window.YT?.Player) return;
+            playerRef.current?.destroy?.();
+            playerRef.current = new window.YT.Player(hostRef.current, {
+                videoId: getYoutubeVideoId(video?.url),
+                playerVars: { rel: 0, playsinline: 1 },
+                events: {
+                    onReady: (event) => { if (playVersion > 0) event.target.playVideo(); },
+                    onStateChange: (event) => { if (event.data === window.YT.PlayerState.ENDED) onEnded?.(); }
+                }
+            });
+        };
+        if (window.YT?.Player) create();
+        else {
+            const previous = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => { previous?.(); create(); };
+            if (!document.querySelector('script[data-conda-youtube-api]')) {
+                const script = document.createElement('script');
+                script.src = 'https://www.youtube.com/iframe_api';
+                script.dataset.condaYoutubeApi = '1';
+                document.head.appendChild(script);
+            }
+        }
+        return () => { cancelled = true; playerRef.current?.destroy?.(); playerRef.current = null; };
+    }, [video?.url]);
+    useEffect(() => { if (playVersion > 0) playerRef.current?.playVideo?.(); }, [playVersion]);
+    return <div className="course-youtube-player" ref={hostRef} />;
+}
+
 const normalizeVideoScenes = (course = {}) => {
     const savedScenes = Array.isArray(course.presentationVideoScenes) ? course.presentationVideoScenes : [];
     if (savedScenes.length) return savedScenes.map((scene, sceneIndex) => ({
@@ -141,6 +190,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [videoSequencer, setVideoSequencer] = useState(null);
     const [uploadingSequenceVideos, setUploadingSequenceVideos] = useState(false);
     const [draggedSequence, setDraggedSequence] = useState(null);
+    const [youtubeDrafts, setYoutubeDrafts] = useState({});
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [projectedControl, setProjectedControl] = useState(null);
     const [presentationRemote, setPresentationRemote] = useState(null);
@@ -326,6 +376,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
         : getEmbedUrl(playingCourse?.slidesUrl);
+    const finishProjectedVideo = () => {
+        const group = projectedGroups[projectedSequenceIndex] || [];
+        if (playingVideoIndex < group.length - 1) setPlayingVideoIndex((index) => index + 1);
+        else void sendPresentationCommand('sequence_finished', { closeAfterSequence: projectedVideo?.closeAfterSequence === true });
+    };
 
     useEffect(() => { setPlayingVideoIndex(0); }, [projectedSceneIndex, projectedSequenceIndex]);
     useEffect(() => {
@@ -745,6 +800,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         } finally {
             setUploadingSequenceVideos(false);
         }
+    };
+
+    const addYoutubeSequence = (sceneIndex) => {
+        const url = String(youtubeDrafts[sceneIndex] || '').trim();
+        const videoId = getYoutubeVideoId(url);
+        if (!videoId) { setError('Lien YouTube invalide.'); return; }
+        setVideoSequencer((current) => current ? { ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((scene, index) => index === sceneIndex ? { ...scene, sequences: [...(scene.sequences || []), { id: `youtube_${Date.now()}`, name: `YouTube ${videoId}`, url, sourceType: 'youtube', mergeWithNext: false, closeAfterSequence: false }] } : scene) } : slide) } : current);
+        setYoutubeDrafts((current) => ({ ...current, [sceneIndex]: '' }));
     };
 
     const saveVideoSequences = async () => {
@@ -1291,11 +1354,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             allowFullScreen
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
-                        {presentationRemote?.remote?.animationVisible && projectedVideo && <div className="course-sequence-video-layer"><video key={projectedVideo.id || projectedVideo.url} ref={sequenceVideoRef} src={projectedVideo.url} playsInline preload="metadata" onEnded={() => {
-                            const group = projectedGroups[projectedSequenceIndex] || [];
-                            if (playingVideoIndex < group.length - 1) setPlayingVideoIndex((index) => index + 1);
-                            else void sendPresentationCommand('sequence_finished', { closeAfterSequence: projectedVideo.closeAfterSequence === true });
-                        }} /></div>}
+                        {presentationRemote?.remote?.animationVisible && projectedVideo && <div className="course-sequence-video-layer">{projectedVideo.sourceType === 'youtube' || getYoutubeVideoId(projectedVideo.url) ? <YoutubeSequencePlayer key={projectedVideo.id || projectedVideo.url} video={projectedVideo} playVersion={presentationRemote.remote.playVersion} onEnded={finishProjectedVideo} /> : <video key={projectedVideo.id || projectedVideo.url} ref={sequenceVideoRef} src={projectedVideo.url} playsInline preload="metadata" onEnded={finishProjectedVideo} />}</div>}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">
@@ -1410,9 +1469,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" className="course-video-add-scene" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: [...slide.scenes, { id: `scene_${Date.now()}`, name: `Scène ${slide.scenes.length + 1}`, sequences: [] }] } : slide) }))}>＋ AJOUTER UNE SCÈNE</button>
                             {videoSequencerScenes.map((scene, sceneIndex) => <section className="course-video-scene" key={scene.id}>
                                 <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) } : slide) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MP4'}<input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencerScenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.filter((_, index) => index !== sceneIndex) } : slide) }))}>×</button> : null}</div>
+                                <div className="course-video-youtube-add"><input type="url" placeholder="Coller un lien YouTube" value={youtubeDrafts[sceneIndex] || ''} onChange={(event) => setYoutubeDrafts((current) => ({ ...current, [sceneIndex]: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addYoutubeSequence(sceneIndex); } }} /><button type="button" onClick={() => addYoutubeSequence(sceneIndex)}>＋ AJOUTER LE LIEN</button></div>
                                 {scene.sequences.length === 0 ? <div className={`course-video-empty ${draggedSequence ? 'drop-ready' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={() => moveSequenceVideo(sceneIndex, 0)}>Importe les vidéos de cette scène.</div> : null}
                                 <div className="course-video-sequence-list">{scene.sequences.map((sequence, index) => <div className={`course-video-sequence-row ${draggedSequence?.sceneIndex === sceneIndex && draggedSequence?.videoIndex === index ? 'dragging' : ''}`} key={sequence.id || index} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={() => moveSequenceVideo(sceneIndex, index)}>
-                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position de la vidéo ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /><video src={sequence.url} preload="metadata" controls />
+                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position de la vidéo ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />{sequence.sourceType === 'youtube' || getYoutubeVideoId(sequence.url) ? <iframe src={getYoutubeEmbedUrl(sequence.url)} title={sequence.name || 'Vidéo YouTube'} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : <video src={sequence.url} preload="metadata" controls />}
                                     <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, name: event.target.value } : video) } : item) } : slide) }))} />
                                     {index < scene.sequences.length - 1 ? <label className="course-video-merge"><input type="checkbox" checked={sequence.mergeWithNext === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, mergeWithNext: event.target.checked } : video) } : item) } : slide) }))} /> Fusionner avec la suivante</label> : null}
                                     {sequence.mergeWithNext !== true ? <label className="course-video-close-after"><input type="checkbox" checked={sequence.closeAfterSequence === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, closeAfterSequence: event.target.checked } : video) } : item) } : slide) }))} /> Fermer après</label> : null}

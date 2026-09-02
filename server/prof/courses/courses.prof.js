@@ -450,6 +450,7 @@ router.patch('/:id/video-sequences', async (req, res) => {
                 name: String(item?.name || `Vidéo ${index + 1}`).trim().slice(0, 160),
                 url: String(item?.url || '').trim(),
                 driveFileId: String(item?.driveFileId || '').trim(),
+                sourceType: String(item?.sourceType || '').trim() === 'youtube' ? 'youtube' : 'mp4',
                 mergeWithNext: item?.mergeWithNext === true,
                 closeAfterSequence: item?.closeAfterSequence === true
             }))
