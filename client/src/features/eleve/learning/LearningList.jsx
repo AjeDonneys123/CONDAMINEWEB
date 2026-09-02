@@ -14,11 +14,15 @@ export default function LearningList({ user, openItemId = '', onOpenHandled }) {
             const visitorQuery = user?.isVisitorPreview ? `?forGames=1&level=${encodeURIComponent(user.currentClass || '')}` : '';
             const res = await fetch(`/api/eleve/learning/list/${id}${visitorQuery}`);
             const rows = res.ok ? await res.json() : [];
-            setModules((rows || []).map(m => ({
-                ...m,
-                status: m.completion?.completedAt ? 'done' : 'todo',
-                subject: m.chapterSection || m.subject || 'GÉNÉRAL'
-            })));
+            setModules((rows || []).map(m => {
+                const isLocked = m.isLycee && !m.isTraceEcriteValidated;
+                return {
+                    ...m,
+                    title: isLocked ? `🔒 ${m.title}` : (m.isLycee && m.isTraceEcriteValidated ? `✓ ${m.title}` : m.title),
+                    status: m.completion?.completedAt ? 'done' : 'todo',
+                    subject: m.chapterSection || m.subject || 'GÉNÉRAL'
+                };
+            }));
         } catch (e) {
             setModules([]);
         }

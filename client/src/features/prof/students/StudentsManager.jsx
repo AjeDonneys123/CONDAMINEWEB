@@ -92,6 +92,7 @@ export default function StudentsManager({ globalClassId }) {
     setViewingControlCopy({ control, copy, student });
     setEditingControlScore(String(copy.score ?? 0));
     setEditingControlNote(String(copy.teacherNote || ''));
+    setPromptsDraft({});
   };
 
   const handleSaveControlScore = async () => {
@@ -139,36 +140,39 @@ export default function StudentsManager({ globalClassId }) {
     }
   };
 
-  const [editingExpectedKey, setEditingExpectedKey] = useState('');
-  const [editingExpectedValue, setEditingExpectedValue] = useState('');
-  const [regradingExpected, setRegradingExpected] = useState(false);
+  const [promptsDraft, setPromptsDraft] = useState({});
+  const [isRegradingAll, setIsRegradingAll] = useState(false);
 
-  const handleUpdateExpectedAndRegrade = async (controlId, itemId, blankIndex, expected) => {
-    setRegradingExpected(true);
+  const hasPromptModifications = viewingControlCopy && Object.keys(promptsDraft).some((itemId) => {
+    const originalItem = (viewingControlCopy.control.items || []).find(i => String(i.id) === String(itemId));
+    return originalItem && promptsDraft[itemId] !== originalItem.prompt;
+  });
+
+  const handleSaveAndRegradeAll = async () => {
+    if (!viewingControlCopy || !hasPromptModifications) return;
+    setIsRegradingAll(true);
     try {
-      const res = await fetch(`/api/controls/${controlId}/items/${itemId}/expected`, {
+      const controlId = viewingControlCopy.control._id;
+      const res = await fetch(`/api/controls/${controlId}/update-and-regrade`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          blankIndex: Number.isInteger(blankIndex) ? blankIndex : null,
-          expected
-        })
+        body: JSON.stringify({ prompts: promptsDraft })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Erreur lors de la mise à jour de l’attendu');
+      if (!res.ok) throw new Error(data?.error || 'Erreur lors du recalcul');
 
       const updatedControl = data.control;
-      const currentCopyId = viewingControlCopy?.copy?.id;
-      const freshCopy = (updatedControl?.submissions || []).find(s => String(s.id) === String(currentCopyId)) || viewingControlCopy?.copy;
+      const currentCopyId = viewingControlCopy.copy?.id;
+      const freshCopy = (updatedControl?.submissions || []).find(s => String(s.id) === String(currentCopyId)) || viewingControlCopy.copy;
       setViewingControlCopy(prev => prev ? { ...prev, control: updatedControl, copy: freshCopy } : null);
       setEditingControlScore(String(freshCopy?.score ?? 0));
-      setEditingExpectedKey('');
-      setEditingExpectedValue('');
+      setPromptsDraft({});
       await loadMatrix();
+      alert(`Contrôle mis à jour et ${data.updatedCount || 0} copie(s) recalculées avec succès !`);
     } catch (err) {
-      alert(err.message || 'Erreur lors de la mise à jour');
+      alert(err.message || 'Erreur lors de la recorrection');
     } finally {
-      setRegradingExpected(false);
+      setIsRegradingAll(false);
     }
   };
 
@@ -1822,8 +1826,37 @@ export default function StudentsManager({ globalClassId }) {
                         </div>
                     </div>
 
-                    {/* Corps : Liste des questions de la copie */}
-                    <div className="p-6 overflow-y-auto flex-1 space-y-4 custom-scrollbar">
+                    {/* BANDEAU FLOTTANT : EN-TETE DE RECORRECTION SI L'ENONCE EST MODIFIE */}
+                    {hasPromptModifications && (
+                        <div className="p-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-between px-6 shadow-md animate-in sticky top-0 z-20">
+                            <div className="flex items-center gap-2">
+                                <span className="text-base">⚡</span>
+                                <span className="text-xs font-black uppercase tracking-wide">
+                                    Énoncé modifié en direct !
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPromptsDraft({})}
+                                    className="px-3 py-1.5 rounded-xl bg-black/20 hover:bg-black/30 text-white text-xs font-black transition"
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isRegradingAll}
+                                    onClick={handleSaveAndRegradeAll}
+                                    className="px-4 py-1.5 rounded-xl bg-white text-orange-950 hover:bg-orange-50 text-xs font-black shadow-md flex items-center gap-1.5 transition disabled:opacity-50"
+                                >
+                                    <span>{isRegradingAll ? 'Recalcul...' : '⚡ RECORRIGER TOUTES LES COPIES'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Corps : Rendu fidèle et fluide, identique au téléphone élève */}
+                    <div className="p-6 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/50">
                         {(viewingControlCopy.control.items || []).map((item, idx) => {
                             const answer = (viewingControlCopy.copy.answers || []).find((a) => String(a.itemId) === String(item.id)) || {};
                             const isItemCorrect = answer.correct === true;
@@ -1834,126 +1867,196 @@ export default function StudentsManager({ globalClassId }) {
                             return (
                                 <div
                                     key={item.id}
-                                    className={`p-4 rounded-2xl border-2 transition-all ${
+                                    className={`p-5 rounded-3xl border-2 bg-white transition-all shadow-sm ${
                                         isItemCorrect
-                                            ? 'border-emerald-300 bg-emerald-50/60'
+                                            ? 'border-emerald-200'
                                             : isContested
-                                                ? 'border-amber-400 bg-amber-50 shadow-sm'
-                                                : 'border-rose-300 bg-rose-50/60'
+                                                ? 'border-amber-400 ring-2 ring-amber-100'
+                                                : 'border-rose-200'
                                     }`}
                                 >
-                                    <div className="flex justify-between items-center gap-2 mb-2">
-                                        <span className="text-xs font-black uppercase tracking-wider text-slate-600">
-                                            Question {idx + 1} · {item.lessonTitle || 'Général'}
-                                        </span>
+                                    {/* En-tete de la question */}
+                                    <div className="flex justify-between items-center gap-2 mb-3">
                                         <div className="flex items-center gap-2">
+                                            <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                                                Question {idx + 1} {item.lessonTitle ? `· ${item.lessonTitle}` : ''}
+                                            </span>
                                             {isContested && (
-                                                <span className="rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black uppercase">
-                                                    ⚠️ Question contestée
+                                                <span className="rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black uppercase shadow-xs">
+                                                    ⚠️ Contestée
                                                 </span>
                                             )}
-                                            <span className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-black text-slate-700">
-                                                {answer.awardedPoints ?? (isItemCorrect ? item.points : 0)} / {item.points || 1} pt(s)
-                                            </span>
+                                        </div>
+                                        <span className="rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-black text-slate-700 shadow-xs">
+                                            {answer.awardedPoints ?? (isItemCorrect ? item.points : 0)} / {item.points || 1} pt(s)
+                                        </span>
+                                    </div>
+
+                                    {/* Champ de texte de l'énoncé modifiable en direct */}
+                                    <div className="mb-4">
+                                        <textarea
+                                            value={promptsDraft[item.id] !== undefined ? promptsDraft[item.id] : item.prompt}
+                                            onChange={(e) => setPromptsDraft({ ...promptsDraft, [item.id]: e.target.value })}
+                                            className="w-full text-xs font-bold text-slate-800 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-amber-400 rounded-xl p-3 transition resize-y focus:outline-none focus:ring-2 focus:ring-amber-200 leading-relaxed"
+                                            rows={Math.max(2, Math.ceil(String(promptsDraft[item.id] ?? item.prompt ?? '').length / 90))}
+                                            title="Énoncé du contrôle. Modifiez le texte ou les guillemets pour corriger l'attendu."
+                                        />
+                                        <div className="text-[10px] text-slate-400 font-semibold mt-1 flex items-center justify-between">
+                                            <span>{item.type === 'fill' ? '💡 Modifiez directement les mots entre guillemets "..." pour corriger les attendus.' : '💡 Vous pouvez modifier l\'énoncé directement ici.'}</span>
+                                            {promptsDraft[item.id] !== undefined && promptsDraft[item.id] !== item.prompt && (
+                                                <span className="text-amber-600 font-black">● Texte modifié</span>
+                                            )}
                                         </div>
                                     </div>
 
-                                    <div className="font-bold text-sm text-slate-800 mb-3">{item.prompt}</div>
+                                    {/* RENDU DE LA RÉPONSE DE L'ÉLÈVE (PROCHE DU SMARTPHONE ÉLÈVE) */}
 
-                                    {/* QCM */}
+                                    {/* 1. QCM */}
                                     {item.type === 'qcm' && (
-                                        <div className="text-xs space-y-1">
-                                            {(item.choices || []).map((c, cIdx) => {
+                                        <div className="space-y-1.5">
+                                            {(item.choices || []).map((choice, cIdx) => {
                                                 const isChosen = Number(answer.value) === cIdx;
+                                                const isCorrectChoice = Number(item.correctIndex) === cIdx;
+                                                const isChoiceContested = isChosen && (isWholeContested || answer.contestStatus === 'pending');
+
+                                                let pillStyle = 'bg-slate-50 border-slate-200 text-slate-700';
+                                                if (isChosen && isItemCorrect) {
+                                                    pillStyle = 'bg-emerald-50 border-emerald-400 text-emerald-950 font-black';
+                                                } else if (isChosen && isChoiceContested) {
+                                                    pillStyle = 'bg-amber-100 border-amber-400 text-amber-950 font-black shadow-sm';
+                                                } else if (isChosen && !isItemCorrect) {
+                                                    pillStyle = 'bg-rose-50 border-rose-400 text-rose-950 font-black';
+                                                } else if (!isChosen && isCorrectChoice && !isItemCorrect) {
+                                                    pillStyle = 'bg-emerald-50/70 border-dashed border-emerald-300 text-emerald-800 font-semibold';
+                                                }
+
                                                 return (
-                                                    <div
-                                                        key={c}
-                                                        className={`p-2 rounded-lg font-bold flex items-center justify-between ${
-                                                            isChosen
-                                                                ? isItemCorrect
-                                                                    ? 'bg-emerald-200 text-emerald-900'
-                                                                    : 'bg-rose-200 text-rose-900'
-                                                                : 'bg-white/70 text-slate-600'
-                                                        }`}
-                                                    >
-                                                        <span>{String.fromCharCode(65 + cIdx)}. {c}</span>
-                                                        {isChosen && <span>(Choix de l'élève)</span>}
+                                                    <div key={cIdx} className={`p-3 rounded-xl border text-xs flex items-center justify-between transition ${pillStyle}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-black text-slate-400">{String.fromCharCode(65 + cIdx)}.</span>
+                                                            <span>{choice}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {isChosen && <span className="text-[10px] font-black uppercase">(Choix élève)</span>}
+                                                            {isChosen && isChoiceContested && <span className="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">⚠️ Contesté</span>}
+                                                            {!isChosen && isCorrectChoice && !isItemCorrect && <span className="text-[10px] font-black text-emerald-600 uppercase">(Bonne réponse)</span>}
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     )}
 
-                                    {/* TARGET / QUESTION OUVERTE */}
+                                    {/* 2. TEXTE A TROUS (RENDU NATUREL EN PARAGRAPHE COMME CÔTÉ ÉLÈVE) */}
+                                    {item.type === 'fill' && (() => {
+                                        const currentPrompt = promptsDraft[item.id] !== undefined ? promptsDraft[item.id] : item.prompt;
+                                        const segments = String(currentPrompt || '').split(/["“«][^"”»]+["”»]/g);
+                                        const blankResults = answer.blankResults || [];
+                                        const hasContest = isWholeContested || blankResults.some(b => b.contestStatus === 'pending');
+                                        const contestMsg = blankResults.find(b => b.contestMessage)?.contestMessage || answer.contestMessage;
+
+                                        return (
+                                            <div className="space-y-3">
+                                                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-sm leading-[2.6] text-slate-800 font-medium">
+                                                    {segments.map((seg, sIdx) => {
+                                                        const hasBlank = sIdx < segments.length - 1;
+                                                        const blank = blankResults[sIdx] || {};
+                                                        const isCorrect = blank.correct === true;
+                                                        const isBlankContested = blank.contestStatus === 'pending' || (isWholeContested && !isCorrect);
+                                                        const expected = (item.expectedAnswers || [])[sIdx] || blank.expected;
+
+                                                        return (
+                                                            <React.Fragment key={sIdx}>
+                                                                <span>{seg}</span>
+                                                                {hasBlank && (
+                                                                    <span className="inline-flex items-center mx-1 align-middle">
+                                                                        <span
+                                                                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black border transition ${
+                                                                                isCorrect
+                                                                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                                                                    : isBlankContested
+                                                                                        ? 'bg-amber-100 border-amber-400 text-amber-950 shadow-sm'
+                                                                                        : 'bg-rose-50 border-rose-300 text-rose-900'
+                                                                            }`}
+                                                                        >
+                                                                            <span>
+                                                                                {isCorrect ? '✓' : isBlankContested ? '⚠️' : '✗'}{' '}
+                                                                                {blank.value || '(vide)'}
+                                                                            </span>
+                                                                            {!isCorrect && expected && (
+                                                                                <span className="text-[11px] font-bold text-slate-500 ml-1">
+                                                                                    (attendu: {expected})
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                    </span>
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {hasContest && (
+                                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 flex flex-wrap items-center justify-between gap-2 animate-in">
+                                                        <div className="text-xs text-amber-950 font-bold flex items-center gap-1">
+                                                            <span>⚠️ Contestation élève :</span>
+                                                            <span className="font-black italic">« {contestMsg || 'Non précisé'} »</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, null, true)}
+                                                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-sm"
+                                                            >
+                                                                ✓ Valider (+ points)
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, null, false)}
+                                                                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black shadow-sm"
+                                                            >
+                                                                ✗ Refuser
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* 3. QUESTION OUVERTE */}
                                     {item.type === 'target' && (
                                         <div className="space-y-2 text-xs">
-                                            <div className="p-3 bg-white rounded-xl border border-slate-200">
-                                                <span className="font-black text-slate-400 uppercase text-[10px]">Réponse saisie :</span>
-                                                <div className="font-bold text-sm text-slate-800 mt-1">
-                                                    {answer.value || <em className="text-slate-400">Aucune réponse</em>}
+                                            <div className={`p-3.5 rounded-xl border ${
+                                                isItemCorrect
+                                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                                                    : (isWholeContested || answer.contestStatus === 'pending')
+                                                        ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-sm'
+                                                        : 'bg-rose-50 border-rose-300 text-rose-950'
+                                            }`}>
+                                                <span className="font-black text-[10px] uppercase opacity-75">Réponse élève :</span>
+                                                <div className="font-black text-sm mt-0.5">
+                                                    {answer.value || <em className="opacity-50">Aucune réponse</em>}
                                                 </div>
+                                                {!isItemCorrect && (
+                                                    <div className="text-[11px] font-bold text-slate-500 mt-2">
+                                                        Attendu : {(item.expectedAnswers || []).join(' OU ') || (item.expectedKeywords || []).join(', ')}
+                                                    </div>
+                                                )}
                                             </div>
 
-                                            {!isItemCorrect && (
-                                                <div className="text-[11px] text-slate-500 font-bold flex flex-wrap items-center gap-2">
-                                                    <span>Attendu : {(item.expectedAnswers || []).join(' OU ') || (item.expectedKeywords || []).join(', ')}</span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setEditingExpectedKey(`${item.id}`);
-                                                            setEditingExpectedValue((item.expectedAnswers || []).join(' / '));
-                                                        }}
-                                                        className="text-[10px] font-black text-violet-700 hover:text-violet-900 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2 py-0.5 rounded shadow-sm"
-                                                        title="Modifier l'attendu et recalculer toutes les copies"
-                                                    >
-                                                        ✏️ Modifier l'attendu
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {editingExpectedKey === `${item.id}` && (
-                                                <div className="p-3 rounded-xl border border-violet-200 bg-violet-50/90 shadow-sm">
-                                                    <div className="text-[11px] font-black text-violet-900 mb-1">
-                                                        Corriger l'attendu pour toute la classe (séparer par / pour variantes) :
+                                            {(isWholeContested || answer.contestStatus === 'pending') && (
+                                                <div className="p-3 bg-amber-100 rounded-xl border border-amber-300 flex flex-wrap items-center justify-between gap-2">
+                                                    <div className="font-black text-amber-900 text-xs">
+                                                        ⚠️ Motif élève : « {answer.contestMessage || 'Non précisé'} »
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-violet-300 bg-white focus:outline-none"
-                                                            value={editingExpectedValue}
-                                                            onChange={(e) => setEditingExpectedValue(e.target.value)}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            disabled={regradingExpected}
-                                                            onClick={() => handleUpdateExpectedAndRegrade(viewingControlCopy.control._id, item.id, null, editingExpectedValue)}
-                                                            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-black shadow-sm disabled:opacity-50"
-                                                        >
-                                                            {regradingExpected ? 'Recalcul...' : '✓ Recorriger toutes les copies'}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setEditingExpectedKey('')}
-                                                            className="px-2.5 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold"
-                                                        >
-                                                            Annuler
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {isWholeContested && (
-                                                <div className="p-3 bg-amber-100 rounded-xl border border-amber-300">
-                                                    <div className="font-black text-amber-900 text-xs">
-                                                        ⚠️ Motif de contestation : « {answer.contestMessage || 'Non précisé'} »
-                                                    </div>
-                                                    <div className="flex gap-2 mt-2">
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, null, true)}
                                                             className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-sm"
                                                         >
-                                                            ✓ Accepter la contestation
+                                                            ✓ Valider (+ points)
                                                         </button>
                                                         <button
                                                             type="button"
@@ -1965,122 +2068,6 @@ export default function StudentsManager({ globalClassId }) {
                                                     </div>
                                                 </div>
                                             )}
-                                        </div>
-                                    )}
-
-                                    {/* FILL / TEXTE A TROUS */}
-                                    {item.type === 'fill' && (
-                                        <div className="space-y-2 text-xs">
-                                            <div className="p-3 bg-white rounded-xl border border-slate-200 leading-relaxed font-bold">
-                                                {(answer.blankResults || []).map((blank, bIdx) => {
-                                                    const isBlankContested = blank.contestStatus === 'pending' || (isWholeContested && !blank.correct);
-                                                    const isEditingThisBlank = editingExpectedKey === `${item.id}:::${bIdx}`;
-
-                                                    return (
-                                                        <div
-                                                            key={bIdx}
-                                                            className={`my-1.5 p-2 rounded-lg border transition-all ${
-                                                                blank.correct
-                                                                    ? 'bg-slate-50 border-slate-200'
-                                                                    : isBlankContested
-                                                                        ? 'bg-amber-50/90 border-amber-300 shadow-sm'
-                                                                        : 'bg-rose-50/60 border-rose-200'
-                                                            }`}
-                                                        >
-                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                <span className="flex flex-wrap items-center gap-1">
-                                                                    <span>Trou n°{bIdx + 1} :{' '}</span>
-                                                                    <strong className={blank.correct ? 'text-emerald-700' : (isBlankContested ? 'text-amber-800' : 'text-rose-700')}>
-                                                                        {blank.value || '(vide)'}
-                                                                    </strong>
-                                                                    {!blank.correct && (
-                                                                        <span className="text-slate-400 font-bold ml-1">
-                                                                            (Attendu : {blank.expected || ((item.expectedAnswers || [])[bIdx] || '')})
-                                                                        </span>
-                                                                    )}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setEditingExpectedKey(`${item.id}:::${bIdx}`);
-                                                                            setEditingExpectedValue(blank.expected || ((item.expectedAnswers || [])[bIdx] || ''));
-                                                                        }}
-                                                                        className="ml-2 text-[10px] font-black text-violet-700 hover:text-violet-900 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2 py-0.5 rounded shadow-sm"
-                                                                        title="Modifier l'attendu pour cette question et recalculer toutes les copies"
-                                                                    >
-                                                                        ✏️ Modifier l'attendu
-                                                                    </button>
-                                                                </span>
-                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                                                                    blank.correct
-                                                                        ? 'bg-emerald-100 text-emerald-800'
-                                                                        : isBlankContested
-                                                                            ? 'bg-amber-200 text-amber-900'
-                                                                            : 'bg-rose-100 text-rose-800'
-                                                                }`}>
-                                                                    {blank.correct ? '✓ Correct' : (isBlankContested ? '⚠️ Contesté' : '✗ Faux')}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Editeur inline de l'attendu pour ce trou */}
-                                                            {isEditingThisBlank && (
-                                                                <div className="mt-2 p-2.5 rounded-xl border border-violet-200 bg-violet-50/90 shadow-sm">
-                                                                    <div className="text-[11px] font-black text-violet-900 mb-1">
-                                                                        Corriger l'attendu du trou n°{bIdx + 1} pour toute la classe (séparer par / pour plusieurs variantes) :
-                                                                    </div>
-                                                                    <div className="flex gap-2">
-                                                                        <input
-                                                                            type="text"
-                                                                            className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-violet-300 bg-white focus:outline-none"
-                                                                            value={editingExpectedValue}
-                                                                            onChange={(e) => setEditingExpectedValue(e.target.value)}
-                                                                            placeholder="Ex: Première guerre mondiale / 1ère Guerre mondiale"
-                                                                        />
-                                                                        <button
-                                                                            type="button"
-                                                                            disabled={regradingExpected}
-                                                                            onClick={() => handleUpdateExpectedAndRegrade(viewingControlCopy.control._id, item.id, bIdx, editingExpectedValue)}
-                                                                            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-black shadow-sm disabled:opacity-50"
-                                                                        >
-                                                                            {regradingExpected ? 'Recalcul...' : '✓ Recorriger toutes les copies'}
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => setEditingExpectedKey('')}
-                                                                            className="px-2.5 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold"
-                                                                        >
-                                                                            Annuler
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {isBlankContested && (
-                                                                <div className="mt-2 pt-2 border-t border-amber-200 bg-amber-100/60 p-2 rounded">
-                                                                    <div className="font-black text-amber-900 text-xs">
-                                                                        Motif de contestation : « {blank.contestMessage || answer.contestMessage || 'Non précisé'} »
-                                                                    </div>
-                                                                    <div className="flex gap-2 mt-2">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, bIdx, true)}
-                                                                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-black"
-                                                                        >
-                                                                            ✓ Accepter (+ points)
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, bIdx, false)}
-                                                                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-black"
-                                                                        >
-                                                                            ✗ Refuser
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
                                         </div>
                                     )}
                                 </div>

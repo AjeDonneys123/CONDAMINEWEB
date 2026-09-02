@@ -1087,6 +1087,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         presentationUrl: initialData?.presentationUrl || '',
         presentationSourceUrl: initialData?.presentationSourceUrl || '',
         presentationSlidesFocus: initialData?.presentationSlidesFocus || '',
+        traceEcriteKeywords: Array.isArray(initialData?.traceEcriteKeywords) ? initialData.traceEcriteKeywords.join(', ') : String(initialData?.traceEcriteKeywords || ''),
         generalSheetDocUrl: initialData?.generalSheetDocUrl || '',
         generalSheetCourseId: initialData?.generalSheetCourseId || '',
         generalSheetCourseTitle: initialData?.generalSheetCourseTitle || '',
@@ -6004,6 +6005,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     presentationUrl: String(formData.presentationUrl || '').trim(),
                     presentationSourceUrl: String(formData.presentationSourceUrl || '').trim(),
                     presentationSlidesFocus: String(formData.presentationSlidesFocus || '').trim(),
+                    traceEcriteKeywords: String(formData.traceEcriteKeywords || '').split(/[,;\n]+/).map(k => k.trim()).filter(Boolean),
                     generalSheetDocUrl: String(formData.generalSheetDocUrl || '').trim(),
                     generalSheetCourseId: String(formData.generalSheetCourseId || '').trim(),
                     generalSheetCourseTitle: String(formData.generalSheetCourseTitle || '').trim(),
@@ -6560,7 +6562,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     </div>
                 </div>
             )}
-            <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[minmax(240px,0.8fr)_1fr_220px] gap-3">
+            <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[minmax(200px,0.8fr)_1fr_140px_1fr] gap-3">
                 <div>
                     <select
                         className="v84-ans-input !w-full !min-w-0"
@@ -6592,7 +6594,14 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     className="v84-ans-input !w-full !min-w-0"
                     value={formData.presentationSlidesFocus || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, presentationSlidesFocus: e.target.value }))}
-                    placeholder="Slides TE (ex: 8-12,15)"
+                    placeholder="Slides TE (ex: 8-12)"
+                />
+                <input
+                    className="v84-ans-input !w-full !min-w-0 border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500"
+                    value={formData.traceEcriteKeywords || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, traceEcriteKeywords: e.target.value }))}
+                    placeholder="Mots-clés cahier vert (ex: mégalopole, PIB)"
+                    title="Mots-clés recherchés par l'IA dans l'écriture verte du cahier des élèves de lycée pour débloquer la fiche."
                 />
             </div>
 

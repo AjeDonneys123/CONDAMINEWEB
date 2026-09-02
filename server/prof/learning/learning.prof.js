@@ -1505,6 +1505,11 @@ router.post('/', async (req, res) => {
         data.generalSheetCourseId = String(data.generalSheetCourseId || '').trim();
         data.generalSheetCourseTitle = String(data.generalSheetCourseTitle || '').trim().slice(0, 300);
         data.generalSheetCourseDescription = String(data.generalSheetCourseDescription || '').trim().slice(0, 2000);
+        data.traceEcriteKeywords = Array.isArray(data.traceEcriteKeywords)
+            ? data.traceEcriteKeywords.map(k => String(k || '').trim()).filter(Boolean)
+            : (typeof data.traceEcriteKeywords === 'string'
+                ? data.traceEcriteKeywords.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean)
+                : []);
         if (!data.title) data.title = 'APPRENTISSAGE';
         await assertLearningChapterMatchesTargets(data);
 

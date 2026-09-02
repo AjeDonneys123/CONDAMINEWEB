@@ -112,6 +112,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [dismissedDebtIds, setDismissedDebtIds] = useState({});
     const [animationEditor, setAnimationEditor] = useState(null);
     const [savingAnimation, setSavingAnimation] = useState(false);
+    const [videoSequencer, setVideoSequencer] = useState(null);
+    const [uploadingSequenceVideos, setUploadingSequenceVideos] = useState(false);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [projectedControl, setProjectedControl] = useState(null);
     const animationFrameRef = useRef(null);
@@ -613,17 +615,57 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
     };
 
-    const openMascotAnimationStudio = () => {
+    const openVideoSequencer = () => {
         setAddMenuOpen(false);
         if (!playingCourse) return;
-        const suggested = Math.max(1, Number(playingCourse.publishedUntilSlide || 1));
-        const raw = window.prompt('Sur quelle slide ajouter ou modifier la mascotte ?', String(suggested));
-        if (raw === null) return;
-        const slideNumber = Math.max(1, Math.floor(Number(raw || 1)));
-        const existing = (playingCourse.presentationAnimations || []).find((row) => Number(row?.slideNumber) === slideNumber)?.animationBlock || null;
-        const isLocal = ['localhost', '127.0.0.1'].includes(String(window.location.hostname || '').toLowerCase());
-        const studioUrl = WEB5E_STUDIO_URL || (isLocal ? 'http://localhost:5174' : '/projet-5e');
-        setAnimationEditor({ course: playingCourse, slideNumber, animationBlock: existing, studioUrl: `${studioUrl.replace(/\/$/, '')}/?embeddedAnimation=1` });
+        setVideoSequencer({
+            course: playingCourse,
+            sequences: Array.isArray(playingCourse.presentationVideoSequences)
+                ? playingCourse.presentationVideoSequences.map((item) => ({ ...item }))
+                : []
+        });
+    };
+
+    const uploadSequenceVideos = async (fileList) => {
+        const files = Array.from(fileList || []).filter((file) => String(file.type || '').startsWith('video/'));
+        if (!files.length) return;
+        setUploadingSequenceVideos(true);
+        try {
+            const uploaded = [];
+            for (const file of files) {
+                const body = new FormData();
+                body.append('file', file);
+                const response = await fetch('/api/web5e/presentation-video-upload', { method: 'POST', body });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.url) throw new Error(data.error || `Import impossible : ${file.name}`);
+                uploaded.push({ id: `video_${Date.now()}_${uploaded.length}`, name: file.name.replace(/\.mp4$/i, ''), url: data.url, driveFileId: data.driveFileId || '', mergeWithNext: false });
+            }
+            setVideoSequencer((current) => current ? { ...current, sequences: [...current.sequences, ...uploaded] } : current);
+        } catch (uploadError) {
+            setError(uploadError.message);
+        } finally {
+            setUploadingSequenceVideos(false);
+        }
+    };
+
+    const saveVideoSequences = async () => {
+        if (!videoSequencer?.course?._id) return;
+        setSavingAnimation(true);
+        try {
+            const response = await fetch(`/api/courses/${videoSequencer.course._id}/video-sequences`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sequences: videoSequencer.sequences })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'Enregistrement impossible');
+            setCourses((current) => current.map((course) => String(course._id) === String(data._id) ? mergeCourseForCurrentView(course, data) : course));
+            setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationVideoSequences: data.presentationVideoSequences || [] } : current);
+            setVideoSequencer(null);
+        } catch (saveError) {
+            setError(saveError.message);
+        } finally {
+            setSavingAnimation(false);
+        }
     };
 
     const openControlOnCourse = async () => {
@@ -1172,7 +1214,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             className="active"
                             onClick={() => playerMode === 'presentation' ? openModification(playingCourse) : setPlayerMode('presentation')}
                         >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
-                        <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openMascotAnimationStudio}>🎭 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>
+                        <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openVideoSequencer}>🎬 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>
                     </div>
                 </div>
             )}
@@ -1187,6 +1229,38 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <div className="course-animation-editor-actions">
                             <button type="button" className="courses-secondary-button" onClick={() => setAnimationEditor(null)} disabled={savingAnimation}>ANNULER</button>
                             <button type="button" className="courses-save-button" onClick={saveMascotAnimation} disabled={savingAnimation || !animationEditor.animationBlock}>{savingAnimation ? 'ENREGISTREMENT…' : 'ENREGISTRER L’ANIMATION'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {videoSequencer && (
+                <div className="course-animation-editor-backdrop" role="dialog" aria-modal="true" aria-label="Séquenceur vidéo">
+                    <div className="course-video-sequencer-window">
+                        <div className="course-animation-editor-heading">
+                            <div><strong>SÉQUENCEUR VIDÉO</strong><span>{videoSequencer.course.title}</span></div>
+                            <button type="button" onClick={() => !savingAnimation && setVideoSequencer(null)} aria-label="Fermer">×</button>
+                        </div>
+                        <div className="course-video-sequencer-body">
+                            <label className="course-video-upload-button">
+                                {uploadingSequenceVideos ? 'IMPORT EN COURS…' : '＋ IMPORTER DES VIDÉOS MP4'}
+                                <input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files)} />
+                            </label>
+                            {videoSequencer.sequences.length === 0 ? <div className="course-video-empty">Importe les vidéos dans leur ordre de lecture.</div> : null}
+                            <div className="course-video-sequence-list">
+                                {videoSequencer.sequences.map((sequence, index) => (
+                                    <div className="course-video-sequence-row" key={sequence.id || index}>
+                                        <span className="course-video-sequence-number">{index + 1}</span>
+                                        <video src={sequence.url} preload="metadata" controls />
+                                        <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, sequences: current.sequences.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) }))} />
+                                        {index < videoSequencer.sequences.length - 1 ? <label className="course-video-merge"><input type="checkbox" checked={sequence.mergeWithNext === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, sequences: current.sequences.map((item, itemIndex) => itemIndex === index ? { ...item, mergeWithNext: event.target.checked } : item) }))} /> Fusionner avec la suivante</label> : null}
+                                        <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, sequences: current.sequences.filter((_, itemIndex) => itemIndex !== index) }))}>×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="course-animation-editor-actions">
+                            <button type="button" className="courses-secondary-button" onClick={() => setVideoSequencer(null)} disabled={savingAnimation}>ANNULER</button>
+                            <button type="button" className="courses-save-button" onClick={() => void saveVideoSequences()} disabled={savingAnimation || uploadingSequenceVideos}>{savingAnimation ? 'ENREGISTREMENT…' : 'ENREGISTRER LES SÉQUENCES'}</button>
                         </div>
                     </div>
                 </div>

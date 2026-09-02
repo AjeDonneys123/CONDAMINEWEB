@@ -216,6 +216,90 @@ router.put('/:id/items/:itemId/expected', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.put('/:id/update-and-regrade', async (req, res) => {
+    try {
+        const row = await AssessmentControl.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
+
+        const prompts = req.body?.prompts || {};
+        const items = Array.isArray(row.items) ? [...row.items] : [];
+
+        items.forEach((item, idx) => {
+            if (prompts[item.id] !== undefined) {
+                const newPrompt = String(prompts[item.id] || '').trim();
+                item.prompt = newPrompt;
+                if (item.type === 'fill') {
+                    const quoted = (newPrompt.match(/["“«]([^"”»]+)["”»]/g) || [])
+                        .map(s => s.replace(/["“«"”»]/g, '').trim())
+                        .filter(Boolean);
+                    item.expectedAnswers = quoted;
+                }
+                items[idx] = item;
+            }
+        });
+        row.items = items;
+
+        // RECALCUL DE TOUTES LES COPIES AVEC LES NOUVEAUX ÉNONCÉS / ATTENDUS
+        const submissions = Array.isArray(row.submissions) ? row.submissions.map(s => ({ ...s })) : [];
+        submissions.forEach((sub) => {
+            const answers = Array.isArray(sub.answers) ? [...sub.answers] : [];
+            answers.forEach((answer, aIdx) => {
+                const item = items.find(candidate => String(candidate.id) === String(answer.itemId));
+                if (!item) return;
+
+                if (item.type === 'fill') {
+                    const expList = item.expectedAnswers || [];
+                    const prevBlanks = Array.isArray(answer.blankResults) ? answer.blankResults : [];
+                    answer.blankResults = expList.map((exp, bIdx) => {
+                        const prev = prevBlanks[bIdx] || {};
+                        const val = prev.value !== undefined ? prev.value : ((answer.values || [])[bIdx] || '');
+                        const isOk = matchAnswer(val, exp);
+                        const contestResolved = isOk && prev.contestStatus === 'pending' ? 'accepted' : (prev.contestStatus || '');
+                        return {
+                            ...prev,
+                            index: bIdx,
+                            value: val,
+                            expected: exp,
+                            correct: isOk,
+                            contestStatus: contestResolved
+                        };
+                    });
+
+                    const correctCount = answer.blankResults.filter(b => b.correct).length;
+                    const maxPts = Number(item.points) || 1;
+                    answer.awardedPoints = Math.round((maxPts * correctCount / Math.max(1, answer.blankResults.length)) * 100) / 100;
+                    answer.correct = answer.blankResults.every(b => b.correct);
+                    if (answer.correct && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
+                } else if (item.type === 'target') {
+                    const val = String(answer.value || '');
+                    const isOk = (item.expectedAnswers || []).some(exp => matchAnswer(val, exp)) ||
+                        ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every(kw => norm(val).includes(norm(kw))));
+                    const maxPts = Number(item.points) || 1;
+                    answer.correct = isOk;
+                    answer.awardedPoints = isOk ? maxPts : 0;
+                    if (isOk && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
+                } else if (item.type === 'qcm') {
+                    const isOk = Number(answer.value) === Number(item.correctIndex);
+                    const maxPts = Number(item.points) || 1;
+                    answer.correct = isOk;
+                    answer.awardedPoints = isOk ? maxPts : 0;
+                }
+
+                answers[aIdx] = answer;
+            });
+            sub.answers = answers;
+            sub.score = Math.round(answers.reduce((sum, a) => sum + (Number(a.awardedPoints) || 0), 0) * 100) / 100;
+        });
+
+        row.submissions = submissions;
+        row.markModified('items');
+        row.markModified('submissions');
+        await row.save();
+
+        res.json({ ok: true, control: row, updatedCount: submissions.length });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 router.delete('/:id', async (req, res) => {
     try { await AssessmentControl.findByIdAndDelete(req.params.id); res.json({ ok: true }); }
     catch (error) { res.status(500).json({ error: error.message }); }

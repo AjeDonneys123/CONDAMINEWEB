@@ -13,8 +13,10 @@ const {
     Web5eActor,
     Web5eAnimation,
     Web5eAudio,
-    Web5eMobileActionAccess
+    Web5eMobileActionAccess,
+    Web5ePresentationRemote
 } = require('./models.web5e');
+const DriveEngine = require('../core/drive.engine');
 
 const router = express.Router();
 const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-mobile');
@@ -24,6 +26,7 @@ fs.mkdirSync(ttsUploadDir, { recursive: true });
 const cutoutUploadDir = path.join(process.cwd(), 'public', 'uploads', 'web5e-cutouts');
 fs.mkdirSync(cutoutUploadDir, { recursive: true });
 const uploadBatch = multer({ dest: uploadDir });
+const videoUpload = multer({ dest: uploadDir, limits: { fileSize: 250 * 1024 * 1024 } });
 
 const normalizeSectionKey = (value = '') => String(value || '').trim().toLowerCase();
 const normalizeTabKey = (value = '') => String(value || '').trim().toLowerCase();
@@ -422,6 +425,72 @@ router.post('/mobile-action-access', async (req, res) => {
         res.json({ ok: true, token: access.token });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/presentation-video-upload', videoUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ ok: false, error: 'Fichier MP4 requis' });
+        if (!String(req.file.mimetype || '').startsWith('video/')) {
+            try { fs.unlinkSync(req.file.path); } catch (_) {}
+            return res.status(400).json({ ok: false, error: 'Le fichier doit être une vidéo' });
+        }
+        const folderId = await DriveEngine.getOrCreateFolder('WEB5E_VIDEOS');
+        const driveFile = await DriveEngine.uploadFile(req.file.originalname || 'sequence.mp4', req.file.path, folderId);
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.json({ ok: true, url: `/api/proxy/${driveFile.id}`, driveFileId: driveFile.id });
+    } catch (e) {
+        if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(500).json({ ok: false, error: e.message || 'Import vidéo impossible' });
+    }
+});
+
+router.post('/presentation-remote-access', async (req, res) => {
+    try {
+        const entryId = String(req.body?.entryId || '').trim();
+        const blockIndex = Math.max(0, Number(req.body?.blockIndex || 0));
+        if (!mongoose.Types.ObjectId.isValid(entryId)) return res.status(400).json({ ok: false, error: 'Présentation non sauvegardée' });
+        let remote = await Web5ePresentationRemote.findOne({ entryId, blockIndex });
+        if (!remote) remote = await Web5ePresentationRemote.create({ token: crypto.randomBytes(12).toString('hex'), entryId, blockIndex });
+        remote.sequenceIndex = 0;
+        remote.visible = false;
+        remote.command = '';
+        remote.lastIssuedAt = new Date();
+        await remote.save();
+        return res.json({ ok: true, token: remote.token });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/presentation-remote/:token', async (req, res) => {
+    try {
+        const remote = await Web5ePresentationRemote.findOne({ token: String(req.params.token || '') }).lean();
+        if (!remote) return res.status(404).json({ ok: false, error: 'Télécommande introuvable' });
+        return res.json({ ok: true, sequenceIndex: remote.sequenceIndex, visible: remote.visible, command: remote.command, commandVersion: remote.commandVersion });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/presentation-remote/:token/command', async (req, res) => {
+    try {
+        const remote = await Web5ePresentationRemote.findOne({ token: String(req.params.token || '') });
+        if (!remote) return res.status(404).json({ ok: false, error: 'Télécommande introuvable' });
+        const action = String(req.body?.action || '');
+        const total = Math.max(1, Number(req.body?.total || 1));
+        if (action === 'previous') remote.sequenceIndex = Math.max(0, remote.sequenceIndex - 1);
+        if (action === 'next') remote.sequenceIndex = Math.min(total - 1, remote.sequenceIndex + 1);
+        if (action === 'toggle') remote.visible = !remote.visible;
+        if (action === 'play') {
+            remote.command = 'play';
+            remote.commandVersion += 1;
+        }
+        remote.lastIssuedAt = new Date();
+        await remote.save();
+        return res.json({ ok: true, sequenceIndex: remote.sequenceIndex, visible: remote.visible, commandVersion: remote.commandVersion });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 

@@ -671,6 +671,106 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
     const [sheetSlidesIdx, setSheetSlidesIdx] = useState(0);
     const [activeBlankMic, setActiveBlankMic] = useState('');
 
+    // Lycée (Seconde, Première, Terminale) Trace Écrite States
+    const isLyceeStudent = useMemo(() => {
+        const raw = String(user?.currentClass || module?.chapterLevel || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        if (/^(2|2DE|2NDE|SECONDE)/.test(raw)) return true;
+        if (/^(1|1ERE|1ER|PREMIERE)/.test(raw)) return true;
+        if (/^(T|TERM|TERMINALE)/.test(raw)) return true;
+        return Boolean(module?.isLycee);
+    }, [user?.currentClass, module?.chapterLevel, module?.isLycee]);
+
+    const initialTraceEcriteValid = Boolean(
+        !isLyceeStudent
+        || module?.isTraceEcriteValidated
+        || module?.completion?.traceEcrite?.validated
+    );
+    const [traceEcriteUnlocked, setTraceEcriteUnlocked] = useState(initialTraceEcriteValid);
+    const [traceEcritePhotoFile, setTraceEcritePhotoFile] = useState(null);
+    const [traceEcritePreviewUrl, setTraceEcritePreviewUrl] = useState(
+        module?.completion?.traceEcrite?.photoUrl || module?.traceEcrite?.photoUrl || ''
+    );
+    const [traceEcriteLoading, setTraceEcriteLoading] = useState(false);
+    const [traceEcriteResult, setTraceEcriteResult] = useState(null);
+    const [showSlidesModal, setShowSlidesModal] = useState(false);
+    const [slidesModalManifest, setSlidesModalManifest] = useState([]);
+    const [slidesModalIdx, setSlidesModalIdx] = useState(0);
+    const [slidesModalLoading, setSlidesModalLoading] = useState(false);
+    const [slidesModalError, setSlidesModalError] = useState('');
+
+    const handleOpenSlidesModal = async () => {
+        setShowSlidesModal(true);
+        if (slidesModalManifest.length > 0) return;
+        setSlidesModalLoading(true);
+        setSlidesModalError('');
+        try {
+            const presUrl = module?.presentationUrl || currentStep?.sheetUrl || '';
+            const res = await fetch('/api/learning/slides/manifest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    presentationUrl: presUrl,
+                    slideSelection: module?.presentationSlidesFocus || ''
+                })
+            });
+            const data = await res.json();
+            if (data?.slides && data.slides.length > 0) {
+                setSlidesModalManifest(data.slides);
+                setSlidesModalIdx(0);
+            } else {
+                setSlidesModalError("Aucune slide trouvée pour ce cours.");
+            }
+        } catch (e) {
+            setSlidesModalError("Impossible de charger les slides du cours.");
+        } finally {
+            setSlidesModalLoading(false);
+        }
+    };
+
+    const handleTraceEcritePhotoSelect = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setTraceEcritePhotoFile(file);
+        const url = URL.createObjectURL(file);
+        setTraceEcritePreviewUrl(url);
+        setTraceEcriteResult(null);
+    };
+
+    const handleVerifyTraceEcrite = async () => {
+        if (!traceEcritePhotoFile && !traceEcritePreviewUrl) {
+            alert("Prends d'abord une photo nette de ton cahier complété au stylo vert.");
+            return;
+        }
+        setTraceEcriteLoading(true);
+        setTraceEcriteResult(null);
+        try {
+            const formData = new FormData();
+            if (traceEcritePhotoFile) {
+                formData.append('photo', traceEcritePhotoFile);
+            } else if (traceEcritePreviewUrl.startsWith('data:')) {
+                formData.append('photoBase64', traceEcritePreviewUrl);
+            }
+            formData.append('studentId', String(user?._id || user?.id || ''));
+
+            const res = await fetch(`/api/eleve/learning/${module._id}/verify-trace-ecrite`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            setTraceEcriteResult(data);
+            if (data.ok && data.unlocked) {
+                setTraceEcriteUnlocked(true);
+            }
+        } catch (err) {
+            setTraceEcriteResult({
+                ok: false,
+                feedback: "Erreur de connexion. Vérifie ta connexion Internet et réessaie."
+            });
+        } finally {
+            setTraceEcriteLoading(false);
+        }
+    };
+
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
     const videoEmbedRef = useRef(null);
@@ -2623,14 +2723,191 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             <div className="learning-top">
                 <button className="learning-btn ghost" onClick={onQuit}>✕ Quitter</button>
                 <div className="learning-title">{module.title}</div>
-                <div className="learning-step">⭐ {learningStars} étoile{learningStars > 1 ? 's' : ''}{starGain > 0 ? <b className="learning-star-gain"> +{starGain}</b> : null} · Étape {stepIndex + 1}/{steps.length}</div>
+                <div className="learning-step">
+                    {isLyceeStudent && traceEcriteUnlocked && (
+                        <span className="mr-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">✓ Cahier vert validé</span>
+                    )}
+                    ⭐ {learningStars} étoile{learningStars > 1 ? 's' : ''}{starGain > 0 ? <b className="learning-star-gain"> +{starGain}</b> : null} · Étape {stepIndex + 1}/{steps.length}
+                </div>
             </div>
 
-            <div className="learning-progress">
-                <div className="learning-progress-bar" style={{ width: `${progressPct}%` }} />
-            </div>
+            {isLyceeStudent && !traceEcriteUnlocked ? (
+                <div className="p-6 md:p-8 rounded-3xl bg-white border-2 border-emerald-200 shadow-2xl max-w-4xl mx-auto my-6 flex flex-col gap-6">
+                    {/* Header du verrou Lycée */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-emerald-100">
+                        <div className="flex items-center gap-3">
+                            <span className="text-3xl">🔒</span>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black tracking-wider uppercase">
+                                        Niveau Lycée · Spécificité Trace Écrite
+                                    </span>
+                                    <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-black tracking-wider uppercase">
+                                        Cahier en vert requis
+                                    </span>
+                                </div>
+                                <h2 className="text-xl md:text-2xl font-black text-slate-900 mt-1">
+                                    {module.title}
+                                </h2>
+                            </div>
+                        </div>
 
-            <div className="learning-card">
+                        {module.presentationUrl && (
+                            <button
+                                type="button"
+                                onClick={handleOpenSlidesModal}
+                                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-md transition flex items-center gap-2"
+                            >
+                                <span>👁</span>
+                                <span>Consulter les slides du cours</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Consigne pédagogique détaillée */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-2">
+                            <div className="text-sm font-black text-slate-900 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-black">1</span>
+                                <span>Repère les documents</span>
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                Dans les slides du cours, identifie les documents référencés par le professeur pour compléter ta trace écrite.
+                            </p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col gap-2">
+                            <div className="text-sm font-black text-emerald-950 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-emerald-200 text-emerald-900 flex items-center justify-center text-xs font-black">2</span>
+                                <span>Écris au stylo VERT</span>
+                            </div>
+                            <p className="text-xs text-emerald-900 leading-relaxed font-medium">
+                                Le cours est en <strong>bleu ou noir</strong>. Rédige impérativement <strong>plusieurs lignes au stylo vert</strong> au milieu de ton texte pour répondre aux documents.
+                            </p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-violet-50 border border-violet-200 flex flex-col gap-2">
+                            <div className="text-sm font-black text-violet-950 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-violet-200 text-violet-900 flex items-center justify-center text-xs font-black">3</span>
+                                <span>Validation automatique par IA</span>
+                            </div>
+                            <p className="text-xs text-violet-900 leading-relaxed">
+                                L'IA analyse la couleur de l'encre (vert), le nombre de lignes et vérifie la présence des <strong>mots-clés</strong> du cours pour débloquer la fiche.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Zone de photo et prévisualisation */}
+                    <div className="p-6 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 flex flex-col items-center justify-center text-center gap-4">
+                        {traceEcritePreviewUrl ? (
+                            <div className="flex flex-col items-center gap-3 w-full max-w-md">
+                                <div className="relative rounded-2xl overflow-hidden shadow-lg border-2 border-emerald-400 max-h-72 w-full bg-black">
+                                    <img
+                                        src={traceEcritePreviewUrl}
+                                        alt="Aperçu cahier"
+                                        className="w-full h-full object-contain max-h-72"
+                                    />
+                                </div>
+                                <label className="cursor-pointer text-xs font-bold text-slate-600 hover:text-slate-900 underline">
+                                    <span>🔄 Choisir une autre photo de mon cahier</span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="hidden"
+                                        onChange={handleTraceEcritePhotoSelect}
+                                        disabled={traceEcriteLoading}
+                                    />
+                                </label>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-3xl shadow-inner">
+                                    📸
+                                </div>
+                                <div className="text-base font-black text-slate-900">
+                                    Prends une photo nette de ta page de cahier
+                                </div>
+                                <p className="text-xs text-slate-500 max-w-md">
+                                    Assure-toi que la page est bien éclairée et que les lignes écrites au stylo vert sont clairement lisibles.
+                                </p>
+                                <label className="cursor-pointer mt-2 px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 transition transform active:scale-95 flex items-center gap-2">
+                                    <span>📷</span>
+                                    <span>PRENDRE LA PHOTO / CHOISIR L'IMAGE</span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="hidden"
+                                        onChange={handleTraceEcritePhotoSelect}
+                                        disabled={traceEcriteLoading}
+                                    />
+                                </label>
+                            </div>
+                        )}
+
+                        {/* Bouton d'action principale */}
+                        {traceEcritePreviewUrl && !traceEcriteUnlocked && (
+                            <button
+                                type="button"
+                                onClick={handleVerifyTraceEcrite}
+                                disabled={traceEcriteLoading}
+                                className="mt-2 px-8 py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm shadow-xl shadow-emerald-700/30 transition transform active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {traceEcriteLoading ? (
+                                    <>
+                                        <span className="animate-spin text-lg">⏳</span>
+                                        <span>ANALYSE IA EN COURS (VERT & MOTS-CLÉS)...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>⚡</span>
+                                        <span>FAIRE ANALYSER MON CAHIER PAR L'IA</span>
+                                    </>
+                                )}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Retour de l'IA */}
+                    {traceEcriteResult && (
+                        <div className={`p-4 rounded-2xl border ${traceEcriteResult.ok ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-amber-50 border-amber-300 text-amber-950'} flex flex-col gap-2`}>
+                            <div className="flex items-center gap-2 font-black text-sm">
+                                <span>{traceEcriteResult.ok ? '✅' : '⚠️'}</span>
+                                <span>{traceEcriteResult.ok ? 'Trace écrite validée avec succès !' : 'Critères non remplis pour l\'instant'}</span>
+                            </div>
+                            <p className="text-xs leading-relaxed">
+                                {traceEcriteResult.feedback}
+                            </p>
+                            {traceEcriteResult.matchedKeywords && traceEcriteResult.matchedKeywords.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    <span className="text-[11px] font-bold">Mots-clés détectés en vert :</span>
+                                    {traceEcriteResult.matchedKeywords.map((kw, i) => (
+                                        <span key={i} className="px-2 py-0.5 rounded-lg bg-emerald-200 text-emerald-900 text-[10px] font-black uppercase">
+                                            ✓ {kw}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            {traceEcriteResult.ok && (
+                                <button
+                                    type="button"
+                                    onClick={() => setTraceEcriteUnlocked(true)}
+                                    className="mt-2 self-start px-5 py-2 rounded-xl bg-emerald-700 text-white font-black text-xs shadow hover:bg-emerald-800 transition"
+                                >
+                                    🚀 Entrer dans la fiche et le cours
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <>
+                    <div className="learning-progress">
+                        <div className="learning-progress-bar" style={{ width: `${progressPct}%` }} />
+                    </div>
+
+                    <div className="learning-card">
                 <div className="learning-step-title">
                     {currentStep.type === 'sheet' ? '📄' : currentStep.type === 'video' ? '🎬' : '🎤'} {currentStep.title || 'Étape'}
                 </div>
@@ -3102,6 +3379,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                 </div>
             )}
             {gateHint && <div className="learning-error">{gateHint}</div>}
+                </>
+            )}
             {activeOral && (
                 <div className="learning-oral-overlay">
                     <div className="learning-oral-card">
@@ -3227,6 +3506,61 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 </div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+            {showSlidesModal && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="relative w-full max-w-4xl bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col max-h-[90vh]">
+                        <div className="p-4 bg-slate-800 border-b border-slate-700 flex items-center justify-between text-white">
+                            <div className="flex items-center gap-2 font-black text-sm">
+                                <span>📑</span>
+                                <span>Slides du cours · {module.title}</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowSlidesModal(false)}
+                                className="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center font-bold text-slate-200"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-hidden p-4 flex items-center justify-center bg-black min-h-[360px]">
+                            {slidesModalLoading ? (
+                                <div className="text-slate-400 font-bold text-sm">Chargement des slides...</div>
+                            ) : slidesModalError ? (
+                                <div className="text-red-400 font-bold text-sm text-center px-4">{slidesModalError}</div>
+                            ) : slidesModalManifest.length > 0 ? (
+                                <div className="relative w-full h-full flex flex-col items-center justify-center">
+                                    <img
+                                        src={slidesModalManifest[slidesModalIdx]?.thumbnailUrl || slidesModalManifest[slidesModalIdx]?.thumbnailProxyUrl || ''}
+                                        alt={`Slide ${slidesModalIdx + 1}`}
+                                        className="max-h-[60vh] max-w-full object-contain rounded-xl"
+                                    />
+                                    <div className="mt-4 flex items-center gap-4 text-white text-xs font-bold">
+                                        <button
+                                            type="button"
+                                            disabled={slidesModalIdx <= 0}
+                                            onClick={() => setSlidesModalIdx(i => Math.max(0, i - 1))}
+                                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40"
+                                        >
+                                            ◀ Précédente
+                                        </button>
+                                        <span>Slide {slidesModalIdx + 1} / {slidesModalManifest.length}</span>
+                                        <button
+                                            type="button"
+                                            disabled={slidesModalIdx >= slidesModalManifest.length - 1}
+                                            onClick={() => setSlidesModalIdx(i => Math.min(slidesModalManifest.length - 1, i + 1))}
+                                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40"
+                                        >
+                                            Suivante ▶
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-slate-400 text-sm">Aucune slide disponible.</div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

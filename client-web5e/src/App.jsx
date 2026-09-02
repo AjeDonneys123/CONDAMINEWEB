@@ -448,6 +448,7 @@ function createAnimationBlockFromDraft(draft = {}) {
     actorWidth: 140,
     actorHeight: 140,
     actorDocked: true,
+    videoSequences: [],
     actions: [
       {
         id: `action_${Date.now()}`,
@@ -470,6 +471,114 @@ function createAnimationBlockFromDraft(draft = {}) {
       }
     ]
   };
+}
+
+function normalizeVideoSequences(value = []) {
+  return (Array.isArray(value) ? value : []).map((item, index) => ({
+    id: String(item?.id || `video_${Date.now()}_${index}`),
+    name: String(item?.name || `Séquence ${index + 1}`),
+    url: String(item?.url || '').trim(),
+    mergeWithNext: item?.mergeWithNext === true
+  })).filter((item) => item.url);
+}
+
+function groupVideoSequences(value = []) {
+  const videos = normalizeVideoSequences(value);
+  const groups = [];
+  videos.forEach((video) => {
+    const current = groups[groups.length - 1];
+    if (current && current[current.length - 1]?.mergeWithNext === true) current.push(video);
+    else groups.push([video]);
+  });
+  return groups;
+}
+
+function VideoSequenceEditor({ animation, onChange }) {
+  const [uploading, setUploading] = useState(false);
+  const sequences = normalizeVideoSequences(animation?.videoSequences);
+  const uploadVideos = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) => file.type.startsWith('video/'));
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        const form = new FormData();
+        form.append('file', file);
+        const response = await fetch('/api/web5e/presentation-video-upload', { method: 'POST', body: form });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.url) throw new Error(data.error || 'Import impossible');
+        uploaded.push({ id: `video_${Date.now()}_${uploaded.length}`, name: file.name.replace(/\.mp4$/i, ''), url: data.url, mergeWithNext: false });
+      }
+      onChange?.({ ...animation, videoSequences: [...sequences, ...uploaded] });
+    } catch (error) {
+      window.alert(error.message || 'Import vidéo impossible');
+    } finally {
+      setUploading(false);
+    }
+  };
+  const update = (index, patch) => onChange?.({ ...animation, videoSequences: sequences.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) });
+  return (
+    <div className="video-sequence-editor">
+      <div className="video-sequence-editor-head">
+        <strong>Séquences vidéo</strong>
+        <label className="presentation-slide-add">{uploading ? 'Import...' : '+ MP4'}<input type="file" accept="video/mp4,video/*" multiple disabled={uploading} className="hidden-file-input" onChange={(event) => void uploadVideos(event.target.files)} /></label>
+      </div>
+      {sequences.map((sequence, index) => (
+        <div className="video-sequence-row" key={sequence.id}>
+          <span>{index + 1}</span>
+          <input value={sequence.name} onChange={(event) => update(index, { name: event.target.value })} />
+          {index < sequences.length - 1 ? <label><input type="checkbox" checked={sequence.mergeWithNext} onChange={(event) => update(index, { mergeWithNext: event.target.checked })} /> Fusionner avec la suivante</label> : null}
+          <button type="button" onClick={() => onChange?.({ ...animation, videoSequences: sequences.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PresentationVideoRemote({ token, total }) {
+  const [state, setState] = useState(null);
+  const send = async (action) => {
+    const response = await fetch(`/api/web5e/presentation-remote/${encodeURIComponent(token)}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, total }) });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setState((previous) => ({ ...(previous || {}), ...data }));
+  };
+  useEffect(() => { fetch(`/api/web5e/presentation-remote/${encodeURIComponent(token)}`).then((response) => response.json()).then(setState).catch(() => {}); }, [token]);
+  return <div className="presentation-video-remote"><div className="eyebrow">Télécommande vidéo</div><h1>Séquence {Number(state?.sequenceIndex || 0) + 1}/{Math.max(1, total)}</h1><div className="presentation-video-remote-buttons"><button onClick={() => void send('previous')}>‹</button><button onClick={() => void send('toggle')}>{state?.visible === false ? 'Show' : 'Hide'}</button><button onClick={() => void send('play')}>Play</button><button onClick={() => void send('next')}>›</button></div></div>;
+}
+
+function PresentationVideoPlayer({ sequences: rawSequences, remoteToken }) {
+  const sequenceGroups = useMemo(() => groupVideoSequences(rawSequences), [rawSequences]);
+  const [remote, setRemote] = useState({ sequenceIndex: 0, visible: false, commandVersion: 0 });
+  const [videoIndex, setVideoIndex] = useState(0);
+  const videoRef = useRef(null);
+  useEffect(() => {
+    if (!remoteToken) return undefined;
+    const poll = () => fetch(`/api/web5e/presentation-remote/${encodeURIComponent(remoteToken)}`).then((response) => response.json()).then((data) => { if (data.ok) setRemote(data); }).catch(() => {});
+    poll();
+    const interval = window.setInterval(poll, 900);
+    return () => window.clearInterval(interval);
+  }, [remoteToken]);
+  const groupIndex = Math.min(sequenceGroups.length - 1, Math.max(0, Number(remote.sequenceIndex || 0)));
+  const sequence = sequenceGroups[groupIndex]?.[videoIndex] || sequenceGroups[groupIndex]?.[0];
+  useEffect(() => { setVideoIndex(0); }, [groupIndex]);
+  useEffect(() => {
+    if (remote.commandVersion <= 0 || remote.visible === false) return;
+    setVideoIndex(0);
+    window.setTimeout(() => videoRef.current?.play().catch(() => {}), 0);
+  }, [remote.commandVersion]);
+  useEffect(() => {
+    if (videoIndex <= 0 || remote.visible === false) return;
+    videoRef.current?.play().catch(() => {});
+  }, [videoIndex, remote.visible]);
+  if (!sequenceGroups.length) return null;
+  const onEnded = async () => {
+    const currentGroup = sequenceGroups[groupIndex] || [];
+    if (videoIndex < currentGroup.length - 1) { setVideoIndex((previous) => previous + 1); return; }
+    if (groupIndex >= sequenceGroups.length - 1 || !remoteToken) return;
+    await fetch(`/api/web5e/presentation-remote/${encodeURIComponent(remoteToken)}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'next', total: sequenceGroups.length }) });
+  };
+  return <><div className="presentation-video-counter">{groupIndex + 1}</div>{remote.visible !== false && sequence ? <div className="presentation-video-layer"><video key={sequence.id} ref={videoRef} src={resolveWeb5eAssetUrl(sequence.url)} playsInline preload="metadata" onEnded={() => void onEnded()} /></div> : null}</>;
 }
 
 function createSpriteFrame(url = '') {
@@ -2175,6 +2284,12 @@ function PresentationEditor({ block, onChange, readOnly, previewOnly = false, se
               ) : null}
             </div>
           ) : null}
+          {presentation.activeEditorTab === 'animation' && currentEditorCanvaSlide?.animation ? (
+            <VideoSequenceEditor
+              animation={currentEditorCanvaSlide.animation}
+              onChange={(nextAnimation) => patchSlide(currentEditorCanvaSlideIndex, { animation: attachAnimationMetadata(nextAnimation, presentationNumber, editorCanvaStep, presentation.presentationName, currentEditorCanvaSlide?.presenterName), presentationValidated: false })}
+            />
+          ) : null}
           {presentation.activeEditorTab !== 'qcm' ? (
             <>
               {hasUploadedFallbackSlides && !editorCanvaLoaded ? (
@@ -2427,6 +2542,7 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
   const [canvaRuntimeUrl, setCanvaRuntimeUrl] = useState(normalized.canvaLiveUrl || '');
   const [canvaPlaying, setCanvaPlaying] = useState(mode === 'canva');
   const [publicCanvaLoaded, setPublicCanvaLoaded] = useState(false);
+  const [videoRemoteToken, setVideoRemoteToken] = useState('');
   const activeSlide = normalized.slides[activeIndex] || normalized.slides[0];
   const qcmQuestions = Array.isArray(normalized.qcmQuestions) ? normalized.qcmQuestions : [];
   const hasQcmTab = qcmQuestions.length > 0;
@@ -2450,6 +2566,14 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
   const quizQuestion = qcmQuestions[quizIndex] || null;
   const quizScore = quizAnswers.filter((entry) => entry?.isCorrect).length;
   const quizPassed = quizCompleted && quizScore === qcmQuestions.length && qcmQuestions.length > 0;
+  const visibleVideoSequences = normalizeVideoSequences((currentCanvaSlide || visibleSlide)?.animation?.videoSequences);
+  const visibleVideoSequenceCount = groupVideoSequences(visibleVideoSequences).length;
+
+  useEffect(() => {
+    if (!entryId || !visibleVideoSequences.length) { setVideoRemoteToken(''); return; }
+    fetch('/api/web5e/presentation-remote-access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entryId, blockIndex }) })
+      .then((response) => response.json()).then((data) => { if (data.ok) setVideoRemoteToken(String(data.token || '')); }).catch(() => {});
+  }, [entryId, blockIndex, visibleVideoSequences.length]);
 
   useEffect(() => {
     setQuizIndex(0);
@@ -2706,6 +2830,7 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
                 />
               </div>
             ) : null}
+            <PresentationVideoPlayer sequences={currentCanvaSlide?.animation?.videoSequences} remoteToken={videoRemoteToken} />
           </div>
           {!simpleMode ? (
             <a className="presentation-slide-add" href={canvaRuntimeUrl || normalized.canvaLiveUrl} target="_blank" rel="noreferrer">
@@ -2805,11 +2930,13 @@ function PublicPresentationViewer({ presentation, sectionKey = '', tabKey = '', 
               canGoNext={simpleMode && isSlideshow ? !showingQcm && slideshowStep < totalSteps - 1 : false}
             />
           ) : null}
+          <PresentationVideoPlayer sequences={visibleSlide?.animation?.videoSequences} remoteToken={videoRemoteToken} />
           {visibleSlide?.presenterName ? (
             <div className="presentation-slide-signature">Presentateur: {formatPresenterLabel(visibleSlide.presenterName)}</div>
           ) : null}
         </div>
       )}
+      {videoRemoteToken && visibleVideoSequenceCount ? <a className="presentation-video-remote-qr" href={`?r=${encodeURIComponent(videoRemoteToken)}&total=${visibleVideoSequenceCount}`} target="_blank" rel="noreferrer"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&ecc=M&qzone=2&data=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?r=${videoRemoteToken}&total=${visibleVideoSequenceCount}`)}`} alt="Télécommande vidéo" /></a> : null}
     </div>
   );
 }
@@ -5625,6 +5752,8 @@ function MainWeb5eApp() {
   }, []);
   const mobileActionToken = String(pageParams.get('m') || pageParams.get('mobileActionToken') || '').trim();
   const isMobileActionMode = Boolean(mobileActionToken);
+  const presentationRemoteToken = String(pageParams.get('r') || '').trim();
+  const presentationRemoteTotal = Math.max(1, Number(pageParams.get('total') || 1));
   const [localContentReady, setLocalContentReady] = useState(!isLocalSessionMode);
 
   useEffect(() => {
@@ -6526,6 +6655,9 @@ function MainWeb5eApp() {
 
   if (isMobileActionMode) {
     return <MobileActionRemote token={mobileActionToken} />;
+  }
+  if (presentationRemoteToken) {
+    return <PresentationVideoRemote token={presentationRemoteToken} total={presentationRemoteTotal} />;
   }
 
   return (

@@ -442,6 +442,29 @@ router.patch('/:id/animation', async (req, res) => {
     }
 });
 
+router.patch('/:id/video-sequences', async (req, res) => {
+    try {
+        const sequences = (Array.isArray(req.body?.sequences) ? req.body.sequences : [])
+            .map((item, index) => ({
+                id: String(item?.id || `video_${Date.now()}_${index}`),
+                name: String(item?.name || `Vidéo ${index + 1}`).trim().slice(0, 160),
+                url: String(item?.url || '').trim(),
+                driveFileId: String(item?.driveFileId || '').trim(),
+                mergeWithNext: item?.mergeWithNext === true
+            }))
+            .filter((item) => item.url);
+        const row = await Course.findByIdAndUpdate(
+            req.params.id,
+            { $set: { presentationVideoSequences: sequences } },
+            { new: true, runValidators: true }
+        ).lean();
+        if (!row) return res.status(404).json({ error: 'Cours introuvable' });
+        return res.json(row);
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 router.delete('/:id', async (req, res) => {
     try {
         const row = await Course.findByIdAndDelete(req.params.id).lean();

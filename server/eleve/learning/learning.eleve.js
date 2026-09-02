@@ -16,6 +16,33 @@ const learningAudioUpload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+const traceEcriteUploadDir = path.join(process.cwd(), 'public', 'uploads', 'traces-ecrites');
+fs.mkdirSync(traceEcriteUploadDir, { recursive: true });
+const traceEcriteUpload = multer({
+    dest: traceEcriteUploadDir,
+    limits: { fileSize: 15 * 1024 * 1024 }
+});
+
+const parseSlideSelection = (raw = '') => {
+    const text = String(raw || '').trim();
+    if (!text) return [];
+    const out = new Set();
+    text.split(',').map((x) => x.trim()).filter(Boolean).forEach((part) => {
+        const range = part.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (range) {
+            const start = parseInt(range[1], 10);
+            const end = parseInt(range[2], 10);
+            const low = Math.min(start, end);
+            const high = Math.max(start, end);
+            for (let i = low; i <= high; i += 1) out.add(i);
+        } else {
+            const n = parseInt(part, 10);
+            if (Number.isFinite(n) && n > 0) out.add(n);
+        }
+    });
+    return Array.from(out).sort((a, b) => a - b);
+};
+
 const isCoursePlanLearningStep = (step = {}) => {
     const title = String(step?.title || '').trim();
     return step?.autoLinkedSheetMode === 'plan'
@@ -96,6 +123,15 @@ function inferAcademicLevel(value = '') {
     if (match) return match[1];
     if (/^(T|TERM|TERMINALE)/.test(normalized)) return 'T';
     return '';
+}
+
+function isLyceeLevel(value = '') {
+    const normalized = normalizeTargetKey(value);
+    const match = normalized.match(/^([1-6])/);
+    if (match && (match[1] === '2' || match[1] === '1')) return true;
+    if (/^(T|TERM|TERMINALE)/.test(normalized)) return true;
+    if (/^(2|2DE|2NDE|SECONDE|1|1ERE|1ER|PREMIERE)/.test(normalized)) return true;
+    return false;
 }
 
 const compactRealtimeStepText = (step = {}) => {
@@ -911,11 +947,14 @@ router.get('/list/:studentId', async (req, res) => {
             return true;
         };
 
+        const isLycee = isLyceeLevel(student.currentClass || req.query.level || '');
         const withChapter = modules
             .filter(m => isChapterAvailableToStudent(chapterById.get(String(m.chapterId))))
             .map(m => {
                 const chapter = chapterById.get(String(m.chapterId));
                 const completion = (m.completions || []).find(c => String(c.studentId) === String(student._id));
+                const traceEcrite = completion?.traceEcrite || null;
+                const isTraceEcriteValidated = !isLycee || Boolean(traceEcrite?.validated);
                 return {
                     ...m,
                     chapterId: String(chapter?._id || m.chapterId || ''),
@@ -923,7 +962,11 @@ router.get('/list/:studentId', async (req, res) => {
                     chapterSection: chapter?.section || m.subject || 'GÉNÉRAL',
                     chapterLevel: inferAcademicLevel(chapter?.sharedLevel || chapter?.classroom),
                     chapterIsActive: chapter?.isArchived !== true,
-                    completion: completion || null
+                    completion: completion || null,
+                    isLycee,
+                    isTraceEcriteValidated,
+                    traceEcrite,
+                    traceEcriteKeywords: Array.isArray(m.traceEcriteKeywords) ? m.traceEcriteKeywords : []
                 };
             });
 
@@ -983,6 +1026,215 @@ router.post('/progress', async (req, res) => {
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:moduleId/verify-trace-ecrite', traceEcriteUpload.single('photo'), async (req, res) => {
+    try {
+        const LearningModule = mongoose.model('LearningModule');
+        const Student = mongoose.model('Student');
+        const { moduleId } = req.params;
+        const studentId = String(req.body?.studentId || req.query?.studentId || '').trim();
+
+        if (!mongoose.Types.ObjectId.isValid(moduleId)) {
+            return res.status(400).json({ error: 'moduleId invalide' });
+        }
+
+        const moduleDoc = await LearningModule.findById(moduleId);
+        if (!moduleDoc || moduleDoc.active === false || moduleDoc.isEnabled === false) {
+            return res.status(404).json({ error: 'Apprentissage introuvable' });
+        }
+
+        const student = mongoose.Types.ObjectId.isValid(studentId)
+            ? await Student.findById(studentId).lean()
+            : null;
+
+        // Récupération de l'image (upload multipart ou base64)
+        let imageBuffer = null;
+        let mimeType = 'image/jpeg';
+        let photoUrl = '';
+
+        if (req.file) {
+            const ext = path.extname(req.file.originalname || '') || '.jpg';
+            const finalName = `te_${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
+            const finalPath = path.join(traceEcriteUploadDir, finalName);
+            fs.renameSync(req.file.path, finalPath);
+            photoUrl = `/uploads/traces-ecrites/${finalName}`;
+            imageBuffer = fs.readFileSync(finalPath);
+            mimeType = String(req.file.mimetype || 'image/jpeg');
+        } else if (req.body?.photoBase64) {
+            const raw = String(req.body.photoBase64 || '').trim();
+            const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) {
+                mimeType = match[1];
+                imageBuffer = Buffer.from(match[2], 'base64');
+            } else {
+                imageBuffer = Buffer.from(raw, 'base64');
+            }
+            const ext = mimeType.includes('png') ? '.png' : (mimeType.includes('webp') ? '.webp' : '.jpg');
+            const finalName = `te_${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
+            const finalPath = path.join(traceEcriteUploadDir, finalName);
+            fs.writeFileSync(finalPath, imageBuffer);
+            photoUrl = `/uploads/traces-ecrites/${finalName}`;
+        }
+
+        if (!imageBuffer || imageBuffer.length < 100) {
+            return res.status(400).json({ error: 'Aucune photo valide fournie. Prends une photo nette de ton cahier.' });
+        }
+
+        // Collecte des mots-clés et du contexte de la leçon
+        const keywordsSet = new Set();
+        (moduleDoc.traceEcriteKeywords || []).forEach((k) => {
+            const s = String(k || '').trim();
+            if (s) keywordsSet.add(s);
+        });
+
+        const contextSnippets = [];
+        (moduleDoc.steps || []).forEach((step) => {
+            (step.sheetKeywords || []).forEach((k) => keywordsSet.add(String(k).trim()));
+            (step.sheetPinkHighlights || []).forEach((k) => keywordsSet.add(String(k).trim()));
+            if (step.title) contextSnippets.push(step.title);
+            if (step.sheetText) contextSnippets.push(step.sheetText.slice(0, 300));
+        });
+
+        if (keywordsSet.size === 0 && moduleDoc.presentationUrl && moduleDoc.presentationSlidesFocus) {
+            try {
+                const selected = parseSlideSelection(moduleDoc.presentationSlidesFocus);
+                const slidesData = await ProfDrive.getGoogleSlidesText(moduleDoc.presentationUrl, selected);
+                if (slidesData?.combinedText) {
+                    contextSnippets.push(slidesData.combinedText.slice(0, 1000));
+                }
+            } catch (_) {}
+        }
+
+        const expectedKeywordsList = Array.from(keywordsSet).filter(Boolean);
+        const contextSummary = contextSnippets.join('\n').slice(0, 1500) || moduleDoc.title;
+
+        // Appel Gemini Multimodal Vision
+        const promptParts = [
+            {
+                inlineData: {
+                    mimeType: mimeType || 'image/jpeg',
+                    data: imageBuffer.toString('base64')
+                }
+            },
+            {
+                text: `Tu es un professeur de lycée exigeant et bienveillant qui vérifie la trace écrite d'un élève dans son cahier (classe de Seconde / Lycée).
+
+CONTEXTE DU COURS :
+- Titre de la leçon : "${moduleDoc.title || 'Cours'}"
+- Éléments et notions du cours : ${contextSummary}
+- Mots-clés / Notions attendus des documents : ${expectedKeywordsList.length > 0 ? expectedKeywordsList.join(', ') : 'Notions clés du cours ci-dessus'}
+
+RÈGLE PÉDAGOGIQUE DU CAHIER :
+1. Le cours est écrit au stylo BLEU et/ou NOIR.
+2. L'élève doit avoir complété la trace écrite en exploitant les documents des slides de cours.
+3. Ces compléments ou réponses doivent être rédigés impérativement au STYLO VERT.
+4. Il doit y avoir PLUSIEURS LIGNES manuscrites écrites en VERT (au moins 2 ou 3 lignes en vert au milieu ou à la suite du texte bleu/noir).
+5. Dans la partie écrite en vert, il doit y avoir au moins UN mot-clé ou notion essentielle en lien avec les documents ou le cours (${expectedKeywordsList.slice(0, 15).join(', ')}).
+
+CONSIGNE D'ÉVALUATION :
+- Repère s'il y a du texte manuscrit au stylo bleu ou noir.
+- Repère avec soin le texte manuscrit écrit à l'encre VERTE.
+- Évalue s'il y a plusieurs lignes écrites en vert (au moins 2 lignes visibles).
+- Transcris ce qui est écrit en vert et cherche s'il contient au moins 1 mot-clé ou notion clé correspondant au cours / documents.
+- Règle de décision :
+  valid = true SI ET SEULEMENT SI :
+    plusieurs lignes en vert sont présentes (greenLinesCount >= 2 ou hasSeveralGreenLines = true)
+    ET au moins 1 mot-clé ou notion pertinente du cours est présent dans la partie verte (matchedKeywords.length >= 1).
+
+RÉPONDS UNIQUEMENT AU FORMAT JSON STRICT (aucun texte autour, pas de balise markdown) :
+{
+  "hasBlueOrBlackText": true,
+  "hasGreenText": true,
+  "greenLinesCount": 3,
+  "hasSeveralGreenLines": true,
+  "greenExtractedText": "mots transcrits écrits en vert",
+  "matchedKeywords": ["mot1", "mot2"],
+  "valid": true,
+  "feedback": "Explication claire et encourageante pour l'élève en français"
+}`
+            }
+        ];
+
+        let aiRaw = '';
+        try {
+            aiRaw = await AIEngine.ask(promptParts, "Tu es un évaluateur OCR et enseignant de lycée strict. Réponds impérativement en JSON strict.");
+        } catch (aiErr) {
+            console.error('[verify-trace-ecrite] AI error:', aiErr);
+            return res.status(500).json({ error: "Le service d'analyse IA est momentanément indisponible. Réessaie dans quelques instants." });
+        }
+
+        let parsed = AIEngine.sanitizeJSON(aiRaw);
+        if (!parsed || typeof parsed !== 'object') {
+            try {
+                const match = String(aiRaw).match(/\{[\s\S]*\}/);
+                if (match) parsed = JSON.parse(match[0]);
+            } catch (_) {}
+        }
+
+        if (!parsed) {
+            return res.status(500).json({ error: "L'IA n'a pas pu analyser l'image. Assure-toi que la photo est bien éclairée et bien nette." });
+        }
+
+        const valid = Boolean(parsed.valid === true || (parsed.hasSeveralGreenLines && Array.isArray(parsed.matchedKeywords) && parsed.matchedKeywords.length > 0));
+        const matchedKeywords = Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [];
+        const greenLinesCount = Number(parsed.greenLinesCount || (parsed.hasSeveralGreenLines ? 3 : (parsed.hasGreenText ? 1 : 0)));
+        const feedback = String(parsed.feedback || (valid ? 'Trace écrite validée avec succès !' : 'La trace écrite ne remplit pas tous les critères attendus.')).trim();
+
+        if (valid) {
+            const sid = studentId || String(student?._id || '');
+            if (sid) {
+                const completions = Array.isArray(moduleDoc.completions) ? [...moduleDoc.completions] : [];
+                const cIdx = completions.findIndex(c => String(c.studentId) === sid);
+                const traceEcriteRecord = {
+                    validated: true,
+                    validatedAt: new Date(),
+                    photoUrl,
+                    greenLinesCount,
+                    greenExtractedText: String(parsed.greenExtractedText || '').slice(0, 500),
+                    matchedKeywords,
+                    feedback
+                };
+
+                if (cIdx >= 0) {
+                    const base = typeof completions[cIdx]?.toObject === 'function' ? completions[cIdx].toObject() : completions[cIdx];
+                    completions[cIdx] = { ...base, traceEcrite: traceEcriteRecord, lastUpdateAt: new Date() };
+                } else {
+                    completions.push({
+                        studentId: sid,
+                        currentStep: 0,
+                        validatedStepIndexes: [],
+                        traceEcrite: traceEcriteRecord,
+                        lastUpdateAt: new Date()
+                    });
+                }
+
+                moduleDoc.completions = completions;
+                await moduleDoc.save();
+            }
+
+            return res.json({
+                ok: true,
+                unlocked: true,
+                matchedKeywords,
+                greenLinesCount,
+                photoUrl,
+                feedback
+            });
+        } else {
+            return res.json({
+                ok: false,
+                unlocked: false,
+                greenLinesCount,
+                matchedKeywords,
+                photoUrl,
+                feedback: feedback || "Ton cahier doit comporter plusieurs lignes écrites en vert au milieu du texte bleu/noir, avec au moins un mot-clé des documents du cours."
+            });
+        }
+    } catch (e) {
+        console.error('[verify-trace-ecrite] error:', e);
+        res.status(500).json({ error: e.message || 'Erreur lors de la vérification de la trace écrite.' });
     }
 });
 

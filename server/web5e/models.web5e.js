@@ -136,6 +136,17 @@ const Web5eMobileActionAccess = getModel('Web5eMobileActionAccess', {
     lastIssuedAt: { type: Date, default: Date.now }
 }, 'web5e_mobile_action_access');
 
+const Web5ePresentationRemote = getModel('Web5ePresentationRemote', {
+    token: { type: String, required: true, unique: true, index: true, trim: true },
+    entryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Web5eEntry', default: null, index: true },
+    blockIndex: { type: Number, default: 0 },
+    sequenceIndex: { type: Number, default: 0 },
+    visible: { type: Boolean, default: false },
+    command: { type: String, enum: ['', 'play'], default: '' },
+    commandVersion: { type: Number, default: 0 },
+    lastIssuedAt: { type: Date, default: Date.now }
+}, 'web5e_presentation_remotes');
+
 module.exports = {
     Web5eSite,
     Web5eTab,
@@ -143,5 +154,6 @@ module.exports = {
     Web5eActor,
     Web5eAnimation,
     Web5eAudio,
-    Web5eMobileActionAccess
+    Web5eMobileActionAccess,
+    Web5ePresentationRemote
 };

@@ -236,6 +236,7 @@ const Models = {
         generalSheetCourseId: { type: String, default: '' },
         generalSheetCourseTitle: { type: String, default: '' },
         generalSheetCourseDescription: { type: String, default: '' },
+        traceEcriteKeywords: { type: [String], default: [] },
         sections: {
             type: [Object],
             default: []
@@ -259,7 +260,8 @@ const Models = {
                 chatLogText: { type: String, default: '' },
                 sheetTimesMs: { type: Object, default: {} },
                 recitationAttempts: { type: [Object], default: [] },
-                recitationValidatedWords: { type: [String], default: [] }
+                recitationValidatedWords: { type: [String], default: [] },
+                traceEcrite: { type: Object, default: null }
             }],
             default: []
         },
@@ -351,6 +353,7 @@ const Models = {
         sourceStartAnchor: { type: mongoose.Schema.Types.Mixed, default: null },
         sourceEndAnchor: { type: mongoose.Schema.Types.Mixed, default: null },
         presentationAnimations: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        presentationVideoSequences: { type: [mongoose.Schema.Types.Mixed], default: [] },
         date: { type: Date, default: Date.now }
     }),
 
