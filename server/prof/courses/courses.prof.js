@@ -450,7 +450,8 @@ router.patch('/:id/video-sequences', async (req, res) => {
                 name: String(item?.name || `Vidéo ${index + 1}`).trim().slice(0, 160),
                 url: String(item?.url || '').trim(),
                 driveFileId: String(item?.driveFileId || '').trim(),
-                mergeWithNext: item?.mergeWithNext === true
+                mergeWithNext: item?.mergeWithNext === true,
+                closeAfterSequence: item?.closeAfterSequence === true
             }))
             .filter((item) => item.url);
         const sequences = normalizeSequences(req.body?.sequences);
@@ -532,7 +533,10 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         if (action === 'play') { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; }
         if (action === 'sequence_next') remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1);
         if (action === 'sequence_finished') {
-            if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) remote.sequenceIndex = Number(remote.sequenceIndex || 0) + 1;
+            if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) {
+                remote.sequenceIndex = Number(remote.sequenceIndex || 0) + 1;
+                if (req.body?.closeAfterSequence === true) remote.animationVisible = false;
+            }
             else { remote.animationVisible = false; remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; }
         }
         if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.animationVisible = false; }
