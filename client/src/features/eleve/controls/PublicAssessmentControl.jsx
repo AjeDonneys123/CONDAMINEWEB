@@ -344,9 +344,13 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                         return segments.map((seg, sIdx) => {
                           const hasBlank = sIdx < segments.length - 1;
                           const blankInfo = blankResults[sIdx] || {};
-                          const blankKey = `${item.id}_${sIdx}`;
+                          const blankKey = `${item.id}:::${sIdx}`;
                           const isBlankCorrect = blankInfo.correct === true;
-                          const blankContested = contestedMap[blankKey] || (blankInfo.contestStatus === 'pending' ? { status: 'pending', message: blankInfo.contestMessage } : null);
+                          const isBlankContested = blankInfo.contestStatus === 'pending' ||
+                            (corr.contestStatus === 'pending' && !isBlankCorrect) ||
+                            Boolean(contestedMap[blankKey]) ||
+                            Boolean(contestedMap[item.id] && !isBlankCorrect);
+                          const blankContestInfo = contestedMap[blankKey] || (blankInfo.contestStatus === 'pending' ? { status: 'pending', message: blankInfo.contestMessage } : null);
 
                           return (
                             <React.Fragment key={sIdx}>
@@ -362,9 +366,9 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                                       borderRadius: 8,
                                       fontSize: 13,
                                       fontWeight: 800,
-                                      border: isBlankCorrect ? '1.5px solid #22c55e' : (blankContested ? '1.5px solid #f59e0b' : '1.5px solid #ef4444'),
-                                      background: isBlankCorrect ? '#dcfce7' : (blankContested ? '#fef3c7' : '#fee2e2'),
-                                      color: isBlankCorrect ? '#15803d' : (blankContested ? '#b45309' : '#991b1b')
+                                      border: isBlankCorrect ? '1.5px solid #22c55e' : (isBlankContested ? '1.5px solid #f59e0b' : '1.5px solid #ef4444'),
+                                      background: isBlankCorrect ? '#dcfce7' : (isBlankContested ? '#fef3c7' : '#fee2e2'),
+                                      color: isBlankCorrect ? '#15803d' : (isBlankContested ? '#b45309' : '#991b1b')
                                     }}
                                   >
                                     {isBlankCorrect ? (
@@ -384,8 +388,8 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                                   {/* Bouton contestation par trou */}
                                   {!isBlankCorrect && (
                                     <>
-                                      {blankContested ? (
-                                        <span className="public-control-contest-badge" title={blankContested.message}>
+                                      {isBlankContested ? (
+                                        <span className="public-control-contest-badge" title={blankContestInfo?.message || 'Contestation transmise au professeur'}>
                                           ⚠️ Contesté
                                         </span>
                                       ) : activeContestKey === blankKey ? null : (
@@ -412,10 +416,10 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                     </div>
 
                     {/* Zone de saisie contestation pour un trou ouvert */}
-                    {activeContestKey.startsWith(`${item.id}_`) && (
+                    {activeContestKey.startsWith(`${item.id}:::`) && (
                       <div className="public-control-contest-box">
                         <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
-                          Contestation pour le trou n°{Number(activeContestKey.split('_')[1]) + 1} :
+                          Contestation pour le trou n°{Number(activeContestKey.split(':::')[1]) + 1} :
                         </div>
                         <input
                           type="text"
@@ -434,7 +438,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                           <button
                             type="button"
                             className="public-control-contest-send"
-                            onClick={() => handleSendContest(item.id, Number(activeContestKey.split('_')[1]))}
+                            onClick={() => handleSendContest(item.id, Number(activeContestKey.split(':::')[1]))}
                           >
                             Envoyer la contestation
                           </button>

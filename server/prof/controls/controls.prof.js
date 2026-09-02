@@ -109,6 +109,113 @@ router.patch('/:id/contest/:submissionId/:itemId', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+const norm = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[’']/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const matchAnswer = (given = '', expected = '') => {
+    const givenNorm = norm(given);
+    if (!givenNorm) return false;
+    const variants = String(expected || '').split(/[/|]/).map(v => norm(v)).filter(Boolean);
+    if (variants.length === 0) return givenNorm === norm(expected);
+    return variants.some(v => v === givenNorm);
+};
+
+router.put('/:id/items/:itemId/expected', async (req, res) => {
+    try {
+        const row = await AssessmentControl.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
+
+        const items = Array.isArray(row.items) ? [...row.items] : [];
+        const itemIndex = items.findIndex(candidate => String(candidate.id) === String(req.params.itemId));
+        if (itemIndex < 0) return res.status(404).json({ error: 'Question introuvable' });
+
+        const item = { ...items[itemIndex] };
+        const expected = String(req.body?.expected || '').trim();
+        const blankIndex = Number(req.body?.blankIndex);
+
+        if (item.type === 'fill' && Number.isInteger(blankIndex)) {
+            const expList = Array.isArray(item.expectedAnswers) ? [...item.expectedAnswers] : [];
+            expList[blankIndex] = expected;
+            item.expectedAnswers = expList;
+
+            // Mettre a jour le prompt du controle en remplacant les guillemets correspondants
+            let quoteCounter = 0;
+            item.prompt = String(item.prompt || '').replace(/["“«]([^"”»]+)["”»]/g, (match, inner) => {
+                if (quoteCounter === blankIndex) {
+                    quoteCounter++;
+                    return `"${expected.replace(/["“«"”»]/g, '').trim()}"`;
+                }
+                quoteCounter++;
+                return match;
+            });
+        } else {
+            // Target / Question ouverte
+            item.expectedAnswers = expected.split(/[/|\n]/).map(s => s.trim()).filter(Boolean);
+        }
+
+        items[itemIndex] = item;
+        row.items = items;
+
+        // RECORRIGER AUTOMATIQUEMENT TOUTES LES COPIES
+        const submissions = Array.isArray(row.submissions) ? row.submissions.map(s => ({ ...s })) : [];
+        submissions.forEach((sub) => {
+            const answers = Array.isArray(sub.answers) ? [...sub.answers] : [];
+            const ansIdx = answers.findIndex(a => String(a.itemId) === String(item.id));
+            if (ansIdx < 0) return;
+
+            const answer = { ...answers[ansIdx] };
+            if (item.type === 'fill') {
+                const expList = item.expectedAnswers || [];
+                const prevBlanks = Array.isArray(answer.blankResults) ? answer.blankResults : [];
+                answer.blankResults = expList.map((exp, bIdx) => {
+                    const prev = prevBlanks[bIdx] || {};
+                    const val = prev.value !== undefined ? prev.value : ((answer.values || [])[bIdx] || '');
+                    const isOk = matchAnswer(val, exp);
+                    const contestResolved = isOk && prev.contestStatus === 'pending' ? 'accepted' : (prev.contestStatus || '');
+                    return {
+                        ...prev,
+                        index: bIdx,
+                        value: val,
+                        expected: exp,
+                        correct: isOk,
+                        contestStatus: contestResolved
+                    };
+                });
+
+                const correctCount = answer.blankResults.filter(b => b.correct).length;
+                const maxPts = Number(item.points) || 1;
+                answer.awardedPoints = Math.round((maxPts * correctCount / Math.max(1, answer.blankResults.length)) * 100) / 100;
+                answer.correct = answer.blankResults.every(b => b.correct);
+                if (answer.correct && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
+            } else if (item.type === 'target') {
+                const val = String(answer.value || '');
+                const isOk = (item.expectedAnswers || []).some(exp => matchAnswer(val, exp)) ||
+                    ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every(kw => norm(val).includes(norm(kw))));
+                const maxPts = Number(item.points) || 1;
+                answer.correct = isOk;
+                answer.awardedPoints = isOk ? maxPts : 0;
+                if (isOk && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
+            }
+
+            answers[ansIdx] = answer;
+            sub.answers = answers;
+            sub.score = Math.round(answers.reduce((sum, a) => sum + (Number(a.awardedPoints) || 0), 0) * 100) / 100;
+        });
+
+        row.submissions = submissions;
+        row.markModified('items');
+        row.markModified('submissions');
+        await row.save();
+
+        res.json({ ok: true, control: row, updatedCount: submissions.length });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 router.delete('/:id', async (req, res) => {
     try { await AssessmentControl.findByIdAndDelete(req.params.id); res.json({ ok: true }); }
     catch (error) { res.status(500).json({ error: error.message }); }

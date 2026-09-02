@@ -139,6 +139,39 @@ export default function StudentsManager({ globalClassId }) {
     }
   };
 
+  const [editingExpectedKey, setEditingExpectedKey] = useState('');
+  const [editingExpectedValue, setEditingExpectedValue] = useState('');
+  const [regradingExpected, setRegradingExpected] = useState(false);
+
+  const handleUpdateExpectedAndRegrade = async (controlId, itemId, blankIndex, expected) => {
+    setRegradingExpected(true);
+    try {
+      const res = await fetch(`/api/controls/${controlId}/items/${itemId}/expected`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blankIndex: Number.isInteger(blankIndex) ? blankIndex : null,
+          expected
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Erreur lors de la mise à jour de l’attendu');
+
+      const updatedControl = data.control;
+      const currentCopyId = viewingControlCopy?.copy?.id;
+      const freshCopy = (updatedControl?.submissions || []).find(s => String(s.id) === String(currentCopyId)) || viewingControlCopy?.copy;
+      setViewingControlCopy(prev => prev ? { ...prev, control: updatedControl, copy: freshCopy } : null);
+      setEditingControlScore(String(freshCopy?.score ?? 0));
+      setEditingExpectedKey('');
+      setEditingExpectedValue('');
+      await loadMatrix();
+    } catch (err) {
+      alert(err.message || 'Erreur lors de la mise à jour');
+    } finally {
+      setRegradingExpected(false);
+    }
+  };
+
   useEffect(() => {
     if (!globalClassId) return;
     loadMatrix();
@@ -1862,8 +1895,50 @@ export default function StudentsManager({ globalClassId }) {
                                             </div>
 
                                             {!isItemCorrect && (
-                                                <div className="text-[11px] text-slate-500 font-bold">
-                                                    Attendu : {(item.expectedAnswers || []).join(' OU ') || (item.expectedKeywords || []).join(', ')}
+                                                <div className="text-[11px] text-slate-500 font-bold flex flex-wrap items-center gap-2">
+                                                    <span>Attendu : {(item.expectedAnswers || []).join(' OU ') || (item.expectedKeywords || []).join(', ')}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditingExpectedKey(`${item.id}`);
+                                                            setEditingExpectedValue((item.expectedAnswers || []).join(' / '));
+                                                        }}
+                                                        className="text-[10px] font-black text-violet-700 hover:text-violet-900 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2 py-0.5 rounded shadow-sm"
+                                                        title="Modifier l'attendu et recalculer toutes les copies"
+                                                    >
+                                                        ✏️ Modifier l'attendu
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {editingExpectedKey === `${item.id}` && (
+                                                <div className="p-3 rounded-xl border border-violet-200 bg-violet-50/90 shadow-sm">
+                                                    <div className="text-[11px] font-black text-violet-900 mb-1">
+                                                        Corriger l'attendu pour toute la classe (séparer par / pour variantes) :
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-violet-300 bg-white focus:outline-none"
+                                                            value={editingExpectedValue}
+                                                            onChange={(e) => setEditingExpectedValue(e.target.value)}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            disabled={regradingExpected}
+                                                            onClick={() => handleUpdateExpectedAndRegrade(viewingControlCopy.control._id, item.id, null, editingExpectedValue)}
+                                                            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-black shadow-sm disabled:opacity-50"
+                                                        >
+                                                            {regradingExpected ? 'Recalcul...' : '✓ Recorriger toutes les copies'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingExpectedKey('')}
+                                                            className="px-2.5 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold"
+                                                        >
+                                                            Annuler
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
 
@@ -1898,18 +1973,42 @@ export default function StudentsManager({ globalClassId }) {
                                         <div className="space-y-2 text-xs">
                                             <div className="p-3 bg-white rounded-xl border border-slate-200 leading-relaxed font-bold">
                                                 {(answer.blankResults || []).map((blank, bIdx) => {
-                                                    const isBlankContested = blank.contestStatus === 'pending';
+                                                    const isBlankContested = blank.contestStatus === 'pending' || (isWholeContested && !blank.correct);
+                                                    const isEditingThisBlank = editingExpectedKey === `${item.id}:::${bIdx}`;
+
                                                     return (
-                                                        <div key={bIdx} className="my-1.5 p-2 rounded-lg border bg-slate-50">
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <span>
-                                                                    Trou n°{bIdx + 1} :{' '}
-                                                                    <strong className={blank.correct ? 'text-emerald-700' : (isBlankContested ? 'text-amber-700' : 'text-rose-700')}>
+                                                        <div
+                                                            key={bIdx}
+                                                            className={`my-1.5 p-2 rounded-lg border transition-all ${
+                                                                blank.correct
+                                                                    ? 'bg-slate-50 border-slate-200'
+                                                                    : isBlankContested
+                                                                        ? 'bg-amber-50/90 border-amber-300 shadow-sm'
+                                                                        : 'bg-rose-50/60 border-rose-200'
+                                                            }`}
+                                                        >
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <span className="flex flex-wrap items-center gap-1">
+                                                                    <span>Trou n°{bIdx + 1} :{' '}</span>
+                                                                    <strong className={blank.correct ? 'text-emerald-700' : (isBlankContested ? 'text-amber-800' : 'text-rose-700')}>
                                                                         {blank.value || '(vide)'}
                                                                     </strong>
-                                                                    {!blank.correct && blank.expected && (
-                                                                        <span className="text-slate-400 font-bold ml-2">(Attendu : {blank.expected})</span>
+                                                                    {!blank.correct && (
+                                                                        <span className="text-slate-400 font-bold ml-1">
+                                                                            (Attendu : {blank.expected || ((item.expectedAnswers || [])[bIdx] || '')})
+                                                                        </span>
                                                                     )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setEditingExpectedKey(`${item.id}:::${bIdx}`);
+                                                                            setEditingExpectedValue(blank.expected || ((item.expectedAnswers || [])[bIdx] || ''));
+                                                                        }}
+                                                                        className="ml-2 text-[10px] font-black text-violet-700 hover:text-violet-900 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2 py-0.5 rounded shadow-sm"
+                                                                        title="Modifier l'attendu pour cette question et recalculer toutes les copies"
+                                                                    >
+                                                                        ✏️ Modifier l'attendu
+                                                                    </button>
                                                                 </span>
                                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
                                                                     blank.correct
@@ -1922,10 +2021,43 @@ export default function StudentsManager({ globalClassId }) {
                                                                 </span>
                                                             </div>
 
+                                                            {/* Editeur inline de l'attendu pour ce trou */}
+                                                            {isEditingThisBlank && (
+                                                                <div className="mt-2 p-2.5 rounded-xl border border-violet-200 bg-violet-50/90 shadow-sm">
+                                                                    <div className="text-[11px] font-black text-violet-900 mb-1">
+                                                                        Corriger l'attendu du trou n°{bIdx + 1} pour toute la classe (séparer par / pour plusieurs variantes) :
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <input
+                                                                            type="text"
+                                                                            className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-violet-300 bg-white focus:outline-none"
+                                                                            value={editingExpectedValue}
+                                                                            onChange={(e) => setEditingExpectedValue(e.target.value)}
+                                                                            placeholder="Ex: Première guerre mondiale / 1ère Guerre mondiale"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={regradingExpected}
+                                                                            onClick={() => handleUpdateExpectedAndRegrade(viewingControlCopy.control._id, item.id, bIdx, editingExpectedValue)}
+                                                                            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-black shadow-sm disabled:opacity-50"
+                                                                        >
+                                                                            {regradingExpected ? 'Recalcul...' : '✓ Recorriger toutes les copies'}
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setEditingExpectedKey('')}
+                                                                            className="px-2.5 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold"
+                                                                        >
+                                                                            Annuler
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
                                                             {isBlankContested && (
                                                                 <div className="mt-2 pt-2 border-t border-amber-200 bg-amber-100/60 p-2 rounded">
                                                                     <div className="font-black text-amber-900 text-xs">
-                                                                        Motif de contestation : « {blank.contestMessage || 'Non précisé'} »
+                                                                        Motif de contestation : « {blank.contestMessage || answer.contestMessage || 'Non précisé'} »
                                                                     </div>
                                                                     <div className="flex gap-2 mt-2">
                                                                         <button

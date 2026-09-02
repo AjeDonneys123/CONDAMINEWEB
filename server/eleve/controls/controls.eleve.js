@@ -5,6 +5,15 @@ const router = express.Router();
 
 const norm = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’']/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 const classKey = (value = '') => norm(value).replace(/\s/g, '');
+
+const matchAnswer = (given = '', expected = '') => {
+    const givenNorm = norm(given);
+    if (!givenNorm) return false;
+    const variants = String(expected || '').split(/[/|]/).map(v => norm(v)).filter(Boolean);
+    if (variants.length === 0) return givenNorm === norm(expected);
+    return variants.some(v => v === givenNorm);
+};
+
 const publicControl = (row) => ({
     _id: row._id, title: row.title, subject: row.subject, chapterId: row.chapterId,
     items: (row.items || []).map(({ expectedAnswers, expectedKeywords, correctIndex, prompt, ...item }) => ({
@@ -86,15 +95,15 @@ router.post('/:id/submit', async (req, res) => {
             const values = Array.isArray(given?.values) ? given.values.map(v => String(v || '')) : [String(given?.value ?? '')];
             let correct = false;
             if (item.type === 'qcm') correct = Number(given?.value) === Number(item.correctIndex);
-            else if (item.type === 'fill') correct = (item.expectedAnswers || []).every((expected, index) => norm(values[index]) === norm(expected));
+            else if (item.type === 'fill') correct = (item.expectedAnswers || []).every((expected, index) => matchAnswer(values[index], expected));
             else if ((item.expectedKeywords || []).length) correct = (item.expectedKeywords || []).every(keyword => norm(values[0]).includes(norm(keyword)));
-            else correct = (item.expectedAnswers || []).some(expected => norm(values[0]) === norm(expected));
+            else correct = (item.expectedAnswers || []).some(expected => matchAnswer(values[0], expected));
 
             const blankResults = item.type === 'fill' ? (item.expectedAnswers || []).map((expected, index) => ({
                 index,
                 value: String(values[index] || ''),
                 expected: String(expected || ''),
-                correct: norm(values[index]) === norm(expected),
+                correct: matchAnswer(values[index], expected),
                 contestStatus: ''
             })) : [];
 
