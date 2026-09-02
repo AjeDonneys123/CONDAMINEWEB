@@ -114,7 +114,8 @@ export function buildGameLearningContext(modules = [], student = {}) {
       const title = String(step?.title || `${step?.type === 'video' ? 'Vidéo' : 'Fiche'} ${index + 1}`).trim();
       if (step?.type === 'sheet' && String(step?.sheetText || step?.sheetUrl || '').trim()) {
         const row = { id: String(step?.id || index), chapterId, sectionId: String(step?.sectionId || ''), title, text: String(step?.sheetText || ''), html: String(step?.sheetTextHtml || ''), url: String(step?.sheetUrl || '') };
-        const isGeneralSheet = /introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(title)
+        const isGeneralSheet = step?.isGeneralSheetMaster === true
+          || /introduction|(?:super)?fiche\s+g[eé]n[eé]rale|plan\s+(?:des|du)/i.test(title)
           || (String(step?.sectionId || '') === firstSectionId && !resources.generalSheets.some((item) => item.chapterId === chapterId));
         (isGeneralSheet ? resources.generalSheets : resources.lessonSheets).push(row);
       }
@@ -140,7 +141,9 @@ export function buildGameLearningContext(modules = [], student = {}) {
       const sectionId = String(step?.sectionId || 'module');
       const section = sectionById.get(sectionId);
       const sectionLabel = String(section?.title || step?.title || '').trim();
-      if (/introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(sectionLabel) || /introduction|fiche\s+g[eé]n[eé]rale|plan\s+des/i.test(String(step?.title || ''))) return;
+      if (step?.isGeneralSheetMaster === true
+        || /introduction|synth[eè]se\s+finale|(?:super)?fiche\s+g[eé]n[eé]rale|plan\s+(?:des|du)/i.test(sectionLabel)
+        || /introduction|(?:super)?fiche\s+g[eé]n[eé]rale|plan\s+(?:des|du)/i.test(String(step?.title || ''))) return;
       const text = String(step.sheetText || '').replace(/\r/g, '').trim();
       const keywords = [
         ...keywordsFromHtml(step?.sheetTextHtml),

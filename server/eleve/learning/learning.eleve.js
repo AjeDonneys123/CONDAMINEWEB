@@ -15,6 +15,17 @@ const learningAudioUpload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+const isCoursePlanLearningStep = (step = {}) => {
+    const title = String(step?.title || '').trim();
+    return step?.autoLinkedSheetMode === 'plan'
+        || /plan\s+des\s+grandes\s+parties/i.test(title)
+        || /restituer\s+le\s+plan/i.test(title);
+};
+
+const isStudentVisibleLearningStep = (step = {}) => String(step?.type || '') !== 'quiz'
+    && step?.hiddenFromLearning !== true
+    && !isCoursePlanLearningStep(step);
+
 const getTutorSessionSecret = () => String(
     process.env.TUTOR_SESSION_SECRET
     || process.env.GPT_INBOX_TOKEN
@@ -934,7 +945,8 @@ router.post('/progress', async (req, res) => {
         }
         // Un parcours n'est achevé que lorsque toutes ses étapes ont été validées,
         // même si l'élève a utilisé « suivant sans valider ».
-        if (completed && patch.validatedStepIndexes.length >= (row.steps || []).length) patch.completedAt = now;
+        const visibleStepsLength = (row.steps || []).filter(isStudentVisibleLearningStep).length;
+        if (completed && patch.validatedStepIndexes.length >= visibleStepsLength) patch.completedAt = now;
 
         if (idx >= 0) {
             const base = typeof next[idx]?.toObject === 'function' ? next[idx].toObject() : next[idx];

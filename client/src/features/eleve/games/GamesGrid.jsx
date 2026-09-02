@@ -23,6 +23,7 @@ export default function GamesGrid({ user }) {
   const [learningModules, setLearningModules] = useState([]);
   const [pendingLaunch, setPendingLaunch] = useState(null);
   const [selectedLearningContext, setSelectedLearningContext] = useState(null);
+  const [expandedChapterId, setExpandedChapterId] = useState('');
 
   const learningContext = useMemo(
       () => buildGameLearningContext(learningModules, user),
@@ -40,7 +41,10 @@ export default function GamesGrid({ user }) {
       return groups;
   }, [learningContext]);
 
-  const requestLaunch = (type, payload = null) => setPendingLaunch({ type, payload });
+  const requestLaunch = (type, payload = null) => {
+      setExpandedChapterId('');
+      setPendingLaunch({ type, payload });
+  };
 
   const buildLearningLevels = (chapter) => (chapter?.lessons || []).map((lesson, index) => ({
       name: `Partie ${['I', 'II', 'III', 'IV', 'V', 'VI'][index] || index + 1} · ${lesson.title}`,
@@ -73,14 +77,24 @@ export default function GamesGrid({ user }) {
     });
   };
 
-  const launchWithChapter = (chapter) => {
+  const launchWithChapter = (chapter, selectedLesson = null) => {
+      const selectedLessons = selectedLesson
+          ? (chapter.lessons || []).filter((lesson) => String(lesson.id) === String(selectedLesson.id))
+          : (Array.isArray(chapter.lessons) ? chapter.lessons : []);
+      const selectedChapter = { ...chapter, lessons: selectedLessons };
       const context = {
           ...learningContext,
           activeChapterId: chapter.id,
           activeChapterTitle: chapter.title,
-          chapters: [chapter],
-          lessons: Array.isArray(chapter.lessons) ? chapter.lessons : [],
-          resources: Object.fromEntries(Object.entries(learningContext.resources || {}).map(([key, rows]) => [key, (rows || []).filter((row) => row.chapterId === chapter.id)]))
+          activeLessonId: selectedLesson ? String(selectedLesson.id) : '',
+          activeLessonTitle: selectedLesson ? String(selectedLesson.title || '') : '',
+          chapters: [selectedChapter],
+          lessons: selectedLessons,
+          resources: Object.fromEntries(Object.entries(learningContext.resources || {}).map(([key, rows]) => [key, (rows || []).filter((row) => {
+              if (row.chapterId !== chapter.id) return false;
+              if (!selectedLesson || key === 'generalSheets' || key === 'generalVideos') return true;
+              return !row.sectionId || String(row.sectionId) === String(selectedLesson.sectionId);
+          })]))
       };
       setSelectedLearningContext(context);
       const launch = pendingLaunch;
@@ -88,10 +102,10 @@ export default function GamesGrid({ user }) {
       if (launch?.type === 'monster') setPlayingMonsterTamer(true);
       if (launch?.type === 'wispguard') setPlayingWispguard(true);
       if (launch?.type === 'multiplication') setPlayingMultiplicationRpg(true);
-      if (launch?.type === 'game') setPlayingGame({ ...launch.payload, learningContext: context, selectedChapter: chapter });
+      if (launch?.type === 'game') setPlayingGame({ ...launch.payload, learningContext: context, selectedChapter });
       if (launch?.type === 'learning-game') {
           const skin = (skins || []).find((item) => String(item?.title || '').toLowerCase().includes(launch.payload));
-          setPlayingGame({ ...buildLearningGame(skin || {}, chapter, launch.payload), learningContext: context });
+          setPlayingGame({ ...buildLearningGame(skin || {}, selectedChapter, launch.payload), learningContext: context });
       }
   };
 
@@ -213,8 +227,8 @@ export default function GamesGrid({ user }) {
                     <div className="mb-6 flex items-start justify-between gap-4">
                         <div>
                             <div className="text-xs font-black uppercase tracking-[.2em] text-indigo-600">Révision du jeu</div>
-                            <h3 className="mt-1 text-2xl font-black text-slate-900 md:text-3xl">Choisis une matière puis un chapitre</h3>
-                            <p className="mt-2 font-bold text-slate-500">Uniquement les chapitres actifs de ton niveau qui contiennent un apprentissage.</p>
+                            <h3 className="mt-1 text-2xl font-black text-slate-900 md:text-3xl">Choisis une matière, puis une leçon ou un chapitre</h3>
+                            <p className="mt-2 font-bold text-slate-500">Ouvre un chapitre pour choisir une seule leçon, ou révise tout le chapitre.</p>
                         </div>
                         <button type="button" onClick={() => setPendingLaunch(null)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate-100 text-xl font-black">✕</button>
                     </div>
@@ -231,11 +245,45 @@ export default function GamesGrid({ user }) {
                                     <div className="text-xs font-bold opacity-80">{chapterGroups[key].length} chapitre{chapterGroups[key].length > 1 ? 's' : ''}</div>
                                 </div>
                                 <div className="grid max-h-72 gap-2 overflow-y-auto p-3">
-                                    {chapterGroups[key].map((chapter) => (
-                                        <button key={chapter.id} type="button" onClick={() => launchWithChapter(chapter)} className="rounded-2xl border-2 border-white bg-white p-3 text-left text-sm font-black text-slate-800 shadow-sm transition hover:border-indigo-400 hover:text-indigo-700">
-                                            {chapter.title}
-                                        </button>
-                                    ))}
+                                    {chapterGroups[key].map((chapter) => {
+                                        const expanded = String(expandedChapterId) === String(chapter.id);
+                                        const lessons = Array.isArray(chapter.lessons) ? chapter.lessons : [];
+                                        return (
+                                            <div key={chapter.id} className={`overflow-hidden rounded-2xl border-2 bg-white shadow-sm transition ${expanded ? 'border-indigo-300' : 'border-white'}`}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedChapterId(expanded ? '' : String(chapter.id))}
+                                                    className="flex w-full items-center gap-3 p-3 text-left text-sm font-black text-slate-800 hover:text-indigo-700"
+                                                >
+                                                    <span className="text-xl">📁</span>
+                                                    <span className="min-w-0 flex-1">{chapter.title}</span>
+                                                    <span className="shrink-0 text-xs text-slate-400">{lessons.length} leçon{lessons.length > 1 ? 's' : ''}</span>
+                                                    <span className="shrink-0 text-lg">{expanded ? '⌃' : '⌄'}</span>
+                                                </button>
+                                                {expanded && (
+                                                    <div className="grid gap-2 border-t border-slate-100 bg-slate-50 p-3">
+                                                        {lessons.map((lesson, lessonIndex) => (
+                                                            <button
+                                                                key={lesson.id}
+                                                                type="button"
+                                                                onClick={() => launchWithChapter(chapter, lesson)}
+                                                                className="rounded-xl border-2 border-slate-100 bg-white px-3 py-3 text-left text-sm font-black text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700"
+                                                            >
+                                                                📄 Leçon {lessonIndex + 1} · {lesson.title}
+                                                            </button>
+                                                        ))}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => launchWithChapter(chapter)}
+                                                            className="mt-1 rounded-xl border-2 border-indigo-500 bg-indigo-600 px-3 py-3 text-left text-sm font-black text-white transition hover:bg-indigo-700"
+                                                        >
+                                                            📚 Tout le chapitre · {chapter.title}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                     {!chapterGroups[key].length && <div className="p-4 text-center text-sm font-bold text-slate-400">Aucun chapitre disponible</div>}
                                 </div>
                             </div>

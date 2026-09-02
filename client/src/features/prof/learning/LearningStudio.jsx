@@ -5182,12 +5182,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             }
             return { id: uid(), name, order: index, visible: true };
         };
-        const addLinkedQuestion = (sheetStep, mode = 'full') => {
+        const addLinkedQuestion = (sheetStep, mode = 'full', title = '') => {
             const revision = sheetToRevisionQuestion(sheetStep, mode);
             steps.push({
                 ...emptyStep('question'),
                 sectionId: sheetStep.sectionId,
-                title: revision.title,
+                title: String(title || revision.title),
                 autoLinkedSheetId: sheetStep.id,
                 autoLinkedSheetMode: mode,
                 autoRevisionKind: revision.kind,
@@ -5207,6 +5207,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const planSection = createSection(0, 'Introduction');
         const planSectionId = planSection.id;
         sections.push(planSection);
+        // La synthèse reçoit sa propre section : elle ne doit pas récupérer par
+        // erreur l'identifiant d'une ancienne section contenant une vidéo.
+        const previousFinalSection = previousSections.find((section) => /synth[eè]se\s+finale/i.test(String(section?.name || '')));
+        if (previousFinalSection?.id) reusedSectionIds.add(String(previousFinalSection.id));
+        const finalSection = previousFinalSection?.id
+            ? { ...previousFinalSection, name: 'Synthèse finale', order: parsed.parts.length + 1 }
+            : { id: uid(), name: 'Synthèse finale', order: parsed.parts.length + 1, visible: true };
         const allGeneralBlocks = generalSheetHtmlToBlocks(importHtml, usesPlainNumberedIdeas);
         const qcmBlockIndex = allGeneralBlocks.findIndex((block) => /^(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i.test(String(block?.text || '').trim()));
         const generalQuizBlocks = qcmBlockIndex >= 0 ? allGeneralBlocks.slice(qcmBlockIndex) : [];
@@ -5220,8 +5227,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         } : null);
         const masterSheet = {
             ...emptyStep('sheet'),
-            sectionId: planSectionId,
-            title: `Fiche générale · ${parsed.documentTitle}`,
+            sectionId: finalSection.id,
+            title: `Superfiche générale · ${parsed.documentTitle}`,
             sheetText: importText,
             sheetTextHtml: importHtml,
             generalSheetGenerated: true,
@@ -5236,27 +5243,27 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             sheetMediaEndSec: Math.max(0, Number(selectedGeneralMedia?.endSec || 0))
         };
         steps.push(masterSheet);
-        const planLines = parsed.parts.map((part, index) => `${toRomanPartNumber(index + 1)} ${part.title}`);
-        const planSheet = {
+        const planLines = parsed.parts.map((part, index) => `${toRomanPartNumber(index + 1)}. ${part.title}`);
+        steps.push({
             ...emptyStep('sheet'),
             sectionId: planSectionId,
-            title: `Introduction · Plan des grandes parties`,
-            sheetText: `${parsed.documentTitle}\n${planLines.join('\n')}`,
-            sheetTextHtml: `<div>${escapeGeneralSheetHtml(parsed.documentTitle)}</div>${planLines.map((line) => `<div><strong>${escapeGeneralSheetHtml(line)}</strong></div>`).join('')}`,
-            generalSheetGenerated: true
-        };
-        steps.push(planSheet);
-        addLinkedQuestion(planSheet, 'plan');
+            title: 'Plan du cours · à consulter, pas à apprendre',
+            sheetText: planLines.join('\n'),
+            sheetTextHtml: planLines.map((line) => `<div>${escapeGeneralSheetHtml(line)}</div>`).join(''),
+            generalSheetGenerated: true,
+            informationalOnly: true
+        });
 
         parsed.parts.forEach((part, index) => {
             const romanPart = toRomanPartNumber(index + 1);
-            const section = createSection(index + 1, `Partie ${romanPart}`);
+            const lessonNumber = index + 1;
+            const section = createSection(lessonNumber, `Section ${romanPart}`);
             const sectionId = section.id;
             sections.push(section);
             const partSheet = {
                 ...emptyStep('sheet'),
                 sectionId,
-                title: `Partie ${romanPart} · ${part.title}`,
+                title: `Fiche · Leçon ${lessonNumber} · ${part.title}`,
                 sheetText: part.text,
                 sheetTextHtml: part.html,
                 generalSheetGenerated: true,
@@ -5270,7 +5277,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 sheetMediaInheritedFromGeneral: Boolean(masterSheet.sheetMediaUrl)
             };
             steps.push(partSheet);
-            addLinkedQuestion(partSheet, 'full');
+            addLinkedQuestion(partSheet, 'full', `Apprentissage · Leçon ${lessonNumber} · ${part.title}`);
             const quizGroup = (parsed.quizGroups || []).find((group) => String(group?.key || '') === String(index + 1));
             steps.push({
                 ...emptyStep('quiz'),
@@ -5283,6 +5290,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 generalSheetGenerated: true
             });
         });
+        sections.push(finalSection);
 
         // Une vidéo est une ressource indépendante de la fiche : elle ne doit
         // jamais être remplacée par une régénération. Les sections restantes
@@ -5567,6 +5575,7 @@ Ouvre et analyse uniquement la présentation de la séquence sélectionnée ci-d
 RÈGLE DE PLAN PRIORITAIRE
 - Les slides intitulées « Leçon 1 », « Leçon 2 », « Leçon 3 »… (ou leur équivalent explicite) définissent obligatoirement le plan de la fiche.
 - Respecte leur ordre : LEÇON 1 devient la partie I, LEÇON 2 la partie II, LEÇON 3 la partie III, etc.
+- Donne à chaque grande partie un titre explicite et fidèle à la leçon : CondaWeb extraira automatiquement ces titres pour afficher, après la vidéo d'introduction, un plan du cours uniquement consultatif et non évalué.
 - Le contenu des slides de trace écrite constitue la base de chaque partie : n'invente pas de grande partie et ne mélange pas deux leçons.
 - Les autres slides servent uniquement d'illustrations, documents, cartes, frises, photographies, schémas ou exemples pour éclairer la leçon correspondante. Ils peuvent enrichir une explication, mais ne doivent jamais créer une nouvelle partie ni modifier le plan des leçons.
 - Ignore les diapositives appartenant à un autre chapitre.
@@ -6195,12 +6204,12 @@ VÉRIFICATION AVANT DE RÉPONDRE
     const hasGlobalSheet = effectiveGlobalSheetSource.length > 0 || hasGeneratedGeneralSheet;
     const hasGlobalVideo = effectiveGlobalVideoSource.length > 0;
     const sheetBtnText = (() => {
-        if (hasGlobalSheet && globalSlidesWarmup.active) return `✦ FICHE + VIDÉO ${globalSlidesWarmup.percent}%`;
-        if (hasGlobalSheet && globalSlidesWarmup.ready) return '✦ FICHE + VIDÉO CHARGÉE';
-        if (hasGlobalSheet) return '✦ FICHE + VIDÉO NOTEBOOKLM';
-        return '✦ GÉNÉRER FICHE + VIDÉO';
+        if (hasGlobalSheet && globalSlidesWarmup.active) return `✦ FICHE GÉNÉRALE ${globalSlidesWarmup.percent}%`;
+        if (hasGlobalSheet && globalSlidesWarmup.ready) return '✦ FICHE GÉNÉRALE CHARGÉE';
+        if (hasGlobalSheet) return '✦ MODIFIER LA FICHE GÉNÉRALE';
+        return '✦ CRÉER LA FICHE GÉNÉRALE';
     })();
-    const videoBtnText = hasGlobalVideo ? '+ VIDÉO GÉNÉRALE CHARGÉE' : '+ AJOUTER VIDÉO GÉNÉRALE';
+    const videoBtnText = hasGlobalVideo ? '+ VIDÉO D’INTRODUCTION CHARGÉE' : '+ AJOUTER VIDÉO D’INTRODUCTION';
     const videoBtnClass = hasGlobalVideo
         ? '!bg-orange-500 !text-white !border-orange-600 hover:!bg-orange-500'
         : '';
@@ -6255,7 +6264,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     <div className="w-full max-w-2xl bg-white rounded-2xl border border-slate-200 shadow-xl p-5">
                         <div className="flex items-center gap-2">
                             <div className="text-[16px] font-black text-slate-800">
-                                {sourcePickerKind === 'video' ? 'Ajouter une vidéo générale' : 'Ajouter une fiche générale'}
+                                {sourcePickerKind === 'video' ? 'Ajouter une vidéo d’introduction' : 'Ajouter une fiche générale'}
                             </div>
                             <button className="v84-close-btn ml-auto" onClick={closeSourcePicker}>✕</button>
                         </div>
@@ -6432,8 +6441,8 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-2xl">
                         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-6 py-4">
                             <div>
-                                <div className="text-xl font-black text-slate-900">Générer une fiche générale</div>
-                                <div className="text-sm font-bold text-slate-500">Le prompt crée la fiche et son QCM. La préparation de la vidéo se fait dans « Vidéo générale ».</div>
+                                <div className="text-xl font-black text-slate-900">Créer la fiche générale</div>
+                                <div className="text-sm font-bold text-slate-500">La fiche sera découpée en leçons ; la superfiche complète sera placée à la fin du parcours.</div>
                             </div>
                             <button
                                 type="button"
@@ -6444,7 +6453,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-bold text-violet-800">
-                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. La préparation des sources NotebookLM et du prompt vidéo se fait ensuite dans <b>Vidéo générale</b>.
+                                Colle uniquement le contenu situé entre <b>=== DÉBUT FICHE CONDAWEB ===</b> et <b>=== FIN FICHE CONDAWEB ===</b>. La vidéo d’introduction se prépare séparément avec NotebookLM.
                             </div>
                             <div className="mb-4 rounded-2xl border-2 border-violet-200 bg-violet-50 p-4">
                                 <div className="font-black text-violet-900">🎵 Chanson / audio de la fiche générale</div>
@@ -6494,7 +6503,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                     onClick={generateLearningFromGeneralSheet}
                                     disabled={!String(generalSheetText || '').trim()}
                                 >
-                                    Valider et créer les sections
+                                    Créer le parcours par sections
                                 </button>
                             </div>
                         </div>
@@ -6836,7 +6845,6 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                         </div>
                                         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                             {[
-                                                { mode: 'plan', label: 'Plan', icon: '📋' },
                                                 { mode: 'full', label: 'Fiche', icon: '📄' }
                                             ].map(({ mode, label, icon }) => {
                                                 const exists = formData.steps.some((candidate) => candidate?.type === 'question'

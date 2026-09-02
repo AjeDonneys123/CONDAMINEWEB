@@ -22,6 +22,13 @@ const formatVideoTime = (seconds = 0) => {
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 };
 
+const isCoursePlanLearningStep = (step = {}) => {
+    const title = String(step?.title || '').trim();
+    return step?.autoLinkedSheetMode === 'plan'
+        || /plan\s+des\s+grandes\s+parties/i.test(title)
+        || /restituer\s+le\s+plan/i.test(title);
+};
+
 // Les fiches sont enregistrées à la fois en texte (navigation, zones) et en
 // HTML (mise en forme professeur). On retrouve les portions <strong>/<u>
 // dans le texte afin de ne jamais perdre gras ni soulignement côté élève.
@@ -50,7 +57,14 @@ const collectSheetFormattingRanges = (html = '', plainText = '') => {
             const parent = node.parentElement;
             const bold = Boolean(parent?.closest('strong, b'));
             const underline = Boolean(parent?.closest('u'));
-            if (bold || underline) ranges.push({ start, end, bold, underline });
+            let color = '';
+            let ancestor = parent;
+            while (ancestor && ancestor !== doc.body) {
+                color = String(ancestor.style?.color || ancestor.getAttribute?.('color') || '').trim();
+                if (color) break;
+                ancestor = ancestor.parentElement;
+            }
+            if (bold || underline || color) ranges.push({ start, end, bold, underline, color });
         }
         return ranges;
     } catch (_) {
@@ -565,16 +579,16 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
         return [...raw]
             .filter((s) => {
                 if (String(s?.type || '') === 'quiz' || s?.hiddenFromLearning === true) return false;
+                if (isCoursePlanLearningStep(s)) return false;
                 const sid = String(s?.sectionId || '').trim();
                 if (!sid) return true;
                 if (visibleSectionIds.size === 0) return true;
                 return visibleSectionIds.has(sid);
             })
             .sort((a, b) => {
-            // La fiche générale est l'entrée du parcours, même si d'anciennes
-            // sauvegardes lui ont attribué un ordre numérique en fin de liste.
-            if (a?.isGeneralSheetMaster === true && b?.isGeneralSheetMaster !== true) return -1;
-            if (b?.isGeneralSheetMaster === true && a?.isGeneralSheetMaster !== true) return 1;
+            // La superfiche générale sert de synthèse finale du parcours.
+            if (a?.isGeneralSheetMaster === true && b?.isGeneralSheetMaster !== true) return 1;
+            if (b?.isGeneralSheetMaster === true && a?.isGeneralSheetMaster !== true) return -1;
             const ao = Number(a?.order);
             const bo = Number(b?.order);
             const aOk = Number.isFinite(ao);
@@ -687,6 +701,7 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
     const sequenceNodeRefs = useRef({});
     const starGainTimerRef = useRef(0);
     const currentStep = steps[stepIndex];
+    const isInformationalOnly = currentStep?.informationalOnly === true;
     const isHardRecitation = currentStep?.type === 'question' && String(currentStep?.questionMode || 'easy') === 'hard';
     const studentIdForGpt = String(user?._id || user?.id || '').trim();
     const isVisitorPreview = user?.isVisitorPreview === true || /^visitor-/i.test(studentIdForGpt);
@@ -1461,6 +1476,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
     const canValidateCurrent = useMemo(() => {
         if (!currentStep) return false;
+        if (isInformationalOnly) return true;
         if (currentStep.type === 'sheet') {
             if (
                 forcedSheetReview &&
@@ -1474,7 +1490,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (currentStep.type === 'video') return videoUnlocked;
         if (currentStep.type === 'question') return isHardRecitation ? studentGptValidated : true;
         return false;
-    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, isHardRecitation, studentGptValidated]);
+    }, [currentStep, isInformationalOnly, sheetReadMs, sheetScrollRatio, videoUnlocked, isHardRecitation, studentGptValidated]);
 
     useEffect(() => {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
@@ -2315,7 +2331,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return;
         }
         setGateHint('');
-        if (currentStep.type === 'sheet') awardLearningStars(`sheet:${currentStep.id || stepIndex}`, 3);
+        if (currentStep.type === 'sheet' && !isInformationalOnly) awardLearningStars(`sheet:${currentStep.id || stepIndex}`, 3);
         const next = new Set([...validated, stepIndex]);
         setValidated(next);
         const isLast = stepIndex >= steps.length - 1;
@@ -2573,7 +2589,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                 start: Math.max(0, r.start - base),
                 end: Math.min(source.length, r.end - base),
                 bold: r.bold === true,
-                underline: r.underline === true
+                underline: r.underline === true,
+                color: String(r.color || '').trim()
             }))
             .filter((r) => r.end > r.start);
         const lineCuts = [];
@@ -2589,19 +2606,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             if (end <= start) continue;
             const chunk = source.slice(start, end);
             const inPink = localRanges.some((r) => start >= r.start && end <= r.end);
-            const globalStart = base + start;
-            const lineStart = Math.max(0, sheetText.lastIndexOf('\n', Math.max(0, globalStart - 1)) + 1);
-            const lineEndMatch = sheetText.indexOf('\n', globalStart);
-            const lineEnd = lineEndMatch < 0 ? sheetText.length : lineEndMatch;
-            const line = sheetText.slice(lineStart, lineEnd).trim();
-            const romanHeading = /^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(line);
-            const mainPoint = /^\d{1,2}\s*-\s+.+/.test(line);
-            const hierarchyStyle = romanHeading
-                ? { color: '#dc2626', fontWeight: 800 }
-                : mainPoint ? { color: '#16a34a', fontWeight: 800 } : undefined;
             const formatting = localFormatting.find((r) => start >= r.start && end <= r.end);
             const contentStyle = {
-                ...(hierarchyStyle || {}),
+                ...(formatting?.color ? { color: formatting.color } : {}),
                 ...(formatting?.bold ? { fontWeight: 800 } : {}),
                 ...(formatting?.underline ? { textDecoration: 'underline', textUnderlineOffset: '2px' } : {})
             };
@@ -2630,7 +2637,11 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
                 {currentStep.type === 'sheet' && (
                     <>
-                        <div className="learning-hint">Lis la fiche, puis scrolle jusqu'en bas.</div>
+                        <div className="learning-hint">
+                            {isInformationalOnly
+                                ? 'Consulte simplement le plan du cours. Il n’est pas à apprendre.'
+                                : 'Lis la fiche, puis scrolle jusqu’en bas.'}
+                        </div>
                         <div className="learning-sheet" ref={sheetRef}>
                             {sheetText
                                 ? (
@@ -3074,12 +3085,16 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             ? 'Validation...'
                             : (currentStep?.type === 'question'
                                 ? (isHardRecitation ? 'Valider après le retour GPT' : 'Vérifier mes réponses')
-                                : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))}
+                                : (isInformationalOnly
+                                    ? 'Continuer'
+                                    : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape')))}
                     </button>
                 )}
-                <button className="learning-btn ghost" disabled={saving} onClick={goToNextStepWithoutValidation}>
-                    {stepIndex >= steps.length - 1 ? 'Voir les étapes manquantes' : 'Suivant sans valider'}
-                </button>
+                {!isInformationalOnly && (
+                    <button className="learning-btn ghost" disabled={saving} onClick={goToNextStepWithoutValidation}>
+                        {stepIndex >= steps.length - 1 ? 'Voir les étapes manquantes' : 'Suivant sans valider'}
+                    </button>
+                )}
             </div>
             {stepIndex >= steps.length - 1 && validated.size < steps.length && (
                 <div className="learning-error">

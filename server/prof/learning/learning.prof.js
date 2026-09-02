@@ -340,6 +340,7 @@ const sanitizeSteps = (steps = []) => {
                     sheetUrl: String(step?.sheetUrl || '').trim(),
                     sheetText,
                     sheetTextHtml: String(step?.sheetTextHtml || '').slice(0, 120000),
+                    informationalOnly: step?.informationalOnly === true,
                     isGeneralSheetMaster: step?.isGeneralSheetMaster === true,
                     generalSheetParentId: String(step?.generalSheetParentId || '').trim().slice(0, 160),
                     generalSheetPartIndex: Math.max(0, Number(step?.generalSheetPartIndex || 0)),
