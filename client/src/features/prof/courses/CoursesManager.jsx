@@ -1091,7 +1091,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         />
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
-                            <div className="course-control-qr"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`${window.location.origin}/?control=${projectedControl._id}`)}`} alt="QR code du contrôle"/><strong>SCANNE POUR COMMENCER</strong></div>
+                            <div className="course-control-qr">
+                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://condaweb.vercel.app/?control=${projectedControl._id}`)}`} alt="QR code du contrôle"/>
+                                <strong>SCANNE POUR COMMENCER</strong>
+                                <a href={`/?control=${projectedControl._id}`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-black underline text-violet-700 hover:text-violet-900 mt-1">
+                                    ↗ Ouvrir le contrôle
+                                </a>
+                            </div>
                             <div className="course-control-paper"><h1>{projectedControl.title}</h1>{(projectedControl.items || []).map((item, index) => <article key={item.id}><small>{index + 1} · {item.lessonTitle}</small><div>{String(item.prompt || '').replace(/["“«][^"”»]+["”»]/g, '__________')}</div>{item.type === 'qcm' && <ol type="A">{item.choices.map(choice => <li key={choice}>{choice}</li>)}</ol>}</article>)}</div>
                         </div>}
                         

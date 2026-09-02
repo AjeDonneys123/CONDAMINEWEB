@@ -78,6 +78,66 @@ export default function StudentsManager({ globalClassId }) {
   const [gptFeedbackError, setGptFeedbackError] = useState('');
   const [dilVocabulary, setDilVocabulary] = useState([]);
   const [assessmentControls, setAssessmentControls] = useState([]);
+  const [viewingControlCopy, setViewingControlCopy] = useState(null);
+  const [editingControlScore, setEditingControlScore] = useState('');
+  const [editingControlNote, setEditingControlNote] = useState('');
+  const [savingControlScore, setSavingControlScore] = useState(false);
+
+  const isCopyContested = (copy) => (copy?.answers || []).some((a) =>
+    a.contestStatus === 'pending' || (a.blankResults || []).some((b) => b.contestStatus === 'pending')
+  );
+  const isControlContested = (control) => (control?.submissions || []).some(isCopyContested);
+
+  const handleOpenControlCopy = (control, copy, student) => {
+    setViewingControlCopy({ control, copy, student });
+    setEditingControlScore(String(copy.score ?? 0));
+    setEditingControlNote(String(copy.teacherNote || ''));
+  };
+
+  const handleSaveControlScore = async () => {
+    if (!viewingControlCopy) return;
+    setSavingControlScore(true);
+    try {
+      const { control, copy } = viewingControlCopy;
+      const res = await fetch(`/api/controls/${control._id}/submissions/${copy.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          score: Number(editingControlScore),
+          teacherNote: editingControlNote
+        })
+      });
+      const updatedCopy = await res.json();
+      if (!res.ok) throw new Error(updatedCopy?.error || 'Erreur lors de l’enregistrement');
+      setViewingControlCopy((prev) => prev ? { ...prev, copy: updatedCopy } : null);
+      await loadMatrix();
+    } catch (e) {
+      alert(e.message || 'Erreur lors de l’enregistrement de la note');
+    } finally {
+      setSavingControlScore(false);
+    }
+  };
+
+  const handleDecideContest = async (controlId, copyId, itemId, blankIndex, accepted) => {
+    try {
+      const res = await fetch(`/api/controls/${controlId}/contest/${copyId}/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accepted,
+          ...(Number.isInteger(blankIndex) ? { blankIndex } : {})
+        })
+      });
+      const updatedSubmission = await res.json();
+      if (res.ok && updatedSubmission?.id) {
+        setViewingControlCopy((prev) => prev ? { ...prev, copy: updatedSubmission } : null);
+        setEditingControlScore(String(updatedSubmission.score ?? 0));
+        await loadMatrix();
+      }
+    } catch (e) {
+      alert('Erreur lors du traitement de la contestation');
+    }
+  };
 
   useEffect(() => {
     if (!globalClassId) return;
@@ -130,7 +190,18 @@ export default function StudentsManager({ globalClassId }) {
             })
             .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
-        setAssessmentControls((controls || []).filter(row => (row.targetClassrooms || []).map(norm).includes(norm(currentClassName))));
+        const currentClassNorm = norm(currentClassName);
+        const myStudentIds = new Set(myStudents.map(s => extractId(s._id)));
+        const myStudentNames = new Set(myStudents.map(s => norm(`${s.firstName || ''} ${s.lastName || ''}`)));
+        setAssessmentControls((controls || []).filter(row => {
+            const targets = (row.targetClassrooms || []).map(norm);
+            const hitsTarget = targets.length === 0 || targets.includes(currentClassNorm);
+            const hasClassSubmission = (row.submissions || []).some(s => 
+                (s.studentId && myStudentIds.has(String(s.studentId))) ||
+                (s.studentName && myStudentNames.has(norm(s.studentName)))
+            );
+            return hitsTarget || hasClassSubmission;
+        }));
         const methodProgress = {};
         progs.forEach((progress) => {
             const gameId = String(progress?.gameId || '');
@@ -839,6 +910,66 @@ export default function StudentsManager({ globalClassId }) {
                             <div className="text-[12px] text-slate-400 italic mb-4">Aucune récupération de contrôle.</div>
                         )}
 
+                        {/* CONTRÔLES ÉVALUATION */}
+                        <h4 className="text-xs font-black text-slate-400 uppercase mb-2">📝 CONTRÔLES</h4>
+                        {(() => {
+                            const sid = extractId(viewingStudent._id);
+                            const sNameKey = norm(`${viewingStudent.firstName || ''} ${viewingStudent.lastName || ''}`);
+                            const studentControls = assessmentControls.flatMap((ctrl) => {
+                                const studentCopies = (ctrl.submissions || []).filter((copy) =>
+                                    (copy.studentId && String(copy.studentId) === sid) ||
+                                    (copy.studentName && norm(copy.studentName) === sNameKey)
+                                );
+                                return studentCopies.map((copy) => ({ ctrl, copy }));
+                            });
+
+                            if (studentControls.length === 0) {
+                                return <div className="text-[12px] text-slate-400 italic mb-4">Aucun contrôle rendu.</div>;
+                            }
+
+                            return (
+                                <div className="space-y-2 mb-4">
+                                    {studentControls.map(({ ctrl, copy }) => {
+                                        const contested = isCopyContested(copy);
+                                        return (
+                                            <div
+                                                key={`${ctrl._id}_${copy.id}`}
+                                                className={`p-3.5 rounded-xl border flex justify-between items-center transition-colors ${
+                                                    contested ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200'
+                                                }`}
+                                            >
+                                                <div>
+                                                    <div className="font-bold text-slate-800 flex items-center gap-2">
+                                                        <span>{ctrl.title}</span>
+                                                        {contested && (
+                                                            <span className="rounded-md bg-amber-500 px-2 py-0.5 text-[9px] font-black text-white uppercase">
+                                                                ⚠️ Contesté
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[10px] font-black text-slate-400 uppercase mt-0.5">
+                                                        Remis le {new Date(copy.submittedAt || Date.now()).toLocaleDateString('fr-FR')}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${contested ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>
+                                                        {copy.score} / {copy.total}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenControlCopy(ctrl, copy, viewingStudent)}
+                                                        className="bg-violet-50 text-violet-700 border border-violet-200 px-3 py-1.5 rounded-lg text-xs font-black hover:bg-violet-100"
+                                                    >
+                                                        ✏️ Modifier la note
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+
                         {/* DEVOIRS */}
                         <h4 className="text-xs font-black text-slate-400 uppercase mb-2">📚 DEVOIRS</h4>
                         {workloadItems.filter(w => w.type === 'homework' && !w.isPunishment).map(w => (
@@ -1365,8 +1496,101 @@ export default function StudentsManager({ globalClassId }) {
             </div>
         )}
 
-        {/* TABLEAU */}
-        {assessmentControls.length > 0 && <div className="mb-5 rounded-[26px] border border-rose-200 bg-rose-50 p-5"><h3 className="font-black text-rose-800 text-lg mb-3">📝 CONTRÔLES ET CONTESTATIONS</h3>{assessmentControls.map(control => <details key={control._id} className="bg-white border rounded-2xl p-3 mb-2"><summary className="font-black cursor-pointer">{control.title} · {(control.submissions || []).length} copie(s)</summary><div className="mt-3 space-y-2">{(control.submissions || []).map(copy => { const student=students.find(s=>extractId(s._id)===String(copy.studentId)); const contests=(copy.answers||[]).flatMap(answer => { const whole=answer.contestStatus==='pending'?[{answer,message:answer.contestMessage}]:[]; const blanks=(answer.blankResults||[]).filter(blank=>blank.contestStatus==='pending').map(blank=>({answer,blankIndex:blank.index,message:blank.contestMessage})); return [...whole,...blanks]; }); return <div key={copy.id} className="border rounded-xl p-3"><strong>{student?.firstName} {student?.lastName} — {copy.score}/{copy.total}</strong>{contests.map(({answer,blankIndex,message})=><div key={`${answer.itemId}-${blankIndex ?? 'all'}`} className="mt-2 bg-amber-50 p-2 rounded-lg text-xs"><div className="font-bold">Contestation{Number.isInteger(blankIndex)?` · réponse ${blankIndex+1}`:''} : {message}</div><div className="flex gap-2 mt-2"><button onClick={()=>fetch(`/api/controls/${control._id}/contest/${copy.id}/${answer.itemId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted:true,...(Number.isInteger(blankIndex)?{blankIndex}:{})})}).then(loadMatrix)} className="px-3 py-1 bg-green-600 text-white rounded">Accepter</button><button onClick={()=>fetch(`/api/controls/${control._id}/contest/${copy.id}/${answer.itemId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted:false,...(Number.isInteger(blankIndex)?{blankIndex}:{})})}).then(loadMatrix)} className="px-3 py-1 bg-red-600 text-white rounded">Refuser</button></div></div>)}</div>})}</div></details>)}</div>}
+        {/* TABLEAU DES CONTRÔLES & CONTESTATIONS */}
+        {assessmentControls.length > 0 && (
+            <div className="mb-5 rounded-[26px] border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                        <span>📝 CONTRÔLES ET CONTESTATIONS</span>
+                        {assessmentControls.some(isControlContested) && (
+                            <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
+                                ⚠️ Contestations à traiter
+                            </span>
+                        )}
+                    </h3>
+                </div>
+
+                {assessmentControls.map(control => {
+                    const hasControlContest = isControlContested(control);
+                    const submissions = control.submissions || [];
+
+                    return (
+                        <details
+                            key={control._id}
+                            className={`border rounded-2xl p-3 mb-2 transition-all ${
+                                hasControlContest ? 'bg-amber-50/80 border-amber-300' : 'bg-white border-slate-200'
+                            }`}
+                            open={hasControlContest}
+                        >
+                            <summary className="font-black cursor-pointer flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <span>{control.title} · {submissions.length} copie(s)</span>
+                                    {hasControlContest && (
+                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-500 text-white">
+                                            ⚠️ Contestation en attente
+                                        </span>
+                                    )}
+                                </div>
+                            </summary>
+
+                            <div className="mt-3 space-y-2">
+                                {submissions.length === 0 ? (
+                                    <div className="text-xs text-slate-400 italic p-2">Aucune copie reçue pour ce contrôle.</div>
+                                ) : (
+                                    submissions.map(copy => {
+                                        const student = students.find(s =>
+                                            extractId(s._id) === String(copy.studentId) ||
+                                            norm(`${s.firstName} ${s.lastName}`) === norm(copy.studentName)
+                                        );
+                                        const contested = isCopyContested(copy);
+
+                                        return (
+                                            <div
+                                                key={copy.id}
+                                                className={`border rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 transition-colors ${
+                                                    contested ? 'border-amber-400 bg-amber-100/70 text-amber-950' : 'border-slate-200 bg-white'
+                                                }`}
+                                            >
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <strong className="text-sm">
+                                                            {student ? `${student.firstName} ${student.lastName}` : (copy.studentName || 'Élève')}
+                                                        </strong>
+                                                        {contested && (
+                                                            <span className="rounded bg-amber-500 px-2 py-0.5 text-[9px] font-black text-white uppercase">
+                                                                ⚠️ Contesté
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 font-bold mt-0.5">
+                                                        Note : <span className="font-black text-slate-800">{copy.score} / {copy.total}</span>
+                                                        {copy.submittedAt && ` · Rendu le ${new Date(copy.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenControlCopy(control, copy, student)}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm transition ${
+                                                            contested
+                                                                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                                                : 'bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200'
+                                                        }`}
+                                                    >
+                                                        ✏️ Ouvrir la copie & Modifier la note
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </details>
+                    );
+                })}
+            </div>
+        )}
         <div className="bg-white rounded-[30px] border overflow-hidden shadow-xl animate-in flex flex-col max-h-[80vh]">
             <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
                 <h3 className="font-black text-slate-700 text-lg uppercase">📊 SUIVI D'ACTIVITÉ : {className}</h3>
@@ -1512,6 +1736,228 @@ export default function StudentsManager({ globalClassId }) {
                 </table>
             </div>
         </div>
+
+        {/* MODALE DE VISUALISATION DE COPIE & MODIFICATION DE NOTE */}
+        {viewingControlCopy && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in">
+                <div className="bg-white rounded-[28px] border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                    {/* En-tete */}
+                    <div className="p-6 border-b bg-slate-50 flex justify-between items-start gap-4">
+                        <div>
+                            <div className="text-[11px] font-black uppercase tracking-wider text-violet-600">Copie d'évaluation</div>
+                            <h2 className="text-xl font-black text-slate-800 mt-0.5">
+                                {viewingControlCopy.student ? `${viewingControlCopy.student.firstName} ${viewingControlCopy.student.lastName}` : (viewingControlCopy.copy.studentName || 'Élève')}
+                            </h2>
+                            <div className="text-xs font-bold text-slate-500 mt-1">
+                                {viewingControlCopy.control.title} · Remis le {new Date(viewingControlCopy.copy.submittedAt || Date.now()).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setViewingControlCopy(null)}
+                            className="text-slate-400 hover:text-slate-600 text-2xl font-bold w-9 h-9 rounded-full flex items-center justify-center hover:bg-slate-200"
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    {/* Barre de modification de la note */}
+                    <div className="p-4 bg-violet-50/70 border-b border-violet-100 flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs font-black text-violet-900 uppercase">Note attribuée :</label>
+                            <input
+                                type="number"
+                                step="0.25"
+                                min="0"
+                                max={viewingControlCopy.copy.total || 100}
+                                value={editingControlScore}
+                                onChange={(e) => setEditingControlScore(e.target.value)}
+                                className="w-20 px-3 py-1.5 rounded-xl border border-violet-300 bg-white font-black text-center text-sm text-violet-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                            />
+                            <span className="text-sm font-black text-violet-700">/ {viewingControlCopy.copy.total} pts</span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                disabled={savingControlScore}
+                                onClick={handleSaveControlScore}
+                                className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs shadow-md transition disabled:opacity-50"
+                            >
+                                {savingControlScore ? 'Enregistrement...' : '💾 Enregistrer la note'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Corps : Liste des questions de la copie */}
+                    <div className="p-6 overflow-y-auto flex-1 space-y-4 custom-scrollbar">
+                        {(viewingControlCopy.control.items || []).map((item, idx) => {
+                            const answer = (viewingControlCopy.copy.answers || []).find((a) => String(a.itemId) === String(item.id)) || {};
+                            const isItemCorrect = answer.correct === true;
+                            const isWholeContested = answer.contestStatus === 'pending';
+                            const contestedBlanks = (answer.blankResults || []).filter((b) => b.contestStatus === 'pending');
+                            const isContested = isWholeContested || contestedBlanks.length > 0;
+
+                            return (
+                                <div
+                                    key={item.id}
+                                    className={`p-4 rounded-2xl border-2 transition-all ${
+                                        isItemCorrect
+                                            ? 'border-emerald-300 bg-emerald-50/60'
+                                            : isContested
+                                                ? 'border-amber-400 bg-amber-50 shadow-sm'
+                                                : 'border-rose-300 bg-rose-50/60'
+                                    }`}
+                                >
+                                    <div className="flex justify-between items-center gap-2 mb-2">
+                                        <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                                            Question {idx + 1} · {item.lessonTitle || 'Général'}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {isContested && (
+                                                <span className="rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black uppercase">
+                                                    ⚠️ Question contestée
+                                                </span>
+                                            )}
+                                            <span className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-black text-slate-700">
+                                                {answer.awardedPoints ?? (isItemCorrect ? item.points : 0)} / {item.points || 1} pt(s)
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="font-bold text-sm text-slate-800 mb-3">{item.prompt}</div>
+
+                                    {/* QCM */}
+                                    {item.type === 'qcm' && (
+                                        <div className="text-xs space-y-1">
+                                            {(item.choices || []).map((c, cIdx) => {
+                                                const isChosen = Number(answer.value) === cIdx;
+                                                return (
+                                                    <div
+                                                        key={c}
+                                                        className={`p-2 rounded-lg font-bold flex items-center justify-between ${
+                                                            isChosen
+                                                                ? isItemCorrect
+                                                                    ? 'bg-emerald-200 text-emerald-900'
+                                                                    : 'bg-rose-200 text-rose-900'
+                                                                : 'bg-white/70 text-slate-600'
+                                                        }`}
+                                                    >
+                                                        <span>{String.fromCharCode(65 + cIdx)}. {c}</span>
+                                                        {isChosen && <span>(Choix de l'élève)</span>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* TARGET / QUESTION OUVERTE */}
+                                    {item.type === 'target' && (
+                                        <div className="space-y-2 text-xs">
+                                            <div className="p-3 bg-white rounded-xl border border-slate-200">
+                                                <span className="font-black text-slate-400 uppercase text-[10px]">Réponse saisie :</span>
+                                                <div className="font-bold text-sm text-slate-800 mt-1">
+                                                    {answer.value || <em className="text-slate-400">Aucune réponse</em>}
+                                                </div>
+                                            </div>
+
+                                            {!isItemCorrect && (
+                                                <div className="text-[11px] text-slate-500 font-bold">
+                                                    Attendu : {(item.expectedAnswers || []).join(' OU ') || (item.expectedKeywords || []).join(', ')}
+                                                </div>
+                                            )}
+
+                                            {isWholeContested && (
+                                                <div className="p-3 bg-amber-100 rounded-xl border border-amber-300">
+                                                    <div className="font-black text-amber-900 text-xs">
+                                                        ⚠️ Motif de contestation : « {answer.contestMessage || 'Non précisé'} »
+                                                    </div>
+                                                    <div className="flex gap-2 mt-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, null, true)}
+                                                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-sm"
+                                                        >
+                                                            ✓ Accepter la contestation
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, null, false)}
+                                                            className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black shadow-sm"
+                                                        >
+                                                            ✗ Refuser
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* FILL / TEXTE A TROUS */}
+                                    {item.type === 'fill' && (
+                                        <div className="space-y-2 text-xs">
+                                            <div className="p-3 bg-white rounded-xl border border-slate-200 leading-relaxed font-bold">
+                                                {(answer.blankResults || []).map((blank, bIdx) => {
+                                                    const isBlankContested = blank.contestStatus === 'pending';
+                                                    return (
+                                                        <div key={bIdx} className="my-1.5 p-2 rounded-lg border bg-slate-50">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <span>
+                                                                    Trou n°{bIdx + 1} :{' '}
+                                                                    <strong className={blank.correct ? 'text-emerald-700' : (isBlankContested ? 'text-amber-700' : 'text-rose-700')}>
+                                                                        {blank.value || '(vide)'}
+                                                                    </strong>
+                                                                    {!blank.correct && blank.expected && (
+                                                                        <span className="text-slate-400 font-bold ml-2">(Attendu : {blank.expected})</span>
+                                                                    )}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                                                    blank.correct
+                                                                        ? 'bg-emerald-100 text-emerald-800'
+                                                                        : isBlankContested
+                                                                            ? 'bg-amber-200 text-amber-900'
+                                                                            : 'bg-rose-100 text-rose-800'
+                                                                }`}>
+                                                                    {blank.correct ? '✓ Correct' : (isBlankContested ? '⚠️ Contesté' : '✗ Faux')}
+                                                                </span>
+                                                            </div>
+
+                                                            {isBlankContested && (
+                                                                <div className="mt-2 pt-2 border-t border-amber-200 bg-amber-100/60 p-2 rounded">
+                                                                    <div className="font-black text-amber-900 text-xs">
+                                                                        Motif de contestation : « {blank.contestMessage || 'Non précisé'} »
+                                                                    </div>
+                                                                    <div className="flex gap-2 mt-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, bIdx, true)}
+                                                                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-black"
+                                                                        >
+                                                                            ✓ Accepter (+ points)
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDecideContest(viewingControlCopy.control._id, viewingControlCopy.copy.id, item.id, bIdx, false)}
+                                                                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-black"
+                                                                        >
+                                                                            ✗ Refuser
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        )}
     </>
   );
 }

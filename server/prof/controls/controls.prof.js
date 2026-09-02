@@ -55,6 +55,30 @@ router.post('/', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.put('/:id/submissions/:submissionId', async (req, res) => {
+    try {
+        const row = await AssessmentControl.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
+        const submissions = Array.isArray(row.submissions) ? row.submissions.map(s => ({ ...s })) : [];
+        const index = submissions.findIndex(s => String(s.id) === String(req.params.submissionId));
+        if (index >= 0) {
+            const current = submissions[index];
+            const newScore = req.body?.score !== undefined ? Number(req.body.score) : current.score;
+            submissions[index] = {
+                ...current,
+                score: Math.round(Number(newScore) * 100) / 100,
+                teacherNote: req.body?.teacherNote !== undefined ? String(req.body.teacherNote) : (current.teacherNote || ''),
+                answers: Array.isArray(req.body?.answers) ? req.body.answers : current.answers
+            };
+            row.submissions = submissions;
+            row.markModified('submissions');
+            await row.save();
+            return res.json(submissions[index]);
+        }
+        res.status(404).json({ error: 'Copie introuvable' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 router.patch('/:id/contest/:submissionId/:itemId', async (req, res) => {
     try {
         const row = await AssessmentControl.findById(req.params.id);
@@ -79,6 +103,7 @@ router.patch('/:id/contest/:submissionId/:itemId', async (req, res) => {
         }
         submission.score = Math.round(submission.answers.reduce((sum, candidate) => sum + (Number(candidate.awardedPoints) || 0), 0) * 100) / 100;
         row.submissions = submissions;
+        row.markModified('submissions');
         await row.save();
         res.json(submission);
     } catch (error) { res.status(500).json({ error: error.message }); }

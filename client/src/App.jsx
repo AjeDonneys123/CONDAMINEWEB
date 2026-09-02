@@ -3,6 +3,7 @@ import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
 import ControlRecoveryMobileCapture from './features/eleve/controlRecovery/ControlRecoveryMobileCapture';
+import PublicAssessmentControl from './features/eleve/controls/PublicAssessmentControl';
 import SystemStatus from './features/prof/components/SystemStatus';
 import AutoConsoleBugReporter from './features/shared/AutoConsoleBugReporter';
 import './App.css';
@@ -30,6 +31,11 @@ export default function App() {
   const recoveryMobileToken = String(urlParams.get('recoveryMobile') || '').trim();
   if (recoveryMobileToken) {
     return <ControlRecoveryMobileCapture token={recoveryMobileToken} />;
+  }
+
+  const publicControlId = String(urlParams.get('control') || '').trim();
+  if (publicControlId) {
+    return <PublicAssessmentControl controlId={publicControlId} />;
   }
 
   const [user, setUser] = useState(null);
