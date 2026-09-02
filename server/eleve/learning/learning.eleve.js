@@ -9,6 +9,7 @@ const FormData = require('form-data');
 const multer = require('multer');
 const AIEngine = require('../../core/ai.engine');
 const ProfDrive = require('../../prof/core/drive.prof');
+const { synchronizeLinkedSheetQuestions } = require('../../prof/learning/linked-sheet-questions');
 
 const learningAudioUpload = multer({
     dest: path.join(process.cwd(), 'public', 'uploads', 'temp'),
@@ -866,7 +867,23 @@ router.get('/list/:studentId', async (req, res) => {
                 { assignedStudents: student._id }
             ];
         }
-        const rawModules = await LearningModule.find(moduleQuery).sort({ createdAt: -1 }).lean();
+        const storedModules = await LearningModule.find(moduleQuery).sort({ createdAt: -1 }).lean();
+        const repairs = [];
+        const rawModules = storedModules.map((module) => {
+            const synchronized = synchronizeLinkedSheetQuestions(module.steps);
+            if (!synchronized.changed) return module;
+            repairs.push({
+                updateOne: {
+                    filter: { _id: module._id },
+                    update: { $set: { steps: synchronized.steps } }
+                }
+            });
+            return { ...module, steps: synchronized.steps };
+        });
+        // Répare paresseusement les anciennes questions dès leur prochaine
+        // consultation. La réponse envoyée à l'élève est déjà corrigée, sans
+        // attendre l'écriture MongoDB.
+        if (repairs.length > 0) await LearningModule.bulkWrite(repairs, { ordered: false });
 
         const modules = rawModules.filter(m => {
             if (forGames) return true;

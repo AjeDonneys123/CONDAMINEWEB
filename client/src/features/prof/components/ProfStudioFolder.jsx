@@ -12,6 +12,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const ACTIVITY_OPTIONS = [
         { type: 'homework', label: 'Devoir', icon: '📝', tone: 'bg-orange-50 border-orange-200 text-orange-700' },
         { type: 'learning', label: 'Apprentissage', icon: '🧠', tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+        { type: 'control', label: 'Contrôle', icon: '📝', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
         { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
         ...(isHgTeacher ? [{ type: 'comment', label: 'Commentaire', icon: '🧾', tone: 'bg-amber-50 border-amber-200 text-amber-700' }] : []),
         { type: 'production', label: 'Production', icon: '🏗️', tone: 'bg-lime-50 border-lime-200 text-lime-700' }
@@ -651,7 +652,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                             {chapItems.map(it => (
                                             <div
                                                 key={it._id}
-                                                draggable={['homework', 'game', 'learning', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(it.actType)}
+                                                draggable={['homework', 'game', 'learning', 'control', 'expose', 'lecture', 'fiche', 'production', 'comment'].includes(it.actType)}
                                                 onDragStart={(e) => {
                                                     e.stopPropagation();
                                                     setDraggedActivity(it);

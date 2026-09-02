@@ -266,6 +266,19 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    AssessmentControl: getModel('AssessmentControl', {
+        title: { type: String, default: 'CONTRÔLE' },
+        subject: { type: String, default: 'GÉNÉRAL' },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter', index: true },
+        learningModuleId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningModule', default: null },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', default: null },
+        targetClassrooms: { type: [String], default: [] },
+        active: { type: Boolean, default: true },
+        items: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        submissions: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        date: { type: Date, default: Date.now }
+    }),
+
     Expose: getModel('Expose', {
         title: { type: String, default: "EXPOSÉ" },
         subject: { type: String, default: "GÉNÉRAL" },

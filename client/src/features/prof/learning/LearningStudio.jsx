@@ -422,19 +422,34 @@ const sheetToFillBlankText = (sheet = null) => {
     if (!html || typeof DOMParser === 'undefined') return plainText;
     try {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        const isHeading = (node) => {
+        const isStructuralHeading = (node) => {
             const line = node.closest('div, p, li, h1, h2, h3, h4, h5, h6');
-            const text = String(line?.textContent || '').replace(/\u00a0/g, ' ').trim();
-            return /^(?:(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+|\d{1,2}\s*-\s+)/i.test(text);
+            const lineText = String(line?.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+            const nodeText = String(node?.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+            // Les titres I., II., III. sont visuellement gras mais ne sont pas
+            // des réponses. En revanche, dans une ligne 1-, 2-, 3-, chaque
+            // véritable fragment gras doit impérativement devenir un trou.
+            if (/^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(lineText)) return true;
+            if (!/^\d{1,2}\s*-\s+/.test(lineText)) return false;
+            const contentWithoutMarker = lineText.replace(/^\d{1,2}\s*-\s+/, '').trim();
+            // Protection contre un collage qui aurait mis toute l'idée en gras
+            // comme simple style hiérarchique.
+            return nodeText === lineText || nodeText === contentWithoutMarker;
         };
         // Process U first: a title can be visually bold as a whole, but only
         // the words manually underlined by the teacher are expected answers.
-        const formattedNodes = [
+        const formattedNodes = [...new Set([
             ...Array.from(doc.body.querySelectorAll('u')),
-            ...Array.from(doc.body.querySelectorAll('strong, b'))
-        ];
+            ...Array.from(doc.body.querySelectorAll('strong, b, [data-expected-word="true"], span[style*="font-weight"]'))
+                .filter((node) => {
+                    if (['STRONG', 'B'].includes(node.tagName) || node.getAttribute?.('data-expected-word') === 'true') return true;
+                    const weight = String(node.style?.fontWeight || '').toLowerCase();
+                    return weight === 'bold' || Number.parseInt(weight, 10) >= 600;
+                })
+        ])];
         formattedNodes.forEach((node) => {
-            if (node.tagName !== 'U' && isHeading(node)) return;
+            if (!node.isConnected) return;
+            if (node.tagName !== 'U' && isStructuralHeading(node)) return;
             const raw = String(node.textContent || '').replace(/\u00a0/g, ' ');
             // Keep list markers and punctuation in the displayed text, outside
             // the expected answer. A student must answer the word, not `1-`.
@@ -936,6 +951,38 @@ const sheetToRevisionQuestion = (sheet = null, requestedKind = 'full') => {
     };
 };
 
+const synchronizeLinkedSheetQuestions = (rawSteps = []) => {
+    const steps = (Array.isArray(rawSteps) ? rawSteps : []).map((step) => ({ ...step }));
+    const sheetsById = new Map(steps
+        .filter((step) => step?.type === 'sheet' && String(step?.id || '').trim())
+        .map((step) => [String(step.id), step]));
+    return steps.map((step) => {
+        if (step?.type !== 'question') return step;
+        const linkedId = String(step?.autoLinkedSheetId || '').trim()
+            || String(step?.sourceSheetUrl || '').replace(/^sheet:/, '').trim();
+        const sheet = sheetsById.get(linkedId);
+        if (!sheet) return step;
+        const mode = step?.autoLinkedSheetMode === 'plan' ? 'plan' : 'full';
+        const revision = sheetToRevisionQuestion(sheet, mode);
+        return {
+            ...step,
+            autoLinkedSheetId: linkedId,
+            autoLinkedSheetMode: mode,
+            autoRevisionKind: revision.kind,
+            sourceKind: 'sheet',
+            sourceSheetUrl: `sheet:${linkedId}`,
+            questionCount: 1,
+            questionAnswerPairs: [{
+                question: revision.text,
+                answer: '',
+                expectedKeywords: [],
+                generatedByAi: false,
+                validationType: 'fill_blanks'
+            }]
+        };
+    });
+};
+
 const normalizeLoadedSteps = (rawSteps = []) => {
     if (!Array.isArray(rawSteps)) return [];
     const sorted = [...rawSteps].sort((a, b) => {
@@ -1027,10 +1074,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         ...(() => {
             const sections = normalizeLoadedSections(initialData?.sections);
             const defaultSectionId = String(sections[0]?.id || 'sec_1');
-            const steps = normalizeLoadedSteps(initialData?.steps).map((s) => ({
+            const steps = synchronizeLinkedSheetQuestions(normalizeLoadedSteps(initialData?.steps).map((s) => ({
                 ...s,
                 sectionId: String(s?.sectionId || defaultSectionId)
-            }));
+            })));
             return { sections, steps };
         })(),
         _id: initialData?._id,
@@ -5633,6 +5680,7 @@ En 3e, n'utilise a), b), c)... qu'exceptionnellement, lorsqu'un découpage suppl
 Ne multiplie pas les niveaux de plan : une fiche doit pouvoir être relue et apprise facilement.`}
 Mettre en gras uniquement les dates, personnages, lieux, notions, mots-clés et expressions que l'élève devra restituer dans un texte à trous.
 Tous les éléments en gras doivent pouvoir être supprimés pour créer automatiquement un texte à trous.
+Vérifie avant de répondre que chaque date, personnage, lieu, notion ou expression mis en gras apparaît exactement une fois en gras dans la fiche : CondaWeb transformera automatiquement chacun de ces fragments en trou.
 Ne jamais mettre en gras un détail secondaire ou anecdotique.
 Supprimer les informations inutiles au niveau collège.
 Le contenu doit être exact, clair, synthétique et adapté à des élèves de collège.
@@ -5932,6 +5980,8 @@ VÉRIFICATION AVANT DE RÉPONDRE
 
         const chapter = (chapters || []).find(ch => String(ch._id) === chapterId);
 
+        const synchronizedSteps = synchronizeLinkedSheetQuestions(formData.steps);
+        setFormData((previous) => ({ ...previous, steps: synchronizedSteps }));
         setLoading(true);
         try {
             const groups = {};
@@ -5964,7 +6014,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     isAllClass: grp.isAllClass,
                     isEnabled: true,
                     sections: formData.sections || [],
-                    steps: formData.steps
+                    steps: synchronizedSteps
                 };
                 await api.post('/learning', payload);
             }

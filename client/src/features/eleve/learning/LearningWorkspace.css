@@ -433,6 +433,39 @@
     white-space: pre-wrap;
 }
 
+.learning-fill-blank-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin: 5px 6px;
+    vertical-align: middle;
+    white-space: normal;
+}
+
+.learning-fill-answer-line {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.25;
+}
+
+.learning-fill-blank-stack .learning-fill-input {
+    margin: 0;
+}
+
+.learning-fill-inline-correction {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border-bottom: 3px solid #16a34a;
+    border-radius: 0 0 6px 6px;
+    padding: 5px 8px;
+    background: #f0fdf4;
+    color: #166534;
+    font-weight: 900;
+    line-height: 1.25;
+    text-align: center;
+}
+
 .learning-fill-input {
     width: min(190px, 42vw);
     margin: 0 6px;
@@ -451,8 +484,8 @@
     background: rgba(255, 255, 255, 0.72);
 }
 
-/* Après vérification, la correction se lit directement dans chaque trou. */
-.learning-fill-input.is-expected:disabled {
+/* Après vérification, la réponse donnée reste visible en rouge. */
+.learning-fill-input.is-incorrect-answer:disabled {
     border-bottom-color: #dc2626;
     background: #fff1f2;
     color: #b91c1c;
@@ -486,6 +519,13 @@
     opacity: 1;
     background: rgba(255, 255, 255, 0.72);
     color: #334155;
+}
+
+.learning-quiz-textarea.is-incorrect-answer:disabled {
+    border: 2px solid #ef4444;
+    background: #fff1f2;
+    color: #b91c1c;
+    font-weight: 800;
 }
 
 .learning-quiz-mic {
@@ -525,6 +565,38 @@
 
 .learning-correction-actions {
     margin-top: 10px;
+}
+
+.learning-correction-pairs {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.learning-correction-pair {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+}
+
+.learning-student-wrong-answer,
+.learning-correct-answer {
+    padding: 11px 13px;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.learning-student-wrong-answer {
+    background: #fff1f2;
+    color: #b91c1c;
+}
+
+.learning-correct-answer {
+    border-top: 1px solid #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
 }
 
 .learning-expected-answer {

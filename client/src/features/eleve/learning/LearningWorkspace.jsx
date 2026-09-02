@@ -2225,7 +2225,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             // de suite pour permettre la vérification et l'apprentissage.
             revealed: Object.fromEntries(failed.map((item) => [item.id, true]))
         }));
-        setGateHint(`${failed.length} réponse${failed.length > 1 ? 's' : ''} à revoir : la réponse attendue est affichée en rouge.`);
+        setGateHint(`${failed.length} réponse${failed.length > 1 ? 's' : ''} à revoir : ta réponse apparaît en rouge et la correction en vert.`);
         stopRecording({ transcribe: false });
     };
 
@@ -2898,7 +2898,6 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                 const isCorrect = result === 'correct';
                                 const isIncorrect = result === 'incorrect';
                                 const canEdit = currentQuizState.stage === 'answering' && !isCorrect;
-                                const isRevealed = Boolean(currentQuizState.revealed?.[item.id]);
                                 const isFillBlanks = item.validationType === 'fill_blanks';
                                 const fillBlank = isFillBlanks ? parseFillBlankText(item.question) : { parts: [], answers: [] };
                                 const expected = String(item.expectedAnswer || item.expectedKeywords?.join(' / ') || '').trim();
@@ -2929,40 +2928,46 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                 {fillBlank.parts.map((part, blankIndex) => (
                                                     <React.Fragment key={`${item.id}_blank_${blankIndex}`}>
                                                         <span>{part}</span>
-                                                        {blankIndex < fillBlank.answers.length && (
-                                                            <>
-                                                            {(() => {
+                                                        {blankIndex < fillBlank.answers.length && (() => {
                                                                 const blankIsCorrect = blankResults[blankIndex] === true;
                                                                 const showExpectedForBlank = showFillCorrection && !blankIsCorrect;
-                                                                return <input
-                                                                className={`learning-fill-input ${showExpectedForBlank ? 'is-expected' : ''} ${showFillCorrection && blankIsCorrect ? 'is-correct-answer' : ''}`}
-                                                                value={showExpectedForBlank
-                                                                    ? (fillBlank.answers[blankIndex] || '')
-                                                                    : (blankValues[blankIndex] || '')}
-                                                                disabled={!canEdit}
-                                                                aria-label={`Trou ${blankIndex + 1}`}
-                                                                onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
-                                                            />;
+                                                                return (
+                                                                    <span className={`learning-fill-blank-stack ${showExpectedForBlank ? 'has-correction' : ''}`}>
+                                                                        <span className="learning-fill-answer-line">
+                                                                            <input
+                                                                                className={`learning-fill-input ${showExpectedForBlank ? 'is-incorrect-answer' : ''} ${showFillCorrection && blankIsCorrect ? 'is-correct-answer' : ''}`}
+                                                                                value={blankValues[blankIndex] || ''}
+                                                                                disabled={!canEdit}
+                                                                                aria-label={`Trou ${blankIndex + 1}`}
+                                                                                onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
+                                                                            />
+                                                                            {canEdit && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className={`learning-quiz-mic learning-fill-mic ${activeBlankMic === `${item.id}:${blankIndex}` ? 'is-recording' : ''}`}
+                                                                                    title={activeBlankMic === `${item.id}:${blankIndex}` ? 'Enregistrement en cours' : 'Dicter ce trou'}
+                                                                                    onClick={() => dictateBlank(item.id, blankIndex)}
+                                                                                >🎙️</button>
+                                                                            )}
+                                                                            {canEdit && String(blankValues[blankIndex] || '') && !showFillCorrection && (
+                                                                                <button type="button" className="learning-answer-erase" title="Effacer ce trou" aria-label={`Effacer le trou ${blankIndex + 1}`} onClick={() => updateBlankAnswer(item.id, blankIndex, '')}>×</button>
+                                                                            )}
+                                                                        </span>
+                                                                        {showExpectedForBlank && (
+                                                                            <span className="learning-fill-inline-correction">
+                                                                                {fillBlank.answers[blankIndex] || 'Réponse non configurée'}
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                );
                                                             })()}
-                                                            <button
-                                                                type="button"
-                                                                className={`learning-quiz-mic learning-fill-mic ${activeBlankMic === `${item.id}:${blankIndex}` ? 'is-recording' : ''}`}
-                                                                disabled={!canEdit}
-                                                                title={activeBlankMic === `${item.id}:${blankIndex}` ? 'Enregistrement en cours' : 'Dicter ce trou'}
-                                                                onClick={() => dictateBlank(item.id, blankIndex)}
-                                                            >🎙️</button>
-                                                            {canEdit && String(blankValues[blankIndex] || '') && !showFillCorrection && (
-                                                                <button type="button" className="learning-answer-erase" title="Effacer ce trou" aria-label={`Effacer le trou ${blankIndex + 1}`} onClick={() => updateBlankAnswer(item.id, blankIndex, '')}>×</button>
-                                                            )}
-                                                            </>
-                                                        )}
                                                     </React.Fragment>
                                                 ))}
                                             </div>
                                         ) : (
                                         <div className="learning-quiz-answer-row">
                                             <textarea
-                                                className="learning-quiz-textarea"
+                                                className={`learning-quiz-textarea ${currentQuizState.stage === 'correction' && isIncorrect ? 'is-incorrect-answer' : ''}`}
                                                 value={currentQuizState.answers?.[item.id] || ''}
                                                 disabled={!canEdit}
                                                 placeholder="Écris ou dicte ta réponse…"
@@ -3008,20 +3013,15 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                         </div>
                                         )}
                                         {currentQuizState.stage === 'correction' && isIncorrect && !isFillBlanks && (
-                                            <div className="learning-correction-actions">
-                                                {!isRevealed ? (
-                                                    <button
-                                                        type="button"
-                                                        className="learning-btn danger"
-                                                        onClick={() => revealExpectedAnswer(item.id)}
-                                                    >
-                                                        Afficher la réponse
-                                                    </button>
-                                                ) : (
-                                                    <div className="learning-expected-answer">
-                                                        <strong>Réponse à apprendre :</strong> {expected || 'Aucune réponse attendue configurée.'}
+                                            <div className="learning-correction-pairs">
+                                                <div className="learning-correction-pair">
+                                                    <div className="learning-student-wrong-answer">
+                                                        <strong>Ta réponse :</strong> {String(currentQuizState.answers?.[item.id] || '').trim() || 'Aucune réponse'}
                                                     </div>
-                                                )}
+                                                    <div className="learning-correct-answer">
+                                                        <strong>Bonne réponse :</strong> {expected || 'Aucune réponse attendue configurée.'}
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
                                     </article>

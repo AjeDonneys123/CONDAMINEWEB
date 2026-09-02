@@ -77,6 +77,7 @@ export default function StudentsManager({ globalClassId }) {
   const [gptFeedbackLoading, setGptFeedbackLoading] = useState(false);
   const [gptFeedbackError, setGptFeedbackError] = useState('');
   const [dilVocabulary, setDilVocabulary] = useState([]);
+  const [assessmentControls, setAssessmentControls] = useState([]);
 
   useEffect(() => {
     if (!globalClassId) return;
@@ -98,7 +99,7 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, lms, exs, fiches, prods, subs, progs, chapters, draftDocs] = await Promise.all([
+        const [sts, clsList, hws, gms, lms, exs, fiches, prods, subs, progs, chapters, draftDocs, controls] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
@@ -110,7 +111,8 @@ export default function StudentsManager({ globalClassId }) {
             fetch('/api/homework/submissions').then(r => r.json()),
             fetch('/api/games/progress').then(r => r.json()),
             fetch('/api/structure/chapters').then(r => r.ok ? r.json() : []),
-            fetch('/api/homework/draft-docs').then(r => r.ok ? r.json() : [])
+            fetch('/api/homework/draft-docs').then(r => r.ok ? r.json() : []),
+            fetch('/api/controls/all').then(r => r.ok ? r.json() : [])
         ]);
 
         const currentClassObj = clsList.find(c => c._id === globalClassId);
@@ -128,6 +130,7 @@ export default function StudentsManager({ globalClassId }) {
             })
             .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
+        setAssessmentControls((controls || []).filter(row => (row.targetClassrooms || []).map(norm).includes(norm(currentClassName))));
         const methodProgress = {};
         progs.forEach((progress) => {
             const gameId = String(progress?.gameId || '');
@@ -1363,6 +1366,7 @@ export default function StudentsManager({ globalClassId }) {
         )}
 
         {/* TABLEAU */}
+        {assessmentControls.length > 0 && <div className="mb-5 rounded-[26px] border border-rose-200 bg-rose-50 p-5"><h3 className="font-black text-rose-800 text-lg mb-3">📝 CONTRÔLES ET CONTESTATIONS</h3>{assessmentControls.map(control => <details key={control._id} className="bg-white border rounded-2xl p-3 mb-2"><summary className="font-black cursor-pointer">{control.title} · {(control.submissions || []).length} copie(s)</summary><div className="mt-3 space-y-2">{(control.submissions || []).map(copy => { const student=students.find(s=>extractId(s._id)===String(copy.studentId)); const contests=(copy.answers||[]).flatMap(answer => { const whole=answer.contestStatus==='pending'?[{answer,message:answer.contestMessage}]:[]; const blanks=(answer.blankResults||[]).filter(blank=>blank.contestStatus==='pending').map(blank=>({answer,blankIndex:blank.index,message:blank.contestMessage})); return [...whole,...blanks]; }); return <div key={copy.id} className="border rounded-xl p-3"><strong>{student?.firstName} {student?.lastName} — {copy.score}/{copy.total}</strong>{contests.map(({answer,blankIndex,message})=><div key={`${answer.itemId}-${blankIndex ?? 'all'}`} className="mt-2 bg-amber-50 p-2 rounded-lg text-xs"><div className="font-bold">Contestation{Number.isInteger(blankIndex)?` · réponse ${blankIndex+1}`:''} : {message}</div><div className="flex gap-2 mt-2"><button onClick={()=>fetch(`/api/controls/${control._id}/contest/${copy.id}/${answer.itemId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted:true,...(Number.isInteger(blankIndex)?{blankIndex}:{})})}).then(loadMatrix)} className="px-3 py-1 bg-green-600 text-white rounded">Accepter</button><button onClick={()=>fetch(`/api/controls/${control._id}/contest/${copy.id}/${answer.itemId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted:false,...(Number.isInteger(blankIndex)?{blankIndex}:{})})}).then(loadMatrix)} className="px-3 py-1 bg-red-600 text-white rounded">Refuser</button></div></div>)}</div>})}</div></details>)}</div>}
         <div className="bg-white rounded-[30px] border overflow-hidden shadow-xl animate-in flex flex-col max-h-[80vh]">
             <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
                 <h3 className="font-black text-slate-700 text-lg uppercase">📊 SUIVI D'ACTIVITÉ : {className}</h3>

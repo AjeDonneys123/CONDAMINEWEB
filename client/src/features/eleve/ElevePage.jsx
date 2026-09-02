@@ -11,6 +11,7 @@ import EleveChatWorkspace from './chat/EleveChatWorkspace';
 import EleveCoursesList from './courses/EleveCoursesList';
 import ExamTrainingHub from './training/ExamTrainingHub';
 import DilWorkspace from './dil/DilWorkspace';
+import ControlList from './controls/ControlList';
 import { STUDENT_STARS_EVENT } from './utils/studentStars';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
@@ -18,7 +19,7 @@ import './ElevePage.css';
 export default function ElevePage({ user, onLogout, onBackToProf }) {
   // Les élèves DIL arrivent directement sur leur espace de traduction.
   // Les autres profils conservent l'ouverture habituelle sur le statut.
-  const [tab, setTab] = useState(() => (user?.isDil === true ? 'dil' : 'status'));
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('control') ? 'exams' : (user?.isDil === true ? 'dil' : 'status'));
   const [pendingActivity, setPendingActivity] = useState(null);
   const [freshUser, setFreshUser] = useState(user);
   const [showPunishmentSplash, setShowPunishmentSplash] = useState(false);
@@ -155,6 +156,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           <div className="eleve-main-content">
             {tab === 'status' && <StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} />}
             {tab === 'courses' && <EleveCoursesList user={freshUser} />}
+            {tab === 'exams' && <ControlList user={freshUser} openItemId={new URLSearchParams(window.location.search).get('control') || ''} />}
             {tab === 'controles' && (
               <ControlRecoveryList
                 user={freshUser}

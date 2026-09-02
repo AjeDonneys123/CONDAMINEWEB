@@ -86,7 +86,7 @@ router.get('/list/:studentId', async (req, res) => {
                 title: course.title || 'Cours',
                 description: course.description || '',
                 presentationId: course.presentationId || '',
-                slidesUrl: course.slidesUrl || '',
+                slidesUrl: '',
                 embedUrl: course.embedUrl || (course.presentationId ? `https://docs.google.com/presentation/d/${course.presentationId}/embed?start=false&loop=false&delayms=3000` : ''),
                 publishedUntilSlide: Math.max(0, Math.floor(Number(course.publishedUntilSlide || 0))),
                 updatedAt: course.updatedAt || course.date || course.createdAt || null

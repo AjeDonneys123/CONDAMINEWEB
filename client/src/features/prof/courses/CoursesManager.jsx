@@ -112,6 +112,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [dismissedDebtIds, setDismissedDebtIds] = useState({});
     const [animationEditor, setAnimationEditor] = useState(null);
     const [savingAnimation, setSavingAnimation] = useState(false);
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const [projectedControl, setProjectedControl] = useState(null);
     const animationFrameRef = useRef(null);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
@@ -612,6 +614,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const openMascotAnimationStudio = () => {
+        setAddMenuOpen(false);
         if (!playingCourse) return;
         const suggested = Math.max(1, Number(playingCourse.publishedUntilSlide || 1));
         const raw = window.prompt('Sur quelle slide ajouter ou modifier la mascotte ?', String(suggested));
@@ -621,6 +624,19 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const isLocal = ['localhost', '127.0.0.1'].includes(String(window.location.hostname || '').toLowerCase());
         const studioUrl = WEB5E_STUDIO_URL || (isLocal ? 'http://localhost:5174' : '/projet-5e');
         setAnimationEditor({ course: playingCourse, slideNumber, animationBlock: existing, studioUrl: `${studioUrl.replace(/\/$/, '')}/?embeddedAnimation=1` });
+    };
+
+    const openControlOnCourse = async () => {
+        setAddMenuOpen(false);
+        try {
+            const response = await fetch('/api/controls/all');
+            const rows = response.ok ? await response.json() : [];
+            const key = String(globalClass || '').replace(/\s/g, '').toUpperCase();
+            const available = (rows || []).filter(row => row.active !== false && (row.targetClassrooms || []).some(value => String(value || '').replace(/\s/g, '').toUpperCase() === key));
+            if (!available.length) return alert('Aucun contrôle actif pour cette classe. Créez-le dans Activités.');
+            const choice = available.length === 1 ? available[0] : available.find((_, i) => String(i + 1) === prompt(available.map((row, i) => `${i + 1}. ${row.title}`).join('\n'), '1'));
+            if (choice) setProjectedControl(choice);
+        } catch (_) { alert('Chargement des contrôles impossible.'); }
     };
 
     useEffect(() => {
@@ -690,9 +706,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
     };
 
-    const openModification = (course) => {
-        setPlayerMode('edit');
-        setPlayingCourse(course);
+    const openModification = async (course) => {
+        setError('');
+        try {
+            const response = await fetch(`/api/courses/${course._id}/editor-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherEmail: user?.email || user?.mail || '' })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || 'Accès en modification impossible');
+            setPlayerMode('edit');
+            setPlayingCourse({ ...course, slidesUrl: data.editUrl || course.slidesUrl, editorNonce: Date.now() });
+        } catch (accessError) {
+            setError(accessError.message);
+            alert(`Impossible d’ouvrir cette présentation en modification : ${accessError.message}`);
+        }
     };
 
     const createCourseSection = async () => {
@@ -1057,9 +1086,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             title={playingCourse.title}
                             src={playerMode === 'presentation'
                                 ? getEmbedUrl(playingCourse.slidesUrl)
-                                : getEditUrl(playingCourse.slidesUrl)}
+                                : `${getEditUrl(playingCourse.slidesUrl)}?usp=sharing&editor=${playingCourse.editorNonce || Date.now()}`}
                             allowFullScreen
                         />
+                        {projectedControl && <div className="course-control-projection">
+                            <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
+                            <div className="course-control-qr"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`${window.location.origin}/?control=${projectedControl._id}`)}`} alt="QR code du contrôle"/><strong>SCANNE POUR COMMENCER</strong></div>
+                            <div className="course-control-paper"><h1>{projectedControl.title}</h1>{(projectedControl.items || []).map((item, index) => <article key={item.id}><small>{index + 1} · {item.lessonTitle}</small><div>{String(item.prompt || '').replace(/["“«][^"”»]+["”»]/g, '__________')}</div>{item.type === 'qcm' && <ol type="A">{item.choices.map(choice => <li key={choice}>{choice}</li>)}</ol>}</article>)}</div>
+                        </div>}
                         
                         {/* COMPTEUR DE POINTS DE LA CLASSE EN HAUT A DROITE */}
                         <div className="live-class-points">
@@ -1130,9 +1164,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <button
                             type="button"
                             className="active"
-                            onClick={() => setPlayerMode((current) => current === 'presentation' ? 'edit' : 'presentation')}
+                            onClick={() => playerMode === 'presentation' ? openModification(playingCourse) : setPlayerMode('presentation')}
                         >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
-                        <button type="button" className="course-animation-button" onClick={openMascotAnimationStudio}>🎭 ANIMATION</button>
+                        <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openMascotAnimationStudio}>🎭 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>
                     </div>
                 </div>
             )}

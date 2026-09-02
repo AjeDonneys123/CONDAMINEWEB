@@ -129,6 +129,28 @@ const ProfDrive = {
         }
     },
 
+    grantFileWriterAccess: async (fileRef = '') => {
+        if (!oauth2Client) throw new Error('Drive non connecté');
+        const fileId = ProfDrive.extractSlidesPresentationId(fileRef) || String(fileRef || '').trim();
+        if (!fileId) throw new Error('Présentation Google Slides introuvable');
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const existing = await drive.permissions.list({ fileId, fields: 'permissions(id,type,role,emailAddress)' });
+        const permission = (existing?.data?.permissions || []).find(row => row.type === 'anyone');
+        if (permission?.role === 'writer') {
+            return { ok: true, fileId, role: 'writer', existing: true };
+        }
+        if (permission?.id) {
+            await drive.permissions.update({ fileId, permissionId: permission.id, requestBody: { role: 'writer' } });
+        } else {
+            await drive.permissions.create({
+                fileId,
+                requestBody: { type: 'anyone', role: 'writer', allowFileDiscovery: false },
+                fields: 'id,role,type,emailAddress'
+            });
+        }
+        return { ok: true, fileId, role: 'writer', existing: false };
+    },
+
     getAuthUrl: () => {
         if (!oauth2Client) throw new Error("Client OAuth non initialisé.");
         return oauth2Client.generateAuthUrl({
@@ -386,7 +408,7 @@ const ProfDrive = {
             fileId: copyId,
             requestBody: {
                 type: 'anyone',
-                role: 'reader',
+                role: 'writer',
                 allowFileDiscovery: false
             },
             fields: 'id,role,type'
@@ -395,7 +417,7 @@ const ProfDrive = {
             presentationId: copyId,
             editUrl: `https://docs.google.com/presentation/d/${copyId}/edit`,
             publicReaderUrl: `https://docs.google.com/presentation/d/${copyId}/view`,
-            publicAccess: 'reader',
+            publicAccess: 'writer',
             startSlide: start,
             endSlide: end,
             slideCount: end - start + 1

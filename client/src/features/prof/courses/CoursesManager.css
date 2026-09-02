@@ -1151,6 +1151,18 @@
     color: #fff;
 }
 .course-player-mode-switch .course-animation-button:hover { background: #6d28d9; }
+.course-add-wrap { position: relative; }
+.course-add-menu { position: absolute; bottom: 50px; left: 0; z-index: 30; width: 230px; padding: 8px; border-radius: 14px; background: white; box-shadow: 0 16px 40px rgba(15,23,42,.35); }
+.course-add-menu button { width: 100%; min-width: 0; color: #172033; border: 0; text-align: left; background: white; }
+.course-add-menu button:hover { background: #f1f5f9; }
+.course-control-projection { position:absolute; inset:0; z-index:20; display:grid; grid-template-columns:230px 1fr; gap:20px; padding:26px; background:#f8fafc; color:#172033; overflow:hidden; }
+.course-control-close { position:absolute; right:12px; top:10px; z-index:3; width:38px; height:38px; border:0; border-radius:50%; font-size:26px; }
+.course-control-qr { display:flex; flex-direction:column; gap:10px; align-items:center; font-size:12px; text-align:center; }
+.course-control-qr img { width:210px; height:210px; background:white; padding:8px; border-radius:16px; }
+.course-control-paper { overflow-y:auto; padding:10px 22px 80px; background:white; border-radius:20px; }
+.course-control-paper h1 { font-size:26px; font-weight:950; margin-bottom:18px; }
+.course-control-paper article { padding:16px 0; border-top:1px solid #e2e8f0; font-size:17px; line-height:1.7; }
+.course-control-paper small { display:block; color:#7c3aed; font-weight:900; }
 .course-animation-editor-backdrop {
     position: fixed;
     inset: 0;

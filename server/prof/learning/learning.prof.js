@@ -9,6 +9,7 @@ const path = require('path');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
 const { restoreGeneralSheet } = require('./general-sheet.persistence');
+const { synchronizeLinkedSheetQuestions } = require('./linked-sheet-questions');
 
 const learningMediaDir = path.join(process.cwd(), 'public', 'uploads', 'learning-media');
 fs.mkdirSync(learningMediaDir, { recursive: true });
@@ -1077,9 +1078,10 @@ router.get('/all', async (_req, res) => {
                 updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { active: row.active, isEnabled: row.active } } } });
             }
             const restored = restoreGeneralSheet(row.steps, row.title);
-            if (!restored.changed) return;
-            row.steps = restored.steps;
-            updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { steps: restored.steps } } } });
+            const synchronized = synchronizeLinkedSheetQuestions(restored.steps);
+            if (!restored.changed && !synchronized.changed) return;
+            row.steps = synchronized.steps;
+            updates.push({ updateOne: { filter: { _id: row._id }, update: { $set: { steps: synchronized.steps } } } });
         });
         if (updates.length > 0) await LearningModule.bulkWrite(updates, { ordered: false });
         res.json(rows.sort((a, b) => Number(b.referenceNumber || 0) - Number(a.referenceNumber || 0)));
@@ -1471,9 +1473,10 @@ router.get('/:id', async (req, res) => {
         const row = await LearningModule.findById(req.params.id).lean();
         if (!row) return res.status(404).json({ error: "Apprentissage introuvable" });
         const restored = restoreGeneralSheet(row.steps, row.title);
-        if (restored.changed) {
-            row.steps = restored.steps;
-            await LearningModule.updateOne({ _id: row._id }, { $set: { steps: restored.steps } });
+        const synchronized = synchronizeLinkedSheetQuestions(restored.steps);
+        if (restored.changed || synchronized.changed) {
+            row.steps = synchronized.steps;
+            await LearningModule.updateOne({ _id: row._id }, { $set: { steps: synchronized.steps } });
         }
         res.json(row);
     } catch (e) {
@@ -1492,7 +1495,9 @@ router.post('/', async (req, res) => {
         data.isEnabled = active;
         data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
         data.sections = sanitizeSections(data.sections);
-        data.steps = restoreGeneralSheet(sanitizeSteps(data.steps), data.title).steps;
+        data.steps = synchronizeLinkedSheetQuestions(
+            restoreGeneralSheet(sanitizeSteps(data.steps), data.title).steps
+        ).steps;
         data.presentationUrl = String(data.presentationUrl || '').trim();
         data.presentationSourceUrl = String(data.presentationSourceUrl || '').trim();
         data.generalSheetDocUrl = String(data.generalSheetDocUrl || '').trim();

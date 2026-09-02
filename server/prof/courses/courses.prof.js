@@ -219,6 +219,24 @@ router.patch('/:id/placement', async (req, res) => {
     }
 });
 
+router.post('/:id/editor-access', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id).lean();
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const mongoose = require('mongoose');
+        let teacher = null;
+        if (course.teacherId && mongoose.Types.ObjectId.isValid(String(course.teacherId))) {
+            teacher = await mongoose.model('Teacher').findById(course.teacherId, 'email mail').lean()
+                || await mongoose.model('Admin').findById(course.teacherId, 'email mail').lean();
+        }
+        const teacherEmail = String(teacher?.email || teacher?.mail || req.body?.teacherEmail || '').trim().toLowerCase();
+        const access = await ProfDrive.grantFileWriterAccess(course.presentationId || course.slidesUrl);
+        res.json({ ...access, editUrl: `https://docs.google.com/presentation/d/${access.fileId}/edit?usp=sharing` });
+    } catch (error) {
+        res.status(Number(error?.response?.status || 500)).json({ error: error.message });
+    }
+});
+
 router.post('/placements/reorder', async (req, res) => {
     try {
         const placements = (Array.isArray(req.body?.placements) ? req.body.placements : [])

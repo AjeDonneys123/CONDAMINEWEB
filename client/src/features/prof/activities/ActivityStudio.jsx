@@ -9,6 +9,7 @@ import FicheStudio from '../fiches/FicheStudio';
 import CommentStudio from '../comments/CommentStudio';
 import ProductionStudio from '../productions/ProductionStudio';
 import RevisionStudio from '../revisions/RevisionStudio';
+import ControlStudio from '../controls/ControlStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 
 export default function ActivityStudio({ globalClass, globalClassId, globalLevel, user, onRefreshRequest }) {
@@ -32,7 +33,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 }
             };
 
-            const [hw, gm, lrn, ex, lec, fic, comments, prod, rev, cp, sts, cls] = await Promise.all([
+            const [hw, gm, lrn, ex, lec, fic, comments, prod, rev, controls, cp, sts, cls] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
                 fetchJson('/api/learning/all'),
@@ -42,6 +43,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 fetchJson('/api/comments/all'),
                 fetchJson('/api/productions/all'),
                 fetchJson('/api/revisions/all'),
+                fetchJson('/api/controls/all'),
                 fetchJson(`/api/structure/chapters?teacherId=${encodeURIComponent(teacherId)}&classContext=${encodeURIComponent(globalClass || '')}&_=${Date.now()}`),
                 fetchJson('/api/admin/students'),
                 fetchJson('/api/admin/classrooms') // Ajouté
@@ -56,7 +58,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...(fic || []).map(x => ({...x, actType: 'fiche', typeLabel: '🗂️ FIC'})),
                 ...(comments || []).map(x => ({...x, actType: 'comment', typeLabel: '🧾 COM'})),
                 ...(prod || []).map(x => ({...x, actType: 'production', typeLabel: '🏗️ PROD'})),
-                ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'}))
+                ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'})),
+                ...(controls || []).map(x => ({...x, actType: 'control', typeLabel: '📝 CTRL'}))
             ]);
             setChapters(cp || []);
             setAllStudents(sts || []);
@@ -103,6 +106,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         else if (type === 'fiche') url = `/api/fiches/${id}`;
         else if (type === 'production') url = `/api/productions/${id}`;
         else if (type === 'revision') url = `/api/revisions/${id}`;
+        else if (type === 'control') url = `/api/controls/${id}`;
         else if (type === 'scan') url = `/api/scans/sessions/${id}`;
         else url = `/api/structure/chapters/${id}`;
 
@@ -134,6 +138,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         if (editingItem.type === 'fiche') return <FicheStudio {...props} />;
         if (editingItem.type === 'production') return <ProductionStudio {...props} />;
         if (editingItem.type === 'revision') return <RevisionStudio {...props} />;
+        if (editingItem.type === 'control') return <ControlStudio {...props} />;
         return <GameStudio {...props} />;
     }
 
