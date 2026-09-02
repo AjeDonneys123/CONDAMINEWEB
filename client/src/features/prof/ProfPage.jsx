@@ -11,6 +11,7 @@ import ClassroomManager from './classroom/ClassroomManager';
 import ScansStudio from './scans/ScansStudio';
 import CoursesManager from './courses/CoursesManager';
 import BugReportWidget from '../shared/BugReportWidget';
+import LiveControlCheatAlert from './controls/LiveControlCheatAlert';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
@@ -119,6 +120,7 @@ export default function ProfPage({ user, onLogout }) {
 
   return (
     <div className="prof-page-container">
+      <LiveControlCheatAlert />
       <div className="prof-card shadow-2xl">
         <ProfHeader user={liveUser} onLogout={onLogout} />
         

@@ -1562,6 +1562,11 @@ export default function StudentsManager({ globalClassId }) {
                             <summary className="font-black cursor-pointer flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <span>{control.title} · {submissions.length} copie(s)</span>
+                                    {(control.alerts || []).length > 0 && (
+                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-red-600 text-white animate-pulse">
+                                            🚨 {control.alerts.length} sortie(s) d'écran
+                                        </span>
+                                    )}
                                     {hasControlContest && (
                                         <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-500 text-white">
                                             ⚠️ Contestation en attente
@@ -1579,7 +1584,10 @@ export default function StudentsManager({ globalClassId }) {
                                             extractId(s._id) === String(copy.studentId) ||
                                             norm(`${s.firstName} ${s.lastName}`) === norm(copy.studentName)
                                         );
-                                        const contested = isCopyContested(copy);
+                                        const studentAlerts = (control.alerts || []).filter(a =>
+                                            (copy.studentId && String(a.studentId) === String(copy.studentId)) ||
+                                            (a.studentName && norm(a.studentName) === norm(copy.studentName))
+                                        );
 
                                         return (
                                             <div
@@ -1593,6 +1601,11 @@ export default function StudentsManager({ globalClassId }) {
                                                         <strong className="text-sm">
                                                             {student ? `${student.firstName} ${student.lastName}` : (copy.studentName || 'Élève')}
                                                         </strong>
+                                                        {studentAlerts.length > 0 && (
+                                                            <span className="rounded bg-red-600 px-2 py-0.5 text-[9px] font-black text-white uppercase animate-pulse">
+                                                                🚨 {studentAlerts.length} sortie(s)
+                                                            </span>
+                                                        )}
                                                         {contested && (
                                                             <span className="rounded bg-amber-500 px-2 py-0.5 text-[9px] font-black text-white uppercase">
                                                                 ⚠️ Contesté
@@ -1797,6 +1810,31 @@ export default function StudentsManager({ globalClassId }) {
                             ×
                         </button>
                     </div>
+
+                    {/* Alerte triche si l'élève est sorti du plein écran pendant l'épreuve */}
+                    {(() => {
+                        const copyAlerts = (viewingControlCopy.control?.alerts || []).filter(a =>
+                            (viewingControlCopy.copy?.studentId && String(a.studentId) === String(viewingControlCopy.copy.studentId)) ||
+                            (a.studentName && norm(a.studentName) === norm(viewingControlCopy.copy?.studentName))
+                        );
+                        if (copyAlerts.length === 0) return null;
+                        return (
+                            <div className="mx-6 mt-4 p-4 rounded-2xl bg-red-50 border-2 border-red-400 text-red-950 flex flex-col gap-2 shadow-sm">
+                                <div className="flex items-center gap-2 font-black text-sm text-red-700">
+                                    <span className="text-xl">🚨</span>
+                                    <span>SUSPICION DE TRICHE : {copyAlerts.length} sortie(s) d'écran / application enregistrée(s)</span>
+                                </div>
+                                <div className="text-xs text-red-900 space-y-1">
+                                    {copyAlerts.map((a, i) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                            <span className="font-bold">• {new Date(a.timestamp).toLocaleTimeString('fr-FR')} :</span>
+                                            <span>{a.reason}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Barre de modification de la note */}
                     <div className="p-4 bg-violet-50/70 border-b border-violet-100 flex flex-wrap items-center justify-between gap-4">

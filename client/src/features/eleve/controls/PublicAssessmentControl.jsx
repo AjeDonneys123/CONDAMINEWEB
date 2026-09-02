@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import './PublicAssessmentControl.css';
 
 export default function PublicAssessmentControl({ controlId, currentUser = null }) {
@@ -23,6 +23,96 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
   const [activeContestKey, setActiveContestKey] = useState('');
   const [contestMessage, setContestMessage] = useState('');
   const [contestedMap, setContestedMap] = useState({});
+
+  // Surveillance anti-triche mobile & plein écran
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [cheatAlertCount, setCheatAlertCount] = useState(0);
+  const [showCheatWarningModal, setShowCheatWarningModal] = useState(false);
+  const lastAlertTimeRef = useRef(0);
+
+  const requestExamFullscreen = async () => {
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if (el.webkitRequestFullscreen) {
+        await el.webkitRequestFullscreen();
+      }
+      setIsFullscreen(true);
+    } catch (_) {}
+  };
+
+  const triggerCheatAlert = useCallback((reason) => {
+    if (!control || submissionResult) return;
+    const now = Date.now();
+    if (now - lastAlertTimeRef.current < 2500) return;
+    lastAlertTimeRef.current = now;
+
+    setCheatAlertCount((c) => c + 1);
+    setShowCheatWarningModal(true);
+
+    const studentFullName = `${firstName.trim()} ${lastName.trim()}`.trim() || (currentUser ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : 'Élève (Nom non renseigné)');
+    const payload = {
+      studentName: studentFullName,
+      studentId: currentUser?._id || currentUser?.id || '',
+      reason: reason || "Sortie du plein écran / Changement d'application sur mobile",
+      timestamp: now
+    };
+
+    try {
+      if (navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(`/api/eleve/controls/${encodeURIComponent(controlId)}/cheat-alert`, blob);
+      } else {
+        fetch(`/api/eleve/controls/${encodeURIComponent(controlId)}/cheat-alert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  }, [control, submissionResult, firstName, lastName, currentUser, controlId]);
+
+  useEffect(() => {
+    if (!control || submissionResult) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        triggerCheatAlert("Changement d'application ou d'onglet détecté (écran masqué)");
+      }
+    };
+
+    const handleWindowBlur = () => {
+      triggerCheatAlert("Perte de focus de la fenêtre (sortie de l'écran du contrôle)");
+    };
+
+    const handleFullscreenChange = () => {
+      const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      setIsFullscreen(isFs);
+      if (!isFs && !submissionResult) {
+        triggerCheatAlert("Sortie du mode plein écran sur le téléphone");
+      }
+    };
+
+    const handlePageHide = () => {
+      triggerCheatAlert("Fermeture ou mise en arrière-plan de la page");
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [control, submissionResult, triggerCheatAlert]);
 
   useEffect(() => {
     if (!controlId) {
@@ -468,6 +558,40 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
           </p>
         </div>
 
+        {/* Barre de statut anti-triche & plein écran */}
+        {isFullscreen ? (
+          <div className="p-3 mb-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-900 flex items-center justify-between text-xs font-bold shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+              <span>🔒 MODE EXAMEN PLEIN ÉCRAN ACTIF · SURVEILLANCE ANTI-TRICHE EN DIRECT</span>
+            </div>
+            <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+              Sécurisé
+            </span>
+          </div>
+        ) : (
+          <div className="p-4 mb-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📱</span>
+              <div>
+                <strong className="text-xs sm:text-sm font-black text-amber-900 block">
+                  SURVEILLANCE ANTI-TRICHE ACTIVE
+                </strong>
+                <span className="text-[11px] text-amber-800 leading-snug block mt-0.5">
+                  Toute sortie d'application, changement d'onglet ou minimisation est immédiatement signalée au professeur au tableau !
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={requestExamFullscreen}
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-wide shadow-md transition transform active:scale-95 shrink-0"
+            >
+              ⛶ Activer le plein écran
+            </button>
+          </div>
+        )}
+
         {/* Identification : Prenom et Nom en haut */}
         <div className="public-control-identity-card">
           <div className="public-control-identity-title">
@@ -598,6 +722,34 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
             </button>
           </div>
         </form>
+
+        {/* Modal d'avertissement triche sur le téléphone de l'élève */}
+        {showCheatWarningModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-red-950 border-4 border-red-500 rounded-3xl p-6 text-center text-white shadow-2xl flex flex-col items-center gap-4">
+              <div className="text-5xl animate-bounce">🚨</div>
+              <h2 className="text-xl md:text-2xl font-black text-red-300 uppercase tracking-wide">
+                SORTIE D'ÉCRAN DÉTECTÉE !
+              </h2>
+              <p className="text-xs md:text-sm text-red-100 leading-relaxed font-medium">
+                Tu as quitté l'écran du contrôle ou changé d'application sur ton téléphone.
+              </p>
+              <div className="p-3 rounded-2xl bg-black/50 border border-red-500/60 w-full text-xs font-bold text-amber-300">
+                Ton nom (<strong className="text-white">{firstName || 'Élève'} {lastName || ''}</strong>) et cette infraction ({cheatAlertCount}e signalement) ont été immédiatement transmis en gros au tableau du professeur !
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCheatWarningModal(false);
+                  requestExamFullscreen();
+                }}
+                className="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-sm uppercase tracking-wide shadow-xl shadow-red-600/40 transition transform active:scale-95"
+              >
+                REPRENDRE LE CONTRÔLE EN PLEIN ÉCRAN
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

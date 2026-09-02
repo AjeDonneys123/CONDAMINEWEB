@@ -60,6 +60,12 @@ const normalizeVideoScenes = (course = {}) => {
     return [{ id: `scene_${Date.now()}`, name: 'Scène 1', sequences: legacy.map((item) => ({ ...item })) }];
 };
 
+const normalizeVideoSlides = (course = {}) => {
+    const saved = Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [];
+    if (saved.length) return saved.map((slide, index) => ({ slideNumber: Math.max(1, Number(slide?.slideNumber || index + 1)), scenes: normalizeVideoScenes({ presentationVideoScenes: slide?.scenes }) }));
+    return [{ slideNumber: 1, scenes: normalizeVideoScenes(course) }];
+};
+
 const groupSceneSequences = (scene = {}) => {
     const groups = [];
     (Array.isArray(scene?.sequences) ? scene.sequences : []).forEach((video) => {
@@ -134,6 +140,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [savingAnimation, setSavingAnimation] = useState(false);
     const [videoSequencer, setVideoSequencer] = useState(null);
     const [uploadingSequenceVideos, setUploadingSequenceVideos] = useState(false);
+    const [draggedSequence, setDraggedSequence] = useState(null);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [projectedControl, setProjectedControl] = useState(null);
     const [presentationRemote, setPresentationRemote] = useState(null);
@@ -286,18 +293,20 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return undefined;
     }, [isPhone, playingCourse?._id, playerMode, globalClassId]);
 
-    const sendPresentationCommand = async (action, remoteData = presentationRemote) => {
+    const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
-        const scenes = remoteData?.scenes?.length ? remoteData.scenes : normalizeVideoScenes(playingCourse || {});
+        const slideIndex = Math.max(0, Number(remoteData?.remote?.slideIndex || 0));
+        const videoSlides = remoteData?.videoSlides?.length ? remoteData.videoSlides : normalizeVideoSlides(playingCourse || {});
+        const scenes = videoSlides.find((slide) => Number(slide?.slideNumber) === slideIndex + 1)?.scenes || [];
         const sceneIndex = Math.min(scenes.length - 1, Math.max(0, Number(remoteData?.remote?.sceneIndex || 0)));
         const sequenceTotal = Math.max(1, groupSceneSequences(scenes[sceneIndex]).length);
         const response = await fetch(`/api/courses/${courseId}/presentation-remote/command`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, slideTotal: Math.max(1, slideManifest.length || 100), sceneTotal: Math.max(1, scenes.length), sequenceTotal })
+            body: JSON.stringify({ action, ...options, slideTotal: Math.max(1, slideManifest.length || 100), sceneTotal: Math.max(1, scenes.length), sequenceTotal })
         });
         const data = await response.json().catch(() => ({}));
-        if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, scenes, remote: data.remote }));
+        if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, videoSlides, remote: data.remote }));
     };
 
     const closePresentation = () => {
@@ -306,7 +315,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setPresentationRemote(null);
     };
 
-    const projectedScenes = normalizeVideoScenes(playingCourse || {});
+    const projectedVideoSlides = normalizeVideoSlides(playingCourse || {});
+    const projectedScenes = projectedVideoSlides.find((slide) => Number(slide.slideNumber) === Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0)) + 1)?.scenes || [];
     const projectedSceneIndex = Math.min(projectedScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)));
     const projectedGroups = groupSceneSequences(projectedScenes[projectedSceneIndex]);
     const projectedSequenceIndex = Math.max(0, Math.min(projectedGroups.length - 1, Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0))));
@@ -710,7 +720,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (!playingCourse) return;
         setVideoSequencer({
             course: playingCourse,
-            scenes: normalizeVideoScenes(playingCourse)
+            activeSlideNumber: 1,
+            slides: normalizeVideoSlides(playingCourse)
         });
     };
 
@@ -728,7 +739,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 if (!response.ok || !data.url) throw new Error(data.error || `Import impossible : ${file.name}`);
                 uploaded.push({ id: `video_${Date.now()}_${uploaded.length}`, name: file.name.replace(/\.mp4$/i, ''), url: data.url, driveFileId: data.driveFileId || '', mergeWithNext: false });
             }
-            setVideoSequencer((current) => current ? { ...current, scenes: current.scenes.map((scene, index) => index === sceneIndex ? { ...scene, sequences: [...scene.sequences, ...uploaded] } : scene) } : current);
+            setVideoSequencer((current) => current ? { ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((scene, index) => index === sceneIndex ? { ...scene, sequences: [...scene.sequences, ...uploaded] } : scene) } : slide) } : current);
         } catch (uploadError) {
             setError(uploadError.message);
         } finally {
@@ -742,18 +753,55 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         try {
             const response = await fetch(`/api/courses/${videoSequencer.course._id}/video-sequences`, {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scenes: videoSequencer.scenes })
+                body: JSON.stringify({ slides: videoSequencer.slides })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Enregistrement impossible');
             setCourses((current) => current.map((course) => String(course._id) === String(data._id) ? mergeCourseForCurrentView(course, data) : course));
-            setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationVideoScenes: data.presentationVideoScenes || [] } : current);
+            setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationVideoSlides: data.presentationVideoSlides || [] } : current);
             setVideoSequencer(null);
         } catch (saveError) {
             setError(saveError.message);
         } finally {
             setSavingAnimation(false);
         }
+    };
+
+    const moveSequenceVideo = (targetSceneIndex, targetVideoIndex) => {
+        if (!draggedSequence) return;
+        setVideoSequencer((current) => {
+            if (!current) return current;
+            const slides = (current.slides || []).map((slide) => ({ ...slide, scenes: (slide.scenes || []).map((scene) => ({ ...scene, sequences: [...(scene.sequences || [])] })) }));
+            const activeSlide = slides.find((slide) => Number(slide.slideNumber) === Number(current.activeSlideNumber));
+            const sourceScene = activeSlide?.scenes?.[draggedSequence.sceneIndex];
+            const targetScene = activeSlide?.scenes?.[targetSceneIndex];
+            if (!sourceScene || !targetScene) return current;
+            const [moved] = sourceScene.sequences.splice(draggedSequence.videoIndex, 1);
+            if (!moved) return current;
+            let insertionIndex = targetVideoIndex;
+            if (draggedSequence.sceneIndex === targetSceneIndex && draggedSequence.videoIndex < targetVideoIndex) insertionIndex -= 1;
+            targetScene.sequences.splice(Math.max(0, Math.min(insertionIndex, targetScene.sequences.length)), 0, moved);
+            return { ...current, slides };
+        });
+        setDraggedSequence(null);
+    };
+
+    const moveSequenceVideoByNumber = (sceneIndex, videoIndex, rawNumber) => {
+        const scene = videoSequencerScenes[sceneIndex];
+        const total = Array.isArray(scene?.sequences) ? scene.sequences.length : 0;
+        if (!total) return;
+        const requestedIndex = Math.max(0, Math.min(total - 1, Math.floor(Number(rawNumber || 1)) - 1));
+        if (requestedIndex === videoIndex) return;
+        setVideoSequencer((current) => {
+            if (!current) return current;
+            const slides = (current.slides || []).map((slide) => ({ ...slide, scenes: (slide.scenes || []).map((item) => ({ ...item, sequences: [...(item.sequences || [])] })) }));
+            const activeSlide = slides.find((slide) => Number(slide.slideNumber) === Number(current.activeSlideNumber));
+            const sequences = activeSlide?.scenes?.[sceneIndex]?.sequences;
+            if (!sequences?.[videoIndex]) return current;
+            const [moved] = sequences.splice(videoIndex, 1);
+            sequences.splice(requestedIndex, 0, moved);
+            return { ...current, slides };
+        });
     };
 
     const openControlOnCourse = async () => {
@@ -928,25 +976,25 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (raw === null) return;
         updatePublishedUntilSlide(playingCourse, raw);
     };
+    const videoSequencerSlide = videoSequencer?.slides?.find((slide) => Number(slide.slideNumber) === Number(videoSequencer.activeSlideNumber));
+    const videoSequencerScenes = videoSequencerSlide?.scenes || [];
 
     if (isPhone) {
-        const phoneScenes = presentationRemote?.scenes?.length
-            ? presentationRemote.scenes
-            : [{ id: 'scene_1', name: 'Scène 1', sequences: presentationRemote?.sequences || [] }];
-        const phoneSceneIndex = Math.min(phoneScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)));
+        const phoneSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
+        const phoneVideoSlides = presentationRemote?.videoSlides?.length ? presentationRemote.videoSlides : [{ slideNumber: 1, scenes: [{ id: 'scene_1', name: 'Scène 1', sequences: presentationRemote?.sequences || [] }] }];
+        const phoneScenes = phoneVideoSlides.find((slide) => Number(slide?.slideNumber) === phoneSlideIndex + 1)?.scenes || [];
+        const phoneSceneIndex = Math.max(0, Math.min(phoneScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0))));
         const phoneGroups = groupSceneSequences(phoneScenes[phoneSceneIndex]);
         const phoneSequenceIndex = Math.min(Math.max(0, phoneGroups.length - 1), Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0)));
         return <section className="course-phone-remote">
             {!presentationRemote ? <div className="course-phone-remote-empty"><span>🎬</span><strong>AUCUNE PRÉSENTATION ACTIVE</strong><p>Ouvre un cours sur l’ordinateur du tableau. Les commandes apparaîtront automatiquement ici.</p></div> : <>
-                <div className="course-phone-remote-head"><small>COURS AU TABLEAU</small><strong>{presentationRemote.title}</strong><div><span>SCÈNE <b>{phoneSceneIndex + 1}</b></span><span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span></div></div>
+                <div className="course-phone-remote-head"><small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small><strong>{presentationRemote.title}</strong><div className="course-phone-scenes">{phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}</div><div><span>SCÈNE <b>{phoneSceneIndex + 1}</b></span><span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span></div></div>
                 <div className="course-phone-controls">
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
                     <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
                     <button className={presentationRemote.remote?.animationVisible ? 'active' : ''} onClick={() => void sendPresentationCommand('animation_toggle')}><span>🎞</span>{presentationRemote.remote?.animationVisible ? 'Désactiver animation' : 'Activer animation'}</button>
                     <button className="play" onClick={() => void sendPresentationCommand('play')}><span>▶</span>Play</button>
                     <button onClick={() => void sendPresentationCommand('sequence_next')}><span>⏭</span>Séquence suivante</button>
-                    <button onClick={() => void sendPresentationCommand('scene_previous')}><span>⏮</span>Scène précédente</button>
-                    <button onClick={() => void sendPresentationCommand('scene_next')}><span>⏭</span>Scène suivante</button>
                 </div>
             </>}
         </section>;
@@ -1358,16 +1406,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" onClick={() => !savingAnimation && setVideoSequencer(null)} aria-label="Fermer">×</button>
                         </div>
                         <div className="course-video-sequencer-body">
-                            <button type="button" className="course-video-add-scene" onClick={() => setVideoSequencer((current) => ({ ...current, scenes: [...current.scenes, { id: `scene_${Date.now()}`, name: `Scène ${current.scenes.length + 1}`, sequences: [] }] }))}>＋ AJOUTER UNE SCÈNE</button>
-                            {videoSequencer.scenes.map((scene, sceneIndex) => <section className="course-video-scene" key={scene.id}>
-                                <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MP4'}<input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencer.scenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.filter((_, index) => index !== sceneIndex) }))}>×</button> : null}</div>
-                                {scene.sequences.length === 0 ? <div className="course-video-empty">Importe les vidéos de cette scène.</div> : null}
-                                <div className="course-video-sequence-list">{scene.sequences.map((sequence, index) => <div className="course-video-sequence-row" key={sequence.id || index}>
-                                    <span className="course-video-sequence-number">{index + 1}</span><video src={sequence.url} preload="metadata" controls />
-                                    <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: item.sequences.map((video, vIndex) => vIndex === index ? { ...video, name: event.target.value } : video) } : item) }))} />
-                                    {index < scene.sequences.length - 1 ? <label className="course-video-merge"><input type="checkbox" checked={sequence.mergeWithNext === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: item.sequences.map((video, vIndex) => vIndex === index ? { ...video, mergeWithNext: event.target.checked } : video) } : item) }))} /> Fusionner avec la suivante</label> : null}
-                                    <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, scenes: current.scenes.map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: item.sequences.filter((_, vIndex) => vIndex !== index) } : item) }))}>×</button>
-                                </div>)}</div>
+                            <div className="course-video-slide-tabs">{Array.from({ length: Math.max(1, slideManifest.length || Number(videoSequencer.course.publishedUntilSlide || 1)) }, (_, index) => index + 1).map((number) => <button type="button" className={number === videoSequencer.activeSlideNumber ? 'selected' : ''} key={number} onClick={() => setVideoSequencer((current) => ({ ...current, activeSlideNumber: number, slides: current.slides.some((slide) => Number(slide.slideNumber) === number) ? current.slides : [...current.slides, { slideNumber: number, scenes: [{ id: `scene_${Date.now()}`, name: 'Scène 1', sequences: [] }] }] }))}>SLIDE {number}</button>)}</div>
+                            <button type="button" className="course-video-add-scene" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: [...slide.scenes, { id: `scene_${Date.now()}`, name: `Scène ${slide.scenes.length + 1}`, sequences: [] }] } : slide) }))}>＋ AJOUTER UNE SCÈNE</button>
+                            {videoSequencerScenes.map((scene, sceneIndex) => <section className="course-video-scene" key={scene.id}>
+                                <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) } : slide) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MP4'}<input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencerScenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.filter((_, index) => index !== sceneIndex) } : slide) }))}>×</button> : null}</div>
+                                {scene.sequences.length === 0 ? <div className={`course-video-empty ${draggedSequence ? 'drop-ready' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={() => moveSequenceVideo(sceneIndex, 0)}>Importe les vidéos de cette scène.</div> : null}
+                                <div className="course-video-sequence-list">{scene.sequences.map((sequence, index) => <div className={`course-video-sequence-row ${draggedSequence?.sceneIndex === sceneIndex && draggedSequence?.videoIndex === index ? 'dragging' : ''}`} key={sequence.id || index} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={() => moveSequenceVideo(sceneIndex, index)}>
+                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position de la vidéo ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /><video src={sequence.url} preload="metadata" controls />
+                                    <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, name: event.target.value } : video) } : item) } : slide) }))} />
+                                    {index < scene.sequences.length - 1 ? <label className="course-video-merge"><input type="checkbox" checked={sequence.mergeWithNext === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, mergeWithNext: event.target.checked } : video) } : item) } : slide) }))} /> Fusionner avec la suivante</label> : null}
+                                    <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).filter((_, vIndex) => vIndex !== index) } : item) } : slide) }))}>×</button>
+                                </div>)}{scene.sequences.length > 0 ? <div className={`course-video-drop-end ${draggedSequence ? 'active' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={() => moveSequenceVideo(sceneIndex, scene.sequences.length)}>Déposer ici pour placer à la fin</div> : null}</div>
                             </section>)}
                         </div>
                         <div className="course-animation-editor-actions">

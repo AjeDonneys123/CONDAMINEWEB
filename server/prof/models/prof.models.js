@@ -356,6 +356,7 @@ const Models = {
         presentationAnimations: { type: [mongoose.Schema.Types.Mixed], default: [] },
         presentationVideoSequences: { type: [mongoose.Schema.Types.Mixed], default: [] },
         presentationVideoScenes: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        presentationVideoSlides: { type: [mongoose.Schema.Types.Mixed], default: [] },
         presentationRemote: { type: mongoose.Schema.Types.Mixed, default: null },
         date: { type: Date, default: Date.now }
     }),
