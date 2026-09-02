@@ -506,8 +506,51 @@ function isProbablyDirectVideo(url = '') {
     return false;
 }
 
-export default function LearningWorkspace({ module, user, onQuit }) {
+export default function LearningWorkspace({ module: initialModule, user, onQuit }) {
+    const [module, setModule] = useState(initialModule);
     const FORCED_SHEET_REVIEW_MS = 8000;
+
+    // Une fiche peut être corrigée par le professeur pendant qu'elle est déjà
+    // ouverte chez l'élève. Toujours relire sa version courante, sans écraser
+    // la progression personnalisée ajoutée par /list/:studentId.
+    useEffect(() => {
+        setModule(initialModule);
+    }, [initialModule?._id, initialModule?.updatedAt]);
+
+    useEffect(() => {
+        const moduleId = String(initialModule?._id || initialModule?.id || '').trim();
+        if (!moduleId) return undefined;
+        let cancelled = false;
+        const refreshModule = async () => {
+            try {
+                const response = await fetch(`/api/learning/${encodeURIComponent(moduleId)}?_=${Date.now()}`, {
+                    cache: 'no-store'
+                });
+                const fresh = await response.json().catch(() => null);
+                if (!cancelled && response.ok && fresh?._id) {
+                    setModule((previous) => ({
+                        ...fresh,
+                        completion: previous?.completion || initialModule?.completion || null
+                    }));
+                }
+            } catch (_) {}
+        };
+        const onFocus = () => void refreshModule();
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') void refreshModule();
+        };
+        void refreshModule();
+        const timer = window.setInterval(refreshModule, 20000);
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [initialModule?._id, initialModule?.id]);
+
     const visibleSectionIds = useMemo(() => {
         const rows = Array.isArray(module?.sections) ? module.sections : [];
         return new Set(
