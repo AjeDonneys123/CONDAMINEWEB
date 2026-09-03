@@ -123,13 +123,13 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                         onBufferProgress?.(fraction);
                     }
                 } catch (_) { }
-            }, 650);
+            }, 500);
         };
 
         const targetVideoId = getYoutubeVideoId(video?.url);
         const startSec = Math.floor(Number(video?.startSec || 0));
 
-        // If player already exists, load new video without rebuilding the iframe!
+        // If player already exists, load new video without rebuilding iframe
         if (playerRef.current && readyRef.current && typeof playerRef.current.loadVideoById === 'function') {
             if (currentVideoIdRef.current !== targetVideoId) {
                 currentVideoIdRef.current = targetVideoId;
@@ -137,18 +137,6 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                 try {
                     playerRef.current.mute();
                     playerRef.current.loadVideoById({ videoId: targetVideoId, startSeconds: startSec });
-                    if (!isVisibleRef.current) {
-                        window.setTimeout(() => {
-                            try {
-                                if (!isVisibleRef.current) {
-                                    playerRef.current?.pauseVideo?.();
-                                    playerRef.current?.seekTo?.(startSec, true);
-                                }
-                            } catch (_) {}
-                        }, 350);
-                    } else {
-                        playerRef.current.unMute();
-                    }
                 } catch (_) {}
             } else {
                 try { playerRef.current.seekTo(startSec, true); } catch (_) {}
@@ -163,7 +151,8 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
             playerRef.current = new window.YT.Player(hostRef.current, {
                 videoId: targetVideoId,
                 playerVars: {
-                    autoplay: autoplayOnMount ? 1 : 0,
+                    autoplay: 1, // Autoplay muted: allows instant stream buffering into RAM
+                    mute: 1,
                     rel: 0,
                     playsinline: 1,
                     controls: 0,
@@ -178,30 +167,29 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                         readyRef.current = true;
                         monitorEnd(event.target);
                         startBufferMonitoring(event.target);
+                        try {
+                            const initialFrac = event.target.getVideoLoadedFraction?.() || 0.15;
+                            onBufferProgress?.(initialFrac);
+                        } catch (_) {}
                         if (isVisibleRef.current && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
                             finishedRef.current = false;
                             event.target.unMute();
                             event.target.playVideo();
-                        } else {
-                            // Silent pre-warming: mute and play briefly so YouTube buffers the stream into RAM
-                            try {
-                                event.target.mute();
-                                event.target.playVideo();
-                                window.setTimeout(() => {
-                                    try {
-                                        if (!isVisibleRef.current) {
-                                            event.target.pauseVideo();
-                                            event.target.seekTo(startSec, true);
-                                        }
-                                    } catch (_) {}
-                                }, 350);
-                            } catch (_) {}
                         }
                     },
                     onStateChange: (event) => {
                         if (event.data === window.YT.PlayerState.ENDED) finishAtLastFrame(event.target);
-                        if (event.data === window.YT.PlayerState.PLAYING || event.data === window.YT.PlayerState.BUFFERING) {
-                            try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0); } catch (_) { }
+                        if (event.data === window.YT.PlayerState.PLAYING) {
+                            if (!isVisibleRef.current) {
+                                try {
+                                    event.target.pauseVideo();
+                                    event.target.seekTo(startSec, true);
+                                } catch (_) {}
+                            }
+                            try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0.25); } catch (_) { }
+                        }
+                        if (event.data === window.YT.PlayerState.BUFFERING) {
+                            try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0.1); } catch (_) { }
                         }
                     }
                 }
@@ -230,7 +218,15 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
     useEffect(() => {
         if (!readyRef.current || !playerRef.current) return;
         if (!isVisible) {
-            try { playerRef.current.pauseVideo(); } catch (_) { }
+            try {
+                playerRef.current.mute();
+                playerRef.current.pauseVideo();
+            } catch (_) { }
+        } else {
+            try {
+                playerRef.current.unMute();
+                playerRef.current.playVideo();
+            } catch (_) { }
         }
     }, [isVisible]);
 
@@ -492,17 +488,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setProjectedClassPlan(null);
             return undefined;
         }
-        const controller = new AbortController();
+        let cancelled = false;
         const loadProjectedClassPlan = async () => {
             try {
                 const teacherId = String(user?._id || user?.id || '');
                 const [classResponse, planResponse] = await Promise.all([
-                    fetch(`/api/classroom/${encodeURIComponent(projectedClassId)}`, { signal: controller.signal, cache: 'no-store' }),
-                    fetch(`/api/classroom/plan/${encodeURIComponent(projectedClassId)}${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`, { signal: controller.signal, cache: 'no-store' })
+                    fetch(`/api/classroom/${encodeURIComponent(projectedClassId)}`, { cache: 'no-store' }),
+                    fetch(`/api/classroom/plan/${encodeURIComponent(projectedClassId)}${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`, { cache: 'no-store' })
                 ]);
                 if (!classResponse.ok || !planResponse.ok) throw new Error('Plan indisponible');
                 const classInfo = await classResponse.json();
                 const students = await planResponse.json();
+                if (cancelled) return;
                 const list = Array.isArray(students) ? students : [];
                 const cols = Math.max(2, Number(classInfo?.layout?.cols || 6));
                 const rows = Math.max(2, Number(classInfo?.layout?.rows || 5), Math.ceil(list.length / cols));
@@ -539,13 +536,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         seats.push({ student, x, y });
                         cursor += 1;
                     });
-                if (!controller.signal.aborted) setProjectedClassPlan({ name: classInfo?.name || globalClass || 'Classe', cols, rows, seats });
+                setProjectedClassPlan({ name: classInfo?.name || globalClass || 'Classe', cols, rows, seats });
             } catch (_) {
-                if (!controller.signal.aborted) setProjectedClassPlan({ error: true });
+                if (!cancelled) setProjectedClassPlan({ error: true });
             }
         };
         void loadProjectedClassPlan();
-        return () => controller.abort();
+        const planPollInterval = window.setInterval(loadProjectedClassPlan, 1500);
+        return () => {
+            cancelled = true;
+            window.clearInterval(planPollInterval);
+        };
     }, [isPhone, globalClassId, globalClass, user?._id, user?.id, presentationRemote?.remote?.classId, presentationRemote?.remote?.classPlanVisible]);
 
     useEffect(() => {
@@ -660,11 +661,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setPresentationRemote(null);
     };
 
-    const projectedVideoSlides = normalizeVideoSlides(playingCourse || {});
+    const rawVideoSlides = (Array.isArray(playingCourse?.presentationVideoSlides) && playingCourse.presentationVideoSlides.length > 0)
+        ? playingCourse.presentationVideoSlides
+        : (Array.isArray(presentationRemote?.videoSlides) && presentationRemote.videoSlides.length > 0)
+            ? presentationRemote.videoSlides
+            : [];
+    const projectedVideoSlides = rawVideoSlides.length > 0
+        ? normalizeVideoSlides({ presentationVideoSlides: rawVideoSlides })
+        : normalizeVideoSlides(playingCourse || {});
     const projectedScenes = projectedVideoSlides.find((slide) => Number(slide.slideNumber) === Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0)) + 1)?.scenes || [];
-    const projectedSceneIndex = Math.min(projectedScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)));
-    const projectedGroups = groupSceneSequences(projectedScenes[projectedSceneIndex]);
-    const projectedSequenceIndex = Math.max(0, Math.min(projectedGroups.length - 1, Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0))));
+    const projectedSceneIndex = projectedScenes.length > 0
+        ? Math.min(projectedScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)))
+        : 0;
+    const projectedGroups = projectedScenes.length > 0 ? groupSceneSequences(projectedScenes[projectedSceneIndex]) : [];
+    const projectedSequenceIndex = projectedGroups.length > 0
+        ? Math.max(0, Math.min(projectedGroups.length - 1, Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0))))
+        : 0;
     const projectedVideo = projectedGroups[projectedSequenceIndex]?.[playingVideoIndex] || projectedGroups[projectedSequenceIndex]?.[0];
     const currentPlayVersion = Number(presentationRemote?.remote?.playVersion || 0);
     const visibleProjectedVideo = heldProjectedVideo?.playVersion === currentPlayVersion ? heldProjectedVideo.video : projectedVideo;
@@ -673,32 +685,75 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const youtubeAutoplayOnMount = Boolean(visibleVideoIsYoutube && currentPlayVersion > consumedYoutubePlayVersionRef.current);
 
     const lastReportedBufferRef = useRef({});
-    const handleBufferProgress = useCallback((fraction) => {
+    const handleItemBufferProgress = useCallback((sceneIdx, seqIdx, fraction) => {
         if (isPhone || !playingCourse?._id) return;
         const pct = Math.min(100, Math.max(0, Math.round((Number(fraction) || 0) * 100)));
-        const seqIdx = projectedSequenceIndex;
-        const prevPct = lastReportedBufferRef.current[seqIdx] ?? -1;
+        const key = `${sceneIdx}_${seqIdx}`;
+        const prevPct = lastReportedBufferRef.current[key] ?? -1;
         if (pct > prevPct || prevPct === -1) {
-            lastReportedBufferRef.current[seqIdx] = pct;
+            lastReportedBufferRef.current[key] = pct;
             fetch(`/api/courses/${playingCourse._id}/presentation-remote/buffer-status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sequenceIndex: seqIdx, bufferPct: pct, isReady: pct >= 65 })
+                body: JSON.stringify({ sceneIndex: sceneIdx, sequenceIndex: seqIdx, bufferPct: pct, isReady: pct >= 65 })
             }).catch(() => {});
         }
-    }, [isPhone, playingCourse?._id, projectedSequenceIndex]);
+    }, [isPhone, playingCourse?._id]);
 
-    const handleNativeVideoProgress = useCallback((event) => {
+    const handleNativeItemProgress = useCallback((sceneIdx, seqIdx, event) => {
         const video = event.currentTarget;
         if (!video || !video.duration) return;
         try {
             if (video.buffered.length > 0) {
                 const bufferedEnd = video.buffered.end(video.buffered.length - 1);
                 const fraction = Math.min(1, Math.max(0, bufferedEnd / video.duration));
-                handleBufferProgress(fraction);
+                handleItemBufferProgress(sceneIdx, seqIdx, fraction);
             }
         } catch (_) { }
-    }, [handleBufferProgress]);
+    }, [handleItemBufferProgress]);
+
+    const preloadItems = useMemo(() => {
+        if (isPhone || !playingCourse?._id || !Array.isArray(projectedScenes) || projectedScenes.length === 0) return [];
+        const items = [];
+        // 1. All sequences of the current scene (e.g. Scene 1 upon opening the slide)
+        const curScene = projectedScenes[projectedSceneIndex];
+        if (curScene) {
+            const curGroups = groupSceneSequences(curScene);
+            curGroups.forEach((group, seqIdx) => {
+                const vid = group[0];
+                if (vid && (vid.url || vid.id)) {
+                    items.push({
+                        sceneIndex: projectedSceneIndex,
+                        sequenceIndex: seqIdx,
+                        video: vid,
+                        isCurrent: seqIdx === projectedSequenceIndex
+                    });
+                }
+            });
+
+            // 2. Next scene sequences if on the last sequence of current scene
+            const isLastSequenceOfCurrentScene = projectedSequenceIndex >= curGroups.length - 1;
+            if (isLastSequenceOfCurrentScene && projectedSceneIndex + 1 < projectedScenes.length) {
+                const nextSceneIdx = projectedSceneIndex + 1;
+                const nextScene = projectedScenes[nextSceneIdx];
+                if (nextScene) {
+                    const nextGroups = groupSceneSequences(nextScene);
+                    nextGroups.forEach((group, seqIdx) => {
+                        const vid = group[0];
+                        if (vid && (vid.url || vid.id)) {
+                            items.push({
+                                sceneIndex: nextSceneIdx,
+                                sequenceIndex: seqIdx,
+                                video: vid,
+                                isCurrent: false
+                            });
+                        }
+                    });
+                }
+            }
+        }
+        return items;
+    }, [isPhone, playingCourse?._id, projectedScenes, projectedSceneIndex, projectedSequenceIndex]);
     const projectedSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
     const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || '').trim();
     const projectedSlidesUrl = projectedSlideObjectId
@@ -1366,6 +1421,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const openModification = async (course) => {
         setError('');
+        const editSlideObjectId = String(playingCourse?._id || '') === String(course?._id || '')
+            ? projectedSlideObjectId
+            : '';
         try {
             const response = await fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
@@ -1375,7 +1433,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Accès en modification impossible');
             setPlayerMode('edit');
-            setPlayingCourse({ ...course, slidesUrl: data.editUrl || course.slidesUrl, editorNonce: Date.now() });
+            setPlayingCourse({
+                ...course,
+                slidesUrl: data.editUrl || course.slidesUrl,
+                editorNonce: Date.now(),
+                editSlideObjectId
+            });
         } catch (accessError) {
             setError(accessError.message);
             alert(`Impossible d’ouvrir cette présentation en modification : ${accessError.message}`);
@@ -1499,7 +1562,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {phoneGroups.map((group, index) => {
                             const isSelected = index === phoneSequenceIndex;
                             const bufferMap = presentationRemote?.remote?.sequenceBuffers || {};
-                            const pct = Math.min(100, Math.max(0, Number(bufferMap[index] ?? (isSelected ? presentationRemote?.remote?.currentBufferPct : 0) ?? 0)));
+                            const specificKey = `${phoneSceneIndex}_${index}`;
+                            const pct = Math.min(100, Math.max(0, Number(
+                                bufferMap[specificKey] ??
+                                bufferMap[index] ??
+                                (isSelected ? presentationRemote?.remote?.currentBufferPct : 0) ??
+                                0
+                            )));
                             const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
                             const radius = 19;
                             const circ = 2 * Math.PI * radius; // ~119.38
@@ -1862,12 +1931,58 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             title={playingCourse.title}
                             src={playerMode === 'presentation'
                                 ? projectedSlidesUrl
-                                : `${getEditUrl(playingCourse.slidesUrl)}?usp=sharing&editor=${playingCourse.editorNonce || Date.now()}`}
+                                : `${getEditUrl(playingCourse.slidesUrl)}?usp=sharing&editor=${playingCourse.editorNonce || Date.now()}${playingCourse.editSlideObjectId ? `#slide=id.${encodeURIComponent(playingCourse.editSlideObjectId)}` : ''}`}
                             allowFullScreen
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
-                        {visibleProjectedVideo && (
+                        {preloadItems.length > 0 ? (
+                            preloadItems.map((item) => {
+                                const isCurrentActive = item.isCurrent && presentationRemote?.remote?.animationVisible;
+                                const isYoutube = item.video?.sourceType === 'youtube' || getYoutubeVideoId(item.video?.url);
+                                const itemKey = `${item.sceneIndex}_${item.sequenceIndex}_${item.video?.id || item.video?.url || ''}`;
+                                return (
+                                    <div
+                                        key={itemKey}
+                                        className={`course-sequence-video-layer ${isCurrentActive ? 'active' : 'prewarming'}`}
+                                    >
+                                        {isYoutube ? (
+                                            <YoutubeSequencePlayer
+                                                video={item.video}
+                                                playVersion={item.isCurrent ? presentationRemote?.remote?.playVersion : 0}
+                                                isVisible={isCurrentActive}
+                                                autoplayOnMount={item.isCurrent ? youtubeAutoplayOnMount : false}
+                                                onEnded={item.isCurrent ? finishProjectedVideo : undefined}
+                                                onBufferProgress={(fraction) => handleItemBufferProgress(item.sceneIndex, item.sequenceIndex, fraction)}
+                                            />
+                                        ) : (
+                                            <video
+                                                ref={item.isCurrent ? sequenceVideoRef : undefined}
+                                                src={item.video.url}
+                                                playsInline
+                                                preload="auto"
+                                                muted={!isCurrentActive}
+                                                onLoadedMetadata={(event) => {
+                                                    event.currentTarget.currentTime = Math.max(0, Number(item.video.startSec || 0));
+                                                }}
+                                                onProgress={(event) => handleNativeItemProgress(item.sceneIndex, item.sequenceIndex, event)}
+                                                onTimeUpdate={(event) => {
+                                                    handleNativeItemProgress(item.sceneIndex, item.sequenceIndex, event);
+                                                    if (item.isCurrent) {
+                                                        const end = Math.max(0, Number(item.video.endSec || 0));
+                                                        if (end > 0 && event.currentTarget.currentTime >= end) {
+                                                            event.currentTarget.pause();
+                                                            finishProjectedVideo();
+                                                        }
+                                                    }
+                                                }}
+                                                onEnded={item.isCurrent ? finishProjectedVideo : undefined}
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })
+                        ) : visibleProjectedVideo ? (
                             <div className={`course-sequence-video-layer ${presentationRemote?.remote?.animationVisible ? 'active' : 'prewarming'}`}>
                                 {visibleVideoIsYoutube ? (
                                     <YoutubeSequencePlayer
@@ -1876,7 +1991,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         isVisible={presentationRemote?.remote?.animationVisible === true}
                                         autoplayOnMount={youtubeAutoplayOnMount}
                                         onEnded={finishProjectedVideo}
-                                        onBufferProgress={handleBufferProgress}
+                                        onBufferProgress={(fraction) => handleItemBufferProgress(projectedSceneIndex, projectedSequenceIndex, fraction)}
                                     />
                                 ) : (
                                     <video
@@ -1887,9 +2002,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         onLoadedMetadata={(event) => {
                                             event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0));
                                         }}
-                                        onProgress={handleNativeVideoProgress}
+                                        onProgress={(event) => handleNativeItemProgress(projectedSceneIndex, projectedSequenceIndex, event)}
                                         onTimeUpdate={(event) => {
-                                            handleNativeVideoProgress(event);
+                                            handleNativeItemProgress(projectedSceneIndex, projectedSequenceIndex, event);
                                             const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0));
                                             if (end > 0 && event.currentTarget.currentTime >= end) {
                                                 event.currentTarget.pause();
@@ -1900,7 +2015,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     />
                                 )}
                             </div>
-                        )}
+                        ) : null}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">

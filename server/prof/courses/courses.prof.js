@@ -602,14 +602,18 @@ router.post('/:id/presentation-remote/buffer-status', async (req, res) => {
         const course = await Course.findById(req.params.id);
         if (!course) return res.status(404).json({ error: 'Cours introuvable' });
         const remote = course.presentationRemote || { active: true };
+        const sceneIndex = Math.max(0, Number(req.body?.sceneIndex ?? remote.sceneIndex ?? 0));
         const sequenceIndex = Math.max(0, Number(req.body?.sequenceIndex ?? remote.sequenceIndex ?? 0));
         const bufferPct = Math.min(100, Math.max(0, Math.round(Number(req.body?.bufferPct || 0))));
-        const isReady = req.body?.isReady === true || bufferPct >= 70;
+        const isReady = req.body?.isReady === true || bufferPct >= 65;
         const currentBuffers = (remote.sequenceBuffers && typeof remote.sequenceBuffers === 'object') ? { ...remote.sequenceBuffers } : {};
         currentBuffers[sequenceIndex] = bufferPct;
+        currentBuffers[`${sceneIndex}_${sequenceIndex}`] = bufferPct;
         remote.sequenceBuffers = currentBuffers;
-        remote.isReady = isReady;
-        remote.currentBufferPct = bufferPct;
+        if (Number(remote.sceneIndex) === sceneIndex && Number(remote.sequenceIndex) === sequenceIndex) {
+            remote.isReady = isReady;
+            remote.currentBufferPct = bufferPct;
+        }
         remote.updatedAt = new Date();
         course.presentationRemote = remote;
         course.markModified('presentationRemote');
