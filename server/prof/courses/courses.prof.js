@@ -451,7 +451,7 @@ router.patch('/:id/video-sequences', async (req, res) => {
                 url: String(item?.url || '').trim(),
                 driveFileId: String(item?.driveFileId || '').trim(),
                 sourceType: String(item?.sourceType || '').trim() === 'youtube' ? 'youtube' : 'mp4',
-                mergeWithNext: item?.mergeWithNext === true,
+                mergeWithNext: false,
                 closeAfterSequence: item?.closeAfterSequence === true,
                 startSec: Math.max(0, Number(item?.startSec || 0)),
                 endSec: Math.max(0, Number(item?.endSec || 0))
@@ -534,7 +534,7 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         const sceneTotal = Math.max(1, currentScenes.length || Number(req.body?.sceneTotal || 1));
         const currentScene = currentScenes[Math.max(0, Math.min(currentScenes.length - 1, Number(remote.sceneIndex || 0)))];
         const currentVideos = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
-        const storedSequenceTotal = currentVideos.reduce((total, video, index) => total + (index === 0 || currentVideos[index - 1]?.mergeWithNext !== true ? 1 : 0), 0);
+        const storedSequenceTotal = currentVideos.length;
         const sequenceTotal = Math.max(1, storedSequenceTotal || Number(req.body?.sequenceTotal || 1));
         if (action === 'slide_previous') { remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
