@@ -31,6 +31,7 @@ export default function ProfPage({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+  const [classPlanProjected, setClassPlanProjected] = useState(false);
 
   const loadProfileAndClasses = async () => {
     setLoading(true);
@@ -111,6 +112,38 @@ export default function ProfPage({ user, onLogout }) {
     requestedAt: `${requestedClassId}:${requestedScanTitle}:${requestedScanAuto}`
   } : null;
 
+  const sendClassPlanCommand = async (action) => {
+    if (!selectedClassId) return null;
+    try {
+      const activeResponse = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(selectedClassId)}`, { cache: 'no-store' });
+      const active = await activeResponse.json().catch(() => ({}));
+      if (!activeResponse.ok || !active?.active || !active?.courseId) return null;
+      const response = await fetch(`/api/courses/${active.courseId}/presentation-remote/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return null;
+      setClassPlanProjected(data.remote?.classPlanVisible === true);
+      return data.remote;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const handleTabChange = (nextTab) => {
+    if (isPhone && nextTab === 'classroom' && tab === 'classroom') {
+      void sendClassPlanCommand('class_plan_toggle');
+      return;
+    }
+    if (isPhone && tab === 'classroom' && nextTab !== 'classroom') {
+      setClassPlanProjected(false);
+      void sendClassPlanCommand('class_plan_hide');
+    }
+    setTab(nextTab);
+  };
+
   useEffect(() => {
     if (requestedTab && allowedTabs.includes(requestedTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students'].includes(requestedTab))) {
       const blockedForRole = (!liveUser.isDeveloper && (requestedTab === 'studio' || requestedTab === 'admin'));
@@ -147,7 +180,7 @@ export default function ProfPage({ user, onLogout }) {
             )}
         </div>
 
-        <ProfNav activeTab={tab} onTabChange={setTab} user={liveUser} />
+        <ProfNav activeTab={tab} onTabChange={handleTabChange} user={liveUser} isPhone={isPhone} classPlanProjected={classPlanProjected} />
         
         {/* MODIFICATION ICI : On enlève le padding 'p-8' sur mobile (md:p-8) pour que la grille touche les bords */}
         <div className="md:p-8 p-0 bg-white min-h-[600px]">

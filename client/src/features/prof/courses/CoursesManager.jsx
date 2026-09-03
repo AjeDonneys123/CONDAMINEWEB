@@ -240,6 +240,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [slideManifest, setSlideManifest] = useState([]);
     const [playingVideoIndex, setPlayingVideoIndex] = useState(0);
     const [heldProjectedVideo, setHeldProjectedVideo] = useState(null);
+    const [projectedClassPlan, setProjectedClassPlan] = useState(null);
     const animationFrameRef = useRef(null);
     const sequenceVideoRef = useRef(null);
     const sequenceCutVideoRef = useRef(null);
@@ -380,6 +381,56 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const interval = window.setInterval(poll, 650);
         return () => window.clearInterval(interval);
     }, [globalClassId]);
+
+    useEffect(() => {
+        if (isPhone || !globalClassId || presentationRemote?.remote?.classPlanVisible !== true) {
+            setProjectedClassPlan(null);
+            return undefined;
+        }
+        const controller = new AbortController();
+        const loadProjectedClassPlan = async () => {
+            try {
+                const teacherId = String(user?._id || user?.id || '');
+                const [classResponse, planResponse] = await Promise.all([
+                    fetch(`/api/classroom/${encodeURIComponent(globalClassId)}`, { signal: controller.signal, cache: 'no-store' }),
+                    fetch(`/api/classroom/plan/${encodeURIComponent(globalClassId)}${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`, { signal: controller.signal, cache: 'no-store' })
+                ]);
+                if (!classResponse.ok || !planResponse.ok) throw new Error('Plan indisponible');
+                const classInfo = await classResponse.json();
+                const students = await planResponse.json();
+                const list = Array.isArray(students) ? students : [];
+                const cols = Math.max(2, Number(classInfo?.layout?.cols || 6));
+                const rows = Math.max(2, Number(classInfo?.layout?.rows || 5), Math.ceil(list.length / cols));
+                const occupied = new Set();
+                const placedIds = new Set();
+                const seats = [];
+                list.forEach((student) => {
+                    const x = Number(student?.seatX);
+                    const y = Number(student?.seatY);
+                    const key = `${x}-${y}`;
+                    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= cols || y < 0 || y >= rows || occupied.has(key)) return;
+                    occupied.add(key);
+                    placedIds.add(String(student?._id || ''));
+                    seats.push({ student, x, y });
+                });
+                let cursor = 0;
+                list.filter((student) => !placedIds.has(String(student?._id || ''))).forEach((student) => {
+                    while (cursor < cols * rows && occupied.has(`${cursor % cols}-${Math.floor(cursor / cols)}`)) cursor += 1;
+                    if (cursor >= cols * rows) return;
+                    const x = cursor % cols;
+                    const y = Math.floor(cursor / cols);
+                    occupied.add(`${x}-${y}`);
+                    seats.push({ student, x, y });
+                    cursor += 1;
+                });
+                if (!controller.signal.aborted) setProjectedClassPlan({ name: classInfo?.name || globalClass || 'Classe', cols, rows, seats });
+            } catch (_) {
+                if (!controller.signal.aborted) setProjectedClassPlan({ error: true });
+            }
+        };
+        void loadProjectedClassPlan();
+        return () => controller.abort();
+    }, [isPhone, globalClassId, globalClass, user?._id, user?.id, presentationRemote?.remote?.classPlanVisible]);
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return undefined;
@@ -1493,6 +1544,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             allowFullScreen
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
+                        {presentationRemote?.remote?.classPlanVisible && <div className="course-projected-class-plan">
+                            {projectedClassPlan?.error ? <strong className="course-projected-plan-message">PLAN DE CLASSE INDISPONIBLE</strong> : projectedClassPlan ? <>
+                                <div className="course-projected-plan-title"><strong>{projectedClassPlan.name}</strong><span>PLAN VU PAR LES ÉLÈVES</span></div>
+                                <div className="course-projected-plan-grid" style={{ gridTemplateColumns: `repeat(${projectedClassPlan.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${projectedClassPlan.rows}, minmax(0, 1fr))` }}>
+                                    {projectedClassPlan.seats.map(({ student, x, y }) => <div className="course-projected-seat" key={student?._id || `${x}-${y}`} style={{ gridColumn: projectedClassPlan.cols - x, gridRow: projectedClassPlan.rows - y }}>
+                                        <span>{student?.avatar || student?.emoji || '🎓'}</span>
+                                        <strong>{String(student?.firstName || student?.name || 'Élève')}</strong>
+                                        <small>{String(student?.lastName || '').slice(0, 1)}{student?.lastName ? '.' : ''}</small>
+                                    </div>)}
+                                </div>
+                            </> : <strong className="course-projected-plan-message">CHARGEMENT DU PLAN…</strong>}
+                        </div>}
                         {presentationRemote?.remote?.animationVisible && visibleProjectedVideo && <div className="course-sequence-video-layer">{visibleVideoIsYoutube ? <YoutubeSequencePlayer key={visiblePlaybackKey} video={visibleProjectedVideo} playVersion={presentationRemote.remote.playVersion} autoplayOnMount={youtubeAutoplayOnMount} onEnded={finishProjectedVideo} /> : <video key={visiblePlaybackKey} ref={sequenceVideoRef} src={visibleProjectedVideo.url} playsInline preload="auto" onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0)); }} onTimeUpdate={(event) => { const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0)); if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); } }} onEnded={finishProjectedVideo} />}</div>}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>

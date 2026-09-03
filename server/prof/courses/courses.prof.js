@@ -504,7 +504,7 @@ router.post('/:id/presentation-remote/start', async (req, res) => {
         if (!course) return res.status(404).json({ error: 'Cours introuvable' });
         const classId = String(req.body?.classId || course.targetClassroomId || '').trim();
         await Course.updateMany({ 'presentationRemote.classId': classId, _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
-        course.presentationRemote = { active: true, classId, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, playVersion: 0, version: Date.now(), updatedAt: new Date() };
+        course.presentationRemote = { active: true, classId, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, classPlanVisible: false, playVersion: 0, version: Date.now(), updatedAt: new Date() };
         await course.save();
         return res.json({ ok: true, remote: course.presentationRemote });
     } catch (error) {
@@ -525,7 +525,7 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
         if (!course) return res.status(404).json({ error: 'Cours introuvable' });
-        const remote = { active: true, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, playVersion: 0, ...(course.presentationRemote || {}) };
+        const remote = { active: true, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, classPlanVisible: false, playVersion: 0, ...(course.presentationRemote || {}) };
         const action = String(req.body?.action || '');
         const slideTotal = Math.max(1, Number(req.body?.slideTotal || 1));
         const currentSlide = (Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [])
@@ -539,6 +539,11 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         if (action === 'slide_previous') { remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'animation_toggle') remote.animationVisible = !remote.animationVisible;
+        if (action === 'class_plan_toggle') {
+            remote.classPlanVisible = !remote.classPlanVisible;
+            if (remote.classPlanVisible) remote.animationVisible = false;
+        }
+        if (action === 'class_plan_hide') remote.classPlanVisible = false;
         if (action === 'play') { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; }
         if (action === 'sequence_previous') remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1);
         if (action === 'sequence_next') remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1);
