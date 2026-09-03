@@ -452,7 +452,9 @@ router.patch('/:id/video-sequences', async (req, res) => {
                 driveFileId: String(item?.driveFileId || '').trim(),
                 sourceType: String(item?.sourceType || '').trim() === 'youtube' ? 'youtube' : 'mp4',
                 mergeWithNext: item?.mergeWithNext === true,
-                closeAfterSequence: item?.closeAfterSequence === true
+                closeAfterSequence: item?.closeAfterSequence === true,
+                startSec: Math.max(0, Number(item?.startSec || 0)),
+                endSec: Math.max(0, Number(item?.endSec || 0))
             }))
             .filter((item) => item.url);
         const sequences = normalizeSequences(req.body?.sequences);
@@ -532,6 +534,7 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'animation_toggle') remote.animationVisible = !remote.animationVisible;
         if (action === 'play') { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; }
+        if (action === 'sequence_previous') remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1);
         if (action === 'sequence_next') remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1);
         if (action === 'sequence_finished') {
             if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) {
@@ -541,8 +544,8 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
             else { remote.animationVisible = false; remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; }
         }
         if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.animationVisible = false; }
-        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; }
-        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; }
+        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; remote.animationVisible = false; }
+        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; remote.animationVisible = false; }
         remote.version = Date.now();
         remote.updatedAt = new Date();
         course.presentationRemote = remote;
