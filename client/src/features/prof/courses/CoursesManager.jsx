@@ -518,7 +518,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     className="course-projected-seat"
                                     key={student?._id || `${x}-${y}`}
                                     style={{
-                                        gridColumn: projectedClassPlan.cols - x,
+                                        gridColumn: x + 1,
                                         gridRow: y + 1
                                     }}
                                 >
