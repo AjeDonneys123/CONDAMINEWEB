@@ -151,8 +151,49 @@
 .french-mode-btn.active { background: #3730a3; border-color: #3730a3; color: #fff; box-shadow: 0 5px 12px rgba(55,48,163,.25); }
 .french-error-mode-btn { min-height: 38px; padding: 0 10px; border: 2px solid #fecaca; border-radius: 10px; background: #fff; color: #dc2626; font-size: .65rem; font-weight: 950; cursor: pointer; }
 .french-error-mode-btn.active { border-color: #dc2626; background: #dc2626; color: #fff; box-shadow: 0 5px 12px rgba(220,38,38,.25); }
-.french-validate-btn { border-color: #16a34a; background: #16a34a; color: #fff; }
 .french-validate-btn:disabled { opacity: .45; cursor: not-allowed; }
+.cm-projector-btn {
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 10px;
+    border: 2px solid #0284c7;
+    background: #f0f9ff;
+    color: #0369a1;
+    padding: 0 10px;
+    font-size: .68rem;
+    font-weight: 950;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .18s ease;
+}
+.cm-projector-btn:hover:not(:disabled) {
+    background: #e0f2fe;
+    border-color: #0369a1;
+}
+.cm-projector-btn.active {
+    background: #dc2626 !important;
+    border-color: #b91c1c !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, .35);
+    animation: cm-pulse-tableau 1.5s infinite;
+}
+.cm-projector-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.cm-projector-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+.cm-projector-label {
+    letter-spacing: 0.04em;
+}
+@keyframes cm-pulse-tableau {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+}
 .french-mode-hint { margin: -2px 0 12px; color: #3730a3; font-size: .75rem; font-weight: 800; }
 .french-assignment-panel {
     margin: 0 0 12px;

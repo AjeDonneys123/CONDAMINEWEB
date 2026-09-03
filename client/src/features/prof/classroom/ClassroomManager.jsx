@@ -48,6 +48,63 @@ export default function ClassroomManager({ globalClassId, user }) {
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
+
+    // Projection miroir au tableau (contrôle depuis le smartphone)
+    const [classPlanProjected, setClassPlanProjected] = useState(false);
+    const [togglingPlan, setTogglingPlan] = useState(false);
+
+    useEffect(() => {
+        if (!globalClassId) return;
+        let mounted = true;
+        const checkActiveRemote = async () => {
+            try {
+                const res = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
+                const data = await res.json().catch(() => ({}));
+                if (mounted && res.ok) {
+                    setClassPlanProjected(data?.remote?.classPlanVisible === true);
+                }
+            } catch (_) {}
+        };
+        checkActiveRemote();
+        const interval = window.setInterval(checkActiveRemote, 1000);
+        return () => {
+            mounted = false;
+            window.clearInterval(interval);
+        };
+    }, [globalClassId]);
+
+    const toggleTableauPlan = async () => {
+        if (!globalClassId || togglingPlan) return;
+        setTogglingPlan(true);
+        setClassPlanProjected((prev) => !prev);
+        try {
+            const res = await fetch('/api/courses/presentation-remote/toggle-plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ classId: globalClassId })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.remote) {
+                setClassPlanProjected(data.remote.classPlanVisible === true);
+            }
+        } catch (_) {}
+        finally {
+            setTogglingPlan(false);
+        }
+    };
+
+    const renderProjectorButton = () => (
+        <button
+            type="button"
+            className={`cm-projector-btn ${classPlanProjected ? 'active' : ''}`}
+            onClick={toggleTableauPlan}
+            disabled={togglingPlan}
+            title={classPlanProjected ? 'Plan miroir affiché au tableau · Toucher pour masquer' : 'Afficher le plan miroir des élèves au tableau'}
+        >
+            <span className="cm-projector-icon">{classPlanProjected ? '🔴' : '📽️'}</span>
+            <span className="cm-projector-label">{classPlanProjected ? 'TABLEAU ON' : 'TABLEAU'}</span>
+        </button>
+    );
     const fileInputRef = useRef(null);
     const speechRecognitionRef = useRef(null);
     const keepListeningRef = useRef(false);
@@ -960,6 +1017,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {searchTerm.trim() ? listFinderCount : students.length}
                         </span>}
                         <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
+                        {renderProjectorButton()}
                         {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                         {(frenchMode ? frenchExpression : searchTerm).trim() && (
                             <button
@@ -1136,6 +1194,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR</button>
+                            {renderProjectorButton()}
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
