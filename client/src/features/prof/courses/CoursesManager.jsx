@@ -533,7 +533,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         gridRow: projectedClassPlan.rows - y
                                     }}
                                 >
-                                    <span className="course-projected-seat-avatar">{student?.avatar || student?.emoji || '🎓'}</span>
                                     <strong className="course-projected-seat-name">{String(student?.firstName || student?.name || 'Élève')}</strong>
                                     <small className="course-projected-seat-last">{String(student?.lastName || '').slice(0, 1)}{student?.lastName ? '.' : ''}</small>
                                 </div>
@@ -1668,11 +1667,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
             {playingCourse && (
                 <div className="course-player-backdrop" role="dialog" aria-modal="true" aria-label={playingCourse.title} tabIndex={-1} ref={coursePlayerRef}>
-                    <div className="course-player-toolbar">
-                        <strong>{playingCourse.title}</strong>
-                        <button type="button" onClick={closePresentation} aria-label="Fermer">×</button>
-                    </div>
                     <div className="course-player-stage">
+                        <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         <iframe
                             title={playingCourse.title}
                             src={playerMode === 'presentation'
@@ -1696,8 +1692,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         </div>}
                         
                         {/* COMPTEUR DE POINTS DE LA CLASSE EN HAUT A DROITE */}
-                        <div className="live-class-points">
-                            🏆 Score Classe : {classPoints} pts
+                        <div className="live-class-points" title="Score de la classe" aria-label={`Score de la classe : ${classPoints} points`}>
+                            <span aria-hidden="true">🏆</span><strong>{classPoints}</strong>
                         </div>
 
                         {visibleDebtStudents.length > 0 && (

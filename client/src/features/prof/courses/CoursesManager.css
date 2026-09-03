@@ -1011,8 +1011,7 @@
     position: fixed;
     inset: 0;
     z-index: 1000;
-    display: grid;
-    grid-template-rows: 64px minmax(0, 1fr) 64px;
+    display: block;
     background: #080d19;
 }
 
@@ -1082,11 +1081,27 @@
 
 .course-player-stage {
     position: relative;
-    width: min(100%, calc((100vh - 128px) * 16 / 9));
-    aspect-ratio: 16 / 9;
-    align-self: center;
-    justify-self: center;
+    width: 100%;
+    height: 100%;
     background: #000;
+}
+
+.course-player-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 110;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    border: 2px solid rgba(255, 255, 255, .65);
+    border-radius: 50%;
+    background: rgba(15, 23, 42, .82);
+    color: #fff;
+    font-size: 32px;
+    line-height: 1;
+    cursor: pointer;
 }
 
 .course-student-progress-marker {
@@ -1120,12 +1135,19 @@
 }
 
 .course-player-mode-switch {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 10px 16px;
-    background: #172033;
+    height: 50px;
+    padding: 4px 16px;
+    background: rgba(226, 232, 240, .96);
+    box-shadow: 0 -2px 10px rgba(15, 23, 42, .22);
 }
 
 .course-player-mode-switch button {
@@ -1250,7 +1272,7 @@
 .course-video-scene-head { display: grid; grid-template-columns: 36px minmax(160px, 1fr) auto 38px; align-items: center; gap: 10px; }
 .course-video-scene-head > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #dc2626; color: #fff; font-weight: 950; }
 .course-video-scene-head > input { padding: 11px 12px; border: 1px solid #fca5a5; border-radius: 11px; color: #991b1b; font-weight: 900; }
-.course-scene-sequence-counter { position: absolute; top: -52px; right: 24px; z-index: 45; display: flex; align-items: center; overflow: hidden; border-radius: 12px; box-shadow: 0 5px 18px rgba(0,0,0,.35); font-size: 24px; font-weight: 950; }
+.course-scene-sequence-counter { position: absolute; top: 12px; right: 128px; z-index: 105; display: flex; align-items: center; overflow: hidden; border-radius: 12px; box-shadow: 0 5px 18px rgba(0,0,0,.35); font-size: 24px; font-weight: 950; }
 .course-scene-sequence-counter b, .course-scene-sequence-counter span { display: grid; place-items: center; min-width: 44px; height: 42px; }
 .course-scene-sequence-counter b { background: #dc2626; color: #fff; }
 .course-scene-sequence-counter span { background: #fff; color: #111827; }
@@ -1519,20 +1541,20 @@
 /* REAL-TIME BOARD OVERLAYS & ANIMATIONS */
 .live-class-points {
     position: absolute;
-    top: 20px;
-    right: 20px;
-    background: rgba(15, 23, 42, 0.85);
-    color: #38bdf8;
+    top: 12px;
+    right: 70px;
+    background: rgba(15, 23, 42, 0.82);
+    color: #fff;
     font-weight: 900;
-    padding: 10px 20px;
-    border-radius: 12px;
-    font-size: 1.2rem;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 1rem;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     z-index: 99;
-    border: 2px solid #0284c7;
+    border: 1px solid rgba(255, 255, 255, .5);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     pointer-events: none;
     transition: all 0.3s ease;
 }
