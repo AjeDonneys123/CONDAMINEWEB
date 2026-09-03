@@ -612,6 +612,9 @@ router.post('/:id/presentation-remote/sync', async (req, res) => {
         remote.updatedAt = new Date();
         remote.version = Date.now();
         if (req.body?.playerMode) remote.playerMode = String(req.body.playerMode);
+        if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
+        if (Number.isInteger(req.body?.sceneIndex)) remote.sceneIndex = Math.max(0, Number(req.body.sceneIndex));
+        if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
         course.presentationRemote = remote;
         course.markModified('presentationRemote');
         await course.save();
@@ -635,15 +638,15 @@ router.post('/:id/presentation-remote/buffer-status', async (req, res) => {
         const course = await Course.findById(req.params.id);
         if (!course) return res.status(404).json({ error: 'Cours introuvable' });
         const remote = course.presentationRemote || { active: true };
+        const slideIndex = Math.max(0, Number(req.body?.slideIndex ?? remote.slideIndex ?? 0));
         const sceneIndex = Math.max(0, Number(req.body?.sceneIndex ?? remote.sceneIndex ?? 0));
         const sequenceIndex = Math.max(0, Number(req.body?.sequenceIndex ?? remote.sequenceIndex ?? 0));
         const bufferPct = Math.min(100, Math.max(0, Math.round(Number(req.body?.bufferPct || 0))));
         const isReady = req.body?.isReady === true || bufferPct >= 65;
         const currentBuffers = (remote.sequenceBuffers && typeof remote.sequenceBuffers === 'object') ? { ...remote.sequenceBuffers } : {};
-        currentBuffers[sequenceIndex] = bufferPct;
-        currentBuffers[`${sceneIndex}_${sequenceIndex}`] = bufferPct;
+        currentBuffers[`${slideIndex}_${sceneIndex}_${sequenceIndex}`] = bufferPct;
         remote.sequenceBuffers = currentBuffers;
-        if (Number(remote.sceneIndex) === sceneIndex && Number(remote.sequenceIndex) === sequenceIndex) {
+        if (Number(remote.slideIndex) === slideIndex && Number(remote.sceneIndex) === sceneIndex && Number(remote.sequenceIndex) === sequenceIndex) {
             remote.isReady = isReady;
             remote.currentBufferPct = bufferPct;
         }
@@ -706,6 +709,9 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
             if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
             if (req.body?.playerMode) remote.playerMode = String(req.body.playerMode);
         }
+        const activeBufferKey = `${Math.max(0, Number(remote.slideIndex || 0))}_${Math.max(0, Number(remote.sceneIndex || 0))}_${Math.max(0, Number(remote.sequenceIndex || 0))}`;
+        remote.currentBufferPct = Math.min(100, Math.max(0, Number(remote.sequenceBuffers?.[activeBufferKey] || 0)));
+        remote.isReady = remote.currentBufferPct >= 65;
         remote.version = Date.now();
         remote.updatedAt = new Date();
         course.presentationRemote = remote;
