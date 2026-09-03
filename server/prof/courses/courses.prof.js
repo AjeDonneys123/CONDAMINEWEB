@@ -580,9 +580,42 @@ router.post('/:id/presentation-remote/start', async (req, res) => {
         if (!course) return res.status(404).json({ error: 'Cours introuvable' });
         const classId = String(req.body?.classId || course.targetClassroomId || '').trim();
         await Course.updateMany({ 'presentationRemote.classId': classId, _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
-        course.presentationRemote = { active: true, classId, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, classPlanVisible: false, playVersion: 0, version: Date.now(), updatedAt: new Date() };
+        const existingRemote = (course.presentationRemote && typeof course.presentationRemote === 'object') ? course.presentationRemote : {};
+        const isContinuing = existingRemote.active && String(existingRemote.classId || '') === classId;
+        course.presentationRemote = {
+            active: true,
+            classId,
+            slideIndex: isContinuing ? Number(existingRemote.slideIndex || 0) : 0,
+            sceneIndex: isContinuing ? Number(existingRemote.sceneIndex || 0) : 0,
+            sequenceIndex: isContinuing ? Number(existingRemote.sequenceIndex || 0) : 0,
+            animationVisible: false,
+            classPlanVisible: Boolean(existingRemote.classPlanVisible),
+            playVersion: Number(existingRemote.playVersion || 0),
+            sequenceBuffers: existingRemote.sequenceBuffers || {},
+            playerMode: String(req.body?.playerMode || existingRemote.playerMode || 'presentation'),
+            version: Date.now(),
+            updatedAt: new Date()
+        };
+        course.markModified('presentationRemote');
         await course.save();
         return res.json({ ok: true, remote: course.presentationRemote });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/presentation-remote/sync', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const remote = course.presentationRemote || { active: true };
+        remote.updatedAt = new Date();
+        remote.version = Date.now();
+        if (req.body?.playerMode) remote.playerMode = String(req.body.playerMode);
+        course.presentationRemote = remote;
+        course.markModified('presentationRemote');
+        await course.save();
+        return res.json({ ok: true, remote });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -661,6 +694,18 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; remote.animationVisible = false; }
+        if (action === 'mode_change') {
+            remote.playerMode = String(req.body?.playerMode || 'presentation');
+            if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
+            if (Number.isInteger(req.body?.sceneIndex)) remote.sceneIndex = Math.max(0, Number(req.body.sceneIndex));
+            if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
+        }
+        if (action === 'sync') {
+            if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
+            if (Number.isInteger(req.body?.sceneIndex)) remote.sceneIndex = Math.max(0, Number(req.body.sceneIndex));
+            if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
+            if (req.body?.playerMode) remote.playerMode = String(req.body.playerMode);
+        }
         remote.version = Date.now();
         remote.updatedAt = new Date();
         course.presentationRemote = remote;

@@ -550,14 +550,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [isPhone, globalClassId, globalClass, user?._id, user?.id, presentationRemote?.remote?.classId, presentationRemote?.remote?.classPlanVisible]);
 
     useEffect(() => {
-        if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return undefined;
-        fetch(`/api/courses/${playingCourse._id}/presentation-remote/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ classId: globalClassId }) }).catch(() => { });
+        if (isPhone || !playingCourse?._id) return undefined;
+        fetch(`/api/courses/${playingCourse._id}/presentation-remote/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ classId: globalClassId, playerMode })
+        }).catch(() => { });
         fetch('/api/learning/slides/manifest', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
         }).then((response) => response.json()).then((data) => setSlideManifest(Array.isArray(data?.slides) ? data.slides : [])).catch(() => setSlideManifest([]));
         return undefined;
-    }, [isPhone, playingCourse?._id, playerMode, globalClassId]);
+    }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl, globalClassId]);
 
     const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
@@ -597,6 +601,32 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 }
             } catch (_) { }
         }
+    };
+
+    const forceSyncRemote = async () => {
+        try {
+            const classId = globalClassId || presentationRemote?.remote?.classId || '';
+            if (classId) {
+                const res = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(classId)}`, { cache: 'no-store' });
+                const data = await res.json();
+                if (data?.active) {
+                    setPresentationRemote(data);
+                    const courseId = data.courseId || playingCourse?._id || '';
+                    if (courseId) {
+                        await fetch(`/api/courses/${courseId}/presentation-remote/sync`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                playerMode,
+                                slideIndex: projectedSlideIndex,
+                                sceneIndex: projectedSceneIndex,
+                                sequenceIndex: projectedSequenceIndex
+                            })
+                        }).catch(() => {});
+                    }
+                }
+            }
+        } catch (_) { }
     };
 
     const renderProjectedClassPlan = () => {
@@ -755,10 +785,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return items;
     }, [isPhone, playingCourse?._id, projectedScenes, projectedSceneIndex, projectedSequenceIndex]);
     const projectedSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
-    const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || '').trim();
+    const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || '').trim();
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
         : getEmbedUrl(playingCourse?.slidesUrl);
+    const editSlidesUrl = projectedSlideObjectId
+        ? `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}#slide=id.${encodeURIComponent(projectedSlideObjectId)}`
+        : `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}`;
     const finishProjectedVideo = () => {
         const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
         if (completedProjectedVideoRef.current === completionKey) return;
@@ -1421,9 +1454,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const openModification = async (course) => {
         setError('');
-        const editSlideObjectId = String(playingCourse?._id || '') === String(course?._id || '')
-            ? projectedSlideObjectId
-            : '';
+        const editSlideObjectId = projectedSlideObjectId;
         try {
             const response = await fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
@@ -1433,15 +1464,35 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Accès en modification impossible');
             setPlayerMode('edit');
-            setPlayingCourse({
-                ...course,
+            setPlayingCourse((current) => ({
+                ...(current || course),
                 slidesUrl: data.editUrl || course.slidesUrl,
                 editorNonce: Date.now(),
                 editSlideObjectId
+            }));
+            void sendPresentationCommand('mode_change', {
+                playerMode: 'edit',
+                slideIndex: projectedSlideIndex,
+                sceneIndex: projectedSceneIndex,
+                sequenceIndex: projectedSequenceIndex
             });
         } catch (accessError) {
             setError(accessError.message);
             alert(`Impossible d’ouvrir cette présentation en modification : ${accessError.message}`);
+        }
+    };
+
+    const togglePlayerMode = async () => {
+        if (playerMode === 'presentation') {
+            await openModification(playingCourse);
+        } else {
+            setPlayerMode('presentation');
+            void sendPresentationCommand('mode_change', {
+                playerMode: 'presentation',
+                slideIndex: projectedSlideIndex,
+                sceneIndex: projectedSceneIndex,
+                sequenceIndex: projectedSequenceIndex
+            });
         }
     };
 
@@ -1551,8 +1602,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 </div>
             ) : <>
                 <div className="course-phone-remote-head">
-                    <small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small>
+                    <div className="course-phone-top-bar">
+                        <small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small>
+                        <button
+                            type="button"
+                            className="course-phone-sync-btn"
+                            onClick={forceSyncRemote}
+                            title="Forcer la resynchronisation avec le tableau"
+                        >
+                            🔄 Synchro
+                        </button>
+                    </div>
                     <strong>{presentationRemote.title}</strong>
+                    {presentationRemote?.remote?.playerMode === 'edit' && (
+                        <div className="course-phone-edit-warning">
+                            <span>✏️</span>
+                            <div>
+                                <strong>TABLEAU EN MODE MODIFIER</strong>
+                                <small>Édition en cours sur le tableau (Slide {phoneSlideIndex + 1})</small>
+                            </div>
+                        </div>
+                    )}
                     <label>SCÈNES</label>
                     <div className="course-phone-scenes">
                         {phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}
@@ -1621,6 +1691,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <div className="btn-content">
                             <strong>{presentationRemote.remote?.classPlanVisible ? 'ENLEVER LE PLAN DU TABLEAU' : 'AFFICHER LE PLAN AU TABLEAU (MIROIR)'}</strong>
                             <small>{presentationRemote.remote?.classPlanVisible ? 'Plan affiché par-dessus les slides · Toucher pour fermer' : 'Affiche le plan inversé vue élèves par-dessus les slides'}</small>
+                        </div>
+                    </button>
+                    <button
+                        type="button"
+                        className="course-phone-resync-action"
+                        onClick={forceSyncRemote}
+                    >
+                        <span>🔄</span>
+                        <div className="btn-content">
+                            <strong>SYNCHRONISER AVEC LE TABLEAU</strong>
+                            <small>Aligner instantanément le téléphone sur la slide et la scène du tableau</small>
                         </div>
                     </button>
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
@@ -1929,9 +2010,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         <iframe
                             title={playingCourse.title}
-                            src={playerMode === 'presentation'
-                                ? projectedSlidesUrl
-                                : `${getEditUrl(playingCourse.slidesUrl)}?usp=sharing&editor=${playingCourse.editorNonce || Date.now()}${playingCourse.editSlideObjectId ? `#slide=id.${encodeURIComponent(playingCourse.editSlideObjectId)}` : ''}`}
+                            src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
                             allowFullScreen
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
@@ -2097,8 +2176,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <button
                             type="button"
                             className="active"
-                            onClick={() => playerMode === 'presentation' ? openModification(playingCourse) : setPlayerMode('presentation')}
+                            onClick={togglePlayerMode}
                         >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
+                        <button
+                            type="button"
+                            className="course-sync-board-btn"
+                            onClick={forceSyncRemote}
+                            title="Forcer la resynchronisation avec la télécommande"
+                        >🔄 SYNCHRO</button>
                         {playerMode !== 'presentation' && <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openVideoSequencer}>🎬 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>}
                     </div>
                 </div>
