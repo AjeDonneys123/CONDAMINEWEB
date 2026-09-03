@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './CoursesManager.css';
 import SharedVideoSequenceEditor from '../learning/SharedVideoSequenceEditor';
 
@@ -64,7 +64,7 @@ const getYoutubeVideoId = (value = '') => {
         const url = new URL(text);
         if (url.hostname.includes('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || '';
         if (url.hostname.includes('youtube.com')) return url.searchParams.get('v') || url.pathname.match(/\/(?:embed|shorts)\/([^/?]+)/)?.[1] || '';
-    } catch (_) {}
+    } catch (_) { }
     return '';
 };
 
@@ -79,6 +79,8 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
     const readyRef = useRef(false);
     const bufferTimerRef = useRef(null);
     const currentVideoIdRef = useRef('');
+    const isVisibleRef = useRef(isVisible);
+    isVisibleRef.current = isVisible;
     const mountedPlayVersionRef = useRef(autoplayOnMount ? Number(playVersion || 0) - 1 : Number(playVersion || 0));
     const requestedPlayVersionRef = useRef(Number(playVersion || 0));
     const endTimerRef = useRef(null);
@@ -98,7 +100,7 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
             if (finishedRef.current) return;
             finishedRef.current = true;
             stopEndTimer();
-            try { player?.pauseVideo?.(); } catch (_) {}
+            try { player?.pauseVideo?.(); } catch (_) { }
             onEnded?.();
         };
         const monitorEnd = (player) => {
@@ -109,7 +111,7 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                     const naturalEnd = Math.max(0, Number(player?.getDuration?.() || 0));
                     const boundary = configuredEnd > 0 ? configuredEnd : naturalEnd;
                     if (boundary > 0 && Number(player?.getCurrentTime?.() || 0) >= boundary - 0.12) finishAtLastFrame(player);
-                } catch (_) {}
+                } catch (_) { }
             }, 60);
         };
         const startBufferMonitoring = (player) => {
@@ -120,31 +122,43 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                         const fraction = player.getVideoLoadedFraction();
                         onBufferProgress?.(fraction);
                     }
-                } catch (_) {}
-            }, 750);
+                } catch (_) { }
+            }, 650);
         };
 
         const targetVideoId = getYoutubeVideoId(video?.url);
         const startSec = Math.floor(Number(video?.startSec || 0));
 
-        // If player already exists, cue new video without destroying the iframe!
-        if (playerRef.current && readyRef.current && typeof playerRef.current.cueVideoById === 'function') {
+        // If player already exists, load new video without rebuilding the iframe!
+        if (playerRef.current && readyRef.current && typeof playerRef.current.loadVideoById === 'function') {
             if (currentVideoIdRef.current !== targetVideoId) {
                 currentVideoIdRef.current = targetVideoId;
                 finishedRef.current = false;
-                playerRef.current.cueVideoById({ videoId: targetVideoId, startSeconds: startSec });
+                try {
+                    playerRef.current.mute();
+                    playerRef.current.loadVideoById({ videoId: targetVideoId, startSeconds: startSec });
+                    if (!isVisibleRef.current) {
+                        window.setTimeout(() => {
+                            try {
+                                if (!isVisibleRef.current) {
+                                    playerRef.current?.pauseVideo?.();
+                                    playerRef.current?.seekTo?.(startSec, true);
+                                }
+                            } catch (_) {}
+                        }, 350);
+                    } else {
+                        playerRef.current.unMute();
+                    }
+                } catch (_) {}
             } else {
-                playerRef.current.seekTo(startSec, true);
-            }
-            if (isVisible && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
-                playerRef.current.playVideo();
+                try { playerRef.current.seekTo(startSec, true); } catch (_) {}
             }
             return;
         }
 
         const create = () => {
             if (cancelled || !hostRef.current || !window.YT?.Player) return;
-            try { playerRef.current?.destroy?.(); } catch (_) {}
+            try { playerRef.current?.destroy?.(); } catch (_) { }
             currentVideoIdRef.current = targetVideoId;
             playerRef.current = new window.YT.Player(hostRef.current, {
                 videoId: targetVideoId,
@@ -164,17 +178,30 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                         readyRef.current = true;
                         monitorEnd(event.target);
                         startBufferMonitoring(event.target);
-                        if (isVisible && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
+                        if (isVisibleRef.current && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
                             finishedRef.current = false;
+                            event.target.unMute();
                             event.target.playVideo();
                         } else {
-                            event.target.pauseVideo();
+                            // Silent pre-warming: mute and play briefly so YouTube buffers the stream into RAM
+                            try {
+                                event.target.mute();
+                                event.target.playVideo();
+                                window.setTimeout(() => {
+                                    try {
+                                        if (!isVisibleRef.current) {
+                                            event.target.pauseVideo();
+                                            event.target.seekTo(startSec, true);
+                                        }
+                                    } catch (_) {}
+                                }, 350);
+                            } catch (_) {}
                         }
                     },
                     onStateChange: (event) => {
                         if (event.data === window.YT.PlayerState.ENDED) finishAtLastFrame(event.target);
-                        if (event.data === window.YT.PlayerState.PLAYING) {
-                            try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0); } catch (_) {}
+                        if (event.data === window.YT.PlayerState.PLAYING || event.data === window.YT.PlayerState.BUFFERING) {
+                            try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0); } catch (_) { }
                         }
                     }
                 }
@@ -203,7 +230,7 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
     useEffect(() => {
         if (!readyRef.current || !playerRef.current) return;
         if (!isVisible) {
-            try { playerRef.current.pauseVideo(); } catch (_) {}
+            try { playerRef.current.pauseVideo(); } catch (_) { }
         }
     }, [isVisible]);
 
@@ -213,7 +240,10 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
         requestedPlayVersionRef.current = nextVersion;
         finishedRef.current = false;
         if (readyRef.current && isVisible) {
-            try { playerRef.current?.playVideo?.(); } catch (_) {}
+            try {
+                playerRef.current.unMute();
+                playerRef.current.playVideo();
+            } catch (_) { }
         }
     }, [playVersion, isVisible]);
 
@@ -350,7 +380,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 ...(raw && typeof raw === 'object' ? raw : {}),
                 [`${globalClassId}:${id}`]: expiresAt
             }));
-        } catch (_) {}
+        } catch (_) { }
     };
 
     useEffect(() => {
@@ -449,7 +479,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 const response = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
                 const data = await response.json();
                 setPresentationRemote(data?.active ? data : null);
-            } catch (_) {}
+            } catch (_) { }
         };
         poll();
         const interval = window.setInterval(poll, 650);
@@ -501,13 +531,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         return first || String(a?.lastName || '').localeCompare(String(b?.lastName || ''), 'fr', { sensitivity: 'base' });
                     })
                     .forEach((student) => {
-                    while (cursor < cols * rows && occupied.has(`${cursor % cols}-${Math.floor(cursor / cols)}`)) cursor += 1;
-                    if (cursor >= cols * rows) return;
-                    const x = cursor % cols;
-                    const y = Math.floor(cursor / cols);
-                    occupied.add(`${x}-${y}`);
-                    seats.push({ student, x, y });
-                    cursor += 1;
+                        while (cursor < cols * rows && occupied.has(`${cursor % cols}-${Math.floor(cursor / cols)}`)) cursor += 1;
+                        if (cursor >= cols * rows) return;
+                        const x = cursor % cols;
+                        const y = Math.floor(cursor / cols);
+                        occupied.add(`${x}-${y}`);
+                        seats.push({ student, x, y });
+                        cursor += 1;
                     });
                 if (!controller.signal.aborted) setProjectedClassPlan({ name: classInfo?.name || globalClass || 'Classe', cols, rows, seats });
             } catch (_) {
@@ -520,7 +550,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return undefined;
-        fetch(`/api/courses/${playingCourse._id}/presentation-remote/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ classId: globalClassId }) }).catch(() => {});
+        fetch(`/api/courses/${playingCourse._id}/presentation-remote/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ classId: globalClassId }) }).catch(() => { });
         fetch('/api/learning/slides/manifest', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
@@ -564,7 +594,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         remote: data.remote
                     }));
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
     };
 
@@ -625,7 +655,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const closePresentation = () => {
-        if (playingCourse?._id && !isPhone) fetch(`/api/courses/${playingCourse._id}/presentation-remote/stop`, { method: 'POST' }).catch(() => {});
+        if (playingCourse?._id && !isPhone) fetch(`/api/courses/${playingCourse._id}/presentation-remote/stop`, { method: 'POST' }).catch(() => { });
         setPlayingCourse(null);
         setPresentationRemote(null);
     };
@@ -648,7 +678,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const pct = Math.min(100, Math.max(0, Math.round((Number(fraction) || 0) * 100)));
         const seqIdx = projectedSequenceIndex;
         const prevPct = lastReportedBufferRef.current[seqIdx] ?? -1;
-        if (Math.abs(pct - prevPct) >= 5 || (pct >= 65 && prevPct < 65) || (pct === 100 && prevPct !== 100) || (pct > 0 && prevPct === -1)) {
+        if (pct > prevPct || prevPct === -1) {
             lastReportedBufferRef.current[seqIdx] = pct;
             fetch(`/api/courses/${playingCourse._id}/presentation-remote/buffer-status`, {
                 method: 'POST',
@@ -667,13 +697,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 const fraction = Math.min(1, Math.max(0, bufferedEnd / video.duration));
                 handleBufferProgress(fraction);
             }
-        } catch (_) {}
+        } catch (_) { }
     }, [handleBufferProgress]);
     const projectedSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
     const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || '').trim();
     const projectedSlidesUrl = projectedSlideObjectId
-        ? `${getPresentUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
-        : getPresentUrl(playingCourse?.slidesUrl);
+        ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
+        : getEmbedUrl(playingCourse?.slidesUrl);
     const finishProjectedVideo = () => {
         const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
         if (completedProjectedVideoRef.current === completionKey) return;
@@ -720,10 +750,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     useEffect(() => {
         if (!presentationRemote?.remote?.playVersion || presentationRemote.remote.animationVisible === false) return;
         setPlayingVideoIndex(0);
-        window.setTimeout(() => sequenceVideoRef.current?.play().catch(() => {}), 0);
+        window.setTimeout(() => sequenceVideoRef.current?.play().catch(() => { }), 0);
     }, [presentationRemote?.remote?.playVersion]);
     useEffect(() => {
-        if (playingVideoIndex > 0) sequenceVideoRef.current?.play().catch(() => {});
+        if (playingVideoIndex > 0) sequenceVideoRef.current?.play().catch(() => { });
     }, [playingVideoIndex]);
 
     const openNewCourse = () => {
@@ -1236,17 +1266,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const saveAllSequenceCuts = (nextSegments) => {
         if (!sequenceCutEditor || !Array.isArray(nextSegments) || !nextSegments.length) return;
         const sourceUrl = String(sequenceCutEditor.video?.url || '');
-        setVideoSequencer((current) => current ? { ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((scene, sceneIndex) => {
-            if (sceneIndex !== sequenceCutEditor.sceneIndex) return scene;
-            let inserted = false;
-            const sequences = (scene.sequences || []).flatMap((item) => {
-                if (String(item.url || '') !== sourceUrl) return [item];
-                if (inserted) return [];
-                inserted = true;
-                return nextSegments.map((segment) => ({ ...segment, url: sourceUrl, sourceType: sequenceCutEditor.video.sourceType, driveFileId: sequenceCutEditor.video.driveFileId || segment.driveFileId || '' }));
-            });
-            return { ...scene, sequences: inserted ? sequences : [...sequences, ...nextSegments] };
-        }) } : slide) } : current);
+        setVideoSequencer((current) => current ? {
+            ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? {
+                ...slide, scenes: (slide.scenes || []).map((scene, sceneIndex) => {
+                    if (sceneIndex !== sequenceCutEditor.sceneIndex) return scene;
+                    let inserted = false;
+                    const sequences = (scene.sequences || []).flatMap((item) => {
+                        if (String(item.url || '') !== sourceUrl) return [item];
+                        if (inserted) return [];
+                        inserted = true;
+                        return nextSegments.map((segment) => ({ ...segment, url: sourceUrl, sourceType: sequenceCutEditor.video.sourceType, driveFileId: sequenceCutEditor.video.driveFileId || segment.driveFileId || '' }));
+                    });
+                    return { ...scene, sequences: inserted ? sequences : [...sequences, ...nextSegments] };
+                })
+            } : slide)
+        } : current);
         setSequenceCutEditor(null);
     };
 
@@ -1467,25 +1501,38 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             const bufferMap = presentationRemote?.remote?.sequenceBuffers || {};
                             const pct = Math.min(100, Math.max(0, Number(bufferMap[index] ?? (isSelected ? presentationRemote?.remote?.currentBufferPct : 0) ?? 0)));
                             const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
-                            const pieStyle = {
-                                background: isReady
-                                    ? '#10b981'
-                                    : (pct > 0
-                                        ? `conic-gradient(#0284c7 ${pct}%, #e2e8f0 ${pct}% 100%)`
-                                        : '#ffffff')
-                            };
+                            const radius = 19;
+                            const circ = 2 * Math.PI * radius; // ~119.38
+                            const strokeOffset = circ - (circ * pct) / 100;
                             return (
                                 <button
                                     key={group[0]?.id || index}
                                     type="button"
-                                    className={`sequence-pie-btn ${isSelected ? 'selected' : ''} ${isReady ? 'ready' : (pct > 0 ? 'buffering' : '')}`}
-                                    style={pieStyle}
+                                    className={`course-phone-seq-camembert ${isSelected ? 'selected' : ''} ${isReady ? 'ready' : ''}`}
                                     onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}
-                                    title={`Séquence ${index + 1} : ${pct}% chargé ${isReady ? '(Prête en RAM)' : ''}`}
+                                    title={`Séquence ${index + 1} : ${pct}% chargé en mémoire vive ${isReady ? '(Prête)' : ''}`}
                                 >
-                                    <span className="pie-inner">{index + 1}</span>
-                                    {pct > 0 && !isReady && <span className="pie-pct-badge">{pct}%</span>}
-                                    {isReady && <span className="pie-ready-check">✓</span>}
+                                    <svg className="seq-camembert-svg" viewBox="0 0 46 46">
+                                        <circle cx="23" cy="23" r={radius} className="seq-camembert-track" />
+                                        <circle
+                                            cx="23"
+                                            cy="23"
+                                            r={radius}
+                                            className={`seq-camembert-progress ${isReady ? 'ready' : ''}`}
+                                            style={{
+                                                strokeDasharray: circ,
+                                                strokeDashoffset: isReady ? 0 : strokeOffset
+                                            }}
+                                        />
+                                    </svg>
+                                    <div className="seq-camembert-center">
+                                        <span className="seq-camembert-num">{index + 1}</span>
+                                        {isReady ? (
+                                            <span className="seq-camembert-badge ready">✓</span>
+                                        ) : (
+                                            <span className="seq-camembert-badge">{pct}%</span>
+                                        )}
+                                    </div>
                                 </button>
                             );
                         })}
@@ -1714,95 +1761,95 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     </div>
                 ) : (
                     <>
-                    {activeCourses.length > 0 && (
-                        <section className="active-course-shelf" aria-label="Présentations actives">
-                            <div className="active-course-shelf-heading">
-                                <span>●</span>
-                                <strong>PRÉSENTATIONS ACTIVES</strong>
-                                <small>{activeCourses.length}</small>
-                            </div>
-                            <div className="active-course-shelf-list">
-                                {activeCourses.map((course) => (
-                                    <div className="active-course-shelf-item" key={course._id}>
-                                        <button type="button" className="active-course-present" onClick={() => openPresentation(course)}>
-                                            <span>{course.title}</span>
-                                            <strong>PRÉSENTER</strong>
-                                        </button>
-                                        <button type="button" className="active-course-disable" onClick={() => toggleCourseEnabled(course)} title="Inactiver cette présentation" aria-label={`Inactiver ${course.title}`}>×</button>
-                                    </div>
-                                ))}
-                            </div>
-                        </section>
-                    )}
-                    <div className="course-sections-stack">
-                        {[{ _id: '', name: 'SANS SECTION' }, ...[...courseSections].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true, sensitivity: 'base' })), { _id: 'sources', name: 'SOURCES' }].map((section) => {
-                            const sectionId = String(section._id || '');
-                            const rows = courses
-                                .filter((course) => String(course.courseSectionId || '') === sectionId)
-                                .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
-                            const normalizedSectionName = String(section.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
-                            const sectionStateKey = sectionId || 'unsectioned';
-                            const isOpen = openCourseSections[sectionStateKey] === true;
-                            if (normalizedSectionName === 'HISTOIRE' && rows.length === 0) return null;
-                            if (!sectionId && rows.length === 0 && courseSections.length > 0) return null;
-                            if (sectionId === 'sources' && rows.length === 0) return null;
-                            return <section
-                                key={sectionId || 'unsectioned'}
-                                className={`course-drop-section ${draggedCourseId ? 'is-dragging' : ''}`}
-                                onDragOver={(event) => event.preventDefault()}
-                                onDrop={(event) => { event.preventDefault(); moveCourseToSection(draggedCourseId, sectionId); }}
-                            >
-                                <button type="button" className={`course-section-heading ${sectionId === 'sources' && rows.some((row) => Number(row.uncoveredSlideCount || 0) > 0) ? 'has-uncovered-slides' : ''}`} onClick={() => setOpenCourseSections((current) => ({ ...current, [sectionStateKey]: !isOpen }))} aria-expanded={isOpen}>
-                                    <span className="course-section-folder">{isOpen ? '📂' : '📁'}</span><strong>{section.name}</strong><small>{rows.length} présentation{rows.length > 1 ? 's' : ''}</small><span className="course-section-chevron">{isOpen ? '⌃' : '⌄'}</span>
-                                </button>
-                                {isOpen && <div className="courses-grid courses-grid-compact">{rows.map((course) => (
-                            <article
-                                className={`course-compact-row ${course.isSourcePresentation && Number(course.uncoveredSlideCount || 0) > 0 ? 'source-has-gaps' : ''}`}
-                                key={course._id}
-                                onDragOver={(event) => event.preventDefault()}
-                                onDrop={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    const draggedId = event.dataTransfer.getData('text/plain') || draggedCourseId;
-                                    const bounds = event.currentTarget.getBoundingClientRect();
-                                    reorderCourse(draggedId, course, event.clientY > bounds.top + bounds.height / 2);
-                                }}
-                            >
-                                <span className="course-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(course._id)); setDraggedCourseId(String(course._id)); }} onDragEnd={() => setDraggedCourseId('')} title="Glisser pour réordonner ou changer de section">⋮⋮</span>
-                                <div className="course-compact-copy">
-                                    <input
-                                        className="course-inline-title"
-                                        defaultValue={course.title}
-                                        key={`${course._id}-${course.title}`}
-                                        aria-label="Nom de la présentation"
-                                        onBlur={(event) => updateCourseTitle(course, event.target.value)}
-                                        onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                                    />
-                                    {!course.isSourcePresentation && <textarea
-                                        className="course-inline-description"
-                                        defaultValue={course.description || ''}
-                                        key={`${course._id}-${course.description || 'empty'}`}
-                                        aria-label="Informations complémentaires"
-                                        placeholder="Notes facultatives…"
-                                        title="Notes facultatives — ce champ peut rester vide"
-                                        rows="2"
-                                        onBlur={(event) => updateCourseDescription(course, event.target.value)}
-                                    />}
-                                    {course.isSourcePresentation && Number(course.uncoveredSlideCount || 0) > 0 && <small className="course-source-warning">{course.uncoveredSlideCount} slide{course.uncoveredSlideCount > 1 ? 's' : ''} hors chapitre</small>}
+                        {activeCourses.length > 0 && (
+                            <section className="active-course-shelf" aria-label="Présentations actives">
+                                <div className="active-course-shelf-heading">
+                                    <span>●</span>
+                                    <strong>PRÉSENTATIONS ACTIVES</strong>
+                                    <small>{activeCourses.length}</small>
                                 </div>
-                                <div className="course-compact-actions">
-                                    {!course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>}
-                                    {!course.isSourcePresentation && <button type="button" onClick={() => openModification(course)}>MODIFIER</button>}
-                                    {!course.isSourcePresentation && <button type="button" className={`course-enabled-button ${course.isEnabled !== false ? 'active' : ''}`} onClick={() => toggleCourseEnabled(course)} title={course.isEnabled !== false ? 'Masquer cette présentation aux élèves' : 'Rendre cette présentation visible aux élèves'}>{course.isEnabled !== false ? 'ACTIF' : 'INACTIF'}</button>}
-                                    {course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openCourseSplitter(course)}>↻ METTRE À JOUR</button>}
-                                    <button type="button" className="course-source-pencil" onClick={() => changeCourseSource(course)} title="Modifier la source Google Slides" aria-label="Modifier la source Google Slides">✏️</button>
-                                    <button className="course-delete-x" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>×</button>
+                                <div className="active-course-shelf-list">
+                                    {activeCourses.map((course) => (
+                                        <div className="active-course-shelf-item" key={course._id}>
+                                            <button type="button" className="active-course-present" onClick={() => openPresentation(course)}>
+                                                <span>{course.title}</span>
+                                                <strong>PRÉSENTER</strong>
+                                            </button>
+                                            <button type="button" className="active-course-disable" onClick={() => toggleCourseEnabled(course)} title="Inactiver cette présentation" aria-label={`Inactiver ${course.title}`}>×</button>
+                                        </div>
+                                    ))}
                                 </div>
-                            </article>
-                                ))}{rows.length === 0 && <div className="course-section-empty">Glisse une présentation ici</div>}</div>}
-                            </section>;
-                        })}
-                    </div>
+                            </section>
+                        )}
+                        <div className="course-sections-stack">
+                            {[{ _id: '', name: 'SANS SECTION' }, ...[...courseSections].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true, sensitivity: 'base' })), { _id: 'sources', name: 'SOURCES' }].map((section) => {
+                                const sectionId = String(section._id || '');
+                                const rows = courses
+                                    .filter((course) => String(course.courseSectionId || '') === sectionId)
+                                    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+                                const normalizedSectionName = String(section.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+                                const sectionStateKey = sectionId || 'unsectioned';
+                                const isOpen = openCourseSections[sectionStateKey] === true;
+                                if (normalizedSectionName === 'HISTOIRE' && rows.length === 0) return null;
+                                if (!sectionId && rows.length === 0 && courseSections.length > 0) return null;
+                                if (sectionId === 'sources' && rows.length === 0) return null;
+                                return <section
+                                    key={sectionId || 'unsectioned'}
+                                    className={`course-drop-section ${draggedCourseId ? 'is-dragging' : ''}`}
+                                    onDragOver={(event) => event.preventDefault()}
+                                    onDrop={(event) => { event.preventDefault(); moveCourseToSection(draggedCourseId, sectionId); }}
+                                >
+                                    <button type="button" className={`course-section-heading ${sectionId === 'sources' && rows.some((row) => Number(row.uncoveredSlideCount || 0) > 0) ? 'has-uncovered-slides' : ''}`} onClick={() => setOpenCourseSections((current) => ({ ...current, [sectionStateKey]: !isOpen }))} aria-expanded={isOpen}>
+                                        <span className="course-section-folder">{isOpen ? '📂' : '📁'}</span><strong>{section.name}</strong><small>{rows.length} présentation{rows.length > 1 ? 's' : ''}</small><span className="course-section-chevron">{isOpen ? '⌃' : '⌄'}</span>
+                                    </button>
+                                    {isOpen && <div className="courses-grid courses-grid-compact">{rows.map((course) => (
+                                        <article
+                                            className={`course-compact-row ${course.isSourcePresentation && Number(course.uncoveredSlideCount || 0) > 0 ? 'source-has-gaps' : ''}`}
+                                            key={course._id}
+                                            onDragOver={(event) => event.preventDefault()}
+                                            onDrop={(event) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                const draggedId = event.dataTransfer.getData('text/plain') || draggedCourseId;
+                                                const bounds = event.currentTarget.getBoundingClientRect();
+                                                reorderCourse(draggedId, course, event.clientY > bounds.top + bounds.height / 2);
+                                            }}
+                                        >
+                                            <span className="course-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(course._id)); setDraggedCourseId(String(course._id)); }} onDragEnd={() => setDraggedCourseId('')} title="Glisser pour réordonner ou changer de section">⋮⋮</span>
+                                            <div className="course-compact-copy">
+                                                <input
+                                                    className="course-inline-title"
+                                                    defaultValue={course.title}
+                                                    key={`${course._id}-${course.title}`}
+                                                    aria-label="Nom de la présentation"
+                                                    onBlur={(event) => updateCourseTitle(course, event.target.value)}
+                                                    onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                                                />
+                                                {!course.isSourcePresentation && <textarea
+                                                    className="course-inline-description"
+                                                    defaultValue={course.description || ''}
+                                                    key={`${course._id}-${course.description || 'empty'}`}
+                                                    aria-label="Informations complémentaires"
+                                                    placeholder="Notes facultatives…"
+                                                    title="Notes facultatives — ce champ peut rester vide"
+                                                    rows="2"
+                                                    onBlur={(event) => updateCourseDescription(course, event.target.value)}
+                                                />}
+                                                {course.isSourcePresentation && Number(course.uncoveredSlideCount || 0) > 0 && <small className="course-source-warning">{course.uncoveredSlideCount} slide{course.uncoveredSlideCount > 1 ? 's' : ''} hors chapitre</small>}
+                                            </div>
+                                            <div className="course-compact-actions">
+                                                {!course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>}
+                                                {!course.isSourcePresentation && <button type="button" onClick={() => openModification(course)}>MODIFIER</button>}
+                                                {!course.isSourcePresentation && <button type="button" className={`course-enabled-button ${course.isEnabled !== false ? 'active' : ''}`} onClick={() => toggleCourseEnabled(course)} title={course.isEnabled !== false ? 'Masquer cette présentation aux élèves' : 'Rendre cette présentation visible aux élèves'}>{course.isEnabled !== false ? 'ACTIF' : 'INACTIF'}</button>}
+                                                {course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openCourseSplitter(course)}>↻ METTRE À JOUR</button>}
+                                                <button type="button" className="course-source-pencil" onClick={() => changeCourseSource(course)} title="Modifier la source Google Slides" aria-label="Modifier la source Google Slides">✏️</button>
+                                                <button className="course-delete-x" type="button" onClick={() => deleteCourse(course)} aria-label={`Supprimer ${course.title}`}>×</button>
+                                            </div>
+                                        </article>
+                                    ))}{rows.length === 0 && <div className="course-section-empty">Glisse une présentation ici</div>}</div>}
+                                </section>;
+                            })}
+                        </div>
                     </>
                 )}
             </div>
@@ -1857,7 +1904,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">
-                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://condaweb.vercel.app/?control=${projectedControl._id}`)}`} alt="QR code du contrôle"/>
+                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://condaweb.vercel.app/?control=${projectedControl._id}`)}`} alt="QR code du contrôle" />
                                 <strong>SCANNE POUR COMMENCER</strong>
                                 <a href={`/?control=${projectedControl._id}`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-black underline text-violet-700 hover:text-violet-900 mt-1">
                                     ↗ Ouvrir le contrôle
@@ -1865,7 +1912,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                             <div className="course-control-paper"><h1>{projectedControl.title}</h1>{(projectedControl.items || []).map((item, index) => <article key={item.id}><small>{index + 1} · {item.lessonTitle}</small><div>{String(item.prompt || '').replace(/["“«][^"”»]+["”»]/g, '__________')}</div>{item.type === 'qcm' && <ol type="A">{item.choices.map(choice => <li key={choice}>{choice}</li>)}</ol>}</article>)}</div>
                         </div>}
-                        
+
                         {/* COMPTEUR DE POINTS DE LA CLASSE EN HAUT A DROITE */}
                         <div className="live-class-points" title="Score de la classe" aria-label={`Score de la classe : ${classPoints} points`}>
                             <span aria-hidden="true">🏆</span><strong>{classPoints}</strong>
@@ -1937,7 +1984,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             className="active"
                             onClick={() => playerMode === 'presentation' ? openModification(playingCourse) : setPlayerMode('presentation')}
                         >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
-                        <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openVideoSequencer}>🎬 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>
+                        {playerMode !== 'presentation' && <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openVideoSequencer}>🎬 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>}
                     </div>
                 </div>
             )}
