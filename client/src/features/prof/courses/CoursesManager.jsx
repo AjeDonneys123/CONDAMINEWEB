@@ -205,6 +205,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sequenceVideoRef = useRef(null);
     const sequenceCutVideoRef = useRef(null);
     const coursePlayerRef = useRef(null);
+    const completedProjectedVideoRef = useRef('');
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
@@ -354,13 +355,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
         const slideIndex = Math.max(0, Number(remoteData?.remote?.slideIndex || 0));
-        const videoSlides = remoteData?.videoSlides?.length ? remoteData.videoSlides : normalizeVideoSlides(playingCourse || {});
+        const localVideoSlides = playingCourse?._id ? normalizeVideoSlides(playingCourse) : [];
+        const videoSlides = localVideoSlides.length ? localVideoSlides : (remoteData?.videoSlides?.length ? remoteData.videoSlides : []);
         const scenes = videoSlides.find((slide) => Number(slide?.slideNumber) === slideIndex + 1)?.scenes || [];
         const sceneIndex = Math.min(scenes.length - 1, Math.max(0, Number(remoteData?.remote?.sceneIndex || 0)));
-        const sequenceTotal = Math.max(1, groupSceneSequences(scenes[sceneIndex]).length);
+        const sequenceTotal = Math.max(1, Number(options.sequenceTotal || groupSceneSequences(scenes[sceneIndex]).length));
         const response = await fetch(`/api/courses/${courseId}/presentation-remote/command`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, ...options, slideTotal: Math.max(1, slideManifest.length || 100), sceneTotal: Math.max(1, scenes.length), sequenceTotal })
+            body: JSON.stringify({ action, ...options, slideTotal: Math.max(1, slideManifest.length || 100), sceneTotal: Math.max(1, Number(options.sceneTotal || scenes.length)), sequenceTotal })
         });
         const data = await response.json().catch(() => ({}));
         if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, videoSlides, remote: data.remote }));
@@ -384,10 +386,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
         : getEmbedUrl(playingCourse?.slidesUrl);
     const finishProjectedVideo = () => {
+        const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
+        if (completedProjectedVideoRef.current === completionKey) return;
+        completedProjectedVideoRef.current = completionKey;
         const group = projectedGroups[projectedSequenceIndex] || [];
         if (playingVideoIndex < group.length - 1) setPlayingVideoIndex((index) => index + 1);
-        else void sendPresentationCommand('sequence_finished', { closeAfterSequence: projectedVideo?.closeAfterSequence === true });
+        else void sendPresentationCommand('sequence_finished', {
+            closeAfterSequence: projectedVideo?.closeAfterSequence === true,
+            sequenceTotal: projectedGroups.length,
+            sceneTotal: projectedScenes.length
+        });
     };
+
+    useEffect(() => {
+        completedProjectedVideoRef.current = '';
+    }, [projectedSceneIndex, projectedSequenceIndex, playingVideoIndex, projectedVideo?.id, presentationRemote?.remote?.playVersion]);
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') {
@@ -1154,7 +1167,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const phoneSequenceIndex = Math.min(Math.max(0, phoneGroups.length - 1), Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0)));
         return <section className="course-phone-remote">
             {!presentationRemote ? <div className="course-phone-remote-empty"><span>🎬</span><strong>AUCUNE PRÉSENTATION ACTIVE</strong><p>Ouvre un cours sur l’ordinateur du tableau. Les commandes apparaîtront automatiquement ici.</p></div> : <>
-                <div className="course-phone-remote-head"><small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small><strong>{presentationRemote.title}</strong><div className="course-phone-scenes">{phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}</div><div><span>SCÈNE <b>{phoneSceneIndex + 1}</b></span><span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span></div></div>
+                <div className="course-phone-remote-head"><small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small><strong>{presentationRemote.title}</strong><label>SCÈNES</label><div className="course-phone-scenes">{phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}</div><label>SÉQUENCES DE LA SCÈNE {phoneSceneIndex + 1}</label><div className="course-phone-sequences">{phoneGroups.map((group, index) => <button key={group[0]?.id || index} className={index === phoneSequenceIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}>{index + 1}</button>)}</div><div><span>SCÈNE <b>{phoneSceneIndex + 1}</b></span><span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span></div></div>
                 <div className="course-phone-controls">
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
                     <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>

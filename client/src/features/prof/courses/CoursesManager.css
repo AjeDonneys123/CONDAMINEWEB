@@ -1263,6 +1263,10 @@
 .course-phone-remote-head .course-phone-scenes { display: flex; gap: 8px; padding: 4px 0; overflow-x: auto; }
 .course-phone-remote-head .course-phone-scenes button { flex: 0 0 auto; width: 44px; height: 44px; border: 2px solid #ef4444; border-radius: 12px; background: #b91c1c; color: #fff; font-size: 17px; font-weight: 950; }
 .course-phone-remote-head .course-phone-scenes button.selected { outline: 3px solid #fff; background: #ef4444; }
+.course-phone-remote-head > label { color: #94a3b8; font-size: 9px; font-weight: 950; letter-spacing: .08em; }
+.course-phone-remote-head .course-phone-sequences { display: flex; gap: 9px; padding: 5px 3px; overflow-x: auto; }
+.course-phone-remote-head .course-phone-sequences button { flex: 0 0 auto; width: 40px; height: 40px; border: 2px solid #64748b; border-radius: 50%; background: #fff; color: #172033; font-size: 15px; font-weight: 950; }
+.course-phone-remote-head .course-phone-sequences button.selected { border-color: #ef4444; outline: 3px solid #ef4444; outline-offset: 2px; color: #b91c1c; }
 .course-phone-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.course-phone-controls button { min-height: 82px; display: grid; place-items: center; gap: 4px; padding: 10px; border: 1px solid #334155; border-radius: 16px; background: #fff; color: #172033; font-size: 11px; font-weight: 950; }.course-phone-controls button span { font-size: 22px; }.course-phone-controls button.active { background: #dc2626; color: #fff; }.course-phone-controls button.play { background: #7c3aed; color: #fff; }
 
 .course-overlay-layer {

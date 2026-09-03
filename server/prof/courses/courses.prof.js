@@ -528,14 +528,21 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         const remote = { active: true, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, playVersion: 0, ...(course.presentationRemote || {}) };
         const action = String(req.body?.action || '');
         const slideTotal = Math.max(1, Number(req.body?.slideTotal || 1));
-        const sequenceTotal = Math.max(1, Number(req.body?.sequenceTotal || 1));
-        const sceneTotal = Math.max(1, Number(req.body?.sceneTotal || 1));
+        const currentSlide = (Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [])
+            .find((slide) => Number(slide?.slideNumber) === Number(remote.slideIndex || 0) + 1);
+        const currentScenes = Array.isArray(currentSlide?.scenes) ? currentSlide.scenes : [];
+        const sceneTotal = Math.max(1, currentScenes.length || Number(req.body?.sceneTotal || 1));
+        const currentScene = currentScenes[Math.max(0, Math.min(currentScenes.length - 1, Number(remote.sceneIndex || 0)))];
+        const currentVideos = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
+        const storedSequenceTotal = currentVideos.reduce((total, video, index) => total + (index === 0 || currentVideos[index - 1]?.mergeWithNext !== true ? 1 : 0), 0);
+        const sequenceTotal = Math.max(1, storedSequenceTotal || Number(req.body?.sequenceTotal || 1));
         if (action === 'slide_previous') { remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
         if (action === 'animation_toggle') remote.animationVisible = !remote.animationVisible;
         if (action === 'play') { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; }
         if (action === 'sequence_previous') remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1);
         if (action === 'sequence_next') remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1);
+        if (action === 'sequence_select') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0))); remote.animationVisible = false; }
         if (action === 'sequence_finished') {
             if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) {
                 remote.sequenceIndex = Number(remote.sequenceIndex || 0) + 1;
