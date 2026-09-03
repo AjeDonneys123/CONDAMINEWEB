@@ -434,7 +434,9 @@ router.post('/behavior', async (req, res) => {
             const scores = ensureScores();
             const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
             const score = scores.find(x => String(x.id) === scoreId) || scores[scores.length - 1];
-            score.value = Math.max(0, Math.min(20, Number(score.value || 0) + Number(extraData?.delta || 0)));
+            const requestedDelta = Number(extraData?.delta || 0);
+            const safeDelta = requestedDelta === 0 ? 0 : (requestedDelta < 0 ? -0.5 : 0.5);
+            score.value = Math.max(0, Math.min(20, Number(score.value || 0) + safeDelta));
             r.selectedScoreId = score.id;
         }
         if (type === 'DELETE_SCORE') {
@@ -596,8 +598,17 @@ router.post('/:classId/live-action', async (req, res) => {
             cls.activeStudentBonusAlert = `Félicitations à ${studentName} !`;
             cls.activeStudentBonusAlertTime = new Date();
         } else if (action === 'bonus-message') {
-            cls.activeStudentBonusAlert = message || studentName;
-            cls.activeStudentBonusAlertTime = new Date();
+            const now = new Date();
+            const cutoff = now.getTime() - 3000;
+            const active = (Array.isArray(cls.activeScoreAlerts) ? cls.activeScoreAlerts : [])
+                .filter((row) => new Date(row?.createdAt || 0).getTime() > cutoff);
+            active.push({
+                id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+                message: String(message || studentName || '').trim(),
+                createdAt: now
+            });
+            cls.activeScoreAlerts = active.slice(-6);
+            cls.markModified('activeScoreAlerts');
         } else if (action === 'class-bonus') {
             cls.activeStudentBonusAlert = message || 'Bravo +1';
             cls.activeStudentBonusAlertTime = new Date();

@@ -318,6 +318,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [playingCourse, setPlayingCourse] = useState(null);
     const [playerMode, setPlayerMode] = useState('presentation');
     const [liveClassroom, setLiveClassroom] = useState(null);
+    const [liveClock, setLiveClock] = useState(() => Date.now());
     const [progressSavingId, setProgressSavingId] = useState('');
     const [draggedCourseId, setDraggedCourseId] = useState('');
     const [openCourseSections, setOpenCourseSections] = useState({});
@@ -404,9 +405,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         };
 
         fetchLiveStatus(); // immediate call
-        const interval = setInterval(fetchLiveStatus, 2000);
+        const interval = setInterval(fetchLiveStatus, 750);
         return () => clearInterval(interval);
     }, [playingCourse, globalClassId, user.id, user._id]);
+
+    useEffect(() => {
+        if (!playingCourse) return undefined;
+        const interval = window.setInterval(() => setLiveClock(Date.now()), 200);
+        return () => window.clearInterval(interval);
+    }, [playingCourse]);
 
     const isHighlightActive = useMemo(() => {
         if (!liveClassroom?.activeStudentHighlight || !liveClassroom?.activeStudentHighlightTime) return false;
@@ -414,11 +421,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return (Date.now() - highlightTime) < 6000;
     }, [liveClassroom]);
 
-    const isBonusActive = useMemo(() => {
-        if (!liveClassroom?.activeStudentBonusAlert || !liveClassroom?.activeStudentBonusAlertTime) return false;
-        const bonusTime = new Date(liveClassroom.activeStudentBonusAlertTime).getTime();
-        return (Date.now() - bonusTime) < 6000;
-    }, [liveClassroom]);
+    const activeScoreAlerts = useMemo(() => (Array.isArray(liveClassroom?.activeScoreAlerts)
+        ? liveClassroom.activeScoreAlerts
+        : [])
+        .filter((row) => {
+            const createdAt = new Date(row?.createdAt || 0).getTime();
+            return Number.isFinite(createdAt) && liveClock - createdAt >= 0 && liveClock - createdAt < 3000;
+        })
+        .slice(-6), [liveClassroom?.activeScoreAlerts, liveClock]);
 
     const activeHourWarnings = useMemo(() => {
         const now = Date.now();
@@ -1445,11 +1455,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const openPresentation = (course) => {
-        setPlayerMode('presentation');
-        setPlayingCourse(course);
         if (Math.max(0, Number(course?.publishedUntilSlide || 0)) === 0) {
             updatePublishedUntilSlide(course, 1);
         }
+        void openModification(course);
     };
 
     const openModification = async (course) => {
@@ -2010,7 +2019,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         <iframe
                             title={playingCourse.title}
-                            src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
+                            src={editSlidesUrl}
                             allowFullScreen
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
@@ -2142,11 +2151,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                         )}
 
-                        {/* MESSAGE DE FELICITATIONS BONUS EN PLEIN MILIEU */}
-                        {isBonusActive && (
-                            <div className="live-bonus-alert">
-                                <div className="live-bonus-star">⭐</div>
-                                <div>{liveClassroom.activeStudentBonusAlert}</div>
+                        {activeScoreAlerts.length > 0 && (
+                            <div className="live-score-alert-stack" aria-live="polite">
+                                {activeScoreAlerts.map((alert, index) => (
+                                    <div className="live-score-alert" key={alert?.id || `${alert?.createdAt}-${index}`}>
+                                        {alert?.message}
+                                    </div>
+                                ))}
                             </div>
                         )}
 
@@ -2171,20 +2182,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 )
                             ))}
                         </div>}
-                    </div>
-                    <div className="course-player-mode-switch" aria-label="Changer de mode">
-                        <button
-                            type="button"
-                            className="active"
-                            onClick={togglePlayerMode}
-                        >{playerMode === 'presentation' ? '✏️ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}</button>
-                        <button
-                            type="button"
-                            className="course-sync-board-btn"
-                            onClick={forceSyncRemote}
-                            title="Forcer la resynchronisation avec la télécommande"
-                        >🔄 SYNCHRO</button>
-                        {playerMode !== 'presentation' && <div className="course-add-wrap"><button type="button" className="course-animation-button" onClick={() => setAddMenuOpen(value => !value)}>＋ AJOUTER</button>{addMenuOpen && <div className="course-add-menu"><button onClick={openVideoSequencer}>🎬 Animation</button><button onClick={openControlOnCourse}>📝 Contrôle + QR code</button></div>}</div>}
                     </div>
                 </div>
             )}

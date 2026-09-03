@@ -187,6 +187,7 @@ const Models = {
         activeStudentHighlightTime: { type: Date, default: null },
         activeStudentBonusAlert: { type: String, default: null },
         activeStudentBonusAlertTime: { type: Date, default: null },
+        activeScoreAlerts: { type: Array, default: [] },
         activeHourWarnings: { type: Array, default: [] }
     }),
 

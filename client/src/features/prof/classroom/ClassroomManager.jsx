@@ -318,7 +318,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         const shortName = `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim();
         const isUp = Number(delta || 0) > 0;
         const message = isUp
-            ? `Bravo ${shortName} ! Nouvelle note : ${formatScore(nextScore)}`
+            ? `${shortName}  +0,5  →  ${formatScore(nextScore)}`
             : `${shortName} - Nouvelle note : ${formatScore(nextScore)}`;
         try {
             await fetch(`/api/classroom/${globalClassId}/live-action`, {
@@ -477,8 +477,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const isPlanFinderMatch = (stu) => {
         const term = normalizeText(planFinder);
         if (!term) return false;
-        const fullName = `${stu?.firstName || ''} ${stu?.lastName || ''} ${getDisplayName(stu)}`;
-        return normalizeText(fullName).includes(term);
+        return normalizeText(stu?.firstName || '').includes(term);
     };
     const isListFinderMatch = (stu) => {
         const term = normalizeText(searchTerm);
@@ -702,25 +701,14 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const scoreHoldProps = (student, delta) => ({
-        onPointerDown: (event) => {
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            startBehaviorRepeat(student?._id, getSelectedGrade(student)?.id, delta);
-        },
-        onPointerUp: () => stopBehaviorRepeat(false),
-        onPointerCancel: () => stopBehaviorRepeat(false),
-        onLostPointerCapture: () => stopBehaviorRepeat(false),
         onClick: (event) => {
             event.preventDefault();
-            if (behaviorRepeatDidRepeatRef.current) {
-                behaviorRepeatDidRepeatRef.current = false;
-                return;
-            }
             const scoreId = getSelectedGrade(student)?.id;
             if (!student?._id || !scoreId) return;
             addBehavior(
                 student._id,
                 'ADJUST_SCORE',
-                { scoreId, delta },
+                { scoreId, delta: Number(delta) < 0 ? -0.5 : 0.5 },
                 { keepDrawerOpen: true }
             );
         },
@@ -748,8 +736,8 @@ export default function ClassroomManager({ globalClassId, user }) {
         const skipFlash = Boolean(options.skipFlash);
         const silentReload = Boolean(options.silentReload);
         const targetStudent = students.find((s) => String(s._id) === String(sid));
-        if (!skipFlash && targetStudent && type === 'ADJUST_SCORE') {
-            showScoreEvolutionOnBoard(targetStudent, Number(extra?.delta || 0));
+        if (!skipFlash && targetStudent && type === 'ADJUST_SCORE' && Number(extra?.delta || 0) > 0) {
+            showScoreEvolutionOnBoard(targetStudent, 0.5);
         }
 
         const optimisticScoreId = type === 'ADD_SCORE'
@@ -775,10 +763,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                 r.selectedScoreId = selected?.id || scores[scores.length - 1].id;
             }
             if (type === 'ADJUST_SCORE') {
+                const safeDelta = Number(extra?.delta || 0) < 0 ? -0.5 : 0.5;
                 const requestedId = extra?.scoreId || r.selectedScoreId || scores[scores.length - 1].id;
                 const selected = scores.find(g => String(g.id) === String(requestedId)) || scores[scores.length - 1];
                 scores = scores.map(g => String(g.id) === String(selected.id)
-                    ? { ...g, value: Math.max(0, Math.min(20, Number(g.value || 0) + Number(extra?.delta || 0))) }
+                    ? { ...g, value: Math.max(0, Math.min(20, Number(g.value || 0) + safeDelta)) }
                     : g
                 );
                 r.selectedScoreId = selected.id;
