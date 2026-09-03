@@ -402,20 +402,31 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 const list = Array.isArray(students) ? students : [];
                 const cols = Math.max(2, Number(classInfo?.layout?.cols || 6));
                 const rows = Math.max(2, Number(classInfo?.layout?.rows || 5), Math.ceil(list.length / cols));
+                const validSeats = list.filter((student) => Number.isInteger(student?.seatX) && Number.isInteger(student?.seatY)
+                    && student.seatX >= 0 && student.seatX < cols && student.seatY >= 0 && student.seatY < rows);
+                const uniqueSeats = new Set(validSeats.map((student) => `${student.seatX}-${student.seatY}`));
+                const hasMeaningfulPlan = uniqueSeats.size > 1 || list.length <= 1;
                 const occupied = new Set();
                 const placedIds = new Set();
                 const seats = [];
-                list.forEach((student) => {
-                    const x = Number(student?.seatX);
-                    const y = Number(student?.seatY);
-                    const key = `${x}-${y}`;
-                    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= cols || y < 0 || y >= rows || occupied.has(key)) return;
-                    occupied.add(key);
-                    placedIds.add(String(student?._id || ''));
-                    seats.push({ student, x, y });
-                });
+                if (hasMeaningfulPlan) {
+                    validSeats.forEach((student) => {
+                        const x = student.seatX;
+                        const y = student.seatY;
+                        const key = `${x}-${y}`;
+                        if (occupied.has(key)) return;
+                        occupied.add(key);
+                        placedIds.add(String(student?._id || ''));
+                        seats.push({ student, x, y });
+                    });
+                }
                 let cursor = 0;
-                list.filter((student) => !placedIds.has(String(student?._id || ''))).forEach((student) => {
+                list.filter((student) => !placedIds.has(String(student?._id || '')))
+                    .sort((a, b) => {
+                        const first = String(a?.firstName || '').localeCompare(String(b?.firstName || ''), 'fr', { sensitivity: 'base' });
+                        return first || String(a?.lastName || '').localeCompare(String(b?.lastName || ''), 'fr', { sensitivity: 'base' });
+                    })
+                    .forEach((student) => {
                     while (cursor < cols * rows && occupied.has(`${cursor % cols}-${Math.floor(cursor / cols)}`)) cursor += 1;
                     if (cursor >= cols * rows) return;
                     const x = cursor % cols;
@@ -423,7 +434,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     occupied.add(`${x}-${y}`);
                     seats.push({ student, x, y });
                     cursor += 1;
-                });
+                    });
                 if (!controller.signal.aborted) setProjectedClassPlan({ name: classInfo?.name || globalClass || 'Classe', cols, rows, seats });
             } catch (_) {
                 if (!controller.signal.aborted) setProjectedClassPlan({ error: true });
@@ -518,8 +529,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     className="course-projected-seat"
                                     key={student?._id || `${x}-${y}`}
                                     style={{
-                                        gridColumn: x + 1,
-                                        gridRow: y + 1
+                                        gridColumn: projectedClassPlan.cols - x,
+                                        gridRow: projectedClassPlan.rows - y
                                     }}
                                 >
                                     <span className="course-projected-seat-avatar">{student?.avatar || student?.emoji || '🎓'}</span>
