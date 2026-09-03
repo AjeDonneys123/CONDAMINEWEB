@@ -206,6 +206,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sequenceCutVideoRef = useRef(null);
     const coursePlayerRef = useRef(null);
     const completedProjectedVideoRef = useRef('');
+    const projectedPlaybackSourceRef = useRef({ key: '', url: '' });
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
@@ -380,6 +381,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const projectedGroups = groupSceneSequences(projectedScenes[projectedSceneIndex]);
     const projectedSequenceIndex = Math.max(0, Math.min(projectedGroups.length - 1, Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0))));
     const projectedVideo = projectedGroups[projectedSequenceIndex]?.[playingVideoIndex] || projectedGroups[projectedSequenceIndex]?.[0];
+    const projectedPlaybackKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
+    if (!presentationRemote?.remote?.animationVisible || !projectedVideo) {
+        projectedPlaybackSourceRef.current = { key: '', url: '' };
+    } else if (projectedPlaybackSourceRef.current.key !== projectedPlaybackKey) {
+        projectedPlaybackSourceRef.current = {
+            key: projectedPlaybackKey,
+            url: preloadedVideoUrls[projectedVideo.url] || projectedVideo.url || ''
+        };
+    }
     const projectedSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
     const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || '').trim();
     const projectedSlidesUrl = projectedSlideObjectId
@@ -415,17 +425,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             .flatMap((scene) => scene.sequences || [])
             .filter((video, index, all) => video?.url && video.sourceType !== 'youtube' && !getYoutubeVideoId(video.url) && all.findIndex((item) => item.url === video.url) === index);
         setVideosPreloading(videos.length > 0);
-        Promise.allSettled(videos.map(async (video) => {
-            const response = await fetch(video.url, { signal: controller.signal });
-            if (!response.ok) throw new Error(`Préchargement impossible (${response.status})`);
-            const objectUrl = URL.createObjectURL(await response.blob());
-            objectUrls.push(objectUrl);
-            return [video.url, objectUrl];
-        })).then((results) => {
-            if (controller.signal.aborted) return;
-            setPreloadedVideoUrls(Object.fromEntries(results.filter((result) => result.status === 'fulfilled').map((result) => result.value)));
-            setVideosPreloading(false);
-        });
+        setPreloadedVideoUrls({});
+        const preloadSequentially = async () => {
+            // Let the visible player start first, then avoid competing downloads.
+            await new Promise((resolve) => window.setTimeout(resolve, 700));
+            for (const video of videos) {
+                if (controller.signal.aborted) return;
+                try {
+                    const response = await fetch(video.url, { signal: controller.signal });
+                    if (!response.ok) continue;
+                    const objectUrl = URL.createObjectURL(await response.blob());
+                    objectUrls.push(objectUrl);
+                    if (!controller.signal.aborted) {
+                        setPreloadedVideoUrls((current) => ({ ...current, [video.url]: objectUrl }));
+                    }
+                } catch (_) {
+                    if (controller.signal.aborted) return;
+                }
+            }
+            if (!controller.signal.aborted) setVideosPreloading(false);
+        };
+        void preloadSequentially();
         return () => { controller.abort(); objectUrls.forEach((url) => URL.revokeObjectURL(url)); };
     }, [isPhone, playingCourse?._id, playerMode]);
 
@@ -1471,7 +1491,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {videosPreloading && <div className="course-video-preload-status">Préchargement des animations…</div>}
-                        {presentationRemote?.remote?.animationVisible && projectedVideo && <div className="course-sequence-video-layer">{projectedVideo.sourceType === 'youtube' || getYoutubeVideoId(projectedVideo.url) ? <YoutubeSequencePlayer key={projectedVideo.id || projectedVideo.url} video={projectedVideo} playVersion={presentationRemote.remote.playVersion} onEnded={finishProjectedVideo} /> : <video key={projectedVideo.id || projectedVideo.url} ref={sequenceVideoRef} src={preloadedVideoUrls[projectedVideo.url] || projectedVideo.url} playsInline preload="auto" onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(projectedVideo.startSec || 0)); }} onTimeUpdate={(event) => { const end = Math.max(0, Number(projectedVideo.endSec || 0)); if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); } }} onEnded={finishProjectedVideo} />}</div>}
+                        {presentationRemote?.remote?.animationVisible && projectedVideo && <div className="course-sequence-video-layer">{projectedVideo.sourceType === 'youtube' || getYoutubeVideoId(projectedVideo.url) ? <YoutubeSequencePlayer key={projectedVideo.id || projectedVideo.url} video={projectedVideo} playVersion={presentationRemote.remote.playVersion} onEnded={finishProjectedVideo} /> : <video key={projectedPlaybackKey} ref={sequenceVideoRef} src={projectedPlaybackSourceRef.current.url} playsInline preload="auto" onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(projectedVideo.startSec || 0)); }} onTimeUpdate={(event) => { const end = Math.max(0, Number(projectedVideo.endSec || 0)); if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); } }} onEnded={finishProjectedVideo} />}</div>}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">
