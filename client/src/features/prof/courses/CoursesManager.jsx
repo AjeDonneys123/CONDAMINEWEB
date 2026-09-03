@@ -44,6 +44,13 @@ const getEmbedUrl = (value = '') => {
         : '';
 };
 
+const getPresentUrl = (value = '') => {
+    const id = extractPresentationId(value);
+    return id
+        ? `https://docs.google.com/presentation/d/${encodeURIComponent(id)}/present?start=false&loop=false&delayms=3000&rm=minimal`
+        : '';
+};
+
 const getEditUrl = (value = '') => {
     const id = extractPresentationId(value);
     return id
@@ -66,19 +73,26 @@ const getYoutubeEmbedUrl = (value = '') => {
     return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?rel=0&playsinline=1` : '';
 };
 
-function YoutubeSequencePlayer({ video, playVersion, autoplayOnMount = false, onEnded }) {
+function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayOnMount = false, onEnded, onBufferProgress }) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
     const readyRef = useRef(false);
+    const bufferTimerRef = useRef(null);
+    const currentVideoIdRef = useRef('');
     const mountedPlayVersionRef = useRef(autoplayOnMount ? Number(playVersion || 0) - 1 : Number(playVersion || 0));
     const requestedPlayVersionRef = useRef(Number(playVersion || 0));
     const endTimerRef = useRef(null);
     const finishedRef = useRef(false);
+
     useEffect(() => {
         let cancelled = false;
         const stopEndTimer = () => {
             if (endTimerRef.current) window.clearInterval(endTimerRef.current);
             endTimerRef.current = null;
+        };
+        const stopBufferTimer = () => {
+            if (bufferTimerRef.current) window.clearInterval(bufferTimerRef.current);
+            bufferTimerRef.current = null;
         };
         const finishAtLastFrame = (player) => {
             if (finishedRef.current) return;
@@ -98,25 +112,75 @@ function YoutubeSequencePlayer({ video, playVersion, autoplayOnMount = false, on
                 } catch (_) {}
             }, 60);
         };
+        const startBufferMonitoring = (player) => {
+            stopBufferTimer();
+            bufferTimerRef.current = window.setInterval(() => {
+                try {
+                    if (player && typeof player.getVideoLoadedFraction === 'function') {
+                        const fraction = player.getVideoLoadedFraction();
+                        onBufferProgress?.(fraction);
+                    }
+                } catch (_) {}
+            }, 750);
+        };
+
+        const targetVideoId = getYoutubeVideoId(video?.url);
+        const startSec = Math.floor(Number(video?.startSec || 0));
+
+        // If player already exists, cue new video without destroying the iframe!
+        if (playerRef.current && readyRef.current && typeof playerRef.current.cueVideoById === 'function') {
+            if (currentVideoIdRef.current !== targetVideoId) {
+                currentVideoIdRef.current = targetVideoId;
+                finishedRef.current = false;
+                playerRef.current.cueVideoById({ videoId: targetVideoId, startSeconds: startSec });
+            } else {
+                playerRef.current.seekTo(startSec, true);
+            }
+            if (isVisible && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
+                playerRef.current.playVideo();
+            }
+            return;
+        }
+
         const create = () => {
             if (cancelled || !hostRef.current || !window.YT?.Player) return;
             try { playerRef.current?.destroy?.(); } catch (_) {}
+            currentVideoIdRef.current = targetVideoId;
             playerRef.current = new window.YT.Player(hostRef.current, {
-                videoId: getYoutubeVideoId(video?.url),
-                playerVars: { autoplay: autoplayOnMount ? 1 : 0, rel: 0, playsinline: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, modestbranding: 1, start: Math.floor(Number(video?.startSec || 0)) },
+                videoId: targetVideoId,
+                playerVars: {
+                    autoplay: autoplayOnMount ? 1 : 0,
+                    rel: 0,
+                    playsinline: 1,
+                    controls: 0,
+                    disablekb: 1,
+                    fs: 0,
+                    iv_load_policy: 3,
+                    modestbranding: 1,
+                    start: startSec
+                },
                 events: {
                     onReady: (event) => {
                         readyRef.current = true;
                         monitorEnd(event.target);
-                        if (requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
+                        startBufferMonitoring(event.target);
+                        if (isVisible && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
                             finishedRef.current = false;
                             event.target.playVideo();
+                        } else {
+                            event.target.pauseVideo();
                         }
                     },
-                    onStateChange: (event) => { if (event.data === window.YT.PlayerState.ENDED) finishAtLastFrame(event.target); }
+                    onStateChange: (event) => {
+                        if (event.data === window.YT.PlayerState.ENDED) finishAtLastFrame(event.target);
+                        if (event.data === window.YT.PlayerState.PLAYING) {
+                            try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0); } catch (_) {}
+                        }
+                    }
                 }
             });
         };
+
         if (window.YT?.Player) create();
         else {
             const previous = window.onYouTubeIframeAPIReady;
@@ -128,21 +192,31 @@ function YoutubeSequencePlayer({ video, playVersion, autoplayOnMount = false, on
                 document.head.appendChild(script);
             }
         }
+
         return () => {
             cancelled = true;
-            readyRef.current = false;
             stopEndTimer();
-            try { playerRef.current?.destroy?.(); } catch (_) {}
-            playerRef.current = null;
+            stopBufferTimer();
         };
-    }, [video?.url]);
+    }, [video?.url, video?.startSec]);
+
+    useEffect(() => {
+        if (!readyRef.current || !playerRef.current) return;
+        if (!isVisible) {
+            try { playerRef.current.pauseVideo(); } catch (_) {}
+        }
+    }, [isVisible]);
+
     useEffect(() => {
         const nextVersion = Number(playVersion || 0);
         if (nextVersion <= mountedPlayVersionRef.current) return;
         requestedPlayVersionRef.current = nextVersion;
         finishedRef.current = false;
-        if (readyRef.current) playerRef.current?.playVideo?.();
-    }, [playVersion]);
+        if (readyRef.current && isVisible) {
+            try { playerRef.current?.playVideo?.(); } catch (_) {}
+        }
+    }, [playVersion, isVisible]);
+
     return <div className="course-youtube-player"><div className="course-youtube-player-host" ref={hostRef} /></div>;
 }
 
@@ -567,11 +641,39 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const visibleVideoIsYoutube = visibleProjectedVideo?.sourceType === 'youtube' || getYoutubeVideoId(visibleProjectedVideo?.url);
     const visiblePlaybackKey = `${visibleProjectedVideo?.id || visibleProjectedVideo?.url || ''}:${currentPlayVersion}`;
     const youtubeAutoplayOnMount = Boolean(visibleVideoIsYoutube && currentPlayVersion > consumedYoutubePlayVersionRef.current);
+
+    const lastReportedBufferRef = useRef({});
+    const handleBufferProgress = useCallback((fraction) => {
+        if (isPhone || !playingCourse?._id) return;
+        const pct = Math.min(100, Math.max(0, Math.round((Number(fraction) || 0) * 100)));
+        const seqIdx = projectedSequenceIndex;
+        const prevPct = lastReportedBufferRef.current[seqIdx] ?? -1;
+        if (Math.abs(pct - prevPct) >= 5 || (pct >= 65 && prevPct < 65) || (pct === 100 && prevPct !== 100) || (pct > 0 && prevPct === -1)) {
+            lastReportedBufferRef.current[seqIdx] = pct;
+            fetch(`/api/courses/${playingCourse._id}/presentation-remote/buffer-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sequenceIndex: seqIdx, bufferPct: pct, isReady: pct >= 65 })
+            }).catch(() => {});
+        }
+    }, [isPhone, playingCourse?._id, projectedSequenceIndex]);
+
+    const handleNativeVideoProgress = useCallback((event) => {
+        const video = event.currentTarget;
+        if (!video || !video.duration) return;
+        try {
+            if (video.buffered.length > 0) {
+                const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                const fraction = Math.min(1, Math.max(0, bufferedEnd / video.duration));
+                handleBufferProgress(fraction);
+            }
+        } catch (_) {}
+    }, [handleBufferProgress]);
     const projectedSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
     const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || '').trim();
     const projectedSlidesUrl = projectedSlideObjectId
-        ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
-        : getEmbedUrl(playingCourse?.slidesUrl);
+        ? `${getPresentUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
+        : getPresentUrl(playingCourse?.slidesUrl);
     const finishProjectedVideo = () => {
         const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
         if (completedProjectedVideoRef.current === completionKey) return;
@@ -1360,7 +1462,33 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     </div>
                     <label>SÉQUENCES DE LA SCÈNE {phoneSceneIndex + 1}</label>
                     <div className="course-phone-sequences">
-                        {phoneGroups.map((group, index) => <button key={group[0]?.id || index} className={index === phoneSequenceIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}>{index + 1}</button>)}
+                        {phoneGroups.map((group, index) => {
+                            const isSelected = index === phoneSequenceIndex;
+                            const bufferMap = presentationRemote?.remote?.sequenceBuffers || {};
+                            const pct = Math.min(100, Math.max(0, Number(bufferMap[index] ?? (isSelected ? presentationRemote?.remote?.currentBufferPct : 0) ?? 0)));
+                            const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
+                            const pieStyle = {
+                                background: isReady
+                                    ? '#10b981'
+                                    : (pct > 0
+                                        ? `conic-gradient(#0284c7 ${pct}%, #e2e8f0 ${pct}% 100%)`
+                                        : '#ffffff')
+                            };
+                            return (
+                                <button
+                                    key={group[0]?.id || index}
+                                    type="button"
+                                    className={`sequence-pie-btn ${isSelected ? 'selected' : ''} ${isReady ? 'ready' : (pct > 0 ? 'buffering' : '')}`}
+                                    style={pieStyle}
+                                    onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}
+                                    title={`Séquence ${index + 1} : ${pct}% chargé ${isReady ? '(Prête en RAM)' : ''}`}
+                                >
+                                    <span className="pie-inner">{index + 1}</span>
+                                    {pct > 0 && !isReady && <span className="pie-pct-badge">{pct}%</span>}
+                                    {isReady && <span className="pie-ready-check">✓</span>}
+                                </button>
+                            );
+                        })}
                     </div>
                     <div>
                         <span>SCÈNE <b>{phoneSceneIndex + 1}</b></span>
@@ -1382,7 +1510,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
                     <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
                     <button className={presentationRemote.remote?.animationVisible ? 'active' : ''} onClick={() => void sendPresentationCommand('animation_toggle')}><span>🎞</span>{presentationRemote.remote?.animationVisible ? 'Désactiver animation' : 'Activer animation'}</button>
-                    <button className="play" onClick={() => void sendPresentationCommand('play')}><span>▶</span>Play</button>
+                    {(() => {
+                        const currentBufferPct = Math.min(100, Math.max(0, Number(presentationRemote?.remote?.currentBufferPct ?? presentationRemote?.remote?.sequenceBuffers?.[phoneSequenceIndex] ?? 0)));
+                        const isCurrentReady = presentationRemote?.remote?.isReady === true || currentBufferPct >= 65;
+                        return (
+                            <button
+                                type="button"
+                                className={`play ${isCurrentReady ? 'ready' : 'buffering'}`}
+                                onClick={() => void sendPresentationCommand('play')}
+                                title={isCurrentReady ? 'Séquence prête en mémoire vive · Lancer' : `Mémoire tampon à ${currentBufferPct}% · Toucher pour forcer`}
+                            >
+                                <span>{isCurrentReady ? '▶' : '⏳'}</span>
+                                {isCurrentReady ? 'Play (Prêt)' : `Chargement (${currentBufferPct}%)`}
+                            </button>
+                        );
+                    })()}
                     <button onClick={() => void sendPresentationCommand('sequence_next')}><span>⏭</span>Séquence suivante</button>
                 </div>
             </>}
@@ -1678,7 +1820,40 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
-                        {presentationRemote?.remote?.animationVisible && visibleProjectedVideo && <div className="course-sequence-video-layer">{visibleVideoIsYoutube ? <YoutubeSequencePlayer key={visiblePlaybackKey} video={visibleProjectedVideo} playVersion={presentationRemote.remote.playVersion} autoplayOnMount={youtubeAutoplayOnMount} onEnded={finishProjectedVideo} /> : <video key={visiblePlaybackKey} ref={sequenceVideoRef} src={visibleProjectedVideo.url} playsInline preload="auto" onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0)); }} onTimeUpdate={(event) => { const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0)); if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); } }} onEnded={finishProjectedVideo} />}</div>}
+                        {visibleProjectedVideo && (
+                            <div className={`course-sequence-video-layer ${presentationRemote?.remote?.animationVisible ? 'active' : 'prewarming'}`}>
+                                {visibleVideoIsYoutube ? (
+                                    <YoutubeSequencePlayer
+                                        video={visibleProjectedVideo}
+                                        playVersion={presentationRemote?.remote?.playVersion}
+                                        isVisible={presentationRemote?.remote?.animationVisible === true}
+                                        autoplayOnMount={youtubeAutoplayOnMount}
+                                        onEnded={finishProjectedVideo}
+                                        onBufferProgress={handleBufferProgress}
+                                    />
+                                ) : (
+                                    <video
+                                        ref={sequenceVideoRef}
+                                        src={visibleProjectedVideo.url}
+                                        playsInline
+                                        preload="auto"
+                                        onLoadedMetadata={(event) => {
+                                            event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0));
+                                        }}
+                                        onProgress={handleNativeVideoProgress}
+                                        onTimeUpdate={(event) => {
+                                            handleNativeVideoProgress(event);
+                                            const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0));
+                                            if (end > 0 && event.currentTarget.currentTime >= end) {
+                                                event.currentTarget.pause();
+                                                finishProjectedVideo();
+                                            }
+                                        }}
+                                        onEnded={finishProjectedVideo}
+                                    />
+                                )}
+                            </div>
+                        )}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">

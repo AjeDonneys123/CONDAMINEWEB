@@ -597,6 +597,29 @@ router.post('/:id/presentation-remote/stop', async (req, res) => {
     }
 });
 
+router.post('/:id/presentation-remote/buffer-status', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const remote = course.presentationRemote || { active: true };
+        const sequenceIndex = Math.max(0, Number(req.body?.sequenceIndex ?? remote.sequenceIndex ?? 0));
+        const bufferPct = Math.min(100, Math.max(0, Math.round(Number(req.body?.bufferPct || 0))));
+        const isReady = req.body?.isReady === true || bufferPct >= 70;
+        const currentBuffers = (remote.sequenceBuffers && typeof remote.sequenceBuffers === 'object') ? { ...remote.sequenceBuffers } : {};
+        currentBuffers[sequenceIndex] = bufferPct;
+        remote.sequenceBuffers = currentBuffers;
+        remote.isReady = isReady;
+        remote.currentBufferPct = bufferPct;
+        remote.updatedAt = new Date();
+        course.presentationRemote = remote;
+        course.markModified('presentationRemote');
+        await course.save();
+        return res.json({ ok: true, remote });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/:id/presentation-remote/command', async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
