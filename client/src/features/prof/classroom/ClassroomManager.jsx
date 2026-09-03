@@ -29,6 +29,9 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [frenchStudentIds, setFrenchStudentIds] = useState([]);
     const [frenchExpression, setFrenchExpression] = useState("");
     const [frenchKeywords, setFrenchKeywords] = useState([]);
+    const [frenchErrorMode, setFrenchErrorMode] = useState(false);
+    const [frenchCorrectExpression, setFrenchCorrectExpression] = useState("");
+    const [frenchIncorrectWords, setFrenchIncorrectWords] = useState([]);
     const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
@@ -469,6 +472,10 @@ export default function ClassroomManager({ globalClassId, user }) {
     const saveFrenchExpression = async () => {
         const expression = String(frenchExpression || '').trim().replace(/\s+/g, ' ');
         if (!expression) return alert('Écris ou dicte un mot ou une expression.');
+        const correctExpression = String(frenchCorrectExpression || '').trim().replace(/\s+/g, ' ');
+        if (frenchErrorMode && !correctExpression) return alert('Écris la phrase correcte.');
+        if (frenchErrorMode && !frenchIncorrectWords.length) return alert('Sélectionne au moins un mot incorrect dans la phrase fausse.');
+        if (frenchErrorMode && !frenchKeywords.length) return alert('Sélectionne au moins un mot à compléter dans la phrase correcte.');
         const recipientIds = frenchStudentIds.length ? frenchStudentIds : students.map((student) => String(student._id)).filter(Boolean);
         if (!recipientIds.length) return alert('Aucun élève dans cette classe.');
         setFrenchSaving(true);
@@ -476,7 +483,15 @@ export default function ClassroomManager({ globalClassId, user }) {
             const responses = await Promise.all(recipientIds.map(async (studentId) => {
                 const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ french: expression, spanish: expression, focusWords: frenchKeywords, source: 'teacher-french' })
+                    body: JSON.stringify({
+                        french: frenchErrorMode ? correctExpression : expression,
+                        spanish: frenchErrorMode ? correctExpression : expression,
+                        focusWords: frenchKeywords,
+                        exerciseType: frenchErrorMode ? 'correction' : 'vocabulary',
+                        incorrectSentence: frenchErrorMode ? expression : '',
+                        incorrectWords: frenchErrorMode ? frenchIncorrectWords : [],
+                        source: 'teacher-french'
+                    })
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data?.error || 'Enregistrement impossible.');
@@ -484,6 +499,8 @@ export default function ClassroomManager({ globalClassId, user }) {
             }));
             setFrenchExpression('');
             setFrenchKeywords([]);
+            setFrenchCorrectExpression('');
+            setFrenchIncorrectWords([]);
             alert(`Ajouté à la liste de ${responses.length} élève${responses.length > 1 ? 's' : ''}.`);
         } catch (error) {
             alert(error.message || 'Enregistrement impossible.');
@@ -495,6 +512,9 @@ export default function ClassroomManager({ globalClassId, user }) {
     const toggleFrenchMode = () => {
         setFrenchMode((value) => !value);
         setFrenchStudentIds([]);
+        setFrenchErrorMode(false);
+        setFrenchCorrectExpression('');
+        setFrenchIncorrectWords([]);
         setVoiceListening(false);
         keepListeningRef.current = false;
         try { speechRecognitionRef.current?.stop(); } catch (_) {}
@@ -512,18 +532,33 @@ export default function ClassroomManager({ globalClassId, user }) {
             : [...items, word]);
     };
 
+    const toggleFrenchIncorrectWord = (word) => {
+        const key = normaliseFrenchKeyword(word);
+        if (!key) return;
+        setFrenchIncorrectWords((items) => items.some((item) => normaliseFrenchKeyword(item) === key)
+            ? items.filter((item) => normaliseFrenchKeyword(item) !== key)
+            : [...items, word]);
+    };
+
     const renderFrenchAssignmentPanel = () => {
         if (!frenchMode) return null;
         const words = String(frenchExpression || '').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
+        const correctWords = String(frenchCorrectExpression || '').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
         return (
             <div className="french-assignment-panel">
                 <div className="french-assignment-heading">🇫🇷 Ajout de français {frenchSelectedStudents.length ? <strong>pour {frenchSelectedStudents.map(getDisplayName).join(', ')}</strong> : <span>pour toute la classe</span>}</div>
-                <p>Écris ou dicte un mot, une expression ou une phrase. Clique sur les mots à travailler pour les repérer ensuite dans un texte à trous. Sans élève sélectionné, l’ajout est envoyé à toute la classe.</p>
+                <p>{frenchErrorMode ? 'Phrase fausse : sélectionne les mots incorrects. Écris ensuite la phrase correcte et sélectionne les mots qui deviendront des trous.' : 'Écris ou dicte un mot, une expression ou une phrase. Clique sur les mots à travailler pour les repérer ensuite dans un texte à trous.'} Sans élève sélectionné, l’ajout est envoyé à toute la classe.</p>
                 {!!words.length && <div className="french-keyword-list">{words.map((word, index) => {
+                    const selected = (frenchErrorMode ? frenchIncorrectWords : frenchKeywords).some((item) => normaliseFrenchKeyword(item) === normaliseFrenchKeyword(word));
+                    return <button type="button" key={`${word}-${index}`} className={selected ? (frenchErrorMode ? 'incorrect-selected' : 'selected') : ''} onClick={() => frenchErrorMode ? toggleFrenchIncorrectWord(word) : toggleFrenchKeyword(word)}>{selected ? '✓ ' : ''}{word}</button>;
+                })}</div>}
+                {frenchErrorMode && !!frenchIncorrectWords.length && <small className="incorrect-summary">Mots incorrects : {frenchIncorrectWords.join(' · ')}</small>}
+                {frenchErrorMode && <div className="french-correct-sentence"><label>Phrase correcte</label><input value={frenchCorrectExpression} onChange={(event) => { setFrenchCorrectExpression(event.target.value); setFrenchKeywords([]); }} placeholder="Écris ici la phrase correcte…" /></div>}
+                {frenchErrorMode && !!correctWords.length && <div className="french-keyword-list correct">{correctWords.map((word, index) => {
                     const selected = frenchKeywords.some((item) => normaliseFrenchKeyword(item) === normaliseFrenchKeyword(word));
                     return <button type="button" key={`${word}-${index}`} className={selected ? 'selected' : ''} onClick={() => toggleFrenchKeyword(word)}>{selected ? '✓ ' : ''}{word}</button>;
                 })}</div>}
-                {!!frenchKeywords.length && <small>Mots repérés : {frenchKeywords.join(' · ')}</small>}
+                {!!frenchKeywords.length && <small>{frenchErrorMode ? 'Mots à compléter' : 'Mots repérés'} : {frenchKeywords.join(' · ')}</small>}
             </div>
         );
     };
@@ -919,12 +954,13 @@ export default function ClassroomManager({ globalClassId, user }) {
         return (
             <div className="list-container custom-scrollbar alphabetic-layout">
                 <div className="list-finder-row">
-                    <input className="plan-finder-input" placeholder={frenchMode ? (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…') : '🔎 Trouver un élève de la classe...'} value={frenchMode ? frenchExpression : searchTerm} onChange={e => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([])) : setSearchTerm(e.target.value)} />
+                    <input className="plan-finder-input" placeholder={frenchMode ? (frenchErrorMode ? 'Écris la phrase avec les erreurs…' : (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…')) : '🔎 Trouver un élève de la classe...'} value={frenchMode ? frenchExpression : searchTerm} onChange={e => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([]), setFrenchIncorrectWords([])) : setSearchTerm(e.target.value)} />
                     <div className="plan-finder-count-wrap">
                         {!frenchMode && <span className="plan-finder-count" title={searchTerm.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
                             {searchTerm.trim() ? listFinderCount : students.length}
                         </span>}
                         <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
+                        {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                         {(frenchMode ? frenchExpression : searchTerm).trim() && (
                             <button
                                 className="finder-clear-btn"
@@ -1087,9 +1123,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div className="plan-finder-row">
                         <input
                             className="plan-finder-input"
-                            placeholder={frenchMode ? (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…') : '🔎 Trouver un élève de la classe...'}
+                            placeholder={frenchMode ? (frenchErrorMode ? 'Écris la phrase avec les erreurs…' : (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…')) : '🔎 Trouver un élève de la classe...'}
                             value={frenchMode ? frenchExpression : planFinder}
-                            onChange={(e) => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([])) : setPlanFinder(e.target.value)}
+                            onChange={(e) => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([]), setFrenchIncorrectWords([])) : setPlanFinder(e.target.value)}
                         />
                         <div className="plan-finder-count-wrap">
                             {!frenchMode && <span className="plan-finder-count" title={planFinder.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
@@ -1100,6 +1136,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR</button>
+                            {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
                                     className="finder-clear-btn"

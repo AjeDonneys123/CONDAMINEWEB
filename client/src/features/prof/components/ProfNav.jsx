@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ProfNav({ activeTab, onTabChange, user, isPhone = false, classPlanProjected = false }) {
+export default function ProfNav({ activeTab, onTabChange, user }) {
   const allTabs = {
       activities: { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600', hideOnMobile: true },
       exposes: { id: 'exposes', label: '📚 COURS', color: 'bg-rose-600' },
@@ -37,7 +37,6 @@ export default function ProfNav({ activeTab, onTabChange, user, isPhone = false,
             `}
         >
             {t.label}
-            {isPhone && t.id === 'classroom' && activeTab === 'classroom' ? <span className={`prof-class-projector-switch ${classPlanProjected ? 'on' : ''}`} aria-label={classPlanProjected ? 'Plan projeté' : 'Plan masqué'}><i /></span> : null}
         </button>
       ))}
       </div>

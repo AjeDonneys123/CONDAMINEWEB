@@ -149,6 +149,8 @@
     cursor: pointer;
 }
 .french-mode-btn.active { background: #3730a3; border-color: #3730a3; color: #fff; box-shadow: 0 5px 12px rgba(55,48,163,.25); }
+.french-error-mode-btn { min-height: 38px; padding: 0 10px; border: 2px solid #fecaca; border-radius: 10px; background: #fff; color: #dc2626; font-size: .65rem; font-weight: 950; cursor: pointer; }
+.french-error-mode-btn.active { border-color: #dc2626; background: #dc2626; color: #fff; box-shadow: 0 5px 12px rgba(220,38,38,.25); }
 .french-validate-btn { border-color: #16a34a; background: #16a34a; color: #fff; }
 .french-validate-btn:disabled { opacity: .45; cursor: not-allowed; }
 .french-mode-hint { margin: -2px 0 12px; color: #3730a3; font-size: .75rem; font-weight: 800; }
@@ -176,6 +178,10 @@
 }
 .french-keyword-list button.selected { background: #dcfce7; border-color: #22c55e; color: #166534; }
 .french-assignment-panel small { display: block; margin-top: 7px; color: #166534; font-size: .72rem; font-weight: 850; }
+.french-keyword-list button.incorrect-selected { border-color: #ef4444; background: #fee2e2; color: #b91c1c; }
+.french-assignment-panel small.incorrect-summary { color: #b91c1c; }
+.french-correct-sentence { display: grid; gap: 6px; margin-top: 13px; }.french-correct-sentence label { color: #166534; font-size: .72rem; font-weight: 950; }.french-correct-sentence input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid #86efac; border-radius: 11px; background: #f0fdf4; color: #14532d; font: inherit; font-weight: 750; outline: none; }.french-correct-sentence input:focus { border-color: #16a34a; }
+.french-keyword-list.correct button.selected { border-color: #22c55e; background: #dcfce7; color: #166534; }
 .plan-matches-list {
     max-height: 150px;
     overflow-y: auto;

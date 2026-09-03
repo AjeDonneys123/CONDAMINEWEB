@@ -488,11 +488,87 @@ router.patch('/:id/video-sequences', async (req, res) => {
 router.get('/presentation-remote/active', async (req, res) => {
     try {
         const classId = String(req.query.classId || '').trim();
-        if (!classId) return res.json({ ok: true, active: false });
-        const course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
-            .sort({ 'presentationRemote.updatedAt': -1 }).lean();
+        let course = null;
+        if (classId) {
+            course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
+                .sort({ 'presentationRemote.updatedAt': -1 }).lean();
+        }
+        if (!course) {
+            course = await Course.findOne({ 'presentationRemote.active': true })
+                .sort({ 'presentationRemote.updatedAt': -1 }).lean();
+        }
         if (!course) return res.json({ ok: true, active: false });
         return res.json({ ok: true, active: true, courseId: String(course._id), title: course.title, videoSlides: course.presentationVideoSlides || [], scenes: course.presentationVideoScenes || [], sequences: course.presentationVideoSequences || [], remote: course.presentationRemote || {} });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/presentation-remote/toggle-plan', async (req, res) => {
+    try {
+        const classId = String(req.body?.classId || '').trim();
+        let course = null;
+        if (classId) {
+            course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
+                .sort({ 'presentationRemote.updatedAt': -1 });
+        }
+        if (!course) {
+            course = await Course.findOne({ 'presentationRemote.active': true })
+                .sort({ 'presentationRemote.updatedAt': -1 });
+        }
+        if (!course && classId) {
+            course = await Course.findOne({ targetClassroomId: classId }).sort({ updatedAt: -1 });
+        }
+        if (!course) {
+            course = await Course.findOne({}).sort({ updatedAt: -1 });
+        }
+        if (!course) return res.status(404).json({ error: 'Aucun cours disponible' });
+
+        const targetClassId = classId || course.presentationRemote?.classId || course.targetClassroomId || '';
+        const remote = {
+            active: true,
+            classId: targetClassId,
+            slideIndex: 0,
+            sceneIndex: 0,
+            sequenceIndex: 0,
+            animationVisible: false,
+            classPlanVisible: false,
+            playVersion: 0,
+            ...(course.presentationRemote || {})
+        };
+        remote.classPlanVisible = !remote.classPlanVisible;
+        if (remote.classPlanVisible) remote.animationVisible = false;
+        remote.version = Date.now();
+        remote.updatedAt = new Date();
+        course.presentationRemote = remote;
+        course.markModified('presentationRemote');
+        await course.save();
+        return res.json({ ok: true, active: true, courseId: String(course._id), remote });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/presentation-remote/hide-plan', async (req, res) => {
+    try {
+        const classId = String(req.body?.classId || '').trim();
+        let course = null;
+        if (classId) {
+            course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
+                .sort({ 'presentationRemote.updatedAt': -1 });
+        }
+        if (!course) {
+            course = await Course.findOne({ 'presentationRemote.active': true })
+                .sort({ 'presentationRemote.updatedAt': -1 });
+        }
+        if (!course) return res.json({ ok: true, active: false });
+        if (course.presentationRemote) {
+            course.presentationRemote.classPlanVisible = false;
+            course.presentationRemote.updatedAt = new Date();
+            course.markModified('presentationRemote');
+            await course.save();
+        }
+        return res.json({ ok: true, remote: course.presentationRemote });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }

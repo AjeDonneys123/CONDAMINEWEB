@@ -1256,16 +1256,143 @@
 .course-scene-sequence-counter span { background: #fff; color: #111827; }
 .course-sequence-video-layer { position: absolute; inset: 0; z-index: 35; display: grid; place-items: center; overflow: hidden; background: #000; }
 .course-sequence-video-layer video { width: 100%; height: 100%; object-fit: contain; }
-.course-projected-class-plan { position: absolute; inset: 0; z-index: 44; display: flex; flex-direction: column; gap: 14px; padding: 20px 26px 24px; overflow: hidden; background: linear-gradient(145deg, #f8fafc, #e2e8f0); color: #172033; }
-.course-projected-plan-title { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; padding: 0 4px; }.course-projected-plan-title strong { font-size: clamp(22px, 2.4vw, 40px); font-weight: 950; text-transform: uppercase; }.course-projected-plan-title span { color: #dc2626; font-size: clamp(10px, 1vw, 16px); font-weight: 950; letter-spacing: .12em; }
-.course-projected-plan-grid { flex: 1; display: grid; gap: clamp(7px, 1vw, 16px); min-height: 0; padding: 14px; border: 3px solid #cbd5e1; border-radius: 24px; background: #fff; }
-.course-projected-seat { display: grid; place-content: center; min-width: 0; min-height: 0; padding: 5px; border: 2px solid #dbe4f0; border-radius: 16px; background: #f8fafc; text-align: center; box-shadow: 0 5px 12px rgba(15, 23, 42, .08); }.course-projected-seat span { font-size: clamp(17px, 2.3vh, 31px); line-height: 1; }.course-projected-seat strong { overflow: hidden; color: #172033; font-size: clamp(10px, 1.35vw, 22px); font-weight: 950; line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; }.course-projected-seat small { color: #64748b; font-size: clamp(8px, .85vw, 14px); font-weight: 900; }
-.course-projected-plan-message { display: grid; flex: 1; place-items: center; color: #64748b; font-size: clamp(18px, 2vw, 34px); }
+.course-projected-class-plan {
+    position: absolute;
+    inset: 0;
+    z-index: 44;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 24px;
+    overflow: hidden;
+    background: linear-gradient(145deg, #0f172a, #1e293b);
+    color: #fff;
+}
+.course-projected-plan-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.course-projected-board-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 16px;
+    border-radius: 12px;
+    background: #0284c7;
+    color: #ffffff;
+    font-size: clamp(11px, 1.25vw, 18px);
+    font-weight: 950;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+}
+.course-projected-plan-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 4px;
+}
+.course-projected-plan-title strong {
+    font-size: clamp(18px, 2vw, 32px);
+    font-weight: 950;
+    text-transform: uppercase;
+    color: #f8fafc;
+}
+.course-projected-badge {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: clamp(10px, 0.9vw, 14px);
+    font-weight: 900;
+    letter-spacing: .08em;
+}
+.course-projected-plan-orientation-labels {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 8px;
+    color: #f59e0b;
+    font-size: clamp(11px, 1.15vw, 16px);
+    font-weight: 950;
+    letter-spacing: .05em;
+}
+.course-projected-plan-grid {
+    flex: 1;
+    display: grid;
+    gap: clamp(6px, 0.9vw, 14px);
+    min-height: 0;
+    padding: 12px;
+    border: 2px solid #334155;
+    border-radius: 20px;
+    background: #090d16;
+}
+.course-projected-seat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    padding: 4px;
+    border: 2px solid #cbd5e1;
+    border-radius: 14px;
+    background: #ffffff;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+.course-projected-seat-avatar {
+    font-size: clamp(16px, 2.2vh, 28px);
+    line-height: 1;
+}
+.course-projected-seat-name {
+    overflow: hidden;
+    color: #0f172a;
+    font-size: clamp(11px, 1.35vw, 20px);
+    font-weight: 950;
+    line-height: 1.05;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 2px;
+}
+.course-projected-seat-last {
+    color: #64748b;
+    font-size: clamp(9px, 0.85vw, 13px);
+    font-weight: 900;
+}
+.course-projected-back-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    border-radius: 10px;
+    background: #1e293b;
+    color: #94a3b8;
+    font-size: clamp(10px, 1vw, 14px);
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.course-projected-plan-message {
+    display: grid;
+    flex: 1;
+    place-items: center;
+    color: #94a3b8;
+    font-size: clamp(18px, 2vw, 34px);
+    font-weight: 900;
+}
 .course-phone-remote { min-height: calc(100vh - 220px); padding: 18px 14px 28px; background: #0f172a; color: #fff; }
-.course-phone-remote-empty { min-height: 55vh; display: grid; place-content: center; gap: 12px; text-align: center; }
-.course-phone-remote-empty span { font-size: 48px; }.course-phone-remote-empty p { max-width: 310px; color: #94a3b8; font-size: 13px; }
-.course-phone-remote-head { display: grid; gap: 7px; margin-bottom: 18px; }.course-phone-remote-head small { color: #a78bfa; font-weight: 950; }.course-phone-remote-head > strong { font-size: 20px; }.course-phone-remote-head > div { display: flex; gap: 8px; }
-.course-phone-remote-head span { padding: 8px 11px; border-radius: 10px; background: #fff; color: #111827; font-size: 11px; font-weight: 900; }.course-phone-remote-head span:first-child { background: #dc2626; color: #fff; }
+.course-phone-remote-empty { min-height: 55vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 20px; }
+.course-phone-remote-empty span { font-size: 48px; }
+.course-phone-remote-empty p { max-width: 320px; color: #94a3b8; font-size: 13px; margin: 0; }
+.course-phone-remote-head { display: grid; gap: 7px; margin-bottom: 18px; }
+.course-phone-remote-head small { color: #a78bfa; font-weight: 950; }
+.course-phone-remote-head > strong { font-size: 20px; }
+.course-phone-remote-head > div { display: flex; gap: 8px; }
+.course-phone-remote-head span { padding: 8px 11px; border-radius: 10px; background: #fff; color: #111827; font-size: 11px; font-weight: 900; }
+.course-phone-remote-head span:first-child { background: #dc2626; color: #fff; }
 .course-phone-remote-head .course-phone-scenes { display: flex; gap: 8px; padding: 4px 0; overflow-x: auto; }
 .course-phone-remote-head .course-phone-scenes button { flex: 0 0 auto; width: 44px; height: 44px; border: 2px solid #ef4444; border-radius: 12px; background: #b91c1c; color: #fff; font-size: 17px; font-weight: 950; }
 .course-phone-remote-head .course-phone-scenes button.selected { outline: 3px solid #fff; background: #ef4444; }
@@ -1273,7 +1400,62 @@
 .course-phone-remote-head .course-phone-sequences { display: flex; gap: 9px; padding: 5px 3px; overflow-x: auto; }
 .course-phone-remote-head .course-phone-sequences button { flex: 0 0 auto; width: 40px; height: 40px; border: 2px solid #64748b; border-radius: 50%; background: #fff; color: #172033; font-size: 15px; font-weight: 950; }
 .course-phone-remote-head .course-phone-sequences button.selected { border-color: #ef4444; outline: 3px solid #ef4444; outline-offset: 2px; color: #b91c1c; }
-.course-phone-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.course-phone-controls button { min-height: 82px; display: grid; place-items: center; gap: 4px; padding: 10px; border: 1px solid #334155; border-radius: 16px; background: #fff; color: #172033; font-size: 11px; font-weight: 950; }.course-phone-controls button span { font-size: 22px; }.course-phone-controls button.active { background: #dc2626; color: #fff; }.course-phone-controls button.play { background: #7c3aed; color: #fff; }
+.course-phone-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.course-phone-controls button { min-height: 82px; display: grid; place-items: center; gap: 4px; padding: 10px; border: 1px solid #334155; border-radius: 16px; background: #fff; color: #172033; font-size: 11px; font-weight: 950; }
+.course-phone-controls button span { font-size: 22px; }
+.course-phone-controls button.active { background: #dc2626; color: #fff; }
+.course-phone-controls button.play { background: #7c3aed; color: #fff; }
+.course-phone-controls button.class-plan,
+.course-phone-plan-toggle-btn {
+    grid-column: 1 / -1;
+    min-height: 72px;
+    display: flex !important;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 18px;
+    border-radius: 20px;
+    background: #ecfdf5;
+    border: 2px solid #10b981;
+    color: #065f46;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+    transition: all 0.2s ease;
+}
+.course-phone-controls button.class-plan.active,
+.course-phone-plan-toggle-btn.active {
+    background: #dc2626 !important;
+    border-color: #b91c1c !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35);
+}
+.course-phone-controls button.class-plan .icon,
+.course-phone-plan-toggle-btn .icon {
+    font-size: 26px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.course-phone-controls button.class-plan .btn-content,
+.course-phone-plan-toggle-btn .btn-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.course-phone-controls button.class-plan .btn-content strong,
+.course-phone-plan-toggle-btn .btn-content strong {
+    font-size: 13px;
+    font-weight: 950;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+.course-phone-controls button.class-plan .btn-content small,
+.course-phone-plan-toggle-btn .btn-content small {
+    font-size: 10px;
+    opacity: 0.85;
+    font-weight: 800;
+    line-height: 1.2;
+}
 
 .course-overlay-layer {
     position: absolute;

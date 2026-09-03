@@ -383,7 +383,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [globalClassId]);
 
     useEffect(() => {
-        if (isPhone || !globalClassId || presentationRemote?.remote?.classPlanVisible !== true) {
+        const projectedClassId = String(presentationRemote?.remote?.classId || globalClassId || '');
+        if (isPhone || !projectedClassId || presentationRemote?.remote?.classPlanVisible !== true) {
             setProjectedClassPlan(null);
             return undefined;
         }
@@ -392,8 +393,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             try {
                 const teacherId = String(user?._id || user?.id || '');
                 const [classResponse, planResponse] = await Promise.all([
-                    fetch(`/api/classroom/${encodeURIComponent(globalClassId)}`, { signal: controller.signal, cache: 'no-store' }),
-                    fetch(`/api/classroom/plan/${encodeURIComponent(globalClassId)}${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`, { signal: controller.signal, cache: 'no-store' })
+                    fetch(`/api/classroom/${encodeURIComponent(projectedClassId)}`, { signal: controller.signal, cache: 'no-store' }),
+                    fetch(`/api/classroom/plan/${encodeURIComponent(projectedClassId)}${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`, { signal: controller.signal, cache: 'no-store' })
                 ]);
                 if (!classResponse.ok || !planResponse.ok) throw new Error('Plan indisponible');
                 const classInfo = await classResponse.json();
@@ -430,7 +431,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         };
         void loadProjectedClassPlan();
         return () => controller.abort();
-    }, [isPhone, globalClassId, globalClass, user?._id, user?.id, presentationRemote?.remote?.classPlanVisible]);
+    }, [isPhone, globalClassId, globalClass, user?._id, user?.id, presentationRemote?.remote?.classId, presentationRemote?.remote?.classPlanVisible]);
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return undefined;
@@ -457,6 +458,86 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         });
         const data = await response.json().catch(() => ({}));
         if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, videoSlides, remote: data.remote }));
+    };
+
+    const toggleProjectedClassPlan = async () => {
+        if (presentationRemote?.courseId) {
+            await sendPresentationCommand('class_plan_toggle');
+        } else if (globalClassId) {
+            try {
+                const res = await fetch('/api/courses/presentation-remote/toggle-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ classId: globalClassId })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data?.remote) {
+                    setPresentationRemote((prev) => ({
+                        ...(prev || {}),
+                        courseId: data.courseId || prev?.courseId || '',
+                        active: true,
+                        remote: data.remote
+                    }));
+                }
+            } catch (_) {}
+        }
+    };
+
+    const renderProjectedClassPlan = () => {
+        if (!presentationRemote?.remote?.classPlanVisible) return null;
+        return (
+            <div className="course-projected-class-plan">
+                {projectedClassPlan?.error ? (
+                    <strong className="course-projected-plan-message">PLAN DE CLASSE INDISPONIBLE</strong>
+                ) : projectedClassPlan ? (
+                    <>
+                        <div className="course-projected-plan-header">
+                            <div className="course-projected-board-indicator">
+                                <span>⬛ TABLEAU & BUREAU DU PROFESSEUR (DEVANT) ⬛</span>
+                            </div>
+                            <div className="course-projected-plan-title">
+                                <strong>{projectedClassPlan.name}</strong>
+                                <span className="course-projected-badge">PLAN VU PAR LES ÉLÈVES (MIROIR)</span>
+                            </div>
+                        </div>
+
+                        <div className="course-projected-plan-orientation-labels">
+                            <span>← GAUCHE DES ÉLÈVES</span>
+                            <span>DROITE DES ÉLÈVES →</span>
+                        </div>
+
+                        <div
+                            className="course-projected-plan-grid"
+                            style={{
+                                gridTemplateColumns: `repeat(${projectedClassPlan.cols}, minmax(0, 1fr))`,
+                                gridTemplateRows: `repeat(${projectedClassPlan.rows}, minmax(0, 1fr))`
+                            }}
+                        >
+                            {projectedClassPlan.seats.map(({ student, x, y }) => (
+                                <div
+                                    className="course-projected-seat"
+                                    key={student?._id || `${x}-${y}`}
+                                    style={{
+                                        gridColumn: projectedClassPlan.cols - x,
+                                        gridRow: y + 1
+                                    }}
+                                >
+                                    <span className="course-projected-seat-avatar">{student?.avatar || student?.emoji || '🎓'}</span>
+                                    <strong className="course-projected-seat-name">{String(student?.firstName || student?.name || 'Élève')}</strong>
+                                    <small className="course-projected-seat-last">{String(student?.lastName || '').slice(0, 1)}{student?.lastName ? '.' : ''}</small>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="course-projected-back-indicator">
+                            <span>FOND DE LA CLASSE (DERRIÈRE)</span>
+                        </div>
+                    </>
+                ) : (
+                    <strong className="course-projected-plan-message">CHARGEMENT DU PLAN…</strong>
+                )}
+            </div>
+        );
     };
 
     const closePresentation = () => {
@@ -1240,9 +1321,54 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const phoneGroups = groupSceneSequences(phoneScenes[phoneSceneIndex]);
         const phoneSequenceIndex = Math.min(Math.max(0, phoneGroups.length - 1), Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0)));
         return <section className="course-phone-remote">
-            {!presentationRemote ? <div className="course-phone-remote-empty"><span>🎬</span><strong>AUCUNE PRÉSENTATION ACTIVE</strong><p>Ouvre un cours sur l’ordinateur du tableau. Les commandes apparaîtront automatiquement ici.</p></div> : <>
-                <div className="course-phone-remote-head"><small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small><strong>{presentationRemote.title}</strong><label>SCÈNES</label><div className="course-phone-scenes">{phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}</div><label>SÉQUENCES DE LA SCÈNE {phoneSceneIndex + 1}</label><div className="course-phone-sequences">{phoneGroups.map((group, index) => <button key={group[0]?.id || index} className={index === phoneSequenceIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}>{index + 1}</button>)}</div><div><span>SCÈNE <b>{phoneSceneIndex + 1}</b></span><span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span></div></div>
+            {!presentationRemote ? (
+                <div className="course-phone-remote-empty">
+                    <span>🎬</span>
+                    <strong>AUCUNE PRÉSENTATION DE SLIDES ACTIVE</strong>
+                    <p>Ouvre un cours sur l’ordinateur du tableau pour piloter les slides en direct.</p>
+                    <div style={{ marginTop: 24, width: '100%', maxWidth: 360 }}>
+                        <button
+                            type="button"
+                            className={`class-plan ${presentationRemote?.remote?.classPlanVisible ? 'active' : ''}`}
+                            onClick={toggleProjectedClassPlan}
+                        >
+                            <span className="icon">{presentationRemote?.remote?.classPlanVisible ? '❌' : '🪑'}</span>
+                            <div className="btn-content">
+                                <strong>{presentationRemote?.remote?.classPlanVisible ? 'ENLEVER LE PLAN DU TABLEAU' : 'AFFICHER LE PLAN AU TABLEAU (MIROIR)'}</strong>
+                                <small>{presentationRemote?.remote?.classPlanVisible ? 'Plan actuellement projeté au tableau · Toucher pour masquer' : 'Affiche le plan orienté vue élèves au tableau'}</small>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            ) : <>
+                <div className="course-phone-remote-head">
+                    <small>COURS AU TABLEAU · SLIDE {phoneSlideIndex + 1}</small>
+                    <strong>{presentationRemote.title}</strong>
+                    <label>SCÈNES</label>
+                    <div className="course-phone-scenes">
+                        {phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}
+                    </div>
+                    <label>SÉQUENCES DE LA SCÈNE {phoneSceneIndex + 1}</label>
+                    <div className="course-phone-sequences">
+                        {phoneGroups.map((group, index) => <button key={group[0]?.id || index} className={index === phoneSequenceIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}>{index + 1}</button>)}
+                    </div>
+                    <div>
+                        <span>SCÈNE <b>{phoneSceneIndex + 1}</b></span>
+                        <span>SÉQUENCE <b>{phoneSequenceIndex + 1}</b></span>
+                    </div>
+                </div>
                 <div className="course-phone-controls">
+                    <button
+                        type="button"
+                        className={`class-plan ${presentationRemote.remote?.classPlanVisible ? 'active' : ''}`}
+                        onClick={toggleProjectedClassPlan}
+                    >
+                        <span className="icon">{presentationRemote.remote?.classPlanVisible ? '❌' : '🪑'}</span>
+                        <div className="btn-content">
+                            <strong>{presentationRemote.remote?.classPlanVisible ? 'ENLEVER LE PLAN DU TABLEAU' : 'AFFICHER LE PLAN AU TABLEAU (MIROIR)'}</strong>
+                            <small>{presentationRemote.remote?.classPlanVisible ? 'Plan affiché par-dessus les slides · Toucher pour fermer' : 'Affiche le plan inversé vue élèves par-dessus les slides'}</small>
+                        </div>
+                    </button>
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
                     <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
                     <button className={presentationRemote.remote?.animationVisible ? 'active' : ''} onClick={() => void sendPresentationCommand('animation_toggle')}><span>🎞</span>{presentationRemote.remote?.animationVisible ? 'Désactiver animation' : 'Activer animation'}</button>
@@ -1544,18 +1670,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             allowFullScreen
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
-                        {presentationRemote?.remote?.classPlanVisible && <div className="course-projected-class-plan">
-                            {projectedClassPlan?.error ? <strong className="course-projected-plan-message">PLAN DE CLASSE INDISPONIBLE</strong> : projectedClassPlan ? <>
-                                <div className="course-projected-plan-title"><strong>{projectedClassPlan.name}</strong><span>PLAN VU PAR LES ÉLÈVES</span></div>
-                                <div className="course-projected-plan-grid" style={{ gridTemplateColumns: `repeat(${projectedClassPlan.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${projectedClassPlan.rows}, minmax(0, 1fr))` }}>
-                                    {projectedClassPlan.seats.map(({ student, x, y }) => <div className="course-projected-seat" key={student?._id || `${x}-${y}`} style={{ gridColumn: projectedClassPlan.cols - x, gridRow: projectedClassPlan.rows - y }}>
-                                        <span>{student?.avatar || student?.emoji || '🎓'}</span>
-                                        <strong>{String(student?.firstName || student?.name || 'Élève')}</strong>
-                                        <small>{String(student?.lastName || '').slice(0, 1)}{student?.lastName ? '.' : ''}</small>
-                                    </div>)}
-                                </div>
-                            </> : <strong className="course-projected-plan-message">CHARGEMENT DU PLAN…</strong>}
-                        </div>}
+                        {renderProjectedClassPlan()}
                         {presentationRemote?.remote?.animationVisible && visibleProjectedVideo && <div className="course-sequence-video-layer">{visibleVideoIsYoutube ? <YoutubeSequencePlayer key={visiblePlaybackKey} video={visibleProjectedVideo} playVersion={presentationRemote.remote.playVersion} autoplayOnMount={youtubeAutoplayOnMount} onEnded={finishProjectedVideo} /> : <video key={visiblePlaybackKey} ref={sequenceVideoRef} src={visibleProjectedVideo.url} playsInline preload="auto" onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0)); }} onTimeUpdate={(event) => { const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0)); if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); } }} onEnded={finishProjectedVideo} />}</div>}
                         {projectedControl && <div className="course-control-projection">
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
@@ -1695,6 +1810,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 onClose={() => setSequenceCutEditor(null)}
                 onSaveSegments={saveAllSequenceCuts}
             />}
+            {(!playingCourse && !isPhone) ? renderProjectedClassPlan() : null}
         </section>
     );
 }

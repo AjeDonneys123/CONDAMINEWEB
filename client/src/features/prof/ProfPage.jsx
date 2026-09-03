@@ -31,7 +31,6 @@ export default function ProfPage({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
-  const [classPlanProjected, setClassPlanProjected] = useState(false);
 
   const loadProfileAndClasses = async () => {
     setLoading(true);
@@ -112,7 +111,7 @@ export default function ProfPage({ user, onLogout }) {
     requestedAt: `${requestedClassId}:${requestedScanTitle}:${requestedScanAuto}`
   } : null;
 
-  const sendClassPlanCommand = async (action) => {
+  const hideProjectedClassPlan = async () => {
     if (!selectedClassId) return null;
     try {
       const activeResponse = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(selectedClassId)}`, { cache: 'no-store' });
@@ -121,11 +120,10 @@ export default function ProfPage({ user, onLogout }) {
       const response = await fetch(`/api/courses/${active.courseId}/presentation-remote/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action: 'class_plan_hide' })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) return null;
-      setClassPlanProjected(data.remote?.classPlanVisible === true);
       return data.remote;
     } catch (_) {
       return null;
@@ -133,14 +131,7 @@ export default function ProfPage({ user, onLogout }) {
   };
 
   const handleTabChange = (nextTab) => {
-    if (isPhone && nextTab === 'classroom' && tab === 'classroom') {
-      void sendClassPlanCommand('class_plan_toggle');
-      return;
-    }
-    if (isPhone && tab === 'classroom' && nextTab !== 'classroom') {
-      setClassPlanProjected(false);
-      void sendClassPlanCommand('class_plan_hide');
-    }
+    if (isPhone && tab === 'exposes' && nextTab !== 'exposes') void hideProjectedClassPlan();
     setTab(nextTab);
   };
 
@@ -180,7 +171,7 @@ export default function ProfPage({ user, onLogout }) {
             )}
         </div>
 
-        <ProfNav activeTab={tab} onTabChange={handleTabChange} user={liveUser} isPhone={isPhone} classPlanProjected={classPlanProjected} />
+        <ProfNav activeTab={tab} onTabChange={handleTabChange} user={liveUser} />
         
         {/* MODIFICATION ICI : On enlève le padding 'p-8' sur mobile (md:p-8) pour que la grille touche les bords */}
         <div className="md:p-8 p-0 bg-white min-h-[600px]">

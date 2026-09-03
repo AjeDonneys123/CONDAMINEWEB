@@ -747,6 +747,9 @@ const Models = {
         spanish: { type: String, required: true, trim: true },
         // Mots ciblés dans une phrase ajoutée par le professeur.
         focusWords: { type: [String], default: [] },
+        exerciseType: { type: String, enum: ['vocabulary', 'correction'], default: 'vocabulary' },
+        incorrectSentence: { type: String, default: '', trim: true },
+        incorrectWords: { type: [String], default: [] },
         correctCount: { type: Number, default: 0 },
         wrongCount: { type: Number, default: 0 },
         correctStreak: { type: Number, default: 0 },

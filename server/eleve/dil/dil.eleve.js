@@ -28,6 +28,9 @@ router.post('/:studentId/vocabulary', async (req, res) => {
     // est volontairement conservée telle quelle des deux côtés.
     const spanish = cleanWord(req.body?.spanish) || french;
     const focusWords = cleanFocusWords(req.body?.focusWords);
+    const exerciseType = req.body?.exerciseType === 'correction' ? 'correction' : 'vocabulary';
+    const incorrectSentence = exerciseType === 'correction' ? cleanWord(req.body?.incorrectSentence) : '';
+    const incorrectWords = exerciseType === 'correction' ? cleanFocusWords(req.body?.incorrectWords) : [];
     if (!french || !spanish || !/[\p{L}]/u.test(french)) return res.status(400).json({ error: 'Mot à traduire invalide.' });
     const student = await Student.findById(req.params.studentId, '_id isDil').lean();
     if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
@@ -35,10 +38,13 @@ router.post('/:studentId/vocabulary', async (req, res) => {
     if (existing) {
         existing.spanish = spanish;
         existing.focusWords = focusWords;
+        existing.exerciseType = exerciseType;
+        existing.incorrectSentence = incorrectSentence;
+        existing.incorrectWords = incorrectWords;
         await existing.save();
         return res.json(existing);
     }
-    res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish, focusWords }));
+    res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish, focusWords, exerciseType, incorrectSentence, incorrectWords }));
 });
 
 router.delete('/:studentId/vocabulary/:wordId', async (req, res) => {
