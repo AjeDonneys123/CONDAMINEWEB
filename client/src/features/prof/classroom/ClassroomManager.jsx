@@ -506,13 +506,12 @@ export default function ClassroomManager({ globalClassId, user }) {
     const isPlanFinderMatch = (stu) => {
         const term = normalizeText(planFinder);
         if (!term) return false;
-        return normalizeText(stu?.firstName || '').includes(term);
+        return normalizeText(stu?.firstName || '').startsWith(term);
     };
     const isListFinderMatch = (stu) => {
         const term = normalizeText(searchTerm);
         if (!term) return true;
-        const fullName = `${stu?.firstName || ''} ${stu?.lastName || ''} ${getDisplayName(stu)}`;
-        return normalizeText(fullName).includes(term);
+        return normalizeText(stu?.firstName || '').startsWith(term);
     };
     const planFinderCount = students.filter(isPlanFinderMatch).length;
     const selectedPlanStudents = students.filter(isPlanFinderMatch);
