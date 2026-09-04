@@ -382,6 +382,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [presentationRemote, setPresentationRemote] = useState(null);
     const [slideManifest, setSlideManifest] = useState([]);
     const [editSlideNumberDraft, setEditSlideNumberDraft] = useState('');
+    const [lastEditSlideNumber, setLastEditSlideNumber] = useState(null);
     const [playingVideoIndex, setPlayingVideoIndex] = useState(0);
     const [heldProjectedVideo, setHeldProjectedVideo] = useState(null);
     const [projectedClassPlan, setProjectedClassPlan] = useState(null);
@@ -1533,6 +1534,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
         setPlayerMode('presentation');
         setEditSlideNumberDraft('');
+        setLastEditSlideNumber(null);
         setPlayingCourse(course);
     };
 
@@ -1571,19 +1573,25 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const togglePlayerMode = async () => {
+        const hasTypedNumber = String(editSlideNumberDraft).trim() !== '';
+        const requestedNumber = Number(hasTypedNumber ? editSlideNumberDraft : (playerMode === 'edit' ? lastEditSlideNumber : NaN));
+        const total = Math.max(1, slideManifest.length || 1);
+        if (!Number.isInteger(requestedNumber) || requestedNumber < 1 || requestedNumber > total) return;
+        const targetSlideIndex = requestedNumber - 1;
         if (playerMode === 'presentation') {
-            const requestedNumber = Number(editSlideNumberDraft);
-            const total = Math.max(1, slideManifest.length || 1);
-            if (!Number.isInteger(requestedNumber) || requestedNumber < 1 || requestedNumber > total) return;
-            await openModification(playingCourse, requestedNumber - 1);
+            setLastEditSlideNumber(requestedNumber);
+            await openModification(playingCourse, targetSlideIndex);
+            setEditSlideNumberDraft('');
         } else {
+            const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || '').trim();
+            setPlayingCourse((current) => current ? { ...current, editSlideObjectId } : current);
             setPlayerMode('presentation');
             setEditSlideNumberDraft('');
             void sendPresentationCommand('mode_change', {
                 playerMode: 'presentation',
-                slideIndex: projectedSlideIndex,
-                sceneIndex: projectedSceneIndex,
-                sequenceIndex: projectedSequenceIndex
+                slideIndex: targetSlideIndex,
+                sceneIndex: targetSlideIndex === projectedSlideIndex ? projectedSceneIndex : 0,
+                sequenceIndex: targetSlideIndex === projectedSlideIndex ? projectedSequenceIndex : 0
             });
         }
     };
@@ -2086,25 +2094,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
                             allowFullScreen
                         />
-                        {playerMode === 'edit' && (
-                            <aside className="course-conda-slide-rail" aria-label="Slides CondaWeb">
-                                <div className="course-conda-slide-rail-title">SLIDES</div>
-                                <div className="course-conda-slide-rail-list">
-                                    {slideManifest.map((slide, index) => (
-                                        <button
-                                            type="button"
-                                            key={slide.objectId || slide.slideNumber || index}
-                                            className={index === projectedSlideIndex ? 'selected' : ''}
-                                            onClick={() => void selectProjectedSlide(index)}
-                                            title={`Ouvrir la slide ${index + 1}`}
-                                        >
-                                            <span>{index + 1}</span>
-                                            <CourseSlideThumbnail slide={slide} />
-                                        </button>
-                                    ))}
-                                </div>
-                            </aside>
-                        )}
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
                         {preloadItems.length > 0 ? (
@@ -2330,32 +2319,31 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex + 1)} disabled={projectedSlideIndex >= Math.max(0, slideManifest.length - 1)} aria-label="Diapo suivante">›</button>
                             </div>
                             <div className={`course-edit-mode-control ${playerMode === 'edit' ? 'active' : ''}`}>
-                                {playerMode === 'presentation' && (
-                                    <label title="Numéro de la slide Google actuellement affichée">
-                                        <span>SLIDE</span>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max={Math.max(1, slideManifest.length || 1)}
-                                            value={editSlideNumberDraft}
-                                            onChange={(event) => setEditSlideNumberDraft(event.target.value)}
-                                            onKeyDown={(event) => {
-                                                event.stopPropagation();
-                                                if (event.key === 'Enter') void togglePlayerMode();
-                                            }}
-                                            aria-label="Numéro de la slide à modifier"
-                                        />
-                                    </label>
-                                )}
+                                <label title={`Numéro de la slide à ouvrir en mode ${playerMode === 'presentation' ? 'modification' : 'lecture'}`}>
+                                    <span>SLIDE</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max={Math.max(1, slideManifest.length || 1)}
+                                        value={editSlideNumberDraft}
+                                        placeholder={playerMode === 'edit' && lastEditSlideNumber ? String(lastEditSlideNumber) : ''}
+                                        onChange={(event) => setEditSlideNumberDraft(event.target.value)}
+                                        onKeyDown={(event) => {
+                                            event.stopPropagation();
+                                            if (event.key === 'Enter') void togglePlayerMode();
+                                        }}
+                                        aria-label={`Numéro de la slide à ouvrir en mode ${playerMode === 'presentation' ? 'modification' : 'lecture'}`}
+                                    />
+                                </label>
                                 <button
                                     type="button"
                                     className={`course-edit-mode-button ${playerMode === 'edit' ? 'active' : ''}`}
                                     onClick={() => void togglePlayerMode()}
-                                    disabled={playerMode === 'presentation' && (
-                                        !Number.isInteger(Number(editSlideNumberDraft))
-                                        || Number(editSlideNumberDraft) < 1
-                                        || Number(editSlideNumberDraft) > Math.max(1, slideManifest.length || 1)
-                                    )}
+                                    disabled={(() => {
+                                        const typed = String(editSlideNumberDraft).trim() !== '';
+                                        const candidate = Number(typed ? editSlideNumberDraft : (playerMode === 'edit' ? lastEditSlideNumber : NaN));
+                                        return !Number.isInteger(candidate) || candidate < 1 || candidate > Math.max(1, slideManifest.length || 1);
+                                    })()}
                                 >
                                     {playerMode === 'presentation' ? '✎ MODIFIER' : '▶ PASSER EN MODE LECTURE'}
                                 </button>
