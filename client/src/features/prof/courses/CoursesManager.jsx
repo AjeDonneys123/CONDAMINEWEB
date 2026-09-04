@@ -399,6 +399,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sequenceCutVideoRef = useRef(null);
     const coursePlayerRef = useRef(null);
     const presentationIframeRef = useRef(null);
+    const externalSlidesEditorOpenedRef = useRef(false);
     const completedProjectedVideoRef = useRef('');
     const consumedYoutubePlayVersionRef = useRef(0);
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
@@ -869,16 +870,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const projectedSlideObjectId = String(
         slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || ''
     ).trim();
-    const editorSlideObjectId = String(
-        playingCourse?.editSlideObjectId || projectedSlideObjectId || ''
-    ).trim();
     const presentationReloadNonce = Number(playingCourse?.presentationReloadNonce || 0);
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}&condaReload=${presentationReloadNonce}`
         : `${getEmbedUrl(playingCourse?.slidesUrl)}&condaReload=${presentationReloadNonce}`;
-    const editSlidesUrl = editorSlideObjectId
-        ? `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}#slide=id.${encodeURIComponent(editorSlideObjectId)}`
-        : `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}`;
     const finishProjectedVideo = () => {
         const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
         if (completedProjectedVideoRef.current === completionKey) return;
@@ -1573,6 +1568,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             Math.max(0, Number(requestedSlideIndex) || 0)
         );
         const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || projectedSlideObjectId || '').trim();
+        // Le nouvel onglet doit être créé pendant le clic utilisateur, avant le fetch,
+        // sinon les navigateurs mobiles et desktop peuvent le bloquer comme popup.
+        const editorWindow = window.open('about:blank', '_blank');
         try {
             const response = await fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
@@ -1581,22 +1579,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Accès en modification impossible');
-            setPlayerMode('edit');
+            const editBaseUrl = getEditUrl(data.editUrl || course.slidesUrl);
+            const targetUrl = editSlideObjectId
+                ? `${editBaseUrl}#slide=id.${encodeURIComponent(editSlideObjectId)}`
+                : editBaseUrl;
+            if (editorWindow) editorWindow.location.replace(targetUrl);
+            else window.open(targetUrl, '_blank', 'noopener,noreferrer');
+            externalSlidesEditorOpenedRef.current = true;
+            setLastEditSlideNumber(targetSlideIndex + 1);
+            setEditSlideNumberDraft('');
             setPlayingCourse((current) => ({
                 ...(current || course),
                 slidesUrl: data.editUrl || course.slidesUrl,
-                // Recharge l'éditeur seulement lors de son premier déverrouillage.
-                // Les passages suivants lecture <-> édition gardent la même iframe vivante.
-                editorNonce: current?.editorNonce || Date.now(),
                 editSlideObjectId
             }));
-            void sendPresentationCommand('mode_change', {
-                playerMode: 'edit',
-                slideIndex: targetSlideIndex,
-                sceneIndex: targetSlideIndex === projectedSlideIndex ? projectedSceneIndex : 0,
-                sequenceIndex: targetSlideIndex === projectedSlideIndex ? projectedSequenceIndex : 0
-            });
         } catch (accessError) {
+            try { editorWindow?.close(); } catch (_) { }
             setError(accessError.message);
             alert(`Impossible d’ouvrir cette présentation en modification : ${accessError.message}`);
         }
@@ -1604,38 +1602,31 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const togglePlayerMode = async () => {
         const hasTypedNumber = String(editSlideNumberDraft).trim() !== '';
-        const requestedNumber = Number(hasTypedNumber ? editSlideNumberDraft : (playerMode === 'edit' ? lastEditSlideNumber : NaN));
+        const requestedNumber = Number(hasTypedNumber ? editSlideNumberDraft : projectedSlideIndex + 1);
         const total = Math.max(1, slideManifest.length || 1);
         if (!Number.isInteger(requestedNumber) || requestedNumber < 1 || requestedNumber > total) return;
-        const targetSlideIndex = requestedNumber - 1;
-        if (playerMode === 'presentation') {
-            setLastEditSlideNumber(requestedNumber);
-            await openModification(playingCourse, targetSlideIndex);
-            setEditSlideNumberDraft('');
-        } else {
-            const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || '').trim();
-            const presentationReloadNonce = Date.now();
-            setPresentationRemote((current) => current ? {
-                ...current,
-                remote: {
-                    ...(current.remote || {}),
-                    playerMode: 'presentation',
-                    slideIndex: targetSlideIndex,
-                    sceneIndex: targetSlideIndex === projectedSlideIndex ? projectedSceneIndex : 0,
-                    sequenceIndex: targetSlideIndex === projectedSlideIndex ? projectedSequenceIndex : 0
-                }
-            } : current);
-            setPlayingCourse((current) => current ? { ...current, editSlideObjectId, presentationReloadNonce } : current);
-            setPlayerMode('presentation');
-            setEditSlideNumberDraft('');
-            void sendPresentationCommand('mode_change', {
-                playerMode: 'presentation',
-                slideIndex: targetSlideIndex,
-                sceneIndex: targetSlideIndex === projectedSlideIndex ? projectedSceneIndex : 0,
-                sequenceIndex: targetSlideIndex === projectedSlideIndex ? projectedSequenceIndex : 0
-            });
-        }
+        await openModification(playingCourse, requestedNumber - 1);
     };
+
+    useEffect(() => {
+        if (isPhone || !playingCourse?._id) return undefined;
+        const refreshAfterExternalEdit = () => {
+            if (!externalSlidesEditorOpenedRef.current || document.visibilityState === 'hidden') return;
+            setPlayingCourse((current) => current ? { ...current, presentationReloadNonce: Date.now() } : current);
+            fetch('/api/learning/slides/manifest', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
+            }).then((response) => response.json())
+                .then((data) => setSlideManifest(Array.isArray(data?.slides) ? data.slides : []))
+                .catch(() => { });
+        };
+        window.addEventListener('focus', refreshAfterExternalEdit);
+        document.addEventListener('visibilitychange', refreshAfterExternalEdit);
+        return () => {
+            window.removeEventListener('focus', refreshAfterExternalEdit);
+            document.removeEventListener('visibilitychange', refreshAfterExternalEdit);
+        };
+    }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl]);
 
     const createCourseSection = async () => {
         const name = window.prompt('Nom de la nouvelle section :', 'Nouvelle section');
@@ -2142,14 +2133,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             allowFullScreen
                             aria-hidden={playerMode !== 'presentation'}
                         />
-                        <iframe
-                            key={`editor-${playingCourse?.editorNonce || 0}`}
-                            className={`course-player-frame editor ${playerMode === 'edit' ? 'active' : 'inactive'}`}
-                            title={`${playingCourse.title} — modification`}
-                            src={editSlidesUrl}
-                            allowFullScreen
-                            aria-hidden={playerMode !== 'edit'}
-                        />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
                         {preloadItems.length > 0 ? (
@@ -2378,34 +2361,34 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 </label>
                                 <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex + 1)} disabled={projectedSlideIndex >= Math.max(0, slideManifest.length - 1)} aria-label="Diapo suivante">›</button>
                             </div>
-                            <div className={`course-edit-mode-control ${playerMode === 'edit' ? 'active' : ''}`}>
-                                <label title={`Numéro de la slide à ouvrir en mode ${playerMode === 'presentation' ? 'modification' : 'lecture'}`}>
+                            <div className="course-edit-mode-control">
+                                <label title="Numéro de la slide à ouvrir dans Google Slides">
                                     <span>SLIDE</span>
                                     <input
                                         type="number"
                                         min="1"
                                         max={Math.max(1, slideManifest.length || 1)}
                                         value={editSlideNumberDraft}
-                                        placeholder={playerMode === 'edit' && lastEditSlideNumber ? String(lastEditSlideNumber) : ''}
+                                        placeholder={String(projectedSlideIndex + 1)}
                                         onChange={(event) => setEditSlideNumberDraft(event.target.value)}
                                         onKeyDown={(event) => {
                                             event.stopPropagation();
                                             if (event.key === 'Enter') void togglePlayerMode();
                                         }}
-                                        aria-label={`Numéro de la slide à ouvrir en mode ${playerMode === 'presentation' ? 'modification' : 'lecture'}`}
+                                        aria-label="Numéro de la slide à ouvrir dans Google Slides"
                                     />
                                 </label>
                                 <button
                                     type="button"
-                                    className={`course-edit-mode-button ${playerMode === 'edit' ? 'active' : ''}`}
+                                    className="course-edit-mode-button"
                                     onClick={() => void togglePlayerMode()}
                                     disabled={(() => {
                                         const typed = String(editSlideNumberDraft).trim() !== '';
-                                        const candidate = Number(typed ? editSlideNumberDraft : (playerMode === 'edit' ? lastEditSlideNumber : NaN));
+                                        const candidate = Number(typed ? editSlideNumberDraft : projectedSlideIndex + 1);
                                         return !Number.isInteger(candidate) || candidate < 1 || candidate > Math.max(1, slideManifest.length || 1);
                                     })()}
                                 >
-                                    {playerMode === 'presentation' ? '✎ MODIFIER' : '▶ PASSER EN MODE LECTURE'}
+                                    ✎ MODIFIER DANS GOOGLE SLIDES
                                 </button>
                             </div>
                             <button type="button" className="course-sync-board-button" onClick={() => void forceSyncRemote()} title="Envoyer la diapo CondaWeb active au téléphone">
