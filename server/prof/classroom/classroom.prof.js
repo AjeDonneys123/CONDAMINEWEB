@@ -599,16 +599,18 @@ router.post('/:classId/live-action', async (req, res) => {
             cls.activeStudentBonusAlertTime = new Date();
         } else if (action === 'bonus-message') {
             const now = new Date();
-            const cutoff = now.getTime() - 3000;
-            const active = (Array.isArray(cls.activeScoreAlerts) ? cls.activeScoreAlerts : [])
-                .filter((row) => new Date(row?.createdAt || 0).getTime() > cutoff);
-            active.push({
+            const alert = {
                 id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
                 message: String(message || studentName || '').trim(),
                 createdAt: now
-            });
-            cls.activeScoreAlerts = active.slice(-6);
-            cls.markModified('activeScoreAlerts');
+            };
+            // Mise à jour atomique : deux appuis rapprochés ne peuvent plus
+            // s'écraser mutuellement dans le tableau d'alertes.
+            await Classroom.updateOne(
+                { _id: classId },
+                { $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } } }
+            );
+            return res.json({ ok: true, alert });
         } else if (action === 'class-bonus') {
             cls.activeStudentBonusAlert = message || 'Bravo +1';
             cls.activeStudentBonusAlertTime = new Date();

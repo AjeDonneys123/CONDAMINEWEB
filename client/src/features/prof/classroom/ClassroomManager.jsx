@@ -193,6 +193,14 @@ export default function ClassroomManager({ globalClassId, user }) {
 
     useEffect(() => { loadData(); }, [globalClassId, myId]);
 
+    // Tant que le plan est projeté, relire régulièrement le plan enregistré :
+    // un déplacement fait depuis un autre appareil apparaît ainsi au tableau.
+    useEffect(() => {
+        if (!classPlanProjected || !globalClassId) return undefined;
+        const interval = window.setInterval(() => void loadData(), 1500);
+        return () => window.clearInterval(interval);
+    }, [classPlanProjected, globalClassId, myId]);
+
     useEffect(() => {
         currentViewModeRef.current = viewMode;
     }, [viewMode]);
@@ -316,18 +324,19 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
     const showScoreEvolutionOnBoard = async (student, delta) => {
         if (!globalClassId || !student?._id) return;
-        const nextScore = getStudentScore(student) + Number(delta || 0);
+        const appliedDelta = Number(delta || 0) < 0 ? -0.5 : 0.5;
+        const nextScore = getStudentScore(student) + appliedDelta;
         const shortName = `${getDisplayName(student)} ${String(student?.lastName || '').slice(0, 1)}.`.trim();
-        const isUp = Number(delta || 0) > 0;
+        const isUp = appliedDelta > 0;
         const message = isUp
             ? `${shortName}  +0,5  →  ${formatScore(nextScore)}`
-            : `${shortName} - Nouvelle note : ${formatScore(nextScore)}`;
+            : `${shortName}  −0,5  →  ${formatScore(nextScore)}`;
         try {
             await fetch(`/api/classroom/${globalClassId}/live-action`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: isUp ? 'bonus-message' : 'highlight',
+                    action: 'bonus-message',
                     studentName: message,
                     message
                 })
@@ -764,8 +773,8 @@ export default function ClassroomManager({ globalClassId, user }) {
         const skipFlash = Boolean(options.skipFlash);
         const silentReload = Boolean(options.silentReload);
         const targetStudent = students.find((s) => String(s._id) === String(sid));
-        if (!skipFlash && targetStudent && type === 'ADJUST_SCORE' && Number(extra?.delta || 0) > 0) {
-            showScoreEvolutionOnBoard(targetStudent, 0.5);
+        if (!skipFlash && targetStudent && type === 'ADJUST_SCORE' && Number(extra?.delta || 0) !== 0) {
+            showScoreEvolutionOnBoard(targetStudent, Number(extra?.delta || 0));
         }
 
         const optimisticScoreId = type === 'ADD_SCORE'
@@ -1034,7 +1043,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {searchTerm.trim() ? listFinderCount : students.length}
                         </span>}
                         <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
-                        {renderProjectorButton()}
                         {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                         {(frenchMode ? frenchExpression : searchTerm).trim() && (
                             <button
@@ -1156,6 +1164,46 @@ export default function ClassroomManager({ globalClassId, user }) {
         <div className="classroom-wrapper" style={{ '--grid-cols': gridSize.cols }}>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*,.csv,.tsv,.txt,text/csv,text/tab-separated-values" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
+            {classPlanProjected && viewMode === 'PLAN' && (
+                <div className="cm-local-projected-plan" role="dialog" aria-label="Plan de classe miroir projeté">
+                    <button
+                        type="button"
+                        className="cm-local-plan-close"
+                        onClick={toggleTableauPlan}
+                        disabled={togglingPlan}
+                        aria-label="Fermer le plan de classe"
+                        title="Fermer le plan de classe"
+                    >×</button>
+                    <div className="cm-local-board-indicator">TABLEAU &amp; BUREAU DU PROFESSEUR (DEVANT)</div>
+                    <div className="cm-local-plan-heading">
+                        <strong>PLAN DE CLASSE</strong>
+                        <span>PLAN VU PAR LES ÉLÈVES (MIROIR)</span>
+                    </div>
+                    <div className="cm-local-orientation"><span>← GAUCHE DES ÉLÈVES</span><span>DROITE DES ÉLÈVES →</span></div>
+                    <div
+                        className="cm-local-plan-grid"
+                        style={{
+                            gridTemplateColumns: `repeat(${gridSize.cols}, minmax(0, 1fr))`,
+                            gridTemplateRows: `repeat(${effectivePlanRows}, minmax(0, 1fr))`
+                        }}
+                    >
+                        {students.filter((student) => Number.isInteger(student.seatX) && Number.isInteger(student.seatY)).map((student) => (
+                            <div
+                                key={student._id}
+                                className="cm-local-plan-seat"
+                                style={{
+                                    gridColumn: gridSize.cols - student.seatX,
+                                    gridRow: effectivePlanRows - student.seatY
+                                }}
+                            >
+                                <strong>{getDisplayName(student)}</strong>
+                                <small>{student.lastName ? `${String(student.lastName).trim().charAt(0)}.` : ''}</small>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="cm-local-back">FOND DE LA CLASSE (DERRIÈRE)</div>
+                </div>
+            )}
             
             <div className="cm-header">
                 <h2 className="cm-title md:block hidden">{viewMode === 'PLAN' ? 'MODE PLAN' : 'MODE LISTE'}</h2>

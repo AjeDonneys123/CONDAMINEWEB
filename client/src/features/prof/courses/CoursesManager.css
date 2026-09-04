@@ -1179,6 +1179,16 @@
     background: #facc15;
     color: #172033;
 }
+.course-player-mode-switch .course-edit-mode-button {
+    border-color: #0f172a;
+    background: #fff;
+    color: #000;
+}
+.course-player-mode-switch .course-edit-mode-button.active {
+    border-color: #facc15;
+    background: #facc15;
+    color: #000;
+}
 .course-player-mode-switch .course-animation-button {
     border-color: #a78bfa;
     background: #7c3aed;

@@ -639,29 +639,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, videoSlides, remote: data.remote }));
     };
 
-    const toggleProjectedClassPlan = async () => {
-        if (presentationRemote?.courseId) {
-            await sendPresentationCommand('class_plan_toggle');
-        } else if (globalClassId) {
-            try {
-                const res = await fetch('/api/courses/presentation-remote/toggle-plan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ classId: globalClassId })
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok && data?.remote) {
-                    setPresentationRemote((prev) => ({
-                        ...(prev || {}),
-                        courseId: data.courseId || prev?.courseId || '',
-                        active: true,
-                        remote: data.remote
-                    }));
-                }
-            } catch (_) { }
-        }
-    };
-
     const forceSyncRemote = async () => {
         try {
             const classId = globalClassId || presentationRemote?.remote?.classId || '';
@@ -710,7 +687,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 <button
                     type="button"
                     className="course-projected-plan-close"
-                    onClick={() => void sendPresentationCommand('class_plan_hide')}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setPresentationRemote((current) => current ? {
+                            ...current,
+                            remote: { ...(current.remote || {}), classPlanVisible: false }
+                        } : current);
+                        void sendPresentationCommand('class_plan_hide');
+                    }}
                     aria-label="Fermer le plan de classe"
                     title="Fermer le plan de classe"
                 >×</button>
@@ -1655,19 +1641,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     <span>🎬</span>
                     <strong>AUCUNE PRÉSENTATION DE SLIDES ACTIVE</strong>
                     <p>Ouvre un cours sur l’ordinateur du tableau pour piloter les slides en direct.</p>
-                    <div style={{ marginTop: 24, width: '100%', maxWidth: 360 }}>
-                        <button
-                            type="button"
-                            className={`class-plan ${presentationRemote?.remote?.classPlanVisible ? 'active' : ''}`}
-                            onClick={toggleProjectedClassPlan}
-                        >
-                            <span className="icon">{presentationRemote?.remote?.classPlanVisible ? '❌' : '🪑'}</span>
-                            <div className="btn-content">
-                                <strong>{presentationRemote?.remote?.classPlanVisible ? 'ENLEVER LE PLAN DU TABLEAU' : 'AFFICHER LE PLAN AU TABLEAU (MIROIR)'}</strong>
-                                <small>{presentationRemote?.remote?.classPlanVisible ? 'Plan actuellement projeté au tableau · Toucher pour masquer' : 'Affiche le plan orienté vue élèves au tableau'}</small>
-                            </div>
-                        </button>
-                    </div>
                 </div>
             ) : <>
                 <div className="course-phone-remote-head">
@@ -1749,17 +1722,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     </div>
                 </div>
                 <div className="course-phone-controls">
-                    <button
-                        type="button"
-                        className={`class-plan ${presentationRemote.remote?.classPlanVisible ? 'active' : ''}`}
-                        onClick={toggleProjectedClassPlan}
-                    >
-                        <span className="icon">{presentationRemote.remote?.classPlanVisible ? '❌' : '🪑'}</span>
-                        <div className="btn-content">
-                            <strong>{presentationRemote.remote?.classPlanVisible ? 'ENLEVER LE PLAN DU TABLEAU' : 'AFFICHER LE PLAN AU TABLEAU (MIROIR)'}</strong>
-                            <small>{presentationRemote.remote?.classPlanVisible ? 'Plan affiché par-dessus les slides · Toucher pour fermer' : 'Affiche le plan inversé vue élèves par-dessus les slides'}</small>
-                        </div>
-                    </button>
                     <button
                         type="button"
                         className="course-phone-resync-action"
@@ -2076,7 +2038,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             {playingCourse && (
                 <div className="course-player-backdrop" role="dialog" aria-modal="true" aria-label={playingCourse.title} tabIndex={-1} ref={coursePlayerRef}>
                     <div className="course-player-stage">
-                        <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
+                        {!presentationRemote?.remote?.classPlanVisible && (
+                            <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
+                        )}
                         <iframe
                             title={playingCourse.title}
                             src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
@@ -2273,7 +2237,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                             <button
                                 type="button"
-                                className={playerMode === 'edit' ? 'active' : ''}
+                                className={`course-edit-mode-button ${playerMode === 'edit' ? 'active' : ''}`}
                                 onClick={() => void togglePlayerMode()}
                             >
                                 {playerMode === 'presentation' ? '✎ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}
