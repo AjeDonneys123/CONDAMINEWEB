@@ -22,6 +22,7 @@ export default function SharedVideoSequenceEditor({ video, siblingSegments = [],
   const [playhead, setPlayhead] = useState(Math.max(0, Number(video?.startSec || 0)));
   const [playing, setPlaying] = useState(false);
   const isYoutube = video?.sourceType === 'youtube' || Boolean(youtubeId(video?.url));
+  const isAudio = video?.sourceType === 'audio' || String(video?.mimeType || '').startsWith('audio/') || /\.(?:mp3|m4a|aac|wav|ogg|oga|flac)(?:[?#].*)?$/i.test(String(video?.url || video?.name || ''));
   const selected = segments.find((item) => String(item.id) === selectedId) || segments[0];
   const timelineDuration = Math.max(1, Math.ceil(duration || Math.max(...segments.map((item) => Number(item.endSec || 0)), 1)));
   const zones = segments.map((item, index) => {
@@ -57,7 +58,7 @@ export default function SharedVideoSequenceEditor({ video, siblingSegments = [],
       <header><div><strong>ÉDITEUR SÉQUENCES VIDÉO</strong><span>{video?.name || 'Vidéo'}</span></div><div className="shared-video-count">{segments.length} SÉQUENCE{segments.length > 1 ? 'S' : ''}</div><button onClick={onClose}>×</button></header>
       <main>
         <section className="shared-video-editor-main">
-          <div className="shared-video-editor-player">{isYoutube ? <iframe src={`https://www.youtube.com/embed/${youtubeId(video.url)}?rel=0&playsinline=1`} title={video.name || 'YouTube'} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : <video ref={playerRef} src={video?.url} controls onLoadedMetadata={(event) => { const total = Number(event.currentTarget.duration || 0); setDuration(total); seek(selected?.startSec || 0); }} onTimeUpdate={(event) => setPlayhead(Number(event.currentTarget.currentTime || 0))} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />}</div>
+          <div className={`shared-video-editor-player ${isAudio ? 'audio' : ''}`}>{isYoutube ? <iframe src={`https://www.youtube.com/embed/${youtubeId(video.url)}?rel=0&playsinline=1`} title={video.name || 'YouTube'} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : isAudio ? <audio ref={playerRef} src={video?.url} controls onLoadedMetadata={(event) => { const total = Number(event.currentTarget.duration || 0); setDuration(total); seek(selected?.startSec || 0); }} onTimeUpdate={(event) => setPlayhead(Number(event.currentTarget.currentTime || 0))} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} /> : <video ref={playerRef} src={video?.url} controls onLoadedMetadata={(event) => { const total = Number(event.currentTarget.duration || 0); setDuration(total); seek(selected?.startSec || 0); }} onTimeUpdate={(event) => setPlayhead(Number(event.currentTarget.currentTime || 0))} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />}</div>
           <div className="shared-video-timeline">
             <div className="shared-video-timeline-tools"><button onClick={toggle} disabled={isYoutube}>{playing ? 'Pause' : 'Play'}</button><strong>{playhead.toFixed(1)}s / {timelineDuration}s</strong><button className="cut" onClick={cutAtCursor} disabled={isYoutube || !selected}>✂ COUPER ICI</button></div>
             <input type="range" min="0" max={timelineDuration} step="0.1" value={Math.min(playhead, timelineDuration)} onChange={(event) => seek(event.target.value)} disabled={isYoutube} />

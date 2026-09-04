@@ -430,18 +430,20 @@ router.post('/mobile-action-access', async (req, res) => {
 
 router.post('/presentation-video-upload', videoUpload.single('file'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ ok: false, error: 'Fichier MP4 requis' });
-        if (!String(req.file.mimetype || '').startsWith('video/')) {
+        if (!req.file) return res.status(400).json({ ok: false, error: 'Fichier audio ou vidéo requis' });
+        const isSupportedMedia = /^(?:audio|video)\//i.test(String(req.file.mimetype || ''))
+            || /\.(?:mp3|m4a|aac|wav|ogg|oga|flac|mp4|webm)$/i.test(String(req.file.originalname || ''));
+        if (!isSupportedMedia) {
             try { fs.unlinkSync(req.file.path); } catch (_) {}
-            return res.status(400).json({ ok: false, error: 'Le fichier doit être une vidéo' });
+            return res.status(400).json({ ok: false, error: 'Le fichier doit être un audio ou une vidéo compatible' });
         }
-        const folderId = await DriveEngine.getOrCreateFolder('WEB5E_VIDEOS');
-        const driveFile = await DriveEngine.uploadFile(req.file.originalname || 'sequence.mp4', req.file.path, folderId);
+        const folderId = await DriveEngine.getOrCreateFolder('WEB5E_MEDIAS');
+        const driveFile = await DriveEngine.uploadFile(req.file.originalname || 'sequence-media', req.file.path, folderId);
         try { fs.unlinkSync(req.file.path); } catch (_) {}
         return res.json({ ok: true, url: `/api/proxy/${driveFile.id}`, driveFileId: driveFile.id });
     } catch (e) {
         if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(500).json({ ok: false, error: e.message || 'Import vidéo impossible' });
+        return res.status(500).json({ ok: false, error: e.message || 'Import du média impossible' });
     }
 });
 

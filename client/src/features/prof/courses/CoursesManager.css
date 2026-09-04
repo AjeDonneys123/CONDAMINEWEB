@@ -1398,13 +1398,15 @@
 .course-video-sequence-row input.course-video-sequence-number { min-width: 34px; padding: 0; border: 0; text-align: center; appearance: textfield; cursor: text; }
 .course-video-sequence-row input.course-video-sequence-number::-webkit-inner-spin-button { margin: 0; }
 .course-video-sequence-row video { width: 150px; height: 84px; border-radius: 10px; background: #0f172a; object-fit: contain; }
+.course-video-sequence-row audio { width: 150px; min-height: 54px; accent-color: #7c3aed; }
 .course-video-sequence-row iframe { width: 150px; height: 84px; border: 0; border-radius: 10px; background: #0f172a; }
 .course-video-media-cell { display: grid; gap: 7px; }.course-video-media-cell > button.course-open-sequence-editor { display: grid; gap: 2px; border: 2px solid #7c3aed; border-radius: 10px; padding: 8px 10px; background: #7c3aed; color: #fff; text-align: center; cursor: pointer; box-shadow: 0 5px 12px rgba(124,58,237,.22); }.course-open-sequence-editor strong { font-size: 9px; font-weight: 950; }.course-open-sequence-editor span { color: #ede9fe; font-size: 8px; font-weight: 800; }
+.course-video-media-cell.audio { align-self: stretch; align-content: center; padding: 8px; border-radius: 10px; background: #f3e8ff; }
 .course-video-editor-help { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 12px 15px; border: 1px solid #c4b5fd; border-radius: 13px; background: #f5f3ff; color: #5b21b6; }.course-video-editor-help strong { flex: 0 0 auto; font-size: 11px; }.course-video-editor-help span { font-size: 10px; font-weight: 750; }
 .course-video-sequence-row > input { min-width: 0; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 11px; font-weight: 750; }
 .course-video-close-after { display: flex; align-items: center; gap: 7px; color: #b91c1c; font-size: 11px; font-weight: 900; white-space: nowrap; }
 .course-video-delete { width: 36px; height: 36px; border: 0; border-radius: 50%; background: #fee2e2; color: #b91c1c; font-size: 22px; cursor: pointer; }
-@media (max-width: 760px) { .course-video-sequence-row { grid-template-columns: 24px 36px 1fr 36px; } .course-video-media-cell { grid-column: 2 / 4; }.course-video-sequence-row video, .course-video-sequence-row iframe { width: 100%; height: 150px; } .course-video-sequence-row > input, .course-video-close-after { grid-column: 2 / 4; } .course-video-delete { grid-column: 4; grid-row: 1; } .course-video-youtube-add { flex-direction: column; } }
+@media (max-width: 760px) { .course-video-sequence-row { grid-template-columns: 24px 36px 1fr 36px; } .course-video-media-cell { grid-column: 2 / 4; }.course-video-sequence-row video, .course-video-sequence-row iframe, .course-video-sequence-row audio { width: 100%; } .course-video-sequence-row video, .course-video-sequence-row iframe { height: 150px; } .course-video-sequence-row > input, .course-video-close-after { grid-column: 2 / 4; } .course-video-delete { grid-column: 4; grid-row: 1; } .course-video-youtube-add { flex-direction: column; } }
 .course-video-drop-end { height: 0; overflow: hidden; border: 0 dashed #8b5cf6; border-radius: 12px; color: transparent; text-align: center; font-size: 10px; font-weight: 900; transition: all .15s; }
 .course-video-drop-end.active { height: 38px; padding: 10px; border-width: 2px; color: #7c3aed; }
 .course-video-empty.drop-ready { border-color: #8b5cf6; background: #f5f3ff; color: #6d28d9; }
@@ -1424,6 +1426,9 @@
     visibility: visible !important;
     z-index: 50 !important;
 }
+.course-sequence-video-layer.audio,
+.course-sequence-video-layer.audio.active { background: transparent !important; pointer-events: none !important; }
+.course-sequence-video-layer.audio audio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .course-sequence-video-layer .course-youtube-player, .course-sequence-video-layer iframe { width: 100%; height: 100%; border: 0; }
 .course-sequence-video-layer .course-youtube-player { position: relative; overflow: hidden; background: #000; }
 .course-sequence-video-layer .course-youtube-player-host { position: relative; z-index: 2; width: 100%; height: 100%; opacity: 0; }
@@ -1441,6 +1446,8 @@
 .shared-video-editor-window > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; }.shared-video-editor-window > header div { display: grid; gap: 3px; }.shared-video-editor-window > header strong { color: #1e293b; font-size: 15px; }.shared-video-editor-window > header span { color: #64748b; font-size: 11px; font-weight: 800; }.shared-video-editor-window > header button { width: 42px; height: 42px; border: 0; border-radius: 50%; background: #f1f5f9; color: #475569; font-size: 25px; }
 .shared-video-editor-window > header .shared-video-count { display: block; margin-left: auto; margin-right: 14px; padding: 8px 12px; border-radius: 10px; background: #ede9fe; color: #5b21b6; font-size: 11px; font-weight: 950; }
 .shared-video-editor-window > main { display: grid; grid-template-columns: minmax(0,1fr) 290px; min-height: 0; }.shared-video-editor-main { min-height: 0; display: grid; grid-template-rows: minmax(0,1fr) auto; gap: 12px; padding: 16px; background: #f1f5f9; }.shared-video-editor-player { min-height: 0; overflow: hidden; border-radius: 14px; background: #000; }.shared-video-editor-player video, .shared-video-editor-player iframe { width: 100%; height: 100%; border: 0; object-fit: contain; }
+.shared-video-editor-player.audio { display: grid; place-items: center; min-height: 220px; padding: 28px; background: linear-gradient(135deg, #2e1065, #6d28d9); }
+.shared-video-editor-player.audio audio { width: min(620px, 90%); }
 .shared-video-timeline { padding: 12px; border: 1px solid #cbd5e1; border-radius: 13px; background: #fff; }.shared-video-timeline-tools { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }.shared-video-timeline-tools button, .shared-video-editor-window aside > button { padding: 9px 12px; border: 0; border-radius: 9px; background: #7c3aed; color: #fff; font-size: 10px; font-weight: 950; }.shared-video-timeline-tools button:last-child { margin-left: auto; background: #059669; }.shared-video-timeline > input { width: 100%; }.shared-video-zones { position: relative; height: 34px; margin-top: 6px; overflow: hidden; border-radius: 7px; background: #e2e8f0; }.shared-video-zones button { position: absolute; top: 0; height: 100%; display: flex; align-items: center; justify-content: center; gap: 5px; overflow: hidden; padding: 5px 4px; border: 1px solid rgba(15,23,42,.18); background: #93c5fd; color: #172033; font-size: 9px; font-weight: 900; white-space: nowrap; }.shared-video-zones button:nth-child(even) { background: #86efac; }.shared-video-zones button.selected { background: #4f46e5; color: #fff; }.shared-video-zones button b { display: grid; place-items: center; min-width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.75); color: #312e81; }.shared-video-zones button span { overflow: hidden; text-overflow: ellipsis; }
 .shared-video-editor-window aside { display: grid; align-content: start; gap: 12px; padding: 18px; overflow-y: auto; border-left: 1px solid #e2e8f0; }.shared-video-editor-window aside p { padding: 10px; border-radius: 9px; background: #fffbeb; color: #92400e; font-size: 10px; font-weight: 800; }.shared-video-editor-window aside label { display: grid; gap: 5px; color: #64748b; font-size: 9px; font-weight: 950; }.shared-video-editor-window aside input { min-width: 0; padding: 10px; border: 1px solid #cbd5e1; border-radius: 9px; }.shared-video-editor-window aside > button:disabled, .shared-video-timeline-tools button:disabled { opacity: .4; }
 .shared-video-segments-aside h3 { display: flex; align-items: center; justify-content: space-between; margin: 0; color: #334155; font-size: 11px; }.shared-video-segments-aside h3 b { padding: 5px 9px; border-radius: 999px; background: #4f46e5; color: #fff; }.shared-video-segment-list { display: grid; gap: 7px; max-height: 210px; overflow-y: auto; }.shared-video-segment-list > div { display: flex; align-items: center; gap: 7px; padding: 9px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; cursor: pointer; }.shared-video-segment-list > div.selected { border-color: #4f46e5; background: #eef2ff; }.shared-video-segment-list span { min-width: 0; display: grid; flex: 1; gap: 2px; }.shared-video-segment-list b { overflow: hidden; color: #334155; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.shared-video-segment-list small { color: #64748b; font-size: 8px; font-weight: 800; }.shared-video-segment-list button { width: 28px; height: 28px; border: 0; border-radius: 8px; background: #fee2e2; color: #b91c1c; font-size: 17px; font-weight: 900; }.shared-video-segment-list button:disabled { opacity: .3; }
@@ -1664,6 +1671,12 @@
 .course-phone-seq-camembert.ready.selected {
     outline-color: #ef4444;
 }
+.course-phone-seq-camembert:disabled { cursor: wait; opacity: .7; }
+.course-phone-seq-camembert.audio { background: #4c1d95; }
+.course-phone-seq-camembert.audio.selected { outline-color: #c084fc; }
+.course-phone-seq-camembert.audio .seq-camembert-track { stroke: #6d28d9; }
+.course-phone-seq-camembert.audio .seq-camembert-progress,
+.course-phone-seq-camembert.audio .seq-camembert-progress.ready { stroke: #d8b4fe; }
 
 .seq-camembert-svg {
     position: absolute;

@@ -73,6 +73,13 @@ const getYoutubeEmbedUrl = (value = '') => {
     return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?rel=0&playsinline=1` : '';
 };
 
+const AUDIO_FILE_PATTERN = /\.(?:mp3|m4a|aac|wav|ogg|oga|flac)(?:[?#].*)?$/i;
+const isAudioSequence = (sequence = {}) => (
+    String(sequence?.sourceType || '').toLowerCase() === 'audio'
+    || String(sequence?.mimeType || '').toLowerCase().startsWith('audio/')
+    || AUDIO_FILE_PATTERN.test(String(sequence?.url || sequence?.name || ''))
+);
+
 function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayOnMount = false, onEnded, onBufferProgress }) {
     const [hasStarted, setHasStarted] = useState(false);
     const hostRef = useRef(null);
@@ -1305,7 +1312,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const uploadSequenceVideos = async (fileList, sceneIndex) => {
-        const files = Array.from(fileList || []).filter((file) => String(file.type || '').startsWith('video/'));
+        const files = Array.from(fileList || []).filter((file) => (
+            /^(?:audio|video)\//i.test(String(file.type || ''))
+            || /\.(?:mp3|m4a|aac|wav|ogg|oga|flac|mp4|webm)$/i.test(String(file.name || ''))
+        ));
         if (!files.length) return;
         setUploadingSequenceVideos(true);
         try {
@@ -1316,7 +1326,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 const response = await fetch('/api/web5e/presentation-video-upload', { method: 'POST', body });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.url) throw new Error(data.error || `Import impossible : ${file.name}`);
-                uploaded.push({ id: `video_${Date.now()}_${uploaded.length}`, name: file.name.replace(/\.mp4$/i, ''), url: data.url, driveFileId: data.driveFileId || '', mergeWithNext: false, closeAfterSequence: false, startSec: 0, endSec: 0 });
+                const sourceType = String(file.type || '').startsWith('audio/') || AUDIO_FILE_PATTERN.test(file.name) ? 'audio' : 'mp4';
+                uploaded.push({ id: `media_${Date.now()}_${uploaded.length}`, name: file.name.replace(/\.(?:mp3|m4a|aac|wav|ogg|oga|flac|mp4|webm)$/i, ''), url: data.url, driveFileId: data.driveFileId || '', sourceType, mimeType: file.type || '', mergeWithNext: false, closeAfterSequence: false, startSec: 0, endSec: 0 });
             }
             setVideoSequencer((current) => current ? { ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((scene, index) => index === sceneIndex ? { ...scene, sequences: [...scene.sequences, ...uploaded] } : scene) } : slide) } : current);
         } catch (uploadError) {
@@ -1710,6 +1721,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 0
                             )));
                             const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
+                            const isAudio = group.some((item) => isAudioSequence(item));
                             const radius = 19;
                             const circ = 2 * Math.PI * radius; // ~119.38
                             const strokeOffset = circ - (circ * pct) / 100;
@@ -1717,9 +1729,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 <button
                                     key={group[0]?.id || index}
                                     type="button"
-                                    className={`course-phone-seq-camembert ${isSelected ? 'selected' : ''} ${isReady ? 'ready' : ''}`}
-                                    onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}
-                                    title={`Séquence ${index + 1} : ${pct}% chargé en mémoire vive ${isReady ? '(Prête)' : ''}`}
+                                    className={`course-phone-seq-camembert ${isSelected ? 'selected' : ''} ${isReady ? 'ready' : ''} ${isAudio ? 'audio' : ''}`}
+                                    disabled={!isReady}
+                                    onClick={() => { if (isReady) void sendPresentationCommand('sequence_select', { sequenceIndex: index }); }}
+                                    title={`${isAudio ? 'Chanson / audio' : 'Séquence'} ${index + 1} : ${pct}% chargé ${isReady ? '(Prêt)' : '(chargement en cours)'}`}
                                 >
                                     <svg className="seq-camembert-svg" viewBox="0 0 46 46">
                                         <circle cx="23" cy="23" r={radius} className="seq-camembert-track" />
@@ -1765,7 +1778,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     </button>
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
                     <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
-                    <button className={presentationRemote.remote?.animationVisible ? 'active' : ''} onClick={() => void sendPresentationCommand('animation_toggle')}><span>🎞</span>{presentationRemote.remote?.animationVisible ? 'Désactiver animation' : 'Activer animation'}</button>
                     {(() => {
                         const currentBufferKey = `${phoneSlideIndex}_${phoneSceneIndex}_${phoneSequenceIndex}`;
                         const currentBufferPct = Math.min(100, Math.max(0, Number(presentationRemote?.remote?.sequenceBuffers?.[currentBufferKey] ?? 0)));
@@ -1782,8 +1794,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </button>
                         );
                     })()}
-                    <button onClick={() => void sendPresentationCommand('sequence_previous')}><span>⏮</span>Séquence précédente</button>
-                    <button onClick={() => void sendPresentationCommand('sequence_next')}><span>⏭</span>Séquence suivante</button>
                 </div>
             </>}
         </section>;
@@ -2106,11 +2116,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 const isCurrentActive = presentationRemote?.remote?.animationVisible
                                     && (hasHeldFrame ? isHeldItem : item.isCurrent);
                                 const isYoutube = item.video?.sourceType === 'youtube' || getYoutubeVideoId(item.video?.url);
+                                const isAudio = isAudioSequence(item.video);
                                 const itemKey = `${item.slideIndex}_${item.sceneIndex}_${item.sequenceIndex}_${item.video?.id || item.video?.url || ''}`;
                                 return (
                                     <div
                                         key={itemKey}
-                                        className={`course-sequence-video-layer ${isCurrentActive ? 'active' : 'prewarming'}`}
+                                        className={`course-sequence-video-layer ${isCurrentActive ? 'active' : 'prewarming'} ${isAudio ? 'audio' : ''}`}
                                     >
                                         {isYoutube ? (
                                             <YoutubeSequencePlayer
@@ -2120,6 +2131,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                 autoplayOnMount={item.isCurrent ? youtubeAutoplayOnMount : false}
                                                 onEnded={item.isCurrent ? finishProjectedVideo : undefined}
                                                 onBufferProgress={(fraction) => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, fraction)}
+                                            />
+                                        ) : isAudio ? (
+                                            <audio
+                                                ref={item.isCurrent ? sequenceVideoRef : undefined}
+                                                src={item.video.url}
+                                                preload="auto"
+                                                onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(item.video.startSec || 0)); }}
+                                                onLoadedData={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, .25)}
+                                                onCanPlay={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, .65)}
+                                                onCanPlayThrough={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, 1)}
+                                                onProgress={(event) => handleNativeItemProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, event)}
+                                                onTimeUpdate={(event) => {
+                                                    handleNativeItemProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, event);
+                                                    const end = Math.max(0, Number(item.video.endSec || 0));
+                                                    if (item.isCurrent && end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); }
+                                                }}
+                                                onEnded={item.isCurrent ? finishProjectedVideo : undefined}
                                             />
                                         ) : (
                                             <video
@@ -2152,7 +2180,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 );
                             })
                         ) : visibleProjectedVideo ? (
-                            <div className={`course-sequence-video-layer ${presentationRemote?.remote?.animationVisible ? 'active' : 'prewarming'}`}>
+                            <div className={`course-sequence-video-layer ${presentationRemote?.remote?.animationVisible ? 'active' : 'prewarming'} ${isAudioSequence(visibleProjectedVideo) ? 'audio' : ''}`}>
                                 {visibleVideoIsYoutube ? (
                                     <YoutubeSequencePlayer
                                         video={visibleProjectedVideo}
@@ -2161,6 +2189,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         autoplayOnMount={youtubeAutoplayOnMount}
                                         onEnded={finishProjectedVideo}
                                         onBufferProgress={(fraction) => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, fraction)}
+                                    />
+                                ) : isAudioSequence(visibleProjectedVideo) ? (
+                                    <audio
+                                        ref={sequenceVideoRef}
+                                        src={visibleProjectedVideo.url}
+                                        preload="auto"
+                                        onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0)); }}
+                                        onLoadedData={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, .25)}
+                                        onCanPlay={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, .65)}
+                                        onCanPlayThrough={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, 1)}
+                                        onProgress={(event) => handleNativeItemProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, event)}
+                                        onTimeUpdate={(event) => {
+                                            handleNativeItemProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, event);
+                                            const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0));
+                                            if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); }
+                                        }}
+                                        onEnded={finishProjectedVideo}
                                     />
                                 ) : (
                                     <video
@@ -2361,11 +2406,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <div className="course-video-slide-tabs">{Array.from({ length: Math.max(1, slideManifest.length || Number(videoSequencer.course.publishedUntilSlide || 1)) }, (_, index) => index + 1).map((number) => <button type="button" className={number === videoSequencer.activeSlideNumber ? 'selected' : ''} key={number} onClick={() => setVideoSequencer((current) => ({ ...current, activeSlideNumber: number, slides: current.slides.some((slide) => Number(slide.slideNumber) === number) ? current.slides : [...current.slides, { slideNumber: number, scenes: [{ id: `scene_${Date.now()}`, name: 'Scène 1', sequences: [] }] }] }))}>SLIDE {number}</button>)}</div>
                             <button type="button" className="course-video-add-scene" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: [...slide.scenes, { id: `scene_${Date.now()}`, name: `Scène ${slide.scenes.length + 1}`, sequences: [] }] } : slide) }))}>＋ AJOUTER UNE SCÈNE</button>
                             {videoSequencerScenes.map((scene, sceneIndex) => <section className="course-video-scene" key={scene.id}>
-                                <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) } : slide) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MP4'}<input type="file" accept="video/mp4,video/*" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencerScenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.filter((_, index) => index !== sceneIndex) } : slide) }))}>×</button> : null}</div>
+                                <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) } : slide) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MÉDIA'}<input type="file" accept="video/*,audio/*,.mp3,.m4a,.aac,.wav,.ogg,.oga,.flac,.mp4,.webm" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencerScenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.filter((_, index) => index !== sceneIndex) } : slide) }))}>×</button> : null}</div>
                                 <div className="course-video-youtube-add"><input type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Coller un lien YouTube" value={youtubeDrafts[sceneIndex] || ''} onChange={(event) => setYoutubeDrafts((current) => ({ ...current, [sceneIndex]: event.target.value }))} onPaste={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); addYoutubeSequence(sceneIndex); } }} /><button type="button" onClick={() => addYoutubeSequence(sceneIndex)}>＋ AJOUTER LE LIEN</button></div>
                                 {scene.sequences.length === 0 ? <div className={`course-video-empty ${draggedSequence ? 'drop-ready' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={() => moveSequenceVideo(sceneIndex, 0)}>Importe les vidéos de cette scène.</div> : null}
                                 <div className="course-video-sequence-list">{scene.sequences.map((sequence, index) => <div className={`course-video-sequence-row ${draggedSequence?.sceneIndex === sceneIndex && draggedSequence?.videoIndex === index ? 'dragging' : ''}`} key={sequence.id || index} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={() => moveSequenceVideo(sceneIndex, index)}>
-                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position de la vidéo ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /><div className="course-video-media-cell">{sequence.sourceType === 'youtube' || getYoutubeVideoId(sequence.url) ? <iframe src={getYoutubeEmbedUrl(sequence.url)} title={sequence.name || 'Vidéo YouTube'} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : <video src={sequence.url} preload="metadata" controls />}<button type="button" className="course-open-sequence-editor" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); openSequenceCutEditor(sceneIndex, index, sequence); }}><strong>✂ OUVRIR L’ÉDITEUR</strong><span>{Math.max(0, Number(sequence.startSec || 0))}s → {Number(sequence.endSec || 0) > 0 ? `${Number(sequence.endSec)}s` : 'fin de la vidéo'}</span></button></div>
+                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position du média ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /><div className={`course-video-media-cell ${isAudioSequence(sequence) ? 'audio' : ''}`}>{sequence.sourceType === 'youtube' || getYoutubeVideoId(sequence.url) ? <iframe src={getYoutubeEmbedUrl(sequence.url)} title={sequence.name || 'Vidéo YouTube'} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : isAudioSequence(sequence) ? <audio src={sequence.url} preload="metadata" controls /> : <video src={sequence.url} preload="metadata" controls />}<button type="button" className="course-open-sequence-editor" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); openSequenceCutEditor(sceneIndex, index, sequence); }}><strong>✂ OUVRIR L’ÉDITEUR</strong><span>{Math.max(0, Number(sequence.startSec || 0))}s → {Number(sequence.endSec || 0) > 0 ? `${Number(sequence.endSec)}s` : 'fin du média'}</span></button></div>
                                     <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, name: event.target.value } : video) } : item) } : slide) }))} />
                                     <label className="course-video-close-after"><input type="checkbox" checked={sequence.closeAfterSequence === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, closeAfterSequence: event.target.checked } : video) } : item) } : slide) }))} /> Fermer après</label>
                                     <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).filter((_, vIndex) => vIndex !== index) } : item) } : slide) }))}>×</button>
