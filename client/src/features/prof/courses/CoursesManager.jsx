@@ -374,6 +374,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [projectedControl, setProjectedControl] = useState(null);
     const [presentationRemote, setPresentationRemote] = useState(null);
     const [slideManifest, setSlideManifest] = useState([]);
+    const [editSlideNumberDraft, setEditSlideNumberDraft] = useState('');
     const [playingVideoIndex, setPlayingVideoIndex] = useState(0);
     const [heldProjectedVideo, setHeldProjectedVideo] = useState(null);
     const [projectedClassPlan, setProjectedClassPlan] = useState(null);
@@ -426,8 +427,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             try {
                 const teacherId = user.id || user._id || '';
                 const [res, studentsRes] = await Promise.all([
-                    fetch(`/api/classroom/${globalClassId}`),
-                    fetch(`/api/classroom/debts/${globalClassId}?teacherId=${encodeURIComponent(teacherId)}`)
+                    fetch(`/api/classroom/${globalClassId}?live=${Date.now()}`, { cache: 'no-store' }),
+                    fetch(`/api/classroom/debts/${globalClassId}?teacherId=${encodeURIComponent(teacherId)}&live=${Date.now()}`, { cache: 'no-store' })
                 ]);
                 if (res.ok) setLiveClassroom(await res.json());
                 if (studentsRes.ok) {
@@ -456,14 +457,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return (Date.now() - highlightTime) < 6000;
     }, [liveClassroom]);
 
-    const activeScoreAlerts = useMemo(() => (Array.isArray(liveClassroom?.activeScoreAlerts)
-        ? liveClassroom.activeScoreAlerts
-        : [])
+    const activeScoreAlerts = useMemo(() => {
+        const rows = Array.isArray(liveClassroom?.activeScoreAlerts)
+            ? [...liveClassroom.activeScoreAlerts]
+            : [];
+        const fallbackTime = liveClassroom?.activeStudentBonusAlertTime;
+        const fallbackMessage = String(liveClassroom?.activeStudentBonusAlert || '').trim();
+        if (fallbackTime && fallbackMessage && !rows.some((row) => String(row?.message || '') === fallbackMessage && String(row?.createdAt || '') === String(fallbackTime))) {
+            rows.push({ id: `score-fallback-${fallbackTime}`, message: fallbackMessage, createdAt: fallbackTime });
+        }
+        return rows
         .filter((row) => {
             const createdAt = new Date(row?.createdAt || 0).getTime();
             return Number.isFinite(createdAt) && liveClock - createdAt >= 0 && liveClock - createdAt < 3000;
         })
-        .slice(-6), [liveClassroom?.activeScoreAlerts, liveClock]);
+        .slice(-6);
+    }, [liveClassroom?.activeScoreAlerts, liveClassroom?.activeStudentBonusAlert, liveClassroom?.activeStudentBonusAlertTime, liveClock]);
 
     const activeHourWarnings = useMemo(() => {
         const now = Date.now();
@@ -672,6 +681,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const selectProjectedSlide = async (nextIndex) => {
         const total = Math.max(1, slideManifest.length || 1);
         const slideIndex = Math.min(total - 1, Math.max(0, Math.floor(Number(nextIndex) || 0)));
+        if (playerMode === 'edit') {
+            const editSlideObjectId = String(slideManifest[slideIndex]?.objectId || '').trim();
+            setPlayingCourse((current) => current ? { ...current, editSlideObjectId } : current);
+        }
         await sendPresentationCommand('sync', {
             slideIndex,
             sceneIndex: 0,
@@ -836,7 +849,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
         return items;
     }, [isPhone, playingCourse?._id, projectedScenes, projectedSceneIndex, projectedSequenceIndex, projectedSlideIndex]);
-    const projectedSlideObjectId = String(slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || '').trim();
+    const projectedSlideObjectId = String(
+        playerMode === 'edit' && playingCourse?.editSlideObjectId
+            ? playingCourse.editSlideObjectId
+            : (slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || '')
+    ).trim();
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
         : getEmbedUrl(playingCourse?.slidesUrl);
@@ -867,7 +884,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation' || videoSequencer || sequenceCutEditor) return undefined;
-        coursePlayerRef.current?.focus();
         const handlePresentationShortcut = (event) => {
             const tag = String(event.target?.tagName || '').toLowerCase();
             if (['input', 'textarea', 'select', 'button'].includes(tag) || event.target?.isContentEditable || event.repeat) return;
@@ -884,6 +900,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         window.addEventListener('keydown', handlePresentationShortcut, true);
         return () => window.removeEventListener('keydown', handlePresentationShortcut, true);
     }, [isPhone, playingCourse?._id, playerMode, presentationRemote, slideManifest.length, videoSequencer, sequenceCutEditor]);
+
+    useEffect(() => {
+        if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return;
+        coursePlayerRef.current?.focus({ preventScroll: true });
+    }, [isPhone, playingCourse?._id, playerMode]);
 
     useEffect(() => { setPlayingVideoIndex(0); }, [projectedSceneIndex, projectedSequenceIndex]);
     useEffect(() => {
@@ -1500,12 +1521,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             updatePublishedUntilSlide(course, 1);
         }
         setPlayerMode('presentation');
+        setEditSlideNumberDraft('');
         setPlayingCourse(course);
     };
 
-    const openModification = async (course) => {
+    const openModification = async (course, requestedSlideIndex = projectedSlideIndex) => {
         setError('');
-        const editSlideObjectId = projectedSlideObjectId;
+        const targetSlideIndex = Math.min(
+            Math.max(0, slideManifest.length - 1),
+            Math.max(0, Number(requestedSlideIndex) || 0)
+        );
+        const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || projectedSlideObjectId || '').trim();
         try {
             const response = await fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
@@ -1523,9 +1549,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             }));
             void sendPresentationCommand('mode_change', {
                 playerMode: 'edit',
-                slideIndex: projectedSlideIndex,
-                sceneIndex: projectedSceneIndex,
-                sequenceIndex: projectedSequenceIndex
+                slideIndex: targetSlideIndex,
+                sceneIndex: targetSlideIndex === projectedSlideIndex ? projectedSceneIndex : 0,
+                sequenceIndex: targetSlideIndex === projectedSlideIndex ? projectedSequenceIndex : 0
             });
         } catch (accessError) {
             setError(accessError.message);
@@ -1535,9 +1561,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const togglePlayerMode = async () => {
         if (playerMode === 'presentation') {
-            await openModification(playingCourse);
+            const requestedNumber = Number(editSlideNumberDraft);
+            const total = Math.max(1, slideManifest.length || 1);
+            if (!Number.isInteger(requestedNumber) || requestedNumber < 1 || requestedNumber > total) return;
+            await openModification(playingCourse, requestedNumber - 1);
         } else {
             setPlayerMode('presentation');
+            setEditSlideNumberDraft('');
             void sendPresentationCommand('mode_change', {
                 playerMode: 'presentation',
                 slideIndex: projectedSlideIndex,
@@ -2046,6 +2076,25 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
                             allowFullScreen
                         />
+                        {playerMode === 'edit' && (
+                            <aside className="course-conda-slide-rail" aria-label="Slides CondaWeb">
+                                <div className="course-conda-slide-rail-title">SLIDES</div>
+                                <div className="course-conda-slide-rail-list">
+                                    {slideManifest.map((slide, index) => (
+                                        <button
+                                            type="button"
+                                            key={slide.objectId || slide.slideNumber || index}
+                                            className={index === projectedSlideIndex ? 'selected' : ''}
+                                            onClick={() => void selectProjectedSlide(index)}
+                                            title={`Ouvrir la slide ${index + 1}`}
+                                        >
+                                            <span>{index + 1}</span>
+                                            <CourseSlideThumbnail slide={slide} />
+                                        </button>
+                                    ))}
+                                </div>
+                            </aside>
+                        )}
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
                         {preloadItems.length > 0 ? (
@@ -2235,13 +2284,37 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 </label>
                                 <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex + 1)} disabled={projectedSlideIndex >= Math.max(0, slideManifest.length - 1)} aria-label="Diapo suivante">›</button>
                             </div>
-                            <button
-                                type="button"
-                                className={`course-edit-mode-button ${playerMode === 'edit' ? 'active' : ''}`}
-                                onClick={() => void togglePlayerMode()}
-                            >
-                                {playerMode === 'presentation' ? '✎ PASSER EN MODE MODIFIER' : '▶ PASSER EN MODE LECTURE'}
-                            </button>
+                            <div className={`course-edit-mode-control ${playerMode === 'edit' ? 'active' : ''}`}>
+                                {playerMode === 'presentation' && (
+                                    <label title="Numéro de la slide Google actuellement affichée">
+                                        <span>SLIDE</span>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max={Math.max(1, slideManifest.length || 1)}
+                                            value={editSlideNumberDraft}
+                                            onChange={(event) => setEditSlideNumberDraft(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                event.stopPropagation();
+                                                if (event.key === 'Enter') void togglePlayerMode();
+                                            }}
+                                            aria-label="Numéro de la slide à modifier"
+                                        />
+                                    </label>
+                                )}
+                                <button
+                                    type="button"
+                                    className={`course-edit-mode-button ${playerMode === 'edit' ? 'active' : ''}`}
+                                    onClick={() => void togglePlayerMode()}
+                                    disabled={playerMode === 'presentation' && (
+                                        !Number.isInteger(Number(editSlideNumberDraft))
+                                        || Number(editSlideNumberDraft) < 1
+                                        || Number(editSlideNumberDraft) > Math.max(1, slideManifest.length || 1)
+                                    )}
+                                >
+                                    {playerMode === 'presentation' ? '✎ MODIFIER' : '▶ PASSER EN MODE LECTURE'}
+                                </button>
+                            </div>
                             <button type="button" className="course-sync-board-button" onClick={() => void forceSyncRemote()} title="Envoyer la diapo CondaWeb active au téléphone">
                                 ↻ SYNCHRONISER LE TÉLÉPHONE
                             </button>
@@ -2257,6 +2330,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 )}
                             </div>
                         </div>
+
                     </div>
                 </div>
             )}

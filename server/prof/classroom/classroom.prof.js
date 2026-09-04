@@ -608,7 +608,13 @@ router.post('/:classId/live-action', async (req, res) => {
             // s'écraser mutuellement dans le tableau d'alertes.
             await Classroom.updateOne(
                 { _id: classId },
-                { $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } } }
+                {
+                    $set: {
+                        activeStudentBonusAlert: alert.message,
+                        activeStudentBonusAlertTime: now
+                    },
+                    $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } }
+                }
             );
             return res.json({ ok: true, alert });
         } else if (action === 'class-bonus') {
