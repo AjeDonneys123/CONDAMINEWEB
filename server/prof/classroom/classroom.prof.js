@@ -251,9 +251,14 @@ router.get('/debts/:classId', async (req, res) => {
 // 2. RÉCUPÉRATION INFOS CLASSE
 router.get('/:classId', async (req, res) => {
     try {
-        const cls = await Classroom.findById(req.params.classId).lean();
+        const cls = await Classroom.findById(req.params.classId);
         if (!cls) return res.status(404).json({ error: "Classe introuvable" });
-        res.json(cls);
+        if (cls.classPointsInitialized !== true) {
+            cls.classPoints = 10;
+            cls.classPointsInitialized = true;
+            await cls.save();
+        }
+        res.json(cls.toObject());
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -430,13 +435,16 @@ router.post('/behavior', async (req, res) => {
             scores.push(score); r.selectedScoreId = score.id;
         }
         if (type === 'SELECT_SCORE') { ensureScores(); r.selectedScoreId = String(extraData?.scoreId || extraData || ''); }
+        let appliedClassPointDelta = 0;
         if (type === 'ADJUST_SCORE') {
             const scores = ensureScores();
             const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
             const score = scores.find(x => String(x.id) === scoreId) || scores[scores.length - 1];
             const requestedDelta = Number(extraData?.delta || 0);
             const safeDelta = requestedDelta === 0 ? 0 : (requestedDelta < 0 ? -0.5 : 0.5);
-            score.value = Math.max(0, Math.min(20, Number(score.value || 0) + safeDelta));
+            const previousScore = Number(score.value || 0);
+            score.value = Math.max(0, Math.min(20, previousScore + safeDelta));
+            appliedClassPointDelta = Number(score.value) - previousScore;
             r.selectedScoreId = score.id;
         }
         if (type === 'DELETE_SCORE') {
@@ -580,7 +588,16 @@ router.post('/behavior', async (req, res) => {
         }
 
         s.markModified('behaviorRecords');
-        await s.save(); res.json(s);
+        await s.save();
+        const scoreClassId = String(extraData?.classId || '').trim();
+        if (type === 'ADJUST_SCORE' && scoreClassId && appliedClassPointDelta !== 0 && mongoose.Types.ObjectId.isValid(scoreClassId)) {
+            await Classroom.updateOne(
+                { _id: scoreClassId, classPointsInitialized: { $ne: true } },
+                { $set: { classPoints: 10, classPointsInitialized: true } }
+            );
+            await Classroom.updateOne({ _id: scoreClassId }, { $inc: { classPoints: appliedClassPointDelta } });
+        }
+        res.json(s);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -599,6 +616,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
 
         const ids = classStudents.map((student) => student?._id).filter(Boolean);
         const studentDocs = await Student.find({ _id: { $in: ids } });
+        let totalAppliedDelta = 0;
         await Promise.all(studentDocs.map(async (student) => {
             let record = student.behaviorRecords.find((row) => row?.teacherId && String(row.teacherId) === teacherId);
             if (!record) {
@@ -612,17 +630,23 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
             }
             const selectedId = String(record.selectedScoreId || record.scores[record.scores.length - 1].id);
             const selectedScore = record.scores.find((score) => String(score.id) === selectedId) || record.scores[record.scores.length - 1];
-            selectedScore.value = Math.max(0, Math.min(20, Number(selectedScore.value || 0) + delta));
+            const previousScore = Number(selectedScore.value || 0);
+            selectedScore.value = Math.max(0, Math.min(20, previousScore + delta));
+            totalAppliedDelta += Number(selectedScore.value) - previousScore;
             record.selectedScoreId = selectedScore.id;
             student.markModified('behaviorRecords');
             await student.save();
         }));
 
-        cls.classPoints = Math.max(0, Number(cls.classPoints || 0) + delta);
+        if (cls.classPointsInitialized !== true) {
+            cls.classPoints = 10;
+            cls.classPointsInitialized = true;
+        }
+        cls.classPoints = Number(cls.classPoints || 0) + totalAppliedDelta;
         const now = new Date();
         const alert = {
             id: `${now.getTime()}-class-${Math.random().toString(36).slice(2, 8)}`,
-            message: delta < 0 ? 'Classe −1 point' : 'Classe +1 point',
+            message: delta < 0 ? 'Toute la classe : −1 par élève' : 'Toute la classe : +1 par élève',
             createdAt: now
         };
         cls.activeStudentBonusAlert = alert.message;
@@ -630,7 +654,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         cls.activeScoreAlerts = [...(Array.isArray(cls.activeScoreAlerts) ? cls.activeScoreAlerts : []), alert].slice(-6);
         await cls.save();
 
-        res.json({ ok: true, adjustedStudents: studentDocs.length, classPoints: cls.classPoints, alert });
+        res.json({ ok: true, adjustedStudents: studentDocs.length, appliedDelta: totalAppliedDelta, classPoints: cls.classPoints, alert });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

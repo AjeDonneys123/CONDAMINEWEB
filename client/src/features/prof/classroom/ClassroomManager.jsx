@@ -44,7 +44,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [swapSource, setSwapSource] = useState(null);
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
-    const [classPoints, setClassPoints] = useState(0);
     const [classScoreBusy, setClassScoreBusy] = useState(false);
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
@@ -143,7 +142,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                         rows: clsInfo.layout.rows || 5 
                     });
                 }
-                setClassPoints(clsInfo.classPoints || 0);
             }
             const queryParams = myId ? `?teacherId=${myId}` : '';
             const res = await fetch(`/api/classroom/plan/${globalClassId}${queryParams}`);
@@ -159,22 +157,6 @@ export default function ClassroomManager({ globalClassId, user }) {
             }
         } catch(e) { console.error(e); }
         setLoading(false);
-    };
-
-    const updateClassPoints = async (change) => {
-        try {
-            const res = await fetch(`/api/classroom/${globalClassId}/live-action`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: change > 0 ? 'add-point' : 'remove-point' })
-            });
-            if (res.ok) {
-                const updatedCls = await res.json();
-                setClassPoints(updatedCls.classPoints || 0);
-            }
-        } catch (e) {
-            console.error(e);
-        }
     };
 
     const highlightStudentOnBoard = async (student) => {
@@ -396,7 +378,6 @@ export default function ClassroomManager({ globalClassId, user }) {
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Modification collective impossible');
-            setClassPoints(Number(data.classPoints || 0));
             await loadData();
         } catch (e) {
             console.error(e);
@@ -908,7 +889,14 @@ export default function ClassroomManager({ globalClassId, user }) {
             const res = await fetch('/api/classroom/behavior', { 
                 method: 'POST', 
                 headers: {'Content-Type':'application/json'}, 
-                body: JSON.stringify({ studentId: sid, type, teacherId: myId, extraData: extra }) 
+                body: JSON.stringify({
+                    studentId: sid,
+                    type,
+                    teacherId: myId,
+                    extraData: type === 'ADJUST_SCORE' && extra && typeof extra === 'object'
+                        ? { ...extra, classId: globalClassId }
+                        : extra
+                })
             });
 
             if (res.ok) {
@@ -1216,7 +1204,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="cm-header-center">
                     <div className="view-switcher">
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
-                        <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A</button>
                     </div>
                     <button
                         className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
@@ -1226,30 +1213,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                     >
                         {voiceListening ? '🎙️ ON' : '🎙️'}
                     </button>
+                    <button className="class-score-btn negative" onClick={() => void adjustClassScores(-1)} disabled={classScoreBusy}>−1C</button>
+                    <button className="class-score-btn" onClick={addClassScorePoint} disabled={classScoreBusy}>+1C</button>
                 </div>
-                
-                <div className="class-points-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', padding: '4px 10px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-                    <button className="pts-btn" onClick={() => updateClassPoints(-1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>-</button>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#1e3a8a', minWidth: '45px', textAlign: 'center' }}>🏆 {classPoints} pts</span>
-                    <button className="pts-btn" onClick={() => updateClassPoints(1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
-                    <button className="class-score-btn negative" onClick={() => void adjustClassScores(-1)} disabled={classScoreBusy}>−1 classe</button>
-                    <button className="class-score-btn" onClick={addClassScorePoint} disabled={classScoreBusy}>+1 classe</button>
-                </div>
-
-                <button
-                    className={`cm-swap-btn ${isSwapMode ? 'active' : ''}`}
-                    onClick={() => {
-                        setIsSwapMode(prev => {
-                            const next = !prev;
-                            if (!next) setSwapSource(null);
-                            return next;
-                        });
-                        setSelectedStudent(null);
-                    }}
-                    title="Intervertir deux élèves"
-                >
-                    {isSwapMode ? (swapSource ? '🔁 CHOISIS 2E ÉLÈVE' : '🔁 CHOISIS 1ER ÉLÈVE') : '🔁 INTERVERTIR'}
-                </button>
             </div>
             
             {viewMode === 'PLAN' ? (

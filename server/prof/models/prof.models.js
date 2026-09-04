@@ -182,7 +182,8 @@ const Models = {
             cols: { type: Number, default: 6 },
             rows: { type: Number, default: 5 }
         },
-        classPoints: { type: Number, default: 0 },
+        classPoints: { type: Number, default: 10 },
+        classPointsInitialized: { type: Boolean, default: false },
         activeStudentHighlight: { type: String, default: null },
         activeStudentHighlightTime: { type: Date, default: null },
         activeStudentBonusAlert: { type: String, default: null },
