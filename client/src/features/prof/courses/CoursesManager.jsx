@@ -80,7 +80,7 @@ const isAudioSequence = (sequence = {}) => (
     || AUDIO_FILE_PATTERN.test(String(sequence?.url || sequence?.name || ''))
 );
 
-function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayOnMount = false, onEnded, onBufferProgress }) {
+function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying = false, isVisible = true, autoplayOnMount = false, onEnded, onBufferProgress }) {
     const [hasStarted, setHasStarted] = useState(false);
     const hostRef = useRef(null);
     const playerRef = useRef(null);
@@ -265,6 +265,14 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
         }
     }, [playVersion, isVisible]);
 
+    useEffect(() => {
+        if (!readyRef.current || !playerRef.current || isPlaying) return;
+        try { playerRef.current.pauseVideo(); } catch (_) { }
+        playAuthorizedRef.current = false;
+        if (endTimerRef.current) window.clearInterval(endTimerRef.current);
+        endTimerRef.current = null;
+    }, [pauseVersion, isPlaying]);
+
     const thumbnailUrl = getYoutubeVideoId(video?.url)
         ? `https://i.ytimg.com/vi/${encodeURIComponent(getYoutubeVideoId(video.url))}/maxresdefault.jpg`
         : '';
@@ -390,6 +398,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sequenceVideoRef = useRef(null);
     const sequenceCutVideoRef = useRef(null);
     const coursePlayerRef = useRef(null);
+    const presentationIframeRef = useRef(null);
     const completedProjectedVideoRef = useRef('');
     const consumedYoutubePlayVersionRef = useRef(0);
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
@@ -639,7 +648,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
-        if (['play', 'slide_previous', 'slide_next', 'sequence_previous', 'sequence_next', 'sequence_select', 'scene_previous', 'scene_next', 'scene_select', 'sync'].includes(action)) {
+        if (['play', 'play_pause', 'animation_hide', 'slide_previous', 'slide_next', 'sequence_previous', 'sequence_next', 'sequence_select', 'scene_previous', 'scene_next', 'scene_select', 'sync'].includes(action)) {
             setHeldProjectedVideo(null);
         }
         const slideIndex = Math.max(0, Number(remoteData?.remote?.slideIndex || 0));
@@ -858,16 +867,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return items;
     }, [isPhone, playingCourse?._id, projectedScenes, projectedSceneIndex, projectedSequenceIndex, projectedSlideIndex]);
     const projectedSlideObjectId = String(
-        playerMode === 'edit' && playingCourse?.editSlideObjectId
-            ? playingCourse.editSlideObjectId
-            : (slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || '')
+        slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || ''
+    ).trim();
+    const editorSlideObjectId = String(
+        playingCourse?.editSlideObjectId || projectedSlideObjectId || ''
     ).trim();
     const presentationReloadNonce = Number(playingCourse?.presentationReloadNonce || 0);
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}&condaReload=${presentationReloadNonce}`
         : `${getEmbedUrl(playingCourse?.slidesUrl)}&condaReload=${presentationReloadNonce}`;
-    const editSlidesUrl = projectedSlideObjectId
-        ? `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}#slide=id.${encodeURIComponent(projectedSlideObjectId)}`
+    const editSlidesUrl = editorSlideObjectId
+        ? `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}#slide=id.${encodeURIComponent(editorSlideObjectId)}`
         : `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}`;
     const finishProjectedVideo = () => {
         const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
@@ -924,6 +934,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     useEffect(() => {
         if (playingVideoIndex > 0) sequenceVideoRef.current?.play().catch(() => { });
     }, [playingVideoIndex]);
+
+    useEffect(() => {
+        if (presentationRemote?.remote?.animationPlaying === false) sequenceVideoRef.current?.pause?.();
+    }, [presentationRemote?.remote?.pauseVersion, presentationRemote?.remote?.animationPlaying]);
+
+    useEffect(() => {
+        const version = Number(presentationRemote?.remote?.googleAnimationVersion || 0);
+        if (!version || playerMode !== 'presentation') return;
+        const frame = presentationIframeRef.current;
+        const direction = presentationRemote?.remote?.googleAnimationDirection === 'previous' ? 'previous' : 'next';
+        const key = direction === 'previous' ? 'ArrowLeft' : 'ArrowRight';
+        try {
+            frame?.focus({ preventScroll: true });
+            frame?.contentWindow?.postMessage({ type: 'conda-google-slides-navigation', direction, key }, '*');
+            frame?.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true }));
+        } catch (_) { }
+    }, [presentationRemote?.remote?.googleAnimationVersion, presentationRemote?.remote?.googleAnimationDirection, playerMode]);
 
     const openNewCourse = () => {
         setEditingId('');
@@ -1558,7 +1585,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setPlayingCourse((current) => ({
                 ...(current || course),
                 slidesUrl: data.editUrl || course.slidesUrl,
-                editorNonce: Date.now(),
+                // Recharge l'éditeur seulement lors de son premier déverrouillage.
+                // Les passages suivants lecture <-> édition gardent la même iframe vivante.
+                editorNonce: current?.editorNonce || Date.now(),
                 editSlideObjectId
             }));
             void sendPresentationCommand('mode_change', {
@@ -1785,18 +1814,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     </div>
                 </div>
                 <div className="course-phone-controls">
-                    <button
-                        type="button"
-                        className="course-phone-resync-action"
-                        onClick={forceSyncRemote}
-                    >
-                        <span>🔄</span>
-                        <div className="btn-content">
-                            <strong>SYNCHRONISER AVEC LE TABLEAU</strong>
-                            <small>Aligner instantanément le téléphone sur la slide et la scène du tableau</small>
-                        </div>
-                    </button>
                     <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
+                    <button onClick={() => void sendPresentationCommand('google_animation_previous')}><span>↶</span>Animation Google précédente</button>
+                    <button onClick={() => void sendPresentationCommand('google_animation_next')}><span>☝️</span>Simuler un clic Google</button>
                     <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
                     {(() => {
                         const currentBufferKey = `${phoneSlideIndex}_${phoneSceneIndex}_${phoneSequenceIndex}`;
@@ -1806,14 +1826,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button
                                 type="button"
                                 className={`play ${isCurrentReady ? 'ready' : 'buffering'}`}
-                                onClick={() => void sendPresentationCommand('play')}
-                                title={isCurrentReady ? 'Séquence prête en mémoire vive · Lancer' : `Mémoire tampon à ${currentBufferPct}% · Toucher pour forcer`}
+                                onClick={() => void sendPresentationCommand('play_pause')}
+                                title={isCurrentReady ? 'Lire ou mettre en pause la séquence' : `Mémoire tampon à ${currentBufferPct}% · Toucher pour forcer`}
                             >
-                                <span>{isCurrentReady ? '▶' : '⏳'}</span>
-                                {isCurrentReady ? 'Play (Prêt)' : `Chargement (${currentBufferPct}%)`}
+                                <span>{presentationRemote?.remote?.animationPlaying ? 'Ⅱ' : (isCurrentReady ? '▶' : '⏳')}</span>
+                                {presentationRemote?.remote?.animationPlaying ? 'Pause' : (isCurrentReady ? 'Play' : `Chargement (${currentBufferPct}%)`)}
                             </button>
                         );
                     })()}
+                    <button
+                        type="button"
+                        className={presentationRemote?.remote?.animationVisible ? 'active' : ''}
+                        onClick={() => void sendPresentationCommand(presentationRemote?.remote?.animationVisible ? 'animation_hide' : 'animation_show')}
+                    >
+                        <span>{presentationRemote?.remote?.animationVisible ? '🙈' : '🎞️'}</span>
+                        {presentationRemote?.remote?.animationVisible ? 'Cacher l’animation' : 'Montrer l’animation'}
+                    </button>
                 </div>
             </>}
         </section>;
@@ -2102,10 +2130,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         )}
                         <iframe
-                            key={`${playerMode}-${playingCourse?.editorNonce || 0}-${playingCourse?.presentationReloadNonce || 0}-${projectedSlideObjectId}`}
-                            title={playingCourse.title}
-                            src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
+                            ref={presentationIframeRef}
+                            key={`presentation-${playingCourse?.presentationReloadNonce || 0}-${projectedSlideObjectId}`}
+                            className={`course-player-frame presentation ${playerMode === 'presentation' ? 'active' : 'inactive'}`}
+                            title={`${playingCourse.title} — lecture`}
+                            src={projectedSlidesUrl}
                             allowFullScreen
+                            aria-hidden={playerMode !== 'presentation'}
+                        />
+                        <iframe
+                            key={`editor-${playingCourse?.editorNonce || 0}`}
+                            className={`course-player-frame editor ${playerMode === 'edit' ? 'active' : 'inactive'}`}
+                            title={`${playingCourse.title} — modification`}
+                            src={editSlidesUrl}
+                            allowFullScreen
+                            aria-hidden={playerMode !== 'edit'}
                         />
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
@@ -2129,6 +2168,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                             <YoutubeSequencePlayer
                                                 video={item.video}
                                                 playVersion={item.isCurrent ? presentationRemote?.remote?.playVersion : 0}
+                                                pauseVersion={presentationRemote?.remote?.pauseVersion}
+                                                isPlaying={item.isCurrent && presentationRemote?.remote?.animationPlaying === true}
                                                 isVisible={isCurrentActive}
                                                 autoplayOnMount={item.isCurrent ? youtubeAutoplayOnMount : false}
                                                 onEnded={item.isCurrent ? finishProjectedVideo : undefined}
@@ -2187,6 +2228,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     <YoutubeSequencePlayer
                                         video={visibleProjectedVideo}
                                         playVersion={presentationRemote?.remote?.playVersion}
+                                        pauseVersion={presentationRemote?.remote?.pauseVersion}
+                                        isPlaying={presentationRemote?.remote?.animationPlaying === true}
                                         isVisible={presentationRemote?.remote?.animationVisible === true}
                                         autoplayOnMount={youtubeAutoplayOnMount}
                                         onEnded={finishProjectedVideo}
