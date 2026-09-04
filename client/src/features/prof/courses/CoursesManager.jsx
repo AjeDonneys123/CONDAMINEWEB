@@ -74,6 +74,7 @@ const getYoutubeEmbedUrl = (value = '') => {
 };
 
 function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayOnMount = false, onEnded, onBufferProgress }) {
+    const [hasStarted, setHasStarted] = useState(false);
     const hostRef = useRef(null);
     const playerRef = useRef(null);
     const readyRef = useRef(false);
@@ -85,6 +86,8 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
     const requestedPlayVersionRef = useRef(Number(playVersion || 0));
     const endTimerRef = useRef(null);
     const finishedRef = useRef(false);
+    const playAuthorizedRef = useRef(false);
+    const monitorEndRef = useRef(() => {});
 
     useEffect(() => {
         let cancelled = false;
@@ -97,8 +100,9 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
             bufferTimerRef.current = null;
         };
         const finishAtLastFrame = (player) => {
-            if (finishedRef.current) return;
+            if (finishedRef.current || !playAuthorizedRef.current || !isVisibleRef.current) return;
             finishedRef.current = true;
+            playAuthorizedRef.current = false;
             stopEndTimer();
             try { player?.pauseVideo?.(); } catch (_) { }
             onEnded?.();
@@ -114,6 +118,7 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                 } catch (_) { }
             }, 60);
         };
+        monitorEndRef.current = monitorEnd;
         const startBufferMonitoring = (player) => {
             stopBufferTimer();
             bufferTimerRef.current = window.setInterval(() => {
@@ -128,6 +133,7 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
 
         const targetVideoId = getYoutubeVideoId(video?.url);
         const startSec = Math.floor(Number(video?.startSec || 0));
+        setHasStarted(false);
 
         // If player already exists, load new video without rebuilding iframe
         if (playerRef.current && readyRef.current && typeof playerRef.current.loadVideoById === 'function') {
@@ -151,7 +157,7 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
             playerRef.current = new window.YT.Player(hostRef.current, {
                 videoId: targetVideoId,
                 playerVars: {
-                    autoplay: 1, // Autoplay muted: allows instant stream buffering into RAM
+                    autoplay: 0,
                     mute: 1,
                     rel: 0,
                     playsinline: 1,
@@ -165,7 +171,6 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                 events: {
                     onReady: (event) => {
                         readyRef.current = true;
-                        monitorEnd(event.target);
                         startBufferMonitoring(event.target);
                         // YouTube ne garantit pas un téléchargement intégral en pause. La
                         // disponibilité du lecteur API est donc l'état réellement utile :
@@ -173,13 +178,16 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                         onBufferProgress?.(1);
                         if (isVisibleRef.current && requestedPlayVersionRef.current > mountedPlayVersionRef.current) {
                             finishedRef.current = false;
+                            playAuthorizedRef.current = true;
+                            monitorEnd(event.target);
+                            setHasStarted(true);
                             event.target.unMute();
                             event.target.playVideo();
                             mountedPlayVersionRef.current = requestedPlayVersionRef.current;
                         }
                     },
                     onStateChange: (event) => {
-                        if (event.data === window.YT.PlayerState.ENDED) finishAtLastFrame(event.target);
+                        if (event.data === window.YT.PlayerState.ENDED && playAuthorizedRef.current && isVisibleRef.current) finishAtLastFrame(event.target);
                         if (event.data === window.YT.PlayerState.PLAYING) {
                             if (!isVisibleRef.current) {
                                 try {
@@ -223,6 +231,9 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
                 playerRef.current.mute();
                 playerRef.current.pauseVideo();
             } catch (_) { }
+            playAuthorizedRef.current = false;
+            if (endTimerRef.current) window.clearInterval(endTimerRef.current);
+            endTimerRef.current = null;
         } else {
             try {
                 playerRef.current.unMute();
@@ -237,6 +248,9 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
         finishedRef.current = false;
         if (readyRef.current && isVisible) {
             try {
+                playAuthorizedRef.current = true;
+                monitorEndRef.current(playerRef.current);
+                setHasStarted(true);
                 playerRef.current.unMute();
                 playerRef.current.playVideo();
                 mountedPlayVersionRef.current = nextVersion;
@@ -244,7 +258,13 @@ function YoutubeSequencePlayer({ video, playVersion, isVisible = true, autoplayO
         }
     }, [playVersion, isVisible]);
 
-    return <div className="course-youtube-player"><div className="course-youtube-player-host" ref={hostRef} /></div>;
+    const thumbnailUrl = getYoutubeVideoId(video?.url)
+        ? `https://i.ytimg.com/vi/${encodeURIComponent(getYoutubeVideoId(video.url))}/maxresdefault.jpg`
+        : '';
+    return <div className={`course-youtube-player ${hasStarted ? 'has-started' : ''}`}>
+        {thumbnailUrl && <img className="course-youtube-clean-poster" src={thumbnailUrl} alt="" draggable="false" />}
+        <div className="course-youtube-player-host" ref={hostRef} />
+    </div>;
 }
 
 const normalizeVideoScenes = (course = {}) => {

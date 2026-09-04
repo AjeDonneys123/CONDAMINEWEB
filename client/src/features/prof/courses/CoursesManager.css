@@ -1317,7 +1317,10 @@
     z-index: 50 !important;
 }
 .course-sequence-video-layer .course-youtube-player, .course-sequence-video-layer iframe { width: 100%; height: 100%; border: 0; }
-.course-sequence-video-layer .course-youtube-player-host { width: 100%; height: 100%; }
+.course-sequence-video-layer .course-youtube-player { position: relative; overflow: hidden; background: #000; }
+.course-sequence-video-layer .course-youtube-player-host { position: relative; z-index: 2; width: 100%; height: 100%; opacity: 0; }
+.course-sequence-video-layer .course-youtube-player.has-started .course-youtube-player-host { opacity: 1; }
+.course-youtube-clean-poster { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: contain; background: #000; pointer-events: none; }
 .course-sequence-video-layer .course-youtube-player iframe { pointer-events: none; }
 .course-sequence-cut-backdrop { position: fixed; inset: 0; z-index: 1600; display: grid; place-items: center; padding: 20px; background: rgba(2,6,23,.82); }
 .course-sequence-cut-window { width: min(900px, 96vw); max-height: 94vh; display: grid; grid-template-rows: auto minmax(240px, 1fr) auto auto auto; overflow: hidden; border-radius: 22px; background: #fff; }
