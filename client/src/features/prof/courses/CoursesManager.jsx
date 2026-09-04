@@ -267,6 +267,20 @@ const groupSceneSequences = (scene = {}) => {
     return (Array.isArray(scene?.sequences) ? scene.sequences : []).map((video) => [video]);
 };
 
+const getScenesForSlide = (slides = [], slideNumber = 1) => {
+    const rows = Array.isArray(slides) ? slides : [];
+    const exact = rows.find((slide) => Number(slide?.slideNumber) === Number(slideNumber));
+    const exactHasSequences = Array.isArray(exact?.scenes)
+        && exact.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0);
+    if (exactHasSequences) return exact.scenes;
+    // Compatibilité avec l'ancien séquenceur qui enregistrait toujours sous
+    // SLIDE 1, même lorsqu'il était ouvert depuis une autre diapo.
+    const configured = rows.filter((slide) => Array.isArray(slide?.scenes)
+        && slide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0));
+    if (configured.length === 1 && Number(configured[0]?.slideNumber) === 1) return configured[0].scenes;
+    return Array.isArray(exact?.scenes) ? exact.scenes : [];
+};
+
 const normalizeSuggestedChapterTitle = (value = '', fallbackIndex = 1) => {
     const raw = String(value || '').replace(/\s+/g, ' ').trim();
     if (!raw) return `H${fallbackIndex} Chapitre ${fallbackIndex}`;
@@ -566,6 +580,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ classId: globalClassId, playerMode })
+        }).then((response) => response.json()).then((data) => {
+            if (!data?.remote) return;
+            setPresentationRemote({
+                active: true,
+                courseId: String(playingCourse._id),
+                title: playingCourse.title,
+                videoSlides: data.videoSlides || playingCourse.presentationVideoSlides || [],
+                scenes: data.scenes || playingCourse.presentationVideoScenes || [],
+                sequences: data.sequences || playingCourse.presentationVideoSequences || [],
+                remote: data.remote
+            });
         }).catch(() => { });
         fetch('/api/learning/slides/manifest', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -659,6 +684,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (!presentationRemote?.remote?.classPlanVisible) return null;
         return (
             <div className="course-projected-class-plan">
+                <button
+                    type="button"
+                    className="course-projected-plan-close"
+                    onClick={() => void sendPresentationCommand('class_plan_hide')}
+                    aria-label="Fermer le plan de classe"
+                    title="Fermer le plan de classe"
+                >×</button>
                 {projectedClassPlan?.error ? (
                     <strong className="course-projected-plan-message">PLAN DE CLASSE INDISPONIBLE</strong>
                 ) : projectedClassPlan ? (
@@ -725,7 +757,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const projectedVideoSlides = rawVideoSlides.length > 0
         ? normalizeVideoSlides({ presentationVideoSlides: rawVideoSlides })
         : normalizeVideoSlides(playingCourse || {});
-    const projectedScenes = projectedVideoSlides.find((slide) => Number(slide.slideNumber) === Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0)) + 1)?.scenes || [];
+    const projectedScenes = getScenesForSlide(projectedVideoSlides, Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0)) + 1);
     const projectedSceneIndex = projectedScenes.length > 0
         ? Math.min(projectedScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0)))
         : 0;
@@ -1237,7 +1269,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (!playingCourse) return;
         setVideoSequencer({
             course: playingCourse,
-            activeSlideNumber: 1,
+            activeSlideNumber: projectedSlideIndex + 1,
             slides: normalizeVideoSlides(playingCourse)
         });
     };
@@ -1585,8 +1617,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     if (isPhone) {
         const phoneSlideIndex = Math.max(0, Number(presentationRemote?.remote?.slideIndex || 0));
-        const phoneVideoSlides = presentationRemote?.videoSlides?.length ? presentationRemote.videoSlides : [{ slideNumber: 1, scenes: [{ id: 'scene_1', name: 'Scène 1', sequences: presentationRemote?.sequences || [] }] }];
-        const phoneScenes = phoneVideoSlides.find((slide) => Number(slide?.slideNumber) === phoneSlideIndex + 1)?.scenes || [];
+        const phoneVideoSlides = normalizeVideoSlides({
+            presentationVideoSlides: presentationRemote?.videoSlides || [],
+            presentationVideoScenes: presentationRemote?.scenes || [],
+            presentationVideoSequences: presentationRemote?.sequences || []
+        });
+        const phoneScenes = getScenesForSlide(phoneVideoSlides, phoneSlideIndex + 1);
         const phoneSceneIndex = Math.max(0, Math.min(phoneScenes.length - 1, Math.max(0, Number(presentationRemote?.remote?.sceneIndex || 0))));
         const phoneGroups = groupSceneSequences(phoneScenes[phoneSceneIndex]);
         const phoneSequenceIndex = Math.min(Math.max(0, phoneGroups.length - 1), Math.max(0, Number(presentationRemote?.remote?.sequenceIndex || 0)));
@@ -1645,7 +1681,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             const specificKey = `${phoneSlideIndex}_${phoneSceneIndex}_${index}`;
                             const pct = Math.min(100, Math.max(0, Number(
                                 bufferMap[specificKey] ??
-                                (isSelected ? presentationRemote?.remote?.currentBufferPct : 0) ??
                                 0
                             )));
                             const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
@@ -1718,7 +1753,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     <button className={presentationRemote.remote?.animationVisible ? 'active' : ''} onClick={() => void sendPresentationCommand('animation_toggle')}><span>🎞</span>{presentationRemote.remote?.animationVisible ? 'Désactiver animation' : 'Activer animation'}</button>
                     {(() => {
                         const currentBufferKey = `${phoneSlideIndex}_${phoneSceneIndex}_${phoneSequenceIndex}`;
-                        const currentBufferPct = Math.min(100, Math.max(0, Number(presentationRemote?.remote?.sequenceBuffers?.[currentBufferKey] ?? presentationRemote?.remote?.currentBufferPct ?? 0)));
+                        const currentBufferPct = Math.min(100, Math.max(0, Number(presentationRemote?.remote?.sequenceBuffers?.[currentBufferKey] ?? 0)));
                         const isCurrentReady = presentationRemote?.remote?.isReady === true || currentBufferPct >= 65;
                         return (
                             <button
@@ -1732,6 +1767,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </button>
                         );
                     })()}
+                    <button onClick={() => void sendPresentationCommand('sequence_previous')}><span>⏮</span>Séquence précédente</button>
                     <button onClick={() => void sendPresentationCommand('sequence_next')}><span>⏭</span>Séquence suivante</button>
                 </div>
             </>}

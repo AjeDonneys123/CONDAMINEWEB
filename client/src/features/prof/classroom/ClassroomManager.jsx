@@ -102,7 +102,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             title={classPlanProjected ? 'Plan miroir affiché au tableau · Toucher pour masquer' : 'Afficher le plan miroir des élèves au tableau'}
         >
             <span className="cm-projector-icon">{classPlanProjected ? '🔴' : '📽️'}</span>
-            <span className="cm-projector-label">{classPlanProjected ? 'TABLEAU ON' : 'TABLEAU'}</span>
+            <span className="cm-projector-label">{classPlanProjected ? 'T ON' : 'T'}</span>
         </button>
     );
     const fileInputRef = useRef(null);
@@ -117,6 +117,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const behaviorRepeatStudentRef = useRef(null);
     const behaviorRepeatDidRepeatRef = useRef(false);
     const behaviorRepeatBusyRef = useRef(false);
+    const studentLongPressTimerRef = useRef(null);
+    const studentLongPressTriggeredRef = useRef('');
     
     const myId = user ? (user._id || user.id) : null;
     const isPunishmentLate = (student) => {
@@ -430,6 +432,33 @@ export default function ClassroomManager({ globalClassId, user }) {
         } catch (e) {
             loadData();
         }
+    };
+
+    const startStudentLongPress = (student, event) => {
+        if (!student?._id || frenchMode || placementStudent || (event?.button !== undefined && event.button !== 0)) return;
+        window.clearTimeout(studentLongPressTimerRef.current);
+        studentLongPressTriggeredRef.current = '';
+        studentLongPressTimerRef.current = window.setTimeout(() => {
+            studentLongPressTriggeredRef.current = String(student._id);
+            setSelectedStudent(null);
+            setIsSwapMode(true);
+            setSwapSource(student);
+            if (navigator.vibrate) navigator.vibrate(35);
+        }, 550);
+    };
+
+    const stopStudentLongPress = () => {
+        window.clearTimeout(studentLongPressTimerRef.current);
+        studentLongPressTimerRef.current = null;
+    };
+
+    const handleStudentCardClick = (event, student) => {
+        event?.stopPropagation?.();
+        if (studentLongPressTriggeredRef.current === String(student?._id || '')) {
+            studentLongPressTriggeredRef.current = '';
+            return;
+        }
+        handleOpenStudent(student);
     };
 
     const getDisplayName = (stu) => String(stu?.nickname || '').trim() || String(stu?.firstName || '');
@@ -952,7 +981,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
@@ -1052,7 +1081,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 >
                                     <div
                                         className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`}
-                                        onClick={() => handleOpenStudent(student)}
+                                        onPointerDown={(event) => startStudentLongPress(student, event)}
+                                        onPointerUp={stopStudentLongPress}
+                                        onPointerCancel={stopStudentLongPress}
+                                        onPointerLeave={stopStudentLongPress}
+                                        onClick={(event) => handleStudentCardClick(event, student)}
                                     >
                                         {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                         <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
@@ -1088,7 +1121,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     const isPlacementActive = String(placementStudent?._id || '') === String(s._id || '');
                     return (
                         <div key={s._id} className={`plan-match-row ${isPlacementActive ? 'placing' : ''}`}>
-                            <div className="plan-match-info" onClick={() => handleOpenStudent(s)}>
+                            <div className="plan-match-info" onPointerDown={(event) => startStudentLongPress(s, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, s)}>
                                 <span className="plan-match-name">{s.lastName} {getDisplayName(s)}</span>
                                 <span className="plan-match-stats">
                                     Note {formatScore(getStudentScore(s))}

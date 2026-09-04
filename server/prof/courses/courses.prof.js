@@ -498,7 +498,14 @@ router.get('/presentation-remote/active', async (req, res) => {
                 .sort({ 'presentationRemote.updatedAt': -1 }).lean();
         }
         if (!course) return res.json({ ok: true, active: false });
-        return res.json({ ok: true, active: true, courseId: String(course._id), title: course.title, videoSlides: course.presentationVideoSlides || [], scenes: course.presentationVideoScenes || [], sequences: course.presentationVideoSequences || [], remote: course.presentationRemote || {} });
+        const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
+        const legacyScenes = Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
+            ? course.presentationVideoScenes
+            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }];
+        const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
+            ? course.presentationVideoSlides
+            : [{ slideNumber: 1, scenes: legacyScenes }];
+        return res.json({ ok: true, active: true, courseId: String(course._id), title: course.title, videoSlides, scenes: legacyScenes, sequences: legacySequences, remote: course.presentationRemote || {} });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -568,7 +575,14 @@ router.post('/presentation-remote/hide-plan', async (req, res) => {
             course.markModified('presentationRemote');
             await course.save();
         }
-        return res.json({ ok: true, remote: course.presentationRemote });
+        const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
+        const legacyScenes = Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
+            ? course.presentationVideoScenes
+            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }];
+        const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
+            ? course.presentationVideoSlides
+            : [{ slideNumber: 1, scenes: legacyScenes }];
+        return res.json({ ok: true, remote: course.presentationRemote, videoSlides, scenes: legacyScenes, sequences: legacySequences });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -598,7 +612,14 @@ router.post('/:id/presentation-remote/start', async (req, res) => {
         };
         course.markModified('presentationRemote');
         await course.save();
-        return res.json({ ok: true, remote: course.presentationRemote });
+        const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
+        const legacyScenes = Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
+            ? course.presentationVideoScenes
+            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }];
+        const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
+            ? course.presentationVideoSlides
+            : [{ slideNumber: 1, scenes: legacyScenes }];
+        return res.json({ ok: true, remote: course.presentationRemote, videoSlides, scenes: legacyScenes, sequences: legacySequences });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -667,8 +688,20 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         const remote = { active: true, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, classPlanVisible: false, playVersion: 0, ...(course.presentationRemote || {}) };
         const action = String(req.body?.action || '');
         const slideTotal = Math.max(1, Number(req.body?.slideTotal || 1));
-        const currentSlide = (Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [])
+        const storedSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
+            ? course.presentationVideoSlides
+            : [{ slideNumber: 1, scenes: Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
+                ? course.presentationVideoScenes
+                : [{ id: 'scene_1', name: 'Scène 1', sequences: Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [] }] }];
+        let currentSlide = storedSlides
             .find((slide) => Number(slide?.slideNumber) === Number(remote.slideIndex || 0) + 1);
+        const currentSlideHasSequences = Array.isArray(currentSlide?.scenes)
+            && currentSlide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0);
+        if (!currentSlideHasSequences) {
+            const configuredSlides = storedSlides.filter((slide) => Array.isArray(slide?.scenes)
+                && slide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0));
+            if (configuredSlides.length === 1 && Number(configuredSlides[0]?.slideNumber) === 1) currentSlide = configuredSlides[0];
+        }
         const currentScenes = Array.isArray(currentSlide?.scenes) ? currentSlide.scenes : [];
         const sceneTotal = Math.max(1, currentScenes.length || Number(req.body?.sceneTotal || 1));
         const currentScene = currentScenes[Math.max(0, Math.min(currentScenes.length - 1, Number(remote.sceneIndex || 0)))];

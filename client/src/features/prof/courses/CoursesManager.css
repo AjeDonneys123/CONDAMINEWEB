@@ -1366,6 +1366,26 @@
     background: linear-gradient(145deg, #0f172a, #1e293b);
     color: #fff;
 }
+.course-projected-plan-close {
+    position: absolute;
+    top: 14px;
+    right: 24px;
+    z-index: 1060;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 2px solid rgba(255, 255, 255, .85);
+    border-radius: 50%;
+    background: rgba(220, 38, 38, .96);
+    color: #fff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
+    font-size: 29px;
+    line-height: 1;
+    cursor: pointer;
+}
+.course-projected-plan-close:hover { background: #b91c1c; transform: scale(1.05); }
 .course-projected-plan-header {
     display: flex;
     flex-direction: column;
@@ -1525,13 +1545,13 @@
 }
 
 .course-phone-seq-camembert.selected {
-    outline: 3px solid #38bdf8;
+    outline: 3px solid #ef4444;
     outline-offset: 3px;
     transform: scale(1.08);
 }
 
 .course-phone-seq-camembert.ready.selected {
-    outline-color: #10b981;
+    outline-color: #ef4444;
 }
 
 .seq-camembert-svg {
@@ -1550,14 +1570,14 @@
 
 .seq-camembert-progress {
     fill: transparent;
-    stroke: #38bdf8;
+    stroke: #8b5cf6;
     stroke-width: 4;
     stroke-linecap: round;
     transition: stroke-dashoffset 0.35s ease, stroke 0.2s ease;
 }
 
 .seq-camembert-progress.ready {
-    stroke: #10b981;
+    stroke: #a78bfa;
 }
 
 .seq-camembert-center {
