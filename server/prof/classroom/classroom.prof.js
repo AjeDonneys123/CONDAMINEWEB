@@ -584,6 +584,58 @@ router.post('/behavior', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/:classId/adjust-all-scores', async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const teacherId = String(req.body?.teacherId || '').trim();
+        const delta = Number(req.body?.delta) < 0 ? -1 : 1;
+        if (!teacherId) return res.status(400).json({ error: 'Professeur requis' });
+
+        const [{ clsObj, students: classStudents }, cls] = await Promise.all([
+            getStudentsForClassOrGroup(classId),
+            Classroom.findById(classId)
+        ]);
+        if (!clsObj || !cls) return res.status(404).json({ error: 'Classe introuvable' });
+
+        const ids = classStudents.map((student) => student?._id).filter(Boolean);
+        const studentDocs = await Student.find({ _id: { $in: ids } });
+        await Promise.all(studentDocs.map(async (student) => {
+            let record = student.behaviorRecords.find((row) => row?.teacherId && String(row.teacherId) === teacherId);
+            if (!record) {
+                student.behaviorRecords.push({ teacherId, baseScore: 15, crosses: 0, bonuses: 0, scores: [] });
+                record = student.behaviorRecords[student.behaviorRecords.length - 1];
+            }
+            if (!Array.isArray(record.scores) || record.scores.length === 0) {
+                const legacyValue = Math.max(0, Math.min(20, Number(record.baseScore ?? 15) + Number(record.bonuses || 0) * .5 - Number(record.crosses || 0)));
+                record.scores = [{ id: `note-${Date.now()}-${student._id}`, value: legacyValue, createdAt: new Date() }];
+                record.selectedScoreId = record.scores[0].id;
+            }
+            const selectedId = String(record.selectedScoreId || record.scores[record.scores.length - 1].id);
+            const selectedScore = record.scores.find((score) => String(score.id) === selectedId) || record.scores[record.scores.length - 1];
+            selectedScore.value = Math.max(0, Math.min(20, Number(selectedScore.value || 0) + delta));
+            record.selectedScoreId = selectedScore.id;
+            student.markModified('behaviorRecords');
+            await student.save();
+        }));
+
+        cls.classPoints = Math.max(0, Number(cls.classPoints || 0) + delta);
+        const now = new Date();
+        const alert = {
+            id: `${now.getTime()}-class-${Math.random().toString(36).slice(2, 8)}`,
+            message: delta < 0 ? 'Classe −1 point' : 'Classe +1 point',
+            createdAt: now
+        };
+        cls.activeStudentBonusAlert = alert.message;
+        cls.activeStudentBonusAlertTime = now;
+        cls.activeScoreAlerts = [...(Array.isArray(cls.activeScoreAlerts) ? cls.activeScoreAlerts : []), alert].slice(-6);
+        await cls.save();
+
+        res.json({ ok: true, adjustedStudents: studentDocs.length, classPoints: cls.classPoints, alert });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/:classId/live-action', async (req, res) => {
     try {
         const { classId } = req.params;

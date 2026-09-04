@@ -45,6 +45,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
     const [classPoints, setClassPoints] = useState(0);
+    const [classScoreBusy, setClassScoreBusy] = useState(false);
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
@@ -383,23 +384,28 @@ export default function ClassroomManager({ globalClassId, user }) {
             console.error(e);
         }
     };
-    const addClassScorePoint = async () => {
-        const visibleStudents = students.filter((s) => s?._id);
-        for (const student of visibleStudents) {
-            await addBehavior(student._id, 'ADJUST_SCORE', { delta: 1 }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
-        }
-        await updateClassPoints(1);
+    const adjustClassScores = async (delta) => {
+        if (classScoreBusy || !globalClassId || !myId) return;
+        const safeDelta = Number(delta) < 0 ? -1 : 1;
+        setClassScoreBusy(true);
         try {
-            await fetch(`/api/classroom/${globalClassId}/live-action`, {
+            const response = await fetch(`/api/classroom/${globalClassId}/adjust-all-scores`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'class-bonus', message: 'Bravo +1' })
+                body: JSON.stringify({ teacherId: myId, delta: safeDelta })
             });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Modification collective impossible');
+            setClassPoints(Number(data.classPoints || 0));
+            await loadData();
         } catch (e) {
             console.error(e);
+            alert(e.message || 'Modification collective impossible');
+        } finally {
+            setClassScoreBusy(false);
         }
-        await loadData();
     };
+    const addClassScorePoint = () => adjustClassScores(1);
     const getCrossCountdownLabel = (stu) => {
         const stats = getMyStats(stu);
         const crosses = Math.max(0, Number(stats?.crosses || 0));
@@ -1226,7 +1232,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <button className="pts-btn" onClick={() => updateClassPoints(-1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>-</button>
                     <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#1e3a8a', minWidth: '45px', textAlign: 'center' }}>🏆 {classPoints} pts</span>
                     <button className="pts-btn" onClick={() => updateClassPoints(1)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
-                    <button className="class-score-btn" onClick={addClassScorePoint}>+1 classe</button>
+                    <button className="class-score-btn negative" onClick={() => void adjustClassScores(-1)} disabled={classScoreBusy}>−1 classe</button>
+                    <button className="class-score-btn" onClick={addClassScorePoint} disabled={classScoreBusy}>+1 classe</button>
                 </div>
 
                 <button

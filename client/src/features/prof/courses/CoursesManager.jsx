@@ -862,9 +862,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             ? playingCourse.editSlideObjectId
             : (slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || '')
     ).trim();
+    const presentationReloadNonce = Number(playingCourse?.presentationReloadNonce || 0);
     const projectedSlidesUrl = projectedSlideObjectId
-        ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}`
-        : getEmbedUrl(playingCourse?.slidesUrl);
+        ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}&condaReload=${presentationReloadNonce}`
+        : `${getEmbedUrl(playingCourse?.slidesUrl)}&condaReload=${presentationReloadNonce}`;
     const editSlidesUrl = projectedSlideObjectId
         ? `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}#slide=id.${encodeURIComponent(projectedSlideObjectId)}`
         : `${getEditUrl(playingCourse?.slidesUrl)}?usp=sharing&editor=${playingCourse?.editorNonce || 0}`;
@@ -1584,7 +1585,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setEditSlideNumberDraft('');
         } else {
             const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || '').trim();
-            setPlayingCourse((current) => current ? { ...current, editSlideObjectId } : current);
+            const presentationReloadNonce = Date.now();
+            setPresentationRemote((current) => current ? {
+                ...current,
+                remote: {
+                    ...(current.remote || {}),
+                    playerMode: 'presentation',
+                    slideIndex: targetSlideIndex,
+                    sceneIndex: targetSlideIndex === projectedSlideIndex ? projectedSceneIndex : 0,
+                    sequenceIndex: targetSlideIndex === projectedSlideIndex ? projectedSequenceIndex : 0
+                }
+            } : current);
+            setPlayingCourse((current) => current ? { ...current, editSlideObjectId, presentationReloadNonce } : current);
             setPlayerMode('presentation');
             setEditSlideNumberDraft('');
             void sendPresentationCommand('mode_change', {
@@ -2090,6 +2102,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         )}
                         <iframe
+                            key={`${playerMode}-${playingCourse?.editorNonce || 0}-${playingCourse?.presentationReloadNonce || 0}-${projectedSlideObjectId}`}
                             title={playingCourse.title}
                             src={playerMode === 'presentation' ? projectedSlidesUrl : editSlidesUrl}
                             allowFullScreen
