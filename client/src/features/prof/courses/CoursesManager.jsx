@@ -1814,34 +1814,38 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     </div>
                 </div>
                 <div className="course-phone-controls">
-                    <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
-                    <button onClick={() => void sendPresentationCommand('google_animation_previous')}><span>↶</span>Animation Google précédente</button>
-                    <button onClick={() => void sendPresentationCommand('google_animation_next')}><span>☝️</span>Simuler un clic Google</button>
-                    <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
-                    {(() => {
-                        const currentBufferKey = `${phoneSlideIndex}_${phoneSceneIndex}_${phoneSequenceIndex}`;
-                        const currentBufferPct = Math.min(100, Math.max(0, Number(presentationRemote?.remote?.sequenceBuffers?.[currentBufferKey] ?? 0)));
-                        const isCurrentReady = presentationRemote?.remote?.isReady === true || currentBufferPct >= 65;
-                        return (
-                            <button
-                                type="button"
-                                className={`play ${isCurrentReady ? 'ready' : 'buffering'}`}
-                                onClick={() => void sendPresentationCommand('play_pause')}
-                                title={isCurrentReady ? 'Lire ou mettre en pause la séquence' : `Mémoire tampon à ${currentBufferPct}% · Toucher pour forcer`}
-                            >
-                                <span>{presentationRemote?.remote?.animationPlaying ? 'Ⅱ' : (isCurrentReady ? '▶' : '⏳')}</span>
-                                {presentationRemote?.remote?.animationPlaying ? 'Pause' : (isCurrentReady ? 'Play' : `Chargement (${currentBufferPct}%)`)}
-                            </button>
-                        );
-                    })()}
-                    <button
-                        type="button"
-                        className={presentationRemote?.remote?.animationVisible ? 'active' : ''}
-                        onClick={() => void sendPresentationCommand(presentationRemote?.remote?.animationVisible ? 'animation_hide' : 'animation_show')}
-                    >
-                        <span>{presentationRemote?.remote?.animationVisible ? '🙈' : '🎞️'}</span>
-                        {presentationRemote?.remote?.animationVisible ? 'Cacher l’animation' : 'Montrer l’animation'}
-                    </button>
+                    <div className="course-phone-slide-row">
+                        <button onClick={() => void sendPresentationCommand('slide_previous')}><span>◀</span>Slide précédente</button>
+                        <button onClick={() => void sendPresentationCommand('google_animation_next')}><span>☝️</span>Clic Google</button>
+                        <button onClick={() => void sendPresentationCommand('slide_next')}><span>▶</span>Slide suivante</button>
+                    </div>
+                    <div className="course-phone-animation-row">
+                        <button onClick={() => void sendPresentationCommand('sequence_previous')}><span>⏮</span>Précédente</button>
+                        {(() => {
+                            const currentBufferKey = `${phoneSlideIndex}_${phoneSceneIndex}_${phoneSequenceIndex}`;
+                            const currentBufferPct = Math.min(100, Math.max(0, Number(presentationRemote?.remote?.sequenceBuffers?.[currentBufferKey] ?? 0)));
+                            const isCurrentReady = presentationRemote?.remote?.isReady === true || currentBufferPct >= 65;
+                            return (
+                                <button
+                                    type="button"
+                                    className={`play ${isCurrentReady ? 'ready' : 'buffering'}`}
+                                    onClick={() => void sendPresentationCommand('play_pause')}
+                                    title={isCurrentReady ? 'Lire ou mettre en pause la séquence' : `Mémoire tampon à ${currentBufferPct}% · Toucher pour forcer`}
+                                >
+                                    <span>{presentationRemote?.remote?.animationPlaying ? 'Ⅱ' : (isCurrentReady ? '▶' : '⏳')}</span>
+                                    {presentationRemote?.remote?.animationPlaying ? 'Pause' : (isCurrentReady ? 'Play' : `${currentBufferPct}%`)}
+                                </button>
+                            );
+                        })()}
+                        <button
+                            type="button"
+                            className={presentationRemote?.remote?.animationVisible ? 'active stop-animation' : 'stop-animation'}
+                            onClick={() => void sendPresentationCommand('animation_hide')}
+                        >
+                            <span>■</span>Stop / cacher
+                        </button>
+                        <button onClick={() => void sendPresentationCommand('sequence_next')}><span>⏭</span>Suivante</button>
+                    </div>
                 </div>
             </>}
         </section>;
