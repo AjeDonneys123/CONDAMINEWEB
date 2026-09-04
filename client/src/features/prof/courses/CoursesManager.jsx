@@ -622,10 +622,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
+        if (['play', 'slide_previous', 'slide_next', 'sequence_previous', 'sequence_next', 'sequence_select', 'scene_previous', 'scene_next', 'scene_select', 'sync'].includes(action)) {
+            setHeldProjectedVideo(null);
+        }
         const slideIndex = Math.max(0, Number(remoteData?.remote?.slideIndex || 0));
         const localVideoSlides = playingCourse?._id ? normalizeVideoSlides(playingCourse) : [];
         const videoSlides = localVideoSlides.length ? localVideoSlides : (remoteData?.videoSlides?.length ? remoteData.videoSlides : []);
-        const scenes = videoSlides.find((slide) => Number(slide?.slideNumber) === slideIndex + 1)?.scenes || [];
+        const scenes = getScenesForSlide(videoSlides, slideIndex + 1);
         const sceneIndex = Math.min(scenes.length - 1, Math.max(0, Number(remoteData?.remote?.sceneIndex || 0)));
         const sequenceTotal = Math.max(1, Number(options.sequenceTotal || groupSceneSequences(scenes[sceneIndex]).length));
         const response = await fetch(`/api/courses/${courseId}/presentation-remote/command`, {
@@ -2083,7 +2086,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {renderProjectedClassPlan()}
                         {preloadItems.length > 0 ? (
                             preloadItems.map((item) => {
-                                const isCurrentActive = item.isCurrent && presentationRemote?.remote?.animationVisible;
+                                const heldVideoKey = String(heldProjectedVideo?.video?.id || heldProjectedVideo?.video?.url || '');
+                                const itemVideoKey = String(item.video?.id || item.video?.url || '');
+                                const hasHeldFrame = Boolean(heldVideoKey && heldProjectedVideo?.playVersion === currentPlayVersion);
+                                const isHeldItem = hasHeldFrame && heldVideoKey === itemVideoKey;
+                                const isCurrentActive = presentationRemote?.remote?.animationVisible
+                                    && (hasHeldFrame ? isHeldItem : item.isCurrent);
                                 const isYoutube = item.video?.sourceType === 'youtube' || getYoutubeVideoId(item.video?.url);
                                 const itemKey = `${item.slideIndex}_${item.sceneIndex}_${item.sequenceIndex}_${item.video?.id || item.video?.url || ''}`;
                                 return (

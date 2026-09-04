@@ -602,6 +602,7 @@ router.post('/:id/presentation-remote/start', async (req, res) => {
             slideIndex: isContinuing ? Number(existingRemote.slideIndex || 0) : 0,
             sceneIndex: isContinuing ? Number(existingRemote.sceneIndex || 0) : 0,
             sequenceIndex: isContinuing ? Number(existingRemote.sequenceIndex || 0) : 0,
+            sequenceCompleted: isContinuing ? existingRemote.sequenceCompleted === true : false,
             animationVisible: false,
             classPlanVisible: Boolean(existingRemote.classPlanVisible),
             playVersion: Number(existingRemote.playVersion || 0),
@@ -708,28 +709,33 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         const currentVideos = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
         const storedSequenceTotal = currentVideos.length;
         const sequenceTotal = Math.max(1, storedSequenceTotal || Number(req.body?.sequenceTotal || 1));
-        if (action === 'slide_previous') { remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
-        if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.animationVisible = false; }
+        if (action === 'slide_previous') { remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
+        if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
         if (action === 'animation_toggle') remote.animationVisible = !remote.animationVisible;
         if (action === 'class_plan_toggle') {
             remote.classPlanVisible = !remote.classPlanVisible;
             if (remote.classPlanVisible) remote.animationVisible = false;
         }
         if (action === 'class_plan_hide') remote.classPlanVisible = false;
-        if (action === 'play') { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; }
-        if (action === 'sequence_previous') remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1);
-        if (action === 'sequence_next') remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1);
-        if (action === 'sequence_select') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0))); remote.animationVisible = false; }
-        if (action === 'sequence_finished') {
-            if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) {
-                remote.sequenceIndex = Number(remote.sequenceIndex || 0) + 1;
-                if (req.body?.closeAfterSequence === true) remote.animationVisible = false;
+        if (action === 'play') {
+            if (remote.sequenceCompleted === true) {
+                if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) remote.sequenceIndex = Number(remote.sequenceIndex || 0) + 1;
+                else if (Number(remote.sceneIndex || 0) < sceneTotal - 1) { remote.sceneIndex = Number(remote.sceneIndex || 0) + 1; remote.sequenceIndex = 0; }
             }
-            else { remote.animationVisible = false; remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; }
+            remote.sequenceCompleted = false;
+            remote.playVersion = Number(remote.playVersion || 0) + 1;
+            remote.animationVisible = true;
         }
-        if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.animationVisible = false; }
-        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; remote.animationVisible = false; }
-        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; remote.animationVisible = false; }
+        if (action === 'sequence_previous') { remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1); remote.sequenceCompleted = false; }
+        if (action === 'sequence_next') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1); remote.sequenceCompleted = false; }
+        if (action === 'sequence_select') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0))); remote.sequenceCompleted = false; remote.animationVisible = false; }
+        if (action === 'sequence_finished') {
+            remote.sequenceCompleted = true;
+            if (req.body?.closeAfterSequence === true) remote.animationVisible = false;
+        }
+        if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
+        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
+        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
         if (action === 'mode_change') {
             remote.playerMode = String(req.body?.playerMode || 'presentation');
             if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
