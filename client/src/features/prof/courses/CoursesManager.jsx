@@ -1612,7 +1612,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (isPhone || !playingCourse?._id) return undefined;
         const refreshAfterExternalEdit = () => {
             if (!externalSlidesEditorOpenedRef.current || document.visibilityState === 'hidden') return;
-            setPlayingCourse((current) => current ? { ...current, presentationReloadNonce: Date.now() } : current);
             fetch('/api/learning/slides/manifest', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
@@ -1627,6 +1626,17 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             document.removeEventListener('visibilitychange', refreshAfterExternalEdit);
         };
     }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl]);
+
+    const refreshSlidesFromGoogle = () => {
+        if (!playingCourse?.slidesUrl) return;
+        setPlayingCourse((current) => current ? { ...current, presentationReloadNonce: Date.now() } : current);
+        fetch('/api/learning/slides/manifest', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
+        }).then((response) => response.json())
+            .then((data) => setSlideManifest(Array.isArray(data?.slides) ? data.slides : []))
+            .catch(() => { });
+    };
 
     const createCourseSection = async () => {
         const name = window.prompt('Nom de la nouvelle section :', 'Nouvelle section');
@@ -2393,6 +2403,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                             <button type="button" className="course-sync-board-button" onClick={() => void forceSyncRemote()} title="Envoyer la diapo CondaWeb active au téléphone">
                                 ↻ SYNCHRONISER LE TÉLÉPHONE
+                            </button>
+                            <button type="button" className="course-sync-board-button" onClick={refreshSlidesFromGoogle} title="Recharger manuellement les modifications depuis Google Slides">
+                                ↻ ACTUALISER LES SLIDES
                             </button>
                             <div className="course-add-wrap">
                                 <button type="button" className="course-animation-button" onClick={() => setAddMenuOpen((current) => !current)}>
