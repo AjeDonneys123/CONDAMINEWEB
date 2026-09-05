@@ -248,6 +248,38 @@ router.get('/debts/:classId', async (req, res) => {
     }
 });
 
+// État léger et stable destiné à l'extension Google Slides.
+router.get('/bridge-state/:classId', async (req, res) => {
+    try {
+        const { clsObj, students } = await getStudentsForClassOrGroup(req.params.classId);
+        if (!clsObj) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
+        const classroom = typeof clsObj.toObject === 'function' ? clsObj.toObject() : clsObj;
+        return res.json({
+            _id: String(classroom._id || req.params.classId),
+            name: classroom.name || '',
+            layout: classroom.layout || { cols: 6, rows: 5, separators: [] },
+            classPlanVisible: classroom.classPlanVisible === true,
+            classPoints: Number(classroom.classPoints ?? 10),
+            activeStudentHighlight: classroom.activeStudentHighlight || '',
+            activeStudentHighlightTime: classroom.activeStudentHighlightTime || null,
+            activeStudentBonusAlert: classroom.activeStudentBonusAlert || '',
+            activeStudentBonusAlertTime: classroom.activeStudentBonusAlertTime || null,
+            activeScoreAlerts: Array.isArray(classroom.activeScoreAlerts) ? classroom.activeScoreAlerts : [],
+            activeHourWarnings: Array.isArray(classroom.activeHourWarnings) ? classroom.activeHourWarnings : [],
+            planStudents: students.map((student) => ({
+                _id: String(student._id),
+                firstName: student.firstName || '',
+                nickname: student.nickname || '',
+                lastName: student.lastName || '',
+                seatX: student.seatX !== null && student.seatX !== undefined && Number.isFinite(Number(student.seatX)) ? Number(student.seatX) : null,
+                seatY: student.seatY !== null && student.seatY !== undefined && Number.isFinite(Number(student.seatY)) ? Number(student.seatY) : null
+            }))
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // 2. RÉCUPÉRATION INFOS CLASSE
 router.get('/:classId', async (req, res) => {
     try {
@@ -590,6 +622,34 @@ router.post('/behavior', async (req, res) => {
         s.markModified('behaviorRecords');
         await s.save();
         const scoreClassId = String(extraData?.classId || '').trim();
+        const liveAlertTypes = new Set(['ADJUST_SCORE', 'TOGGLE_SCORE_WARNING', 'TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'ADD_PUNISHMENT', 'ADD_FORCED_SIX']);
+        if (scoreClassId && mongoose.Types.ObjectId.isValid(scoreClassId) && liveAlertTypes.has(type)) {
+            const displayName = String(s.nickname || s.firstName || '').trim();
+            let message = '';
+            let alertType = 'warning';
+            if (type === 'ADJUST_SCORE' && appliedClassPointDelta !== 0) {
+                const scores = Array.isArray(r.scores) ? r.scores : [];
+                const selected = scores.find((row) => String(row?.id || '') === String(r.selectedScoreId || '')) || scores[scores.length - 1];
+                const value = Number(selected?.value || 0);
+                const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1).replace('.', ',');
+                message = `${displayName} ${appliedClassPointDelta > 0 ? '+0,5' : '−0,5'} → ${formatted}`;
+                alertType = appliedClassPointDelta > 0 ? 'positive' : 'negative';
+            } else if (type === 'TOGGLE_SCORE_WARNING') message = `Avertissement au tableau : ${displayName}`;
+            else if (type === 'TOGGLE_SCORE_PUNISHMENT' || type === 'ADD_PUNISHMENT') message = `Punition : ${displayName}`;
+            else if (type === 'TOGGLE_SCORE_INCOMPLETE') message = `Travail incomplet : ${displayName}`;
+            else if (type === 'ADD_FORCED_SIX') message = `Note forcée à 6 : ${displayName}`;
+            if (message) {
+                const now = new Date();
+                const alert = { id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, message, type: alertType, createdAt: now };
+                await Classroom.updateOne(
+                    { _id: scoreClassId },
+                    {
+                        $set: { activeStudentBonusAlert: message, activeStudentBonusAlertTime: now },
+                        $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } }
+                    }
+                );
+            }
+        }
         if (type === 'ADJUST_SCORE' && scoreClassId && appliedClassPointDelta !== 0 && mongoose.Types.ObjectId.isValid(scoreClassId)) {
             await Classroom.updateOne(
                 { _id: scoreClassId, classPointsInitialized: { $ne: true } },

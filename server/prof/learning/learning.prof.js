@@ -999,12 +999,29 @@ router.post('/general-sheet/google-doc', async (req, res) => {
     }
 });
 
+const slideThumbnailCache = new Map();
+const THUMBNAIL_CACHE_TTL_MS = 60 * 1000;
+
 router.get('/slides/thumbnail', async (req, res) => {
     try {
         const presentationId = String(req.query.presentationId || '').trim();
         const pageObjectId = String(req.query.pageObjectId || '').trim();
         const slideNumber = Math.max(0, Number(req.query.slideNumber || 0));
         if (!presentationId) return res.status(400).send('Paramètres manquants');
+        
+        const cacheKey = `${presentationId}_${pageObjectId}_${slideNumber}`;
+        const now = Date.now();
+        const forceRefresh = req.query.force === '1' || req.query.sync === '1';
+        const cached = slideThumbnailCache.get(cacheKey);
+
+        // Si en cache et valide : réponse immédiate (< 1ms)
+        if (cached && !forceRefresh && (now - cached.timestamp < 3600000)) {
+            res.setHeader('Content-Type', cached.contentType || 'image/png');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.setHeader('X-Cache', 'HIT');
+            return res.status(200).send(cached.buffer);
+        }
+
         let out = null;
         try {
             out = await ProfDrive.getGoogleSlideThumbnailBinary(presentationId, pageObjectId, slideNumber);
@@ -1016,10 +1033,17 @@ router.get('/slides/thumbnail', async (req, res) => {
                 throw inner;
             }
         }
+
+        // Sauvegarde en cache RAM
+        slideThumbnailCache.set(cacheKey, {
+            buffer: out.buffer,
+            contentType: out.contentType || 'image/png',
+            timestamp: now
+        });
+
         res.setHeader('Content-Type', out.contentType || 'image/png');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
+        res.setHeader('X-Cache', 'MISS');
         return res.status(200).send(out.buffer);
     } catch (e) {
         const presentationId = String(req.query.presentationId || '').trim();

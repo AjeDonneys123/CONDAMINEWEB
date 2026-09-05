@@ -760,10 +760,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         const skipFlash = Boolean(options.skipFlash);
         const silentReload = Boolean(options.silentReload);
         const targetStudent = students.find((s) => String(s._id) === String(sid));
-        if (!skipFlash && targetStudent && type === 'ADJUST_SCORE' && Number(extra?.delta || 0) !== 0) {
-            showScoreEvolutionOnBoard(targetStudent, Number(extra?.delta || 0));
-        }
-
         const optimisticScoreId = type === 'ADD_SCORE'
             ? `score-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
             : '';
@@ -893,9 +889,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                     studentId: sid,
                     type,
                     teacherId: myId,
-                    extraData: type === 'ADJUST_SCORE' && extra && typeof extra === 'object'
+                    extraData: extra && typeof extra === 'object'
                         ? { ...extra, classId: globalClassId }
-                        : extra
+                        : (['ADD_PUNISHMENT', 'REMOVE_PUNISHMENT'].includes(type) ? { value: extra, classId: globalClassId } : extra)
                 })
             });
 

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>CondaWeb Bridge</title>
+    <style>
+        body {
+            width: 320px;
+            margin: 0;
+            padding: 16px;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            box-sizing: border-box;
+        }
+        h1 {
+            font-size: 15px;
+            font-weight: 900;
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #38bdf8;
+        }
+        .status-box {
+            padding: 10px 12px;
+            background: #1e293b;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            margin-bottom: 14px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px 10px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 12px;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+            outline: none;
+        }
+        input:focus, select:focus {
+            border-color: #38bdf8;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            background: #7c3aed;
+            color: #fff;
+            font-weight: 800;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 4px;
+            transition: background 0.15s ease;
+        }
+        button:hover {
+            background: #6d28d9;
+        }
+        button.secondary {
+            background: #334155;
+            margin-top: 8px;
+        }
+        button.secondary:hover {
+            background: #475569;
+        }
+        .footer-info {
+            margin-top: 14px;
+            font-size: 10px;
+            color: #64748b;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚡ CondaWeb Bridge</h1>
+    
+    <div class="status-box">
+        <span>Statut :</span>
+        <span id="conn-status"><span class="status-dot"></span>Prêt</span>
+    </div>
+
+    <label for="server-url">Serveur CondaWeb</label>
+    <input type="text" id="server-url" value="http://localhost:3000" />
+
+    <label for="class-select">Classe Active</label>
+    <select id="class-select">
+        <option value="">Chargement des classes…</option>
+    </select>
+
+    <button id="save-btn" type="button">💾 Enregistrer les réglages</button>
+    <button id="test-alert-btn" class="secondary" type="button">🔔 Tester une alerte au tableau</button>
+
+    <div class="footer-info">
+        Session : vuillet.jean@condamine.edu.ec<br>
+        Incruste vos alertes directement sur Google Slides.
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

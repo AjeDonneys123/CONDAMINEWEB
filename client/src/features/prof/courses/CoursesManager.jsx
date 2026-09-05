@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './CoursesManager.css';
 import SharedVideoSequenceEditor from '../learning/SharedVideoSequenceEditor';
 
+
 const EMPTY_FORM = {
     title: '',
     description: '',
@@ -71,6 +72,20 @@ const getYoutubeVideoId = (value = '') => {
 const getYoutubeEmbedUrl = (value = '') => {
     const id = getYoutubeVideoId(value);
     return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?rel=0&playsinline=1` : '';
+};
+
+const getGoogleSlidesVideoEmbedUrl = (value = '') => {
+    const url = String(value || '').trim();
+    const youtubeUrl = getYoutubeEmbedUrl(url);
+    if (youtubeUrl) return youtubeUrl;
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname.includes('drive.google.com')) {
+            const fileId = parsed.pathname.match(/\/d\/([^/]+)/)?.[1] || parsed.searchParams.get('id') || '';
+            return fileId ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview` : '';
+        }
+    } catch (_) { }
+    return '';
 };
 
 const AUDIO_FILE_PATTERN = /\.(?:mp3|m4a|aac|wav|ogg|oga|flac)(?:[?#].*)?$/i;
@@ -316,6 +331,45 @@ const getScenesForSlide = (slides = [], slideNumber = 1) => {
     return Array.isArray(exact?.scenes) ? exact.scenes : [];
 };
 
+const buildSlideTransitionItems = (elements = [], perParagraph = true) => {
+    const items = [];
+    (Array.isArray(elements) ? elements : []).forEach((el) => {
+        if (el.type !== 'text' || !String(el.content || '').trim()) return;
+        const rawText = String(el.content).replace(/\r\n?/g, '\n');
+        let paragraphs = rawText.split(/[\n\v\u2028\u2029]+/).filter((paragraph) => paragraph.trim());
+        // Some Google Slides text runs lose paragraph markers during import.
+        // For a numbered list, its numbered starts remain reliable boundaries
+        // and let "Par paragraphe" still reveal 1-, 2-, 3- one at a time.
+        if (paragraphs.length <= 1) {
+            const numberedParagraphs = rawText
+                .split(/(?=(?:^|\s)\d{1,2}\s*[-–—.)]\s*)/)
+                .map((paragraph) => paragraph.trim())
+                .filter(Boolean);
+            if (numberedParagraphs.length > 1) paragraphs = numberedParagraphs;
+        }
+        const parts = perParagraph && paragraphs.length > 1 ? paragraphs : [String(el.content).trim()];
+        const totalHeight = Number(el.height ?? 0);
+        const elementY = Number(el.y ?? el.top ?? 0);
+        const elementX = Number(el.x ?? el.left ?? 0);
+        const elementWidth = Number(el.width ?? 0);
+        parts.forEach((text, paragraphIndex) => {
+            const partHeight = perParagraph && paragraphs.length > 1 ? totalHeight / parts.length : totalHeight;
+            items.push({
+                id: perParagraph && paragraphs.length > 1 ? `${el.id || el.googleObjectId || ''}_p${paragraphIndex}` : String(el.id || el.googleObjectId || ''),
+                elementId: String(el.id || el.googleObjectId || ''),
+                paragraphIndex,
+                text: String(text).trim(),
+                left: elementX,
+                top: perParagraph && paragraphs.length > 1 ? elementY + (paragraphIndex * partHeight) : elementY,
+                width: elementWidth,
+                height: partHeight,
+                style: el.style || {}
+            });
+        });
+    });
+    return items;
+};
+
 const normalizeSuggestedChapterTitle = (value = '', fallbackIndex = 1) => {
     const raw = String(value || '').replace(/\s+/g, ' ').trim();
     if (!raw) return `H${fallbackIndex} Chapitre ${fallbackIndex}`;
@@ -389,6 +443,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [projectedControl, setProjectedControl] = useState(null);
     const [presentationRemote, setPresentationRemote] = useState(null);
     const [slideManifest, setSlideManifest] = useState([]);
+    const [liveSyncKey, setLiveSyncKey] = useState(Date.now());
+    const [slideImageUrl, setSlideImageUrl] = useState('');
+    const [renderedSlideIndex, setRenderedSlideIndex] = useState(null);
+    const [slideImageLoading, setSlideImageLoading] = useState(false);
+    // Keep decoded slide images available while the teacher navigates.  This is
+    // deliberately local to the presentation: going back and forth must not
+    // wait for a new request to Google Slides.
+    const slideImageCacheRef = useRef(new Map());
+    const renderedSlideIndexRef = useRef(null);
+    const [slideElementsMap, setSlideElementsMap] = useState({});
+    const [slideTransitions, setSlideTransitions] = useState({});
+    const [diaporamaActive, setDiaporamaActive] = useState(false);
+    // Step 1 is the initial state; configured step 2 appears on the first click.
+    const [currentDiaporamaStep, setCurrentDiaporamaStep] = useState(1);
+    const [transitionEditorOpen, setTransitionEditorOpen] = useState(false);
+    const [transitionEditMode, setTransitionEditMode] = useState(false);
+    const [savingTransitions, setSavingTransitions] = useState(false);
+    const [transitionDraft, setTransitionDraft] = useState({ enabled: true, perParagraph: true, stepsMap: {}, masks: [] });
+    const [selectedMaskId, setSelectedMaskId] = useState('');
+    const [editingMaskId, setEditingMaskId] = useState('');
+    const [maskRevealPixels, setMaskRevealPixels] = useState({});
     const [editSlideNumberDraft, setEditSlideNumberDraft] = useState('');
     const [lastEditSlideNumber, setLastEditSlideNumber] = useState(null);
     const [playingVideoIndex, setPlayingVideoIndex] = useState(0);
@@ -402,6 +477,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const externalSlidesEditorOpenedRef = useRef(false);
     const completedProjectedVideoRef = useRef('');
     const consumedYoutubePlayVersionRef = useRef(0);
+    // The class remote is polled every 650ms. Keep a short guard after a local
+    // slide change so a poll that started just before the save cannot undo it.
+    const pendingSlideSyncRef = useRef(null);
+    const slideNavigationLockRef = useRef(null);
+    const diaporamaToggleLockRef = useRef(null);
+    const slideNavigationVersionRef = useRef(0);
+    const slideNavigationQueueRef = useRef(Promise.resolve());
+    const maskHoldDelayRef = useRef(null);
+    const maskHoldProgressRef = useRef(null);
+    const maskHoldCompletedRef = useRef(false);
+    const maskHoldActiveRef = useRef(false);
+    const maskEditorDragRef = useRef(null);
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
@@ -541,12 +628,65 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [playingCourse]);
 
     useEffect(() => {
+        if (!playingCourse?._id) {
+            setSlideElementsMap({});
+            setSlideTransitions({});
+            setDiaporamaActive(false);
+            setCurrentDiaporamaStep(1);
+            return undefined;
+        }
+        if (playingCourse.slideTransitions && typeof playingCourse.slideTransitions === 'object') {
+            setSlideTransitions(playingCourse.slideTransitions);
+        } else {
+            setSlideTransitions({});
+        }
+
+        fetch(`/api/courses/${playingCourse._id}/slides/native`)
+            .then((r) => r.json())
+            .then((data) => {
+                if (Array.isArray(data?.nativeSlides || data?.slides)) {
+                    const list = data.nativeSlides || data.slides;
+                    const map = {};
+                    list.forEach((s) => {
+                        const num = Number(s.slideNumber || 1);
+                        map[num] = {
+                            elements: Array.isArray(s.elements) ? s.elements : [],
+                            backgroundColor: s.background?.color || s.backgroundColor || '#ffffff'
+                        };
+                    });
+                    setSlideElementsMap(map);
+                }
+            })
+            .catch(() => {});
+    }, [playingCourse?._id]);
+
+    useEffect(() => {
         if (!globalClassId) return undefined;
         const poll = async () => {
             try {
                 const response = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
                 const data = await response.json();
-                setPresentationRemote(data?.active ? data : null);
+                if (!data?.active) {
+                    setPresentationRemote(null);
+                    return;
+                }
+                setPresentationRemote((current) => {
+                    const pending = pendingSlideSyncRef.current;
+                    const remoteSlideIndex = Number(data?.remote?.slideIndex || 0);
+                    const navigationLock = slideNavigationLockRef.current;
+                    if (navigationLock && Date.now() < navigationLock.expiresAt && remoteSlideIndex !== navigationLock.slideIndex) {
+                        return current;
+                    }
+                    if (navigationLock && Date.now() >= navigationLock.expiresAt) {
+                        slideNavigationLockRef.current = null;
+                    }
+                    // Keep the last local target locked until its own queued
+                    // command confirms it. An earlier command may temporarily
+                    // reach the same slide number, then be followed by another
+                    // older request from the queue.
+                    if (pending && remoteSlideIndex !== pending.slideIndex) return current;
+                    return data;
+                });
             } catch (_) { }
         };
         poll();
@@ -646,6 +786,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return undefined;
     }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl, globalClassId]);
 
+    // Refresh the visible Google Slide while it is being edited in another tab.
+    // Returning to CondaWeb also triggers an immediate refresh because browsers
+    // may slow timers down in a background tab.
+    useEffect(() => {
+        if (!playingCourse?._id || isPhone) return undefined;
+        const refreshVisibleSlide = () => setLiveSyncKey(Date.now());
+        const intervalId = window.setInterval(() => {
+            refreshVisibleSlide();
+        }, 2000);
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') refreshVisibleSlide();
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+    }, [playingCourse?._id, isPhone]);
+
+
+
     const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
@@ -660,10 +821,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const sequenceTotal = Math.max(1, Number(options.sequenceTotal || groupSceneSequences(scenes[sceneIndex]).length));
         const response = await fetch(`/api/courses/${courseId}/presentation-remote/command`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, ...options, slideTotal: Math.max(1, slideManifest.length || 100), sceneTotal: Math.max(1, Number(options.sceneTotal || scenes.length)), sequenceTotal })
+            body: JSON.stringify({ action, ...options, slideTotal: Math.max(1, slideManifest.length || 1), sceneTotal: Math.max(1, Number(options.sceneTotal || scenes.length)), sequenceTotal })
         });
         const data = await response.json().catch(() => ({}));
-        if (response.ok) setPresentationRemote((current) => ({ ...(current || remoteData || {}), active: true, courseId, videoSlides, remote: data.remote }));
+        if (response.ok) setPresentationRemote((current) => {
+            const pending = pendingSlideSyncRef.current;
+            const remoteSlideIndex = Number(data?.remote?.slideIndex || 0);
+            const navigationVersion = Number(options.localNavigationVersion || 0);
+            // Several quick clicks can leave responses arriving out of order.
+            // Never let an earlier response replace the most recent selection.
+            if (action === 'sync' && navigationVersion && navigationVersion !== slideNavigationVersionRef.current) return current;
+            if (action === 'sync' && pending && remoteSlideIndex !== pending.slideIndex) return current;
+            if (action === 'sync' && pending && remoteSlideIndex === pending.slideIndex) {
+                pendingSlideSyncRef.current = null;
+            }
+            return { ...(current || remoteData || {}), active: true, courseId, videoSlides, remote: data.remote };
+        });
     };
 
     const forceSyncRemote = async () => {
@@ -699,16 +872,51 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const selectProjectedSlide = async (nextIndex) => {
         const total = Math.max(1, slideManifest.length || 1);
         const slideIndex = Math.min(total - 1, Math.max(0, Math.floor(Number(nextIndex) || 0)));
+        const navigationVersion = slideNavigationVersionRef.current + 1;
+        slideNavigationVersionRef.current = navigationVersion;
+        pendingSlideSyncRef.current = { slideIndex, requestedAt: Date.now(), navigationVersion };
+        slideNavigationLockRef.current = { slideIndex, expiresAt: Date.now() + 2500 };
+        // Update the projected view first. The remote command still keeps the
+        // phone controller and other connected screens in sync, but should not
+        // make the teacher wait for a network round trip to see the next slide.
+        setPresentationRemote((current) => current ? {
+            ...current,
+            remote: {
+                ...(current.remote || {}),
+                slideIndex,
+                sceneIndex: 0,
+                sequenceIndex: 0,
+                transitionStep: 1,
+                playerMode
+            }
+        } : current);
         if (playerMode === 'edit') {
             const editSlideObjectId = String(slideManifest[slideIndex]?.objectId || '').trim();
             setPlayingCourse((current) => current ? { ...current, editSlideObjectId } : current);
         }
-        await sendPresentationCommand('sync', {
-            slideIndex,
-            sceneIndex: 0,
-            sequenceIndex: 0,
-            playerMode
+        // Preserve click order on the server. Without this queue, a delayed
+        // request for slide 27 can arrive after the request for slide 29 and
+        // make the remote state jump backwards once clicking stops.
+        const queuedCommand = slideNavigationQueueRef.current
+            .catch(() => undefined)
+            .then(() => {
+                if (navigationVersion !== slideNavigationVersionRef.current) return undefined;
+                return sendPresentationCommand('sync', {
+                    slideIndex,
+                    sceneIndex: 0,
+                    sequenceIndex: 0,
+                    playerMode,
+                    localNavigationVersion: navigationVersion
+                });
         });
+        slideNavigationQueueRef.current = queuedCommand;
+        try {
+            await queuedCommand;
+        } catch (_) {
+            if (navigationVersion === slideNavigationVersionRef.current) {
+                pendingSlideSyncRef.current = null;
+            }
+        }
     };
 
     const renderProjectedClassPlan = () => {
@@ -787,6 +995,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (playingCourse?._id && !isPhone) fetch(`/api/courses/${playingCourse._id}/presentation-remote/stop`, { method: 'POST' }).catch(() => { });
         setPlayingCourse(null);
         setPresentationRemote(null);
+        setSlideImageUrl('');
+        setRenderedSlideIndex(null);
+        renderedSlideIndexRef.current = null;
+        setSlideImageLoading(false);
+        slideImageCacheRef.current.clear();
+        pendingSlideSyncRef.current = null;
+        slideNavigationLockRef.current = null;
+        diaporamaToggleLockRef.current = null;
+        slideNavigationVersionRef.current += 1;
+        slideNavigationQueueRef.current = Promise.resolve();
     };
 
     const rawVideoSlides = (Array.isArray(playingCourse?.presentationVideoSlides) && playingCourse.presentationVideoSlides.length > 0)
@@ -874,6 +1092,325 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}&condaReload=${presentationReloadNonce}`
         : `${getEmbedUrl(playingCourse?.slidesUrl)}&condaReload=${presentationReloadNonce}`;
+    const editSlidesUrl = useMemo(() => {
+        if (!playingCourse?.slidesUrl) return '';
+        const base = getEditUrl(playingCourse?.slidesUrl);
+        return projectedSlideObjectId
+            ? `${base}?rm=minimal#slide=id.${encodeURIComponent(projectedSlideObjectId)}`
+            : `${base}?rm=minimal`;
+    }, [playingCourse?.slidesUrl, projectedSlideObjectId]);
+
+    // Loads the current image without blanking the previous slide. Adjacent
+    // slides are normally already decoded by the preloader below.
+    useEffect(() => {
+        const presId = extractPresentationId(playingCourse?.slidesUrl);
+        if (!presId) return;
+        const pageId = String(projectedSlideObjectId || slideManifest[projectedSlideIndex]?.objectId || '').trim();
+        const slideNum = projectedSlideIndex + 1;
+        const cacheKey = `${presId}:${pageId}:${slideNum}`;
+        // `force=1` bypasses the server thumbnail cache: edits made in another
+        // Google Slides tab therefore appear on the projected slide within 2s.
+        const targetUrl = `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presId)}&pageObjectId=${encodeURIComponent(pageId)}&slideNumber=${slideNum}&force=1&refresh=${liveSyncKey}`;
+        const cachedUrl = slideImageCacheRef.current.get(cacheKey);
+        const commitVisibleSlide = (url) => {
+            // Reset transition state in the same React update as the visual
+            // switch. Resetting it in an effect happens one paint too late and
+            // briefly exposes masks from the previous slide.
+            if (renderedSlideIndexRef.current !== projectedSlideIndex) {
+                setCurrentDiaporamaStep(1);
+                setMaskRevealPixels({});
+            }
+            renderedSlideIndexRef.current = projectedSlideIndex;
+            setSlideImageUrl(url);
+            setRenderedSlideIndex(projectedSlideIndex);
+        };
+        if (cachedUrl) {
+            commitVisibleSlide(cachedUrl);
+        }
+
+        let isCancelled = false;
+        setSlideImageLoading(true);
+        const img = new Image();
+        img.src = targetUrl;
+        img.onload = () => {
+            if (!isCancelled) {
+                slideImageCacheRef.current.set(cacheKey, targetUrl);
+                commitVisibleSlide(targetUrl);
+                setSlideImageLoading(false);
+            }
+        };
+        img.onerror = () => {
+            if (!isCancelled) {
+                setSlideImageLoading(false);
+            }
+        };
+        return () => { isCancelled = true; };
+    }, [playingCourse?.slidesUrl, projectedSlideIndex, projectedSlideObjectId, slideManifest, liveSyncKey]);
+
+    // Keep the old image and its masks together until the next slide image has
+    // been decoded. This prevents masks from flashing on the wrong slide.
+    const visibleSlideIndex = renderedSlideIndex === null ? projectedSlideIndex : renderedSlideIndex;
+    const isSlideSwitching = visibleSlideIndex !== projectedSlideIndex;
+    const currentSlideNumber = visibleSlideIndex + 1;
+    const currentSlideData = slideElementsMap[currentSlideNumber];
+    const currentSlideElements = currentSlideData?.elements || [];
+    const currentSlideBgColor = currentSlideData?.backgroundColor || '#ffffff';
+    const currentSlideTransition = slideTransitions[currentSlideNumber] || null;
+    const transitionsEnabled = currentSlideTransition?.enabled !== false;
+
+    const currentSlideTransitionItems = useMemo(
+        () => buildSlideTransitionItems(currentSlideElements, currentSlideTransition?.perParagraph !== false),
+        [currentSlideElements, currentSlideTransition?.perParagraph]
+    );
+    const editorTransitionItems = useMemo(
+        () => buildSlideTransitionItems(currentSlideElements, transitionDraft.perParagraph !== false),
+        [currentSlideElements, transitionDraft.perParagraph]
+    );
+
+    // Compute max steps for current slide
+    const maxSlideSteps = useMemo(() => {
+        const steps = currentSlideTransition?.steps;
+        return Math.max(1, ...currentSlideTransitionItems.map((_item, index) => index + 2), ...(Array.isArray(steps) ? steps : []).map((s) => Number(s.step) || 1), ...(currentSlideTransition?.masks || []).map((mask) => Number(mask.step) || 1));
+    }, [currentSlideTransition?.masks, currentSlideTransition?.steps, currentSlideTransition?.useCustomMasks, currentSlideTransitionItems]);
+
+    const currentSlideMasks = useMemo(() => {
+        const usesCustomMasks = currentSlideTransition?.useCustomMasks === true;
+        const textMasks = usesCustomMasks ? [] : currentSlideTransitionItems.map((item, index) => {
+            const stepConf = (currentSlideTransition?.steps || []).find((step) => (step.elementIds || []).includes(item.id));
+            return { id: `text-${item.id}`, number: index + 1, step: Number(stepConf?.step || index + 2), x: item.left, y: item.top, width: item.width, height: item.height };
+        });
+        const manualMasks = (Array.isArray(currentSlideTransition?.masks) ? currentSlideTransition.masks : []).map((mask, index) => ({
+            id: String(mask.id || `manual-${index}`), number: textMasks.length + index + 1,
+            step: Math.max(1, Number(mask.step) || 1),
+            x: Math.max(0, Number(mask.x) || 0),
+            y: Math.max(0, Number(mask.y) || 0),
+            width: Math.max(1, Number(mask.width) || 1),
+            height: Math.max(1, Number(mask.height) || 1)
+        }));
+        return [...textMasks, ...manualMasks];
+    }, [currentSlideTransition?.masks, currentSlideTransition?.steps, currentSlideTransitionItems]);
+    const nextMaskedStep = useMemo(() => {
+        const pendingSteps = currentSlideMasks
+            .filter((mask) => mask.step > currentDiaporamaStep)
+            .map((mask) => mask.step);
+        return pendingSteps.length ? Math.min(...pendingSteps) : null;
+    }, [currentDiaporamaStep, currentSlideMasks]);
+
+    const advanceDiaporama = useCallback(() => {
+        if (isSlideSwitching) return;
+        if (transitionsEnabled && nextMaskedStep !== null) {
+            const nextStep = nextMaskedStep;
+            setCurrentDiaporamaStep(nextStep);
+            setPresentationRemote((current) => current ? {
+                ...current,
+                remote: { ...(current.remote || {}), transitionStep: nextStep }
+            } : current);
+            sendPresentationCommand('transition_next', { step: nextStep }).catch(() => {});
+        } else {
+            const total = Math.max(1, slideManifest.length || 1);
+            if (projectedSlideIndex < total - 1) {
+                void selectProjectedSlide(projectedSlideIndex + 1);
+            }
+        }
+    }, [isSlideSwitching, transitionsEnabled, nextMaskedStep, slideManifest.length, projectedSlideIndex, selectProjectedSlide, sendPresentationCommand]);
+
+    const stopMaskHold = useCallback((advanceShortPress = false) => {
+        if (maskHoldDelayRef.current) window.clearTimeout(maskHoldDelayRef.current);
+        if (maskHoldProgressRef.current) window.clearInterval(maskHoldProgressRef.current);
+        const wasHolding = maskHoldActiveRef.current;
+        maskHoldDelayRef.current = null;
+        maskHoldProgressRef.current = null;
+        maskHoldActiveRef.current = false;
+        // A long press deliberately keeps the partially revealed mask where it
+        // is. A short press always removes the active mask (or changes slide).
+        if (advanceShortPress && !wasHolding && !maskHoldCompletedRef.current) {
+            maskHoldCompletedRef.current = true;
+            advanceDiaporama();
+        }
+    }, [advanceDiaporama]);
+
+    const startMaskHold = useCallback(() => {
+        maskHoldCompletedRef.current = false;
+        if (!diaporamaActive || !transitionsEnabled || nextMaskedStep === null) return;
+        maskHoldDelayRef.current = window.setTimeout(() => {
+            const nextStep = nextMaskedStep;
+            const startedAt = Date.now();
+            const initialPixels = Number(maskRevealPixels[nextStep] || 0);
+            maskHoldActiveRef.current = true;
+            maskHoldProgressRef.current = window.setInterval(() => {
+                // 12px every 500ms = 24px/s. Updates every 16ms preserve a
+                // continuous motion while making the progressive reveal useful
+                // at presentation speed.
+                const revealedPixels = initialPixels + ((Date.now() - startedAt) * 0.024);
+                setMaskRevealPixels((current) => ({ ...current, [nextStep]: revealedPixels }));
+            }, 16);
+        }, 180);
+    }, [transitionsEnabled, diaporamaActive, maskRevealPixels, nextMaskedStep]);
+
+    const reverseDiaporama = useCallback(() => {
+        const hasTransitions = transitionsEnabled && maxSlideSteps > 1;
+        if (hasTransitions && currentDiaporamaStep > 1) {
+            const prevStep = currentDiaporamaStep - 1;
+            setCurrentDiaporamaStep(prevStep);
+            setPresentationRemote((current) => current ? {
+                ...current,
+                remote: { ...(current.remote || {}), transitionStep: prevStep }
+            } : current);
+            sendPresentationCommand('transition_previous', { step: prevStep }).catch(() => {});
+        } else {
+            if (projectedSlideIndex > 0) {
+                void selectProjectedSlide(projectedSlideIndex - 1);
+            }
+        }
+    }, [transitionsEnabled, maxSlideSteps, currentDiaporamaStep, projectedSlideIndex, selectProjectedSlide, sendPresentationCommand]);
+
+    useEffect(() => {
+        if (typeof presentationRemote?.remote?.diaporamaActive === 'boolean') {
+            const remoteActive = presentationRemote.remote.diaporamaActive;
+            const toggleLock = diaporamaToggleLockRef.current;
+            // Ignore the poll that was sent before the teacher pressed the
+            // button. Otherwise the label briefly goes Diaporama → Normal →
+            // Diaporama even though the server did receive the command.
+            if (!toggleLock || Date.now() >= toggleLock.expiresAt || remoteActive === toggleLock.value) {
+                setDiaporamaActive(remoteActive);
+                if (toggleLock && (Date.now() >= toggleLock.expiresAt || remoteActive === toggleLock.value)) {
+                    diaporamaToggleLockRef.current = null;
+                }
+            }
+        }
+        if (Number.isInteger(presentationRemote?.remote?.transitionStep)) {
+            setCurrentDiaporamaStep(presentationRemote.remote.transitionStep);
+        }
+    }, [presentationRemote?.remote?.diaporamaActive, presentationRemote?.remote?.transitionStep]);
+
+    // Pre-decode nearby slides so arrows, keyboard navigation and the thumbnail
+    // rail all feel immediate.
+    useEffect(() => {
+        const presId = extractPresentationId(playingCourse?.slidesUrl);
+        if (!presId || !playingCourse?._id) return;
+        const total = Math.max(1, slideManifest.length || 1);
+        const indicesToPreload = [
+            projectedSlideIndex + 1,
+            projectedSlideIndex + 2,
+            projectedSlideIndex - 1
+        ].filter((idx) => idx >= 0 && idx < total);
+
+        indicesToPreload.forEach((idx) => {
+            const pageId = String(slideManifest[idx]?.objectId || '').trim();
+            const slideNum = idx + 1;
+            const cacheKey = `${presId}:${pageId}:${slideNum}`;
+            if (slideImageCacheRef.current.has(cacheKey)) return;
+            const url = `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presId)}&pageObjectId=${encodeURIComponent(pageId)}&slideNumber=${slideNum}`;
+            const img = new Image();
+            img.onload = () => slideImageCacheRef.current.set(cacheKey, url);
+            img.src = url;
+        });
+    }, [playingCourse?.slidesUrl, playingCourse?._id, projectedSlideIndex, slideManifest]);
+
+    useEffect(() => {
+        if (!transitionEditMode) return;
+        const existing = slideTransitions[currentSlideNumber];
+        const stepsMap = {};
+        if (existing?.steps && Array.isArray(existing.steps) && existing.steps.length > 0) {
+            existing.steps.forEach((s) => {
+                (s.elementIds || []).forEach((id) => {
+                    stepsMap[id] = Number(s.step) || 1;
+                });
+            });
+        } else {
+            currentSlideTransitionItems.forEach((item, idx) => {
+                stepsMap[item.id] = idx + 1;
+            });
+        }
+        const editableMasks = existing?.useCustomMasks === true
+            ? (Array.isArray(existing?.masks) ? existing.masks : [])
+            : [
+                ...currentSlideTransitionItems.map((item, index) => ({
+                    id: `mask_detected_${item.id}`,
+                    x: item.left, y: item.top, width: item.width, height: item.height,
+                    step: Number(stepsMap[item.id] || index + 2)
+                })),
+                ...(Array.isArray(existing?.masks) ? existing.masks : [])
+            ];
+        setTransitionDraft({
+            enabled: existing?.enabled ?? true,
+            perParagraph: existing?.perParagraph !== false,
+            stepsMap,
+            masks: editableMasks
+        });
+        setSelectedMaskId('');
+    }, [transitionEditMode, currentSlideNumber, slideTransitions, currentSlideTransitionItems]);
+
+    useEffect(() => {
+        if (!transitionEditMode) return undefined;
+        const onPointerMove = (event) => {
+            const drag = maskEditorDragRef.current;
+            if (!drag) return;
+            const deltaX = ((event.clientX - drag.startX) / drag.bounds.width) * 100;
+            const deltaY = ((event.clientY - drag.startY) / drag.bounds.height) * 100;
+            setTransitionDraft((previous) => ({
+                ...previous,
+                masks: (previous.masks || []).map((mask) => {
+                    if (mask.id !== drag.id) return mask;
+                    if (drag.mode === 'resize') return {
+                        ...mask,
+                        width: Math.max(2, Math.min(100 - Number(drag.mask.x || 0), Number(drag.mask.width || 0) + deltaX)),
+                        height: Math.max(2, Math.min(100 - Number(drag.mask.y || 0), Number(drag.mask.height || 0) + deltaY))
+                    };
+                    return {
+                        ...mask,
+                        x: Math.max(0, Math.min(100 - Number(drag.mask.width || 0), Number(drag.mask.x || 0) + deltaX)),
+                        y: Math.max(0, Math.min(100 - Number(drag.mask.height || 0), Number(drag.mask.y || 0) + deltaY))
+                    };
+                })
+            }));
+        };
+        const onPointerUp = () => { maskEditorDragRef.current = null; };
+        const onKeyDown = (event) => {
+            const tag = String(event.target?.tagName || '').toLowerCase();
+            if ((event.key !== 'Delete' && event.key !== 'Backspace') || !selectedMaskId || ['input', 'textarea', 'select'].includes(tag)) return;
+            event.preventDefault();
+            setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).filter((mask) => mask.id !== selectedMaskId) }));
+            setSelectedMaskId('');
+        };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [transitionEditMode, selectedMaskId]);
+
+    const saveSlideTransitions = async (updatedConfig) => {
+        if (!playingCourse?._id) return;
+        setSavingTransitions(true);
+        try {
+            const nextTransitions = {
+                ...slideTransitions,
+                [currentSlideNumber]: updatedConfig
+            };
+            const res = await fetch(`/api/courses/${playingCourse._id}/slides/transitions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slideTransitions: nextTransitions })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur enregistrement transitions');
+            setSlideTransitions(nextTransitions);
+            setTransitionEditMode(false);
+            if (updatedConfig.enabled) {
+                setDiaporamaActive(true);
+                setCurrentDiaporamaStep(1);
+            }
+        } catch (err) {
+            alert(`Impossible d’enregistrer les transitions : ${err.message}`);
+        } finally {
+            setSavingTransitions(false);
+        }
+    };
+
     const finishProjectedVideo = () => {
         const completionKey = `${projectedSceneIndex}:${projectedSequenceIndex}:${playingVideoIndex}:${projectedVideo?.id || projectedVideo?.url || ''}:${presentationRemote?.remote?.playVersion || 0}`;
         if (completedProjectedVideoRef.current === completionKey) return;
@@ -897,23 +1434,62 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [youtubeAutoplayOnMount, currentPlayVersion]);
 
     useEffect(() => {
-        if (isPhone || !playingCourse?._id || playerMode !== 'presentation' || videoSequencer || sequenceCutEditor) return undefined;
+        if (isPhone || !playingCourse?._id || playerMode !== 'presentation' || videoSequencer || sequenceCutEditor || transitionEditMode) return undefined;
         const handlePresentationShortcut = (event) => {
             const tag = String(event.target?.tagName || '').toLowerCase();
             if (['input', 'textarea', 'select', 'button'].includes(tag) || event.target?.isContentEditable || event.repeat) return;
-            const action = event.key === 'Enter' ? 'animation_toggle'
-                : event.code === 'Space' ? 'play'
-                    : event.key === 'ArrowLeft' ? 'sequence_previous'
-                        : event.key === 'ArrowRight' ? 'sequence_next'
-                            : event.key === 'ArrowUp' ? 'scene_previous'
-                                : event.key === 'ArrowDown' ? 'scene_next' : '';
+
+            if (diaporamaActive) {
+                if (event.code === 'Space') {
+                    event.preventDefault();
+                    startMaskHold();
+                    return;
+                }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void sendPresentationCommand('animation_toggle');
+                    return;
+                }
+                if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+                    event.preventDefault();
+                    advanceDiaporama();
+                    return;
+                } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+                    event.preventDefault();
+                    reverseDiaporama();
+                    return;
+                }
+            }
+
+            let action = '';
+            if (event.key === 'Enter') {
+                action = 'animation_toggle';
+            } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+                action = 'slide_previous';
+            } else if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+                action = 'slide_next';
+            } else if (event.key === 'ArrowUp') {
+                action = 'sequence_previous';
+            } else if (event.key === 'ArrowDown') {
+                action = 'sequence_next';
+            }
             if (!action) return;
             event.preventDefault();
             void sendPresentationCommand(action);
         };
+        const handlePresentationKeyUp = (event) => {
+            if (diaporamaActive && event.code === 'Space') {
+                event.preventDefault();
+                stopMaskHold(true);
+            }
+        };
         window.addEventListener('keydown', handlePresentationShortcut, true);
-        return () => window.removeEventListener('keydown', handlePresentationShortcut, true);
-    }, [isPhone, playingCourse?._id, playerMode, presentationRemote, slideManifest.length, videoSequencer, sequenceCutEditor]);
+        window.addEventListener('keyup', handlePresentationKeyUp, true);
+        return () => {
+            window.removeEventListener('keydown', handlePresentationShortcut, true);
+            window.removeEventListener('keyup', handlePresentationKeyUp, true);
+        };
+    }, [isPhone, playingCourse?._id, playerMode, presentationRemote, slideManifest.length, videoSequencer, sequenceCutEditor, transitionEditMode, diaporamaActive, advanceDiaporama, reverseDiaporama, sendPresentationCommand, startMaskHold, stopMaskHold]);
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return;
@@ -1556,20 +2132,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             updatePublishedUntilSlide(course, 1);
         }
         setPlayerMode('presentation');
-        setEditSlideNumberDraft('');
-        setLastEditSlideNumber(null);
         setPlayingCourse(course);
     };
 
-    const openModification = async (course, requestedSlideIndex = projectedSlideIndex) => {
+    const openModification = (course, requestedSlideIndex = projectedSlideIndex) => {
+        openGoogleSlidesExternal(course, requestedSlideIndex);
+    };
+
+    const openGoogleSlidesExternal = async (course, requestedSlideIndex = projectedSlideIndex) => {
         setError('');
+        const total = Math.max(1, slideManifest.length || 1);
         const targetSlideIndex = Math.min(
-            Math.max(0, slideManifest.length - 1),
+            total - 1,
             Math.max(0, Number(requestedSlideIndex) || 0)
         );
         const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || projectedSlideObjectId || '').trim();
-        // Le nouvel onglet doit être créé pendant le clic utilisateur, avant le fetch,
-        // sinon les navigateurs mobiles et desktop peuvent le bloquer comme popup.
         const editorWindow = window.open('about:blank', '_blank');
         try {
             const response = await fetch(`/api/courses/${course._id}/editor-access`, {
@@ -1585,27 +2162,98 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 : editBaseUrl;
             if (editorWindow) editorWindow.location.replace(targetUrl);
             else window.open(targetUrl, '_blank', 'noopener,noreferrer');
+            if (globalClassId) {
+                fetch(`/api/courses/${course._id}/presentation-remote/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        classId: globalClassId,
+                        courseId: course._id,
+                        slideIndex: targetSlideIndex,
+                        playerMode: 'presentation'
+                    })
+                }).catch(() => {});
+            }
             externalSlidesEditorOpenedRef.current = true;
             setLastEditSlideNumber(targetSlideIndex + 1);
             setEditSlideNumberDraft('');
-            setPlayingCourse((current) => ({
-                ...(current || course),
-                slidesUrl: data.editUrl || course.slidesUrl,
-                editSlideObjectId
-            }));
         } catch (accessError) {
             try { editorWindow?.close(); } catch (_) { }
             setError(accessError.message);
-            alert(`Impossible d’ouvrir cette présentation en modification : ${accessError.message}`);
+            alert(`Impossible d’ouvrir cette présentation dans Google Slides : ${accessError.message}`);
         }
     };
 
     const togglePlayerMode = async () => {
-        const hasTypedNumber = String(editSlideNumberDraft).trim() !== '';
-        const requestedNumber = Number(hasTypedNumber ? editSlideNumberDraft : projectedSlideIndex + 1);
-        const total = Math.max(1, slideManifest.length || 1);
-        if (!Number.isInteger(requestedNumber) || requestedNumber < 1 || requestedNumber > total) return;
-        await openModification(playingCourse, requestedNumber - 1);
+        const nextMode = playerMode === 'presentation' ? 'edit' : 'presentation';
+        setPlayerMode(nextMode);
+        if (nextMode === 'edit' && playingCourse?._id) {
+            fetch(`/api/courses/${playingCourse._id}/editor-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherEmail: user?.email || user?.mail || '' })
+            }).catch(() => {});
+        } else if (nextMode === 'presentation' && playingCourse?._id) {
+            setPlayingCourse((current) => current ? { ...current, presentationReloadNonce: Date.now() } : current);
+            // Re-fetch fresh live slides immediately upon returning to lecture mode
+            fetch(`/api/courses/${playingCourse._id}/slides/native?sync=1&live=${Date.now()}`)
+                .then(r => r.json())
+                .then(d => {
+                    if (Array.isArray(d?.nativeSlides || d?.slides)) {
+                        const list = d.nativeSlides || d.slides;
+                        const map = {};
+                        list.forEach((s) => {
+                            const num = Number(s.slideNumber || 1);
+                            map[num] = {
+                                elements: Array.isArray(s.elements) ? s.elements : [],
+                                backgroundColor: s.background?.color || s.backgroundColor || '#ffffff'
+                            };
+                        });
+                        setSlideElementsMap(map);
+                    }
+                })
+                .catch(() => {});
+        }
+        sendPresentationCommand('sync', {
+            slideIndex: projectedSlideIndex,
+            sceneIndex: projectedSceneIndex,
+            sequenceIndex: projectedSequenceIndex,
+            playerMode: nextMode
+        }).catch(() => {});
+    };
+
+    const reimportFromGoogleSlides = async () => {
+        if (!playingCourse?._id) return;
+        try {
+            const [response, nativeResponse] = await Promise.all([
+                fetch('/api/learning/slides/manifest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
+                }),
+                // This imports only the slide structure and the video links
+                // (YouTube / Drive IDs), never the video files themselves.
+                fetch(`/api/courses/${playingCourse._id}/slides/native?sync=1&live=${Date.now()}`)
+            ]);
+            const data = await response.json();
+            if (Array.isArray(data?.slides)) {
+                setSlideManifest(data.slides);
+            }
+            const nativeData = await nativeResponse.json().catch(() => ({}));
+            const nativeSlides = nativeData?.nativeSlides || nativeData?.slides;
+            if (Array.isArray(nativeSlides)) {
+                const map = {};
+                nativeSlides.forEach((slide) => {
+                    const number = Number(slide?.slideNumber || 1);
+                    map[number] = {
+                        elements: Array.isArray(slide?.elements) ? slide.elements : [],
+                        backgroundColor: slide?.background?.color || slide?.backgroundColor || '#ffffff'
+                    };
+                });
+                setSlideElementsMap(map);
+            }
+            setLiveSyncKey(Date.now());
+        } catch (_) { }
     };
 
     useEffect(() => {
@@ -2113,6 +2761,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                             </div>
                                             <div className="course-compact-actions">
                                                 {!course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openPresentation(course)}>PRÉSENTER</button>}
+                                                {!course.isSourcePresentation && <button type="button" className="course-google-ext-launch-button" onClick={() => openGoogleSlidesExternal(course, 0)} title="Lancer directement dans Google Slides avec l'extension CondaWeb">⚡ SLIDES</button>}
                                                 {!course.isSourcePresentation && <button type="button" onClick={() => openModification(course)}>MODIFIER</button>}
                                                 {!course.isSourcePresentation && <button type="button" className={`course-enabled-button ${course.isEnabled !== false ? 'active' : ''}`} onClick={() => toggleCourseEnabled(course)} title={course.isEnabled !== false ? 'Masquer cette présentation aux élèves' : 'Rendre cette présentation visible aux élèves'}>{course.isEnabled !== false ? 'ACTIF' : 'INACTIF'}</button>}
                                                 {course.isSourcePresentation && <button type="button" className="course-present-button" onClick={() => openCourseSplitter(course)}>↻ METTRE À JOUR</button>}
@@ -2134,15 +2783,205 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {!presentationRemote?.remote?.classPlanVisible && (
                             <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         )}
-                        <iframe
-                            ref={presentationIframeRef}
-                            key={`presentation-${playingCourse?.presentationReloadNonce || 0}-${projectedSlideObjectId}`}
-                            className={`course-player-frame presentation ${playerMode === 'presentation' ? 'active' : 'inactive'}`}
-                            title={`${playingCourse.title} — lecture`}
-                            src={projectedSlidesUrl}
-                            allowFullScreen
-                            aria-hidden={playerMode !== 'presentation'}
-                        />
+                        <div className="course-presentation-layout">
+                            <nav className="course-slide-thumbnail-rail" aria-label="Navigateur de diapositives">
+                                <div className="course-slide-thumbnail-rail-title">DIAPOS</div>
+                                <div className="course-slide-thumbnail-list">
+                                    {slideManifest.map((slide, index) => {
+                                        const slideNumber = Number(slide?.slideNumber || index + 1);
+                                        const thumbnailUrl = slide?.thumbnailProxyUrl || slide?.thumbnailPublicUrl || '';
+                                        const isActive = index === projectedSlideIndex;
+                                        return (
+                                            <button
+                                                key={slide?.objectId || `${slideNumber}-${index}`}
+                                                type="button"
+                                                className={`course-slide-thumbnail-button ${isActive ? 'active' : ''}`}
+                                                onClick={() => void selectProjectedSlide(index)}
+                                                aria-label={`Aller à la diapositive ${slideNumber}`}
+                                                aria-current={isActive ? 'true' : undefined}
+                                                title={`Diapositive ${slideNumber}`}
+                                            >
+                                                {thumbnailUrl ? (
+                                                    <img src={thumbnailUrl} alt="" loading={Math.abs(index - projectedSlideIndex) <= 2 ? 'eager' : 'lazy'} draggable="false" />
+                                                ) : (
+                                                    <span className="course-slide-thumbnail-placeholder">{slideNumber}</span>
+                                                )}
+                                                <span className="course-slide-thumbnail-number">{slideNumber}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </nav>
+
+                            {/* Rendu direct haute fidélité de la diapositive active */}
+                            <div
+                                className={`google-slide-stage-container ${diaporamaActive ? 'is-diaporama' : ''}`}
+                                onPointerDown={diaporamaActive ? (event) => {
+                                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                                    startMaskHold();
+                                } : undefined}
+                                onPointerUp={diaporamaActive ? (event) => {
+                                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
+                                    stopMaskHold(true);
+                                } : undefined}
+                                onPointerCancel={diaporamaActive ? (event) => {
+                                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
+                                    stopMaskHold(false);
+                                } : undefined}
+                            >
+                            {slideImageUrl ? (
+                                <img
+                                    key={`google-slide-${visibleSlideIndex}`}
+                                    src={slideImageUrl}
+                                    alt={`Google Slide ${visibleSlideIndex + 1}`}
+                                    className="google-slide-image-display"
+                                    draggable={false}
+                                />
+                            ) : (
+                                <div className="conda-slides-loader-stage">
+                                    <div className="conda-slides-spinner" />
+                                    <span>Chargement de la présentation Google Slides…</span>
+                                </div>
+                            )}
+
+                            {/* Calque des éléments transparents et sélectionnables + Masques de diaporama */}
+                            <div className="google-slide-elements-overlay">
+                                {/* Boîtes de texte transparentes sélectionnables */}
+                                {currentSlideTransitionItems.map((item) => (
+                                    <div
+                                        key={`text-box-${item.id}`}
+                                        className="slide-selectable-text-box"
+                                        style={{
+                                            left: `${item.left}%`,
+                                            top: `${item.top}%`,
+                                            width: `${item.width}%`,
+                                            height: `${item.height}%`,
+                                        }}
+                                        onPointerDown={(e) => {
+                                            e.stopPropagation();
+                                        }}
+                                        onClick={(e) => {
+                                            const sel = window.getSelection()?.toString()?.trim();
+                                            if (sel) {
+                                                e.stopPropagation();
+                                            }
+                                        }}
+                                    >
+                                        <div
+                                            className="slide-selectable-text-content"
+                                            style={{
+                                                fontSize: item.style?.fontSize ? `${Math.max(12, Math.round(Number(item.style.fontSize) * 0.9))}px` : undefined,
+                                                textAlign: item.style?.align || 'left',
+                                                fontWeight: item.style?.bold ? 'bold' : 'normal',
+                                                fontStyle: item.style?.italic ? 'italic' : 'normal',
+                                            }}
+                                            title="Texte sélectionnable"
+                                        >
+                                            {item.text}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Les miniatures Google Slides sont des PNG : une vidéo intégrée
+                                    doit donc être rendue séparément à sa position d'origine. */}
+                                {currentSlideElements.filter((item) => item?.type === 'video_youtube' && getGoogleSlidesVideoEmbedUrl(item.url)).map((video) => (
+                                    <iframe
+                                        key={`google-slide-video-${video.id}`}
+                                        className="google-slide-embedded-video"
+                                        src={getGoogleSlidesVideoEmbedUrl(video.url)}
+                                        title="Vidéo intégrée à la diapositive Google Slides"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                        style={{
+                                            left: `${video.x}%`,
+                                            top: `${video.y}%`,
+                                            width: `${video.width}%`,
+                                            height: `${video.height}%`,
+                                            pointerEvents: transitionEditMode ? 'none' : 'auto',
+                                        }}
+                                    />
+                                ))}
+
+                                {/* Masques de texte et rectangles créés dans l'éditeur */}
+                                {diaporamaActive && transitionsEnabled && currentSlideMasks.map((mask) => {
+                                    const isMasked = mask.step > currentDiaporamaStep;
+                                    const revealedPixels = isMasked ? Number(maskRevealPixels[mask.step] || 0) : 0;
+                                    const activeStep = Math.min(...currentSlideMasks.filter((item) => item.step > currentDiaporamaStep).map((item) => item.step));
+                                    const isActive = isMasked && mask.step === activeStep;
+                                    return (
+                                        <div
+                                            key={`mask-${mask.id}`}
+                                            className={`slide-diaporama-mask ${isMasked ? 'is-masked' : 'is-revealed'} ${isActive ? 'is-active' : ''}`}
+                                            style={{
+                                                left: `${mask.x}%`,
+                                                top: `${mask.y}%`,
+                                                width: `${mask.width}%`,
+                                                height: `${mask.height}%`,
+                                                backgroundColor: '#ffffff',
+                                                clipPath: revealedPixels > 0 ? `inset(${revealedPixels.toFixed(2)}px 0 0 0)` : undefined
+                                            }}
+                                        ><span className="slide-diaporama-mask-number">{mask.number}</span></div>
+                                    );
+                                })}
+                            </div>
+
+                            {transitionEditMode && (
+                                <div className="course-transition-stage-editor" onPointerDown={(event) => {
+                                    if (event.target !== event.currentTarget) return;
+                                    const bounds = event.currentTarget.getBoundingClientRect();
+                                    const x = Math.max(0, Math.min(85, ((event.clientX - bounds.left) / bounds.width) * 100 - 7.5));
+                                    const y = Math.max(0, Math.min(90, ((event.clientY - bounds.top) / bounds.height) * 100 - 5));
+                                    setTransitionDraft((previous) => ({ ...previous, masks: [...(previous.masks || []), { id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, x, y, width: 15, height: 10, step: (previous.masks || []).length + 2 }]}));
+                                }}>
+                                    {(transitionDraft.masks || []).map((mask, index) => <button key={mask.id || index} type="button" className={`course-transition-stage-mask ${selectedMaskId === mask.id ? 'selected' : ''}`} style={{ left: `${mask.x}%`, top: `${mask.y}%`, width: `${mask.width}%`, height: `${mask.height}%` }} onPointerDown={(event) => {
+                                        event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id);
+                                        const bounds = event.currentTarget.parentElement.getBoundingClientRect();
+                                        maskEditorDragRef.current = { id: mask.id, mode: event.target.dataset.resize === 'true' ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, bounds, mask: { ...mask } };
+                                        event.currentTarget.setPointerCapture?.(event.pointerId);
+                                    }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id); setEditingMaskId(mask.id); }}>{editingMaskId === mask.id ? <input className="course-transition-stage-number-input" type="number" min="1" autoFocus defaultValue={Number(mask.step || index + 2)} onPointerDown={(event) => event.stopPropagation()} onBlur={() => setEditingMaskId('')} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onChange={(event) => setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).map((row) => row.id === mask.id ? { ...row, step: Math.max(1, Number(event.target.value) || 1) } : row) }))} /> : Number(mask.step || index + 2)}<span className="course-transition-stage-resize" data-resize="true" /></button>)}
+                                    <div className="course-transition-stage-toolbar">
+                                        <span>Mode édition des masques · Clique dans une zone vide pour ajouter · Suppr pour enlever</span>
+                                        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setTransitionEditMode(false)}>ANNULER</button>
+                                        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void saveSlideTransitions({ enabled: true, perParagraph: transitionDraft.perParagraph !== false, useCustomMasks: true, masks: transitionDraft.masks || [], steps: currentSlideTransition?.steps || [] })}>ENREGISTRER</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Bannière Mode Diaporama */}
+                            {diaporamaActive && (
+                                <div className="course-diaporama-banner">
+                                    <span className="diaporama-badge">📽️ MODE DIAPORAMA ACTIF</span>
+                                    <span>Étape {currentDiaporamaStep} / {maxSlideSteps} (Clique ou appuie sur Espace)</span>
+                                </div>
+                            )}
+
+                            {/* Flèches latérales de navigation au survol */}
+                            {projectedSlideIndex > 0 && (
+                                <button
+                                    type="button"
+                                    className="course-stage-nav-arrow prev"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); void selectProjectedSlide(projectedSlideIndex - 1); }}
+                                    aria-label="Diapositive précédente"
+                                    title="Diapositive précédente"
+                                >
+                                    ‹
+                                </button>
+                            )}
+                            {projectedSlideIndex < Math.max(0, (slideManifest.length || 1) - 1) && (
+                                <button
+                                    type="button"
+                                    className="course-stage-nav-arrow next"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); void selectProjectedSlide(projectedSlideIndex + 1); }}
+                                    aria-label="Diapositive suivante"
+                                    title="Diapositive suivante"
+                                >
+                                    ›
+                                </button>
+                            )}
+                            </div>
+                        </div>
                         {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
                         {renderProjectedClassPlan()}
                         {preloadItems.length > 0 ? (
@@ -2355,7 +3194,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         </div>}
 
                         <div className="course-player-mode-switch" aria-label="Commandes de la présentation">
-                            <div className="course-player-slide-selector" aria-label="Diapo active mémorisée par CondaWeb">
+                            <div className="course-player-slide-stepper">
                                 <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex - 1)} disabled={projectedSlideIndex <= 0} aria-label="Diapo précédente">‹</button>
                                 <label>
                                     <span>DIAPO</span>
@@ -2369,43 +3208,53 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         aria-label="Numéro de la diapo active"
                                     />
                                 </label>
-                                <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex + 1)} disabled={projectedSlideIndex >= Math.max(0, slideManifest.length - 1)} aria-label="Diapo suivante">›</button>
+                                <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex + 1)} disabled={projectedSlideIndex >= Math.max(0, (slideManifest.length || 1) - 1)} aria-label="Diapo suivante">›</button>
                             </div>
+                            <button
+                                type="button"
+                                className={`course-diaporama-toggle-btn ${diaporamaActive ? 'active' : ''}`}
+                                onClick={() => {
+                                    const nextActive = !diaporamaActive;
+                                    diaporamaToggleLockRef.current = { value: nextActive, expiresAt: Date.now() + 2500 };
+                                    setDiaporamaActive(nextActive);
+                                    setCurrentDiaporamaStep(1);
+                                    setPresentationRemote((current) => current ? {
+                                        ...current,
+                                        remote: { ...(current.remote || {}), diaporamaActive: nextActive, transitionStep: 1 }
+                                    } : current);
+                                    sendPresentationCommand('diaporama_toggle', { diaporamaActive: nextActive }).catch(() => {});
+                                }}
+                                title="Activer/désactiver le Mode Diaporama avec transitions au clic"
+                            >
+                                {diaporamaActive ? '📽️ QUITTER DIAPORAMA' : '📽️ MODE DIAPORAMA'}
+                            </button>
+                            <button
+                                type="button"
+                                className={`course-diaporama-toggle-btn ${presentationRemote?.remote?.animationVisible ? 'active' : ''}`}
+                                onClick={() => void sendPresentationCommand('animation_toggle')}
+                                title="Afficher ou cacher l’animation de la diapositive (raccourci : Entrée)"
+                            >
+                                {presentationRemote?.remote?.animationVisible ? '🎬 CACHER L’ANIMATION' : '🎬 AFFICHER L’ANIMATION'}
+                            </button>
                             <div className="course-edit-mode-control">
-                                <label title="Numéro de la slide à ouvrir dans Google Slides">
-                                    <span>SLIDE</span>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max={Math.max(1, slideManifest.length || 1)}
-                                        value={editSlideNumberDraft}
-                                        placeholder={String(projectedSlideIndex + 1)}
-                                        onChange={(event) => setEditSlideNumberDraft(event.target.value)}
-                                        onKeyDown={(event) => {
-                                            event.stopPropagation();
-                                            if (event.key === 'Enter') void togglePlayerMode();
-                                        }}
-                                        aria-label="Numéro de la slide à ouvrir dans Google Slides"
-                                    />
-                                </label>
+                                <span className="course-live-sync-pill" title="Les modifications apportées dans Google Slides sont automatiquement répercutées ici toutes les 2 secondes">
+                                    <span className="live-sync-dot pulsing" />
+                                    <span>Google Slides live (2s)</span>
+                                </span>
                                 <button
                                     type="button"
-                                    className="course-edit-mode-button"
-                                    onClick={() => void togglePlayerMode()}
-                                    disabled={(() => {
-                                        const typed = String(editSlideNumberDraft).trim() !== '';
-                                        const candidate = Number(typed ? editSlideNumberDraft : projectedSlideIndex + 1);
-                                        return !Number.isInteger(candidate) || candidate < 1 || candidate > Math.max(1, slideManifest.length || 1);
-                                    })()}
+                                    className="course-google-ext-btn"
+                                    onClick={() => void openGoogleSlidesExternal(playingCourse, projectedSlideIndex)}
+                                    title={`Ouvrir la slide ${projectedSlideIndex + 1} dans Google Slides pour modifier`}
                                 >
-                                    ✎ MODIFIER DANS GOOGLE SLIDES
+                                    ↗ Ouvrir dans Google Slides
                                 </button>
                             </div>
                             <button type="button" className="course-sync-board-button" onClick={() => void forceSyncRemote()} title="Envoyer la diapo CondaWeb active au téléphone">
                                 ↻ SYNCHRONISER LE TÉLÉPHONE
                             </button>
-                            <button type="button" className="course-sync-board-button" onClick={refreshSlidesFromGoogle} title="Recharger manuellement les modifications depuis Google Slides">
-                                ↻ ACTUALISER LES SLIDES
+                            <button type="button" className="course-sync-board-button" onClick={reimportFromGoogleSlides} title="Réimporter toutes les diapositives depuis Google Slides">
+                                ↻ RÉIMPORTER DEPUIS GOOGLE
                             </button>
                             <div className="course-add-wrap">
                                 <button type="button" className="course-animation-button" onClick={() => setAddMenuOpen((current) => !current)}>
@@ -2413,6 +3262,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 </button>
                                 {addMenuOpen && (
                                     <div className="course-add-menu">
+                                        <button type="button" onClick={() => { setAddMenuOpen(false); setTransitionEditMode(true); }}>✨ AJOUTER UNE TRANSITION</button>
                                         <button type="button" onClick={openVideoSequencer}>🎬 AJOUTER UNE ANIMATION</button>
                                         <button type="button" onClick={openControlOnCourse}>📝 AFFICHER UN CONTRÔLE</button>
                                     </div>
@@ -2420,6 +3270,228 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                         </div>
 
+                    </div>
+                </div>
+            )}
+            {transitionEditorOpen && (
+                <div className="course-transition-editor-backdrop" role="dialog" aria-modal="true" aria-label="Éditeur de transitions">
+                    <div className="course-transition-editor-window">
+                        <div className="course-transition-editor-heading">
+                            <div>
+                                <strong>TRANSITIONS — DIAPOSITIVE {currentSlideNumber}</strong>
+                                <span>{playingCourse?.title}</span>
+                            </div>
+                            <button type="button" onClick={() => !savingTransitions && setTransitionEditorOpen(false)} aria-label="Fermer">×</button>
+                        </div>
+                        <div className="course-transition-editor-body">
+                            <p className="course-transition-editor-intro">
+                                Configure l’ordre d’apparition des paragraphes et éléments de cette diapositive. En <b>Mode Diaporama</b>, chaque clic ou appui sur Espace révélera l’étape suivante.
+                            </p>
+
+                            <div
+                                className="course-transition-slide-preview"
+                                title="Clique sur la diapositive pour créer un masque libre à cet endroit"
+                                onClick={(event) => {
+                                    const rect = event.currentTarget.getBoundingClientRect();
+                                    const x = Math.max(0, Math.min(85, ((event.clientX - rect.left) / rect.width) * 100 - 7.5));
+                                    const y = Math.max(0, Math.min(90, ((event.clientY - rect.top) / rect.height) * 100 - 5));
+                                    setTransitionDraft((previous) => ({
+                                        ...previous,
+                                        masks: [...(previous.masks || []), { id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, x, y, width: 15, height: 10, step: 2 }]
+                                    }));
+                                }}
+                            >
+                                {slideImageUrl && <img src={slideImageUrl} alt={`Aperçu de la diapositive ${currentSlideNumber}`} draggable="false" />}
+                                {(transitionDraft.masks || []).map((mask, index) => <button key={mask.id || index} type="button" className={`course-transition-preview-mask ${selectedMaskId === mask.id ? 'selected' : ''}`} style={{ left: `${mask.x}%`, top: `${mask.y}%`, width: `${mask.width}%`, height: `${mask.height}%` }} onPointerDown={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    setSelectedMaskId(mask.id);
+                                    const bounds = event.currentTarget.parentElement.getBoundingClientRect();
+                                    maskEditorDragRef.current = { id: mask.id, mode: event.target.dataset.resize === 'true' ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, bounds, mask: { ...mask } };
+                                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                                }}>{index + 1}<span className="course-transition-preview-resize" data-resize="true" /></button>)}
+                                <span className="course-transition-slide-preview-hint">Clique pour ajouter un masque libre</span>
+                            </div>
+                            
+                            <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#f8fafc', fontWeight: 600 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={transitionDraft.enabled}
+                                        onChange={(e) => setTransitionDraft((prev) => ({ ...prev, enabled: e.target.checked }))}
+                                    />
+                                    Activer les transitions sur cette diapositive
+                                </label>
+                            </div>
+
+                            <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#f8fafc', fontWeight: 600 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={transitionDraft.perParagraph !== false}
+                                        onChange={(event) => {
+                                            const perParagraph = event.target.checked;
+                                            const items = buildSlideTransitionItems(currentSlideElements, perParagraph);
+                                            const stepsMap = {};
+                                            items.forEach((item, index) => {
+                                                stepsMap[item.id] = transitionDraft.stepsMap[item.id]
+                                                    || (perParagraph ? index + 2 : 2);
+                                            });
+                                            setTransitionDraft((previous) => ({ ...previous, perParagraph, stepsMap }));
+                                        }}
+                                    />
+                                    Par paragraphe <span style={{ color: '#94a3b8', fontWeight: 500 }}>(un retour à la ligne = une apparition)</span>
+                                </label>
+                            </div>
+
+                            {transitionDraft.enabled && (
+                                <>
+                                    <div className="course-transition-quick-actions">
+                                        <button
+                                            type="button"
+                                            className="courses-secondary-button"
+                                            onClick={() => {
+                                                const stepsMap = {};
+                                                editorTransitionItems.forEach((item, idx) => {
+                                                    stepsMap[item.id] = idx + 2;
+                                                });
+                                                setTransitionDraft((prev) => ({ ...prev, stepsMap }));
+                                            }}
+                                        >
+                                            ⚡ Transitions automatiques (1 par 1)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="courses-secondary-button"
+                                            onClick={() => {
+                                                const stepsMap = {};
+                                                editorTransitionItems.forEach((item) => {
+                                                    stepsMap[item.id] = 1;
+                                                });
+                                                setTransitionDraft((prev) => ({ ...prev, stepsMap }));
+                                            }}
+                                        >
+                                            👁 Tout afficher dès le début
+                                        </button>
+                                    </div>
+
+                                    <div className="course-transition-manual-masks">
+                                        <div className="course-transition-manual-masks-heading">
+                                            <strong>Masques libres</strong>
+                                            <button
+                                                type="button"
+                                                className="courses-secondary-button"
+                                                onClick={() => setTransitionDraft((previous) => ({
+                                                    ...previous,
+                                                    masks: [...(previous.masks || []), {
+                                                        id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                                                        x: 20, y: 20, width: 25, height: 12, step: 2
+                                                    }]
+                                                }))}
+                                            >
+                                                ＋ AJOUTER UN MASQUE
+                                            </button>
+                                        </div>
+                                        {(transitionDraft.masks || []).map((mask, index) => (
+                                            <div className="course-transition-mask-row" key={mask.id || index}>
+                                                <span>Masque {index + 1}</span>
+                                                {[['x', 'X'], ['y', 'Y'], ['width', 'L'], ['height', 'H'], ['step', 'Clic']].map(([field, label]) => (
+                                                    <label key={field}>{label}<input type="number" min={field === 'step' ? 1 : 0} max={field === 'step' ? 99 : 100} value={Number(mask[field] || 0)} onChange={(event) => {
+                                                        const value = Number(event.target.value);
+                                                        setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row) }));
+                                                    }} /></label>
+                                                ))}
+                                                <button type="button" onClick={() => setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).filter((_, rowIndex) => rowIndex !== index) }))} aria-label={`Supprimer le masque ${index + 1}`}>×</button>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {editorTransitionItems.length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                                            Aucun texte ou paragraphe détecté sur cette diapositive.
+                                        </div>
+                                    ) : (
+                                        <div className="course-transition-elements-list">
+                                            {editorTransitionItems.map((item, idx) => {
+                                                const currentStep = transitionDraft.stepsMap[item.id] || 1;
+                                                return (
+                                                    <div className="course-transition-element-card" key={item.id}>
+                                                        <div className="course-transition-element-preview">
+                                                            <span className="element-num">#{idx + 1}</span>
+                                                            <p>{item.text}</p>
+                                                        </div>
+                                                        <div className="course-transition-step-selector">
+                                                            <label>Apparaît à :</label>
+                                                            <select
+                                                                value={currentStep}
+                                                                onChange={(e) => {
+                                                                    const val = Number(e.target.value);
+                                                                    setTransitionDraft((prev) => ({
+                                                                        ...prev,
+                                                                        stepsMap: { ...prev.stepsMap, [item.id]: val }
+                                                                    }));
+                                                                }}
+                                                            >
+                                                                {Array.from({ length: Math.max(editorTransitionItems.length + 1, 6) }, (_, i) => i + 1).map((s) => (
+                                                                    <option key={s} value={s}>
+                                                                        {s === 1 ? '1 — Au départ' : `Étape ${s} (Clic ${s - 1})`}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                        <div className="course-transition-editor-actions">
+                            <button
+                                type="button"
+                                className="courses-secondary-button"
+                                onClick={() => setTransitionEditorOpen(false)}
+                                disabled={savingTransitions}
+                            >
+                                ANNULER
+                            </button>
+                            <button
+                                type="button"
+                                className="courses-save-button"
+                                disabled={savingTransitions}
+                                onClick={() => {
+                                    const stepGroups = {};
+                                    const visibleItemIds = new Set(editorTransitionItems.map((item) => item.id));
+                                    Object.entries(transitionDraft.stepsMap).forEach(([id, step]) => {
+                                        if (!visibleItemIds.has(id)) return;
+                                        if (!stepGroups[step]) stepGroups[step] = [];
+                                        stepGroups[step].push(id);
+                                    });
+                                    const steps = Object.entries(stepGroups).map(([step, elementIds]) => ({
+                                        step: Number(step),
+                                        elementIds
+                                    })).sort((a, b) => a.step - b.step);
+
+                                    void saveSlideTransitions({
+                                        enabled: transitionDraft.enabled,
+                                        perParagraph: transitionDraft.perParagraph !== false,
+                                        useCustomMasks: true,
+                                        masks: (transitionDraft.masks || []).map((mask) => ({
+                                            id: String(mask.id || `mask_${Date.now()}`),
+                                            x: Math.max(0, Math.min(100, Number(mask.x) || 0)),
+                                            y: Math.max(0, Math.min(100, Number(mask.y) || 0)),
+                                            width: Math.max(1, Math.min(100, Number(mask.width) || 1)),
+                                            height: Math.max(1, Math.min(100, Number(mask.height) || 1)),
+                                            step: Math.max(1, Number(mask.step) || 1)
+                                        })),
+                                        steps
+                                    });
+                                }}
+                            >
+                                {savingTransitions ? 'ENREGISTREMENT…' : 'ENREGISTRER LES TRANSITIONS'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
-const { Course, CourseSection } = require('../models/prof.models');
+const { Course, CourseSection, Classroom } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 
 const SOURCE_SECTION_ID = 'sources';
@@ -496,6 +496,14 @@ router.get('/presentation-remote/active', async (req, res) => {
             course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
                 .sort({ 'presentationRemote.updatedAt': -1 }).lean();
         }
+        if (!course && classId) {
+            const clsObj = await require('mongoose').model('Classroom').findById(classId, 'name level').lean().catch(() => null);
+            const level = academicLevel(clsObj?.level || clsObj?.name);
+            if (level) {
+                const activeCourses = await Course.find({ 'presentationRemote.active': true }).sort({ 'presentationRemote.updatedAt': -1 }).lean();
+                course = activeCourses.find(c => academicLevel(c.targetLevel || c.targetClassroomName) === level) || null;
+            }
+        }
         if (!course) {
             course = await Course.findOne({ 'presentationRemote.active': true })
                 .sort({ 'presentationRemote.updatedAt': -1 }).lean();
@@ -508,9 +516,143 @@ router.get('/presentation-remote/active', async (req, res) => {
         const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
             ? course.presentationVideoSlides
             : [{ slideNumber: 1, scenes: legacyScenes }];
-        return res.json({ ok: true, active: true, courseId: String(course._id), title: course.title, videoSlides, scenes: legacyScenes, sequences: legacySequences, remote: course.presentationRemote || {} });
+        const remote = course.presentationRemote || {};
+        const requestedSlideNumber = Math.max(1, Number(remote.slideIndex || 0) + 1);
+        let currentSlide = videoSlides.find((slide) => Number(slide?.slideNumber) === requestedSlideNumber);
+        if (!currentSlide) {
+            const configuredSlides = videoSlides.filter((slide) => Array.isArray(slide?.scenes)
+                && slide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length));
+            if (configuredSlides.length === 1) currentSlide = configuredSlides[0];
+        }
+        const currentScenes = Array.isArray(currentSlide?.scenes) ? currentSlide.scenes : [];
+        const currentScene = currentScenes[Math.max(0, Math.min(currentScenes.length - 1, Number(remote.sceneIndex || 0)))];
+        const currentSequences = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
+        const currentVideo = currentSequences[Math.max(0, Math.min(currentSequences.length - 1, Number(remote.sequenceIndex || 0)))] || null;
+        return res.json({ ok: true, active: true, courseId: String(course._id), title: course.title, videoSlides, scenes: legacyScenes, sequences: legacySequences, currentVideo, remote });
     } catch (error) {
         return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/presentation-remote/auto-connect', async (req, res) => {
+    try {
+        const title = String(req.body?.title || '').trim();
+        const presentationId = String(req.body?.presentationId || '').trim();
+        const slideIndex = Math.max(0, Number(req.body?.slideIndex || 0));
+        const classHint = String(req.body?.classHint || '').trim();
+
+        let course = null;
+
+        // 1. Recherche par drivePresentationId ou slidesUrl
+        if (presentationId) {
+            course = await Course.findOne({
+                $or: [
+                    { drivePresentationId: presentationId },
+                    { slidesUrl: { $regex: presentationId, $options: 'i' } },
+                    { externalSlidesUrl: { $regex: presentationId, $options: 'i' } }
+                ]
+            });
+        }
+
+        // 2. Recherche par titre
+        if (!course && title) {
+            const cleanTitle = title.replace(/\s*-\s*Google\s*(Présentations|Slides|Documentos).*/i, '').trim();
+            if (cleanTitle) {
+                course = await Course.findOne({ title: { $regex: cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
+            }
+            if (!course && cleanTitle) {
+                const words = cleanTitle.split(/\s+/).filter(w => w.length > 3 && !['pour', 'dans', 'avec', 'sans', 'sous', 'vers', 'chez'].includes(w.toLowerCase()));
+                for (const word of words) {
+                    course = await Course.findOne({ title: { $regex: word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
+                    if (course) break;
+                }
+            }
+        }
+
+        // 3. Recherche par classe
+        if (!course && classHint) {
+            course = await Course.findOne({
+                $or: [
+                    { targetClassroomId: classHint },
+                    { targetClassroomName: { $regex: classHint, $options: 'i' } }
+                ]
+            }).sort({ updatedAt: -1 });
+        }
+
+        // 4. Fallback sur le cours actif ou le plus récent
+        if (!course) {
+            course = await Course.findOne({ 'presentationRemote.active': true }).sort({ 'presentationRemote.updatedAt': -1 });
+        }
+        if (!course) {
+            course = await Course.findOne({}).sort({ updatedAt: -1 });
+        }
+
+        if (!course) {
+            return res.status(404).json({ ok: false, error: 'Aucun cours trouvé' });
+        }
+
+        // Lie l'ID de présentation Google Drive si absent
+        if (presentationId && !course.drivePresentationId) {
+            course.drivePresentationId = presentationId;
+            course.externalSlidesUrl = `https://docs.google.com/presentation/d/${presentationId}/edit`;
+        }
+
+        // Désactive les autres cours actifs
+        await Course.updateMany({ _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
+
+        const targetClassId = classHint || course.presentationRemote?.classId || course.targetClassroomId || '';
+        const existingRemote = (course.presentationRemote && typeof course.presentationRemote === 'object') ? course.presentationRemote : {};
+
+        course.presentationRemote = {
+            active: true,
+            classId: targetClassId,
+            slideIndex: Number.isInteger(req.body?.slideIndex) ? slideIndex : Number(existingRemote.slideIndex || 0),
+            sceneIndex: Number(existingRemote.sceneIndex || 0),
+            sequenceIndex: Number(existingRemote.sequenceIndex || 0),
+            sequenceCompleted: false,
+            animationVisible: Boolean(existingRemote.animationVisible),
+            animationPlaying: false,
+            classPlanVisible: Boolean(existingRemote.classPlanVisible),
+            playVersion: Number(existingRemote.playVersion || 0),
+            pauseVersion: Number(existingRemote.pauseVersion || 0),
+            googleAnimationVersion: Number(existingRemote.googleAnimationVersion || 0),
+            googleAnimationDirection: 'next',
+            sequenceBuffers: existingRemote.sequenceBuffers || {},
+            playerMode: existingRemote.playerMode || 'presentation',
+            version: Date.now(),
+            updatedAt: new Date()
+        };
+        course.markModified('presentationRemote');
+        await course.save();
+
+        const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
+        const legacyScenes = Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
+            ? course.presentationVideoScenes
+            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }];
+        const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
+            ? course.presentationVideoSlides
+            : [{ slideNumber: 1, scenes: legacyScenes }];
+
+        let className = course.targetClassroomName || '';
+        if (!className && targetClassId) {
+            const clsObj = await require('mongoose').model('Classroom').findById(targetClassId, 'name').lean().catch(() => null);
+            if (clsObj?.name) className = clsObj.name;
+        }
+
+        return res.json({
+            ok: true,
+            active: true,
+            courseId: String(course._id),
+            title: course.title,
+            classId: targetClassId,
+            className: className || 'Classe active',
+            videoSlides,
+            scenes: legacyScenes,
+            sequences: legacySequences,
+            remote: course.presentationRemote
+        });
+    } catch (error) {
+        return res.status(500).json({ ok: false, error: error.message });
     }
 });
 
@@ -548,6 +690,9 @@ router.post('/presentation-remote/toggle-plan', async (req, res) => {
         };
         remote.classPlanVisible = !remote.classPlanVisible;
         if (remote.classPlanVisible) remote.animationVisible = false;
+        if (targetClassId) {
+            await Classroom.updateOne({ _id: targetClassId }, { $set: { classPlanVisible: remote.classPlanVisible } });
+        }
         remote.version = Date.now();
         remote.updatedAt = new Date();
         course.presentationRemote = remote;
@@ -562,6 +707,9 @@ router.post('/presentation-remote/toggle-plan', async (req, res) => {
 router.post('/presentation-remote/hide-plan', async (req, res) => {
     try {
         const classId = String(req.body?.classId || '').trim();
+        if (classId) {
+            await Classroom.updateOne({ _id: classId }, { $set: { classPlanVisible: false } });
+        }
         let course = null;
         if (classId) {
             course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
@@ -586,6 +734,126 @@ router.post('/presentation-remote/hide-plan', async (req, res) => {
             ? course.presentationVideoSlides
             : [{ slideNumber: 1, scenes: legacyScenes }];
         return res.json({ ok: true, remote: course.presentationRemote, videoSlides, scenes: legacyScenes, sequences: legacySequences });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/:id/slides/native', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        
+        let nativeSlides = Array.isArray(course.nativeSlides) ? course.nativeSlides : [];
+        const shouldSync = (req.query.sync === '1' || nativeSlides.length === 0) && Boolean(course.slidesUrl);
+        if (shouldSync) {
+            try {
+                const imported = await ProfDrive.importGoogleSlidesToNativeModel(course.slidesUrl);
+                if (imported?.slides?.length) {
+                    nativeSlides = imported.slides;
+                    course.nativeSlides = nativeSlides;
+                    course.nativeSlidesLastSyncedAt = new Date();
+                    course.markModified('nativeSlides');
+                    await course.save();
+                }
+            } catch (importErr) {
+                console.warn("⚠️ [NATIVE-SLIDES] Erreur import live :", importErr.message);
+            }
+        }
+        return res.json({
+            ok: true,
+            nativeSlides,
+            slides: nativeSlides,
+            lastSyncedAt: course.nativeSlidesLastSyncedAt
+        });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/slides/import-native', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        if (!course.slidesUrl) return res.status(400).json({ error: 'Aucune URL de slides associée' });
+        
+        const imported = await ProfDrive.importGoogleSlidesToNativeModel(course.slidesUrl);
+        course.nativeSlides = imported.slides || [];
+        course.nativeSlidesLastSyncedAt = new Date();
+        course.markModified('nativeSlides');
+        await course.save();
+        return res.json({
+            ok: true,
+            nativeSlides: course.nativeSlides,
+            slides: course.nativeSlides,
+            lastSyncedAt: course.nativeSlidesLastSyncedAt
+        });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/slides/transitions', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        course.slideTransitions = req.body?.slideTransitions || {};
+        course.markModified('slideTransitions');
+        await course.save();
+        return res.json({ ok: true, slideTransitions: course.slideTransitions });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/slides/save-native', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        
+        const nativeSlides = Array.isArray(req.body?.nativeSlides) ? req.body.nativeSlides : [];
+        const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+        
+        course.nativeSlides = nativeSlides;
+        course.markModified('nativeSlides');
+        await course.save();
+
+        let syncResult = null;
+        if (changes.length > 0 && course.slidesUrl) {
+            try {
+                syncResult = await ProfDrive.syncNativeSlideChangesToGoogleSlides(course.slidesUrl, changes);
+                if (syncResult?.ok) {
+                    course.nativeSlidesLastSyncedAt = new Date();
+                    await course.save();
+                }
+            } catch (syncErr) {
+                console.warn("⚠️ [NATIVE-SLIDES] Échec sync Google Slides :", syncErr.message);
+                syncResult = { ok: false, error: syncErr.message };
+            }
+        }
+
+        return res.json({
+            ok: true,
+            nativeSlides: course.nativeSlides,
+            syncResult,
+            lastSyncedAt: course.nativeSlidesLastSyncedAt
+        });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/slides/sync-to-google', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+        const syncResult = await ProfDrive.syncNativeSlideChangesToGoogleSlides(course.slidesUrl, changes);
+        if (syncResult?.ok) {
+            course.nativeSlidesLastSyncedAt = new Date();
+            await course.save();
+        }
+        return res.json({ ok: true, syncResult, lastSyncedAt: course.nativeSlidesLastSyncedAt });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -640,6 +908,24 @@ router.post('/:id/presentation-remote/sync', async (req, res) => {
         if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
         if (Number.isInteger(req.body?.sceneIndex)) remote.sceneIndex = Math.max(0, Number(req.body.sceneIndex));
         if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
+        const slideObjectId = String(req.body?.slideObjectId || '').trim();
+        if (slideObjectId) {
+            try {
+                const manifest = await ProfDrive.getGoogleSlidesManifest(course.slidesUrl, [], '', false);
+                const matchedIndex = (Array.isArray(manifest?.slides) ? manifest.slides : [])
+                    .findIndex((slide) => String(slide?.objectId || '') === slideObjectId);
+                if (matchedIndex >= 0) {
+                    remote.slideIndex = matchedIndex;
+                    remote.sceneIndex = 0;
+                    remote.sequenceIndex = 0;
+                    remote.sequenceCompleted = false;
+                    remote.animationVisible = false;
+                    remote.animationPlaying = false;
+                }
+            } catch (manifestError) {
+                console.warn('[presentation-remote/sync] slideObjectId non résolu:', manifestError.message);
+            }
+        }
         course.presentationRemote = remote;
         course.markModified('presentationRemote');
         await course.save();
@@ -712,8 +998,47 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         const currentVideos = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
         const storedSequenceTotal = currentVideos.length;
         const sequenceTotal = Math.max(1, storedSequenceTotal || Number(req.body?.sequenceTotal || 1));
-        if (action === 'slide_previous') { remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; }
-        if (action === 'slide_next') { remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1); remote.sceneIndex = 0; remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; }
+        if (action === 'slide_previous') {
+            remote.slideIndex = Math.max(0, Number(remote.slideIndex || 0) - 1);
+            remote.sceneIndex = 0;
+            remote.sequenceIndex = 0;
+            remote.sequenceCompleted = false;
+            remote.animationVisible = false;
+            remote.animationPlaying = false;
+            remote.transitionStep = 1;
+            remote.googleAnimationDirection = 'previous';
+            remote.googleAnimationVersion = Number(remote.googleAnimationVersion || 0) + 1;
+        }
+        if (action === 'slide_next') {
+            remote.slideIndex = Math.min(slideTotal - 1, Number(remote.slideIndex || 0) + 1);
+            remote.sceneIndex = 0;
+            remote.sequenceIndex = 0;
+            remote.sequenceCompleted = false;
+            remote.animationVisible = false;
+            remote.animationPlaying = false;
+            remote.transitionStep = 1;
+            remote.googleAnimationDirection = 'next';
+            remote.googleAnimationVersion = Number(remote.googleAnimationVersion || 0) + 1;
+        }
+        if (action === 'transition_next') {
+            remote.transitionStep = Number.isInteger(req.body?.step)
+                ? Math.max(0, Number(req.body.step))
+                : Number(remote.transitionStep || 0) + 1;
+        }
+        if (action === 'transition_previous') {
+            remote.transitionStep = Number.isInteger(req.body?.step)
+                ? Math.max(0, Number(req.body.step))
+                : Math.max(0, Number(remote.transitionStep || 0) - 1);
+        }
+        if (action === 'transition_reset') {
+            remote.transitionStep = 1;
+        }
+        if (action === 'diaporama_toggle') {
+            remote.diaporamaActive = typeof req.body?.diaporamaActive === 'boolean'
+                ? req.body.diaporamaActive
+                : !remote.diaporamaActive;
+            remote.transitionStep = 1;
+        }
         if (action === 'animation_toggle') {
             remote.animationVisible = !remote.animationVisible;
             if (!remote.animationVisible) { remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
@@ -746,8 +1071,14 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         if (action === 'class_plan_toggle') {
             remote.classPlanVisible = !remote.classPlanVisible;
             if (remote.classPlanVisible) remote.animationVisible = false;
+            const targetClassId = String(req.body?.classId || remote.classId || '').trim();
+            if (targetClassId) await Classroom.updateOne({ _id: targetClassId }, { $set: { classPlanVisible: remote.classPlanVisible } });
         }
-        if (action === 'class_plan_hide') remote.classPlanVisible = false;
+        if (action === 'class_plan_hide') {
+            remote.classPlanVisible = false;
+            const targetClassId = String(req.body?.classId || remote.classId || '').trim();
+            if (targetClassId) await Classroom.updateOne({ _id: targetClassId }, { $set: { classPlanVisible: false } });
+        }
         if (action === 'play') {
             if (remote.sequenceCompleted === true) {
                 if (Number(remote.sequenceIndex || 0) < sequenceTotal - 1) remote.sequenceIndex = Number(remote.sequenceIndex || 0) + 1;
@@ -776,7 +1107,15 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
             if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
         }
         if (action === 'sync') {
-            if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
+            const requestedSlideIndex = Number.isInteger(req.body?.slideIndex)
+                ? Math.max(0, Number(req.body.slideIndex))
+                : Number(remote.slideIndex || 0);
+            // A reveal sequence belongs to one slide only. Never carry an
+            // already-revealed step to the next slide.
+            if (requestedSlideIndex !== Number(remote.slideIndex || 0)) {
+                remote.transitionStep = 1;
+            }
+            remote.slideIndex = requestedSlideIndex;
             if (Number.isInteger(req.body?.sceneIndex)) remote.sceneIndex = Math.max(0, Number(req.body.sceneIndex));
             if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
             if (req.body?.playerMode) remote.playerMode = String(req.body.playerMode);

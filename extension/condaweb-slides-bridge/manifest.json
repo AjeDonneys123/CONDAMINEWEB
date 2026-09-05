@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "CondaWeb Presentation Bridge",
+  "version": "1.0.3",
+  "description": "Connecte Google Slides en direct avec CondaWeb : alertes élèves, mascottes, vidéos et télécommande par-dessus votre diaporama.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://docs.google.com/presentation/*",
+    "http://localhost:3000/*",
+    "http://localhost:5173/*",
+    "http://127.0.0.1:3000/*",
+    "http://127.0.0.1:5173/*",
+    "https://*.vercel.app/*"
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "CondaWeb Bridge",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://docs.google.com/presentation/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

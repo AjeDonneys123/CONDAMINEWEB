@@ -702,8 +702,8 @@ const ProfDrive = {
         const thumb = await slidesApi.presentations.pages.getThumbnail({
             presentationId,
             pageObjectId: pageId,
-            thumbnailProperties_mimeType: 'PNG',
-            thumbnailProperties_thumbnailSize: 'LARGE'
+            'thumbnailProperties.mimeType': 'PNG',
+            'thumbnailProperties.thumbnailSize': 'LARGE'
         });
         const contentUrl = String(thumb?.data?.contentUrl || '').trim();
         if (!contentUrl) throw new Error("Miniature indisponible");
@@ -723,6 +723,332 @@ const ProfDrive = {
         const buffer = Buffer.from(arr);
         const contentType = String(resp.headers.get('content-type') || 'image/png');
         return { presentationId: out.presentationId, pageObjectId: out.pageObjectId, buffer, contentType };
+    },
+
+    importGoogleSlidesToNativeModel: async (presentationRef = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        const title = String(pres?.data?.title || 'Présentation');
+        const pageWidthEmu = Number(pres?.data?.pageSize?.width?.magnitude || 9144000);
+        const pageHeightEmu = Number(pres?.data?.pageSize?.height?.magnitude || 5143500);
+        const slides = Array.isArray(pres?.data?.slides) ? pres.data.slides : [];
+
+        const rgbToHex = (c) => {
+            if (!c) return null;
+            const r = Math.round((Number(c.red || 0)) * 255);
+            const g = Math.round((Number(c.green || 0)) * 255);
+            const b = Math.round((Number(c.blue || 0)) * 255);
+            return `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+        };
+
+        const nativeSlides = slides.map((slide, slideIdx) => {
+            const slideNumber = slideIdx + 1;
+            const objectId = String(slide.objectId || `slide_${slideNumber}`);
+            
+            // Background
+            const bgRgb = slide.pageProperties?.pageBackgroundFill?.solidFill?.color?.rgbColor;
+            const backgroundColor = rgbToHex(bgRgb) || '#ffffff';
+
+            const elements = [];
+            const rawElements = Array.isArray(slide.pageElements) ? slide.pageElements : [];
+
+            rawElements.forEach((el, elIdx) => {
+                const elId = String(el.objectId || `el_${slideIdx}_${elIdx}`);
+                const rawWidth = Number(el.size?.width?.magnitude || 0);
+                const rawHeight = Number(el.size?.height?.magnitude || 0);
+                const scaleX = Number(el.transform?.scaleX || 1);
+                const scaleY = Number(el.transform?.scaleY || 1);
+                const renderedWidthEmu = rawWidth * scaleX;
+                const renderedHeightEmu = rawHeight * scaleY;
+                const renderedXEmu = Number(el.transform?.translateX || 0);
+                const renderedYEmu = Number(el.transform?.translateY || 0);
+
+                const x = Math.max(0, Math.min(100, Math.round((renderedXEmu / pageWidthEmu) * 10000) / 100));
+                const y = Math.max(0, Math.min(100, Math.round((renderedYEmu / pageHeightEmu) * 10000) / 100));
+                const width = Math.max(1, Math.min(100, Math.round((renderedWidthEmu / pageWidthEmu) * 10000) / 100));
+                const height = Math.max(1, Math.min(100, Math.round((renderedHeightEmu / pageHeightEmu) * 10000) / 100));
+
+                if (el.shape) {
+                    const textElements = Array.isArray(el.shape?.text?.textElements) ? el.shape.text.textElements : [];
+                    let fullText = '';
+                    let firstRunStyle = null;
+                    let alignment = 'left';
+
+                    textElements.forEach(te => {
+                        if (te.paragraphMarker?.style?.alignment) {
+                            const a = te.paragraphMarker.style.alignment;
+                            if (a === 'CENTER') alignment = 'center';
+                            else if (a === 'END') alignment = 'right';
+                            else if (a === 'JUSTIFIED') alignment = 'justify';
+                        }
+                        if (te.textRun?.content) {
+                            fullText += te.textRun.content;
+                            if (!firstRunStyle && te.textRun.style) {
+                                firstRunStyle = te.textRun.style;
+                            }
+                        }
+                    });
+
+                    const cleanText = fullText.replace(/\n$/, '');
+                    const fontSize = Math.round(Number(firstRunStyle?.fontSize?.magnitude || 18));
+                    const fontColor = rgbToHex(firstRunStyle?.foregroundColor?.opaqueColor?.rgbColor) || '#1e293b';
+                    const fontFamily = String(firstRunStyle?.fontFamily || 'Roboto');
+                    const bold = Boolean(firstRunStyle?.bold);
+                    const italic = Boolean(firstRunStyle?.italic);
+                    const underline = Boolean(firstRunStyle?.underline);
+                    const shapeBgColor = rgbToHex(el.shape?.shapeProperties?.shapeBackgroundFill?.solidFill?.color?.rgbColor) || 'transparent';
+
+                    elements.push({
+                        id: elId,
+                        googleObjectId: elId,
+                        type: 'text',
+                        x, y, width, height,
+                        rawInitialWidthEmu: rawWidth,
+                        rawInitialHeightEmu: rawHeight,
+                        content: cleanText,
+                        style: {
+                            fontFamily,
+                            fontSize,
+                            color: fontColor,
+                            backgroundColor: shapeBgColor,
+                            bold,
+                            italic,
+                            underline,
+                            align: alignment
+                        },
+                        zIndex: elIdx + 1
+                    });
+                } else if (el.image) {
+                    const src = String(el.image?.contentUrl || el.image?.sourceUrl || '');
+                    elements.push({
+                        id: elId,
+                        googleObjectId: elId,
+                        type: 'image',
+                        x, y, width, height,
+                        rawInitialWidthEmu: rawWidth,
+                        rawInitialHeightEmu: rawHeight,
+                        src,
+                        zIndex: elIdx + 1
+                    });
+                } else if (el.video) {
+                    const source = String(el.video?.source || '').toUpperCase();
+                    const videoId = String(el.video?.id || '');
+                    let url = String(el.video?.url || '');
+                    if (!url && videoId && source === 'YOUTUBE') url = `https://www.youtube.com/watch?v=${videoId}`;
+                    if (!url && videoId && source === 'DRIVE') url = `https://drive.google.com/file/d/${videoId}/preview`;
+                    elements.push({
+                        id: elId,
+                        googleObjectId: elId,
+                        type: 'video_youtube',
+                        x, y, width, height,
+                        rawInitialWidthEmu: rawWidth,
+                        rawInitialHeightEmu: rawHeight,
+                        url,
+                        source,
+                        videoId,
+                        zIndex: elIdx + 1
+                    });
+                }
+            });
+
+            return {
+                slideNumber,
+                objectId,
+                background: { color: backgroundColor },
+                elements
+            };
+        });
+
+        return {
+            presentationId,
+            title,
+            pageWidthEmu,
+            pageHeightEmu,
+            slides: nativeSlides
+        };
+    },
+
+    syncNativeSlideChangesToGoogleSlides: async (presentationRef = '', changes = []) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        const pageWidthEmu = Number(pres?.data?.pageSize?.width?.magnitude || 9144000);
+        const pageHeightEmu = Number(pres?.data?.pageSize?.height?.magnitude || 5143500);
+
+        const hexToRgb = (hex = '#000000') => {
+            const clean = String(hex || '#000000').replace('#', '').trim();
+            const num = parseInt(clean.length === 3 ? clean.split('').map(x => x + x).join('') : clean, 16);
+            return {
+                r: ((num >> 16) & 255) / 255,
+                g: ((num >> 8) & 255) / 255,
+                b: (num & 255) / 255
+            };
+        };
+
+        const requests = [];
+
+        (Array.isArray(changes) ? changes : []).forEach((change) => {
+            const { action, element, slideObjectId } = change;
+            if (!element) return;
+
+            if (action === 'update_text' && element.googleObjectId) {
+                // 1. Delete previous text
+                requests.push({
+                    deleteText: {
+                        objectId: element.googleObjectId,
+                        textRange: { type: 'ALL' }
+                    }
+                });
+                // 2. Insert new text
+                if (element.content) {
+                    requests.push({
+                        insertText: {
+                            objectId: element.googleObjectId,
+                            insertionIndex: 0,
+                            text: String(element.content)
+                        }
+                    });
+                    // 3. Update style
+                    const rgb = hexToRgb(element.style?.color || '#000000');
+                    requests.push({
+                        updateTextStyle: {
+                            objectId: element.googleObjectId,
+                            textRange: { type: 'ALL' },
+                            style: {
+                                fontFamily: element.style?.fontFamily || 'Roboto',
+                                fontSize: { magnitude: Math.max(8, Number(element.style?.fontSize || 18)), unit: 'PT' },
+                                bold: Boolean(element.style?.bold),
+                                italic: Boolean(element.style?.italic),
+                                underline: Boolean(element.style?.underline),
+                                foregroundColor: {
+                                    opaqueColor: {
+                                        rgbColor: { red: rgb.r, green: rgb.g, blue: rgb.b }
+                                    }
+                                }
+                            },
+                            fields: 'fontFamily,fontSize,bold,italic,underline,foregroundColor'
+                        }
+                    });
+                    // 4. Update alignment
+                    const alignMap = { left: 'START', center: 'CENTER', right: 'END', justify: 'JUSTIFIED' };
+                    requests.push({
+                        updateParagraphStyle: {
+                            objectId: element.googleObjectId,
+                            textRange: { type: 'ALL' },
+                            style: {
+                                alignment: alignMap[element.style?.align || 'left'] || 'START'
+                            },
+                            fields: 'alignment'
+                        }
+                    });
+                }
+            }
+
+            if (action === 'update_transform' && element.googleObjectId) {
+                const translateX = Math.round((Number(element.x || 0) / 100) * pageWidthEmu);
+                const translateY = Math.round((Number(element.y || 0) / 100) * pageHeightEmu);
+                const widthEmu = Math.round((Number(element.width || 20) / 100) * pageWidthEmu);
+                const heightEmu = Math.round((Number(element.height || 10) / 100) * pageHeightEmu);
+                const baseWidth = element.rawInitialWidthEmu || widthEmu;
+                const baseHeight = element.rawInitialHeightEmu || heightEmu;
+
+                requests.push({
+                    updatePageElementTransform: {
+                        objectId: element.googleObjectId,
+                        transform: {
+                            scaleX: baseWidth > 0 ? widthEmu / baseWidth : 1,
+                            scaleY: baseHeight > 0 ? heightEmu / baseHeight : 1,
+                            translateX,
+                            translateY,
+                            unit: 'EMU'
+                        },
+                        applyMode: 'ABSOLUTE'
+                    }
+                });
+            }
+
+            if (action === 'delete' && element.googleObjectId) {
+                requests.push({
+                    deleteObject: {
+                        objectId: element.googleObjectId
+                    }
+                });
+            }
+
+            if (action === 'create_text' && slideObjectId) {
+                const newId = `conda_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                const translateX = Math.round((Number(element.x || 10) / 100) * pageWidthEmu);
+                const translateY = Math.round((Number(element.y || 10) / 100) * pageHeightEmu);
+                const widthEmu = Math.round((Number(element.width || 40) / 100) * pageWidthEmu);
+                const heightEmu = Math.round((Number(element.height || 15) / 100) * pageHeightEmu);
+
+                requests.push({
+                    createShape: {
+                        objectId: newId,
+                        shapeType: 'TEXT_BOX',
+                        elementProperties: {
+                            pageObjectId: slideObjectId,
+                            size: {
+                                width: { magnitude: widthEmu, unit: 'EMU' },
+                                height: { magnitude: heightEmu, unit: 'EMU' }
+                            },
+                            transform: {
+                                scaleX: 1, scaleY: 1,
+                                translateX, translateY,
+                                unit: 'EMU'
+                            }
+                        }
+                    }
+                });
+                if (element.content) {
+                    requests.push({
+                        insertText: {
+                            objectId: newId,
+                            insertionIndex: 0,
+                            text: String(element.content)
+                        }
+                    });
+                    const rgb = hexToRgb(element.style?.color || '#000000');
+                    requests.push({
+                        updateTextStyle: {
+                            objectId: newId,
+                            textRange: { type: 'ALL' },
+                            style: {
+                                fontFamily: element.style?.fontFamily || 'Roboto',
+                                fontSize: { magnitude: Math.max(8, Number(element.style?.fontSize || 18)), unit: 'PT' },
+                                bold: Boolean(element.style?.bold),
+                                italic: Boolean(element.style?.italic),
+                                underline: Boolean(element.style?.underline),
+                                foregroundColor: {
+                                    opaqueColor: {
+                                        rgbColor: { red: rgb.r, green: rgb.g, blue: rgb.b }
+                                    }
+                                }
+                            },
+                            fields: 'fontFamily,fontSize,bold,italic,underline,foregroundColor'
+                        }
+                    });
+                }
+            }
+        });
+
+        if (!requests.length) return { ok: true, syncedCount: 0 };
+
+        try {
+            const batchRes = await slidesApi.presentations.batchUpdate({
+                presentationId,
+                requestBody: { requests }
+            });
+            return { ok: true, syncedCount: requests.length, reply: batchRes.data };
+        } catch (err) {
+            console.error("⚠️ [GOOGLE-SLIDES-SYNC] Erreur batchUpdate :", err.message);
+            return { ok: false, error: err.message, syncedCount: 0 };
+        }
     }
 };
 

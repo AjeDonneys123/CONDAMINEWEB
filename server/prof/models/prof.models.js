@@ -189,7 +189,8 @@ const Models = {
         activeStudentBonusAlert: { type: String, default: null },
         activeStudentBonusAlertTime: { type: Date, default: null },
         activeScoreAlerts: { type: Array, default: [] },
-        activeHourWarnings: { type: Array, default: [] }
+        activeHourWarnings: { type: Array, default: [] },
+        classPlanVisible: { type: Boolean, default: false }
     }),
 
     Student: getModel('Student', StudentSchema),
@@ -360,6 +361,9 @@ const Models = {
         presentationVideoScenes: { type: [mongoose.Schema.Types.Mixed], default: [] },
         presentationVideoSlides: { type: [mongoose.Schema.Types.Mixed], default: [] },
         presentationRemote: { type: mongoose.Schema.Types.Mixed, default: null },
+        nativeSlides: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        nativeSlidesLastSyncedAt: { type: Date, default: null },
+        slideTransitions: { type: mongoose.Schema.Types.Mixed, default: {} },
         date: { type: Date, default: Date.now }
     }),
 
