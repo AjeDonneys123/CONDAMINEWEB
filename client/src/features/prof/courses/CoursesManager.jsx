@@ -571,6 +571,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // Diagnostic only: lets the console identify the exact event that opened
     // or closed a control overlay during classroom use.
     const controlTraceSourceRef = useRef('');
+    // A control can only be opened once for a real double-click.  This guards
+    // against the browser replaying the second click after an overlay mounts.
+    const controlOpenLockRef = useRef({ key: '', expiresAt: 0 });
     const [slideElementsMap, setSlideElementsMap] = useState({});
     const [slideTransitions, setSlideTransitions] = useState({});
     const [diaporamaActive, setDiaporamaActive] = useState(false);
@@ -707,7 +710,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const createdAt = new Date(row?.createdAt || 0).getTime();
             // Polling and rendering can easily consume a second; keep the
             // board notification visible long enough to be read in class.
-            return Number.isFinite(createdAt) && liveClock - createdAt >= 0 && liveClock - createdAt < 8000;
+            // The classroom server and the browser can have slightly different
+            // clocks on CondaWeb.  A strict "future timestamp" check hid the
+            // alert entirely in that situation.
+            return Number.isFinite(createdAt) && Math.abs(liveClock - createdAt) < 12000;
         })
         .slice(-6);
     }, [liveClassroom?.activeScoreAlerts, liveClassroom?.activeStudentBonusAlert, liveClassroom?.activeStudentBonusAlertTime, liveClock]);
@@ -2577,6 +2583,18 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const openControlFromMask = async (controlId, context = {}) => {
+        const now = Date.now();
+        const key = `${String(controlId || '')}:${String(context.maskId || '')}`;
+        const lock = controlOpenLockRef.current;
+        if (projectedControl || (lock.key === key && lock.expiresAt > now)) {
+            traceControl('ouverture-bloquee', {
+                reason: projectedControl ? 'controle-deja-ouvert' : 'anti-rebond',
+                controlId: String(controlId || ''),
+                ...context
+            });
+            return;
+        }
+        controlOpenLockRef.current = { key, expiresAt: now + 1200 };
         traceControl('ouverture-demande', { controlId: String(controlId || ''), ...context });
         if (!controlId) {
             traceControl('ouverture-annulee-identifiant-manquant', context);
@@ -3457,6 +3475,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                 event.preventDefault();
                                                 event.stopPropagation();
                                                 if (isControlMask) {
+                                                    if (!event.isTrusted || event.detail < 2) {
+                                                        traceControl('masque-double-clic-ignore', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, trusted: event.isTrusted, clickCount: event.detail });
+                                                        return;
+                                                    }
                                                     traceControl('masque-double-clic', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, clickCount: event.detail });
                                                     void openControlFromMask(mask.controlId, { slide: currentSlideNumber, maskId: mask.id, title: mask.controlTitle });
                                                     return;
@@ -3659,8 +3681,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 )}
                             </div>
                         ) : null}
-                        {projectedControl && <div className="course-control-projection" role="dialog" aria-modal="true" aria-label={`Contrôle : ${projectedControl.title}`} onPointerDown={(event) => event.stopPropagation()}>
-                            <button type="button" className="course-control-close" onClick={() => { traceControl('fermeture-bouton', { controlId: String(projectedControl._id || ''), title: String(projectedControl.title || '') }); setProjectedControl(null); window.setTimeout(() => coursePlayerRef.current?.focus?.(), 0); }} aria-label="Fermer le contrôle et revenir à la présentation">×</button>
+                        {projectedControl && <div className="course-control-projection" role="dialog" aria-modal="true" aria-label={`Contrôle : ${projectedControl.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                            <button type="button" className="course-control-close" onClick={(event) => { event.preventDefault(); event.stopPropagation(); traceControl('fermeture-bouton', { controlId: String(projectedControl._id || ''), title: String(projectedControl.title || '') }); setProjectedControl(null); window.setTimeout(() => coursePlayerRef.current?.focus?.(), 0); }} aria-label="Fermer le contrôle et revenir à la présentation">×</button>
                             <div className="course-control-qr">
                                 <span className="course-control-exam-mask">CONTRÔLE</span>
                                 <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(controlPublicUrl)}`} alt={`QR code de l'examen ${projectedControl.title}`} />
