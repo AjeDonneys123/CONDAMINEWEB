@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import './LiveControlCheatAlert.css';
 
 // Synthétiseur audio Web Audio API pour bip d'alerte sans fichier externe
 function playCheatAlarmSound() {
@@ -94,7 +95,7 @@ export default function LiveControlCheatAlert() {
       role="alert"
       aria-live="assertive"
       aria-atomic="true"
-      className="fixed inset-x-3 top-3 z-[9999] max-w-5xl mx-auto animate-bounce transition-all pointer-events-auto"
+      className="fixed inset-x-3 top-3 z-[9999] max-w-5xl mx-auto control-cheat-alert-bounce transition-all pointer-events-auto"
     >
       <div className="relative rounded-3xl border-4 border-red-500 bg-gradient-to-r from-red-950 via-rose-950 to-red-950 text-white p-5 md:p-8 shadow-[0_0_60px_rgba(239,68,68,0.7)] flex flex-col gap-4">
         {/* En-tête d'alerte */}

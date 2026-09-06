@@ -1,0 +1,18 @@
+/* Deliberately local rather than Tailwind's `animate-bounce`: this warning must
+   keep moving on the class screen until the teacher acknowledges it. */
+.control-cheat-alert-bounce {
+  transform-origin: center top;
+  animation: control-cheat-alert-bounce 900ms cubic-bezier(.28, .84, .42, 1) infinite;
+}
+
+@keyframes control-cheat-alert-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  18% { transform: translateY(-16px) scale(1.01); }
+  35% { transform: translateY(0) scale(.995); }
+  52% { transform: translateY(-8px) scale(1.003); }
+  68% { transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control-cheat-alert-bounce { animation-duration: 1.8s; }
+}
