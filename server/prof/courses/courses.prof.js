@@ -866,11 +866,30 @@ router.post('/:id/presentation-remote/start', async (req, res) => {
         const classId = String(req.body?.classId || course.targetClassroomId || '').trim();
         await Course.updateMany({ 'presentationRemote.classId': classId, _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
         const existingRemote = (course.presentationRemote && typeof course.presentationRemote === 'object') ? course.presentationRemote : {};
+        // Closing the player only deactivates the remote session; it must not
+        // erase the position reached during the previous lesson. Reopening the
+        // same presentation therefore resumes on its last active slide.
+        let savedSlideIndex = Math.max(0, Number(existingRemote.slideIndex || 0));
+        const savedSlideObjectId = String(existingRemote.slideObjectId || '').trim();
+        // Slide numbers can change when a teacher inserts a slide in Google
+        // Slides. The Google object id is stable, so resolve it at restart.
+        if (savedSlideObjectId) {
+            try {
+                const manifest = await ProfDrive.getGoogleSlidesManifest(course.slidesUrl, [], '', false);
+                const matchedIndex = (Array.isArray(manifest?.slides) ? manifest.slides : [])
+                    .findIndex((slide) => String(slide?.objectId || '') === savedSlideObjectId);
+                if (matchedIndex >= 0) savedSlideIndex = matchedIndex;
+            } catch (_) {
+                // The numeric index remains a safe fallback if Google is
+                // temporarily unavailable while starting the presentation.
+            }
+        }
         const isContinuing = existingRemote.active && String(existingRemote.classId || '') === classId;
         course.presentationRemote = {
             active: true,
             classId,
-            slideIndex: isContinuing ? Number(existingRemote.slideIndex || 0) : 0,
+            slideIndex: savedSlideIndex,
+            slideObjectId: savedSlideObjectId,
             sceneIndex: isContinuing ? Number(existingRemote.sceneIndex || 0) : 0,
             sequenceIndex: isContinuing ? Number(existingRemote.sequenceIndex || 0) : 0,
             sequenceCompleted: isContinuing ? existingRemote.sequenceCompleted === true : false,
@@ -910,6 +929,7 @@ router.post('/:id/presentation-remote/sync', async (req, res) => {
         if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
         const slideObjectId = String(req.body?.slideObjectId || '').trim();
         if (slideObjectId) {
+            remote.slideObjectId = slideObjectId;
             try {
                 const manifest = await ProfDrive.getGoogleSlidesManifest(course.slidesUrl, [], '', false);
                 const matchedIndex = (Array.isArray(manifest?.slides) ? manifest.slides : [])
@@ -1116,6 +1136,9 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
                 remote.transitionStep = 1;
             }
             remote.slideIndex = requestedSlideIndex;
+            if (String(req.body?.slideObjectId || '').trim()) {
+                remote.slideObjectId = String(req.body.slideObjectId).trim();
+            }
             if (Number.isInteger(req.body?.sceneIndex)) remote.sceneIndex = Math.max(0, Number(req.body.sceneIndex));
             if (Number.isInteger(req.body?.sequenceIndex)) remote.sequenceIndex = Math.max(0, Number(req.body.sequenceIndex));
             if (req.body?.playerMode) remote.playerMode = String(req.body.playerMode);

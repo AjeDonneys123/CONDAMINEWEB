@@ -321,8 +321,12 @@ const uniqueSequences = (existing = [], additions = []) => {
     const seen = new Set();
     return [...existing, ...additions].filter((item) => {
         const url = String(item?.url || '').trim();
-        if (!url || seen.has(url)) return false;
-        seen.add(url);
+        // A single NotebookLM video can intentionally occur several times:
+        // one saved sequence per time range.  The old URL-only key erased all
+        // but the first of those ranges.
+        const key = `${url}|${Math.max(0, Number(item?.startSec || 0))}|${Math.max(0, Number(item?.endSec || 0))}`;
+        if (!url || seen.has(key)) return false;
+        seen.add(key);
         return true;
     });
 };
@@ -376,22 +380,46 @@ const ensureChapterMediaScenes = (slides = [], slideCount = 1, resources = {}) =
 
 const superficialMediaForModule = (module = {}) => {
     const steps = Array.isArray(module?.steps) ? module.steps : [];
-    const master = steps.find((step) => step?.type === 'sheet' && step?.isGeneralSheetMaster === true);
-    const sheetMedia = master
-        ? (Array.isArray(master.sheetMediaItems) && master.sheetMediaItems.length
-            ? master.sheetMediaItems
-            : (master.sheetMediaUrl ? [{ id: 'superfiche_legacy_media', url: master.sheetMediaUrl, name: master.sheetMediaName, type: master.sheetMediaType, startSec: master.sheetMediaStartSec, endSec: master.sheetMediaEndSec }] : []))
-        : [];
+    const sheetMediaForStep = (step, index) => (
+        Array.isArray(step?.sheetMediaItems) && step.sheetMediaItems.length
+            ? step.sheetMediaItems
+            : (step?.sheetMediaUrl ? [{
+                id: `${step.id || 'fiche'}_legacy_${index}`,
+                url: step.sheetMediaUrl,
+                name: step.sheetMediaName,
+                type: step.sheetMediaType,
+                startSec: step.sheetMediaStartSec,
+                endSec: step.sheetMediaEndSec
+            }] : [])
+    );
+    // Videos and songs can be attached directly to any generated sub-fiche,
+    // not only to the general-sheet master.  Gather every sheet in its saved
+    // order; inherited media collapse naturally through uniqueSequences.
+    const sheetMedia = steps.flatMap((step, index) => step?.type === 'sheet'
+        ? sheetMediaForStep(step, index)
+        : []);
+    const videoSteps = steps.filter((step) => step?.type === 'video' && String(step?.videoUrl || '').trim());
     const notebookMedia = [
         ...sheetMedia.filter((media) => !String(media?.type || '').toLowerCase().startsWith('audio/') && !AUDIO_FILE_PATTERN.test(String(media?.url || ''))),
-        ...steps.filter((step) => step?.type === 'video' && String(step?.videoUrl || '').trim()).map((step) => ({
+        ...videoSteps.map((step) => ({
             id: step.id, url: step.videoUrl, name: step.title, type: step.mimeType || '', startSec: step.startSec, endSec: step.endSec
         }))
     ].map(makePresentationSequence);
     const musicMedia = sheetMedia
         .filter((media) => String(media?.type || '').toLowerCase().startsWith('audio/') || AUDIO_FILE_PATTERN.test(String(media?.url || media?.name || '')))
         .map(makePresentationSequence);
-    return { notebook: uniqueSequences([], notebookMedia), music: uniqueSequences([], musicMedia) };
+    return {
+        notebook: uniqueSequences([], notebookMedia),
+        music: uniqueSequences([], musicMedia),
+        // Keep the original video sources so the saved cuts from the Learning
+        // sequence editor can replace the coarse video rows below.
+        notebookSources: videoSteps.map((step) => ({
+            id: String(step?.segmentSourceStepId || step?.id || ''),
+            url: String(step?.videoUrl || '').trim(),
+            name: String(step?.videoSourceName || step?.title || 'Vidéo NotebookLM').trim(),
+            type: String(step?.mimeType || '').trim()
+        })).filter((source) => source.url)
+    };
 };
 
 const groupSceneSequences = (scene = {}) => {
@@ -540,6 +568,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const slideImageCacheRef = useRef(new Map());
     const requestedSlideImageKeyRef = useRef('');
     const renderedSlideIndexRef = useRef(null);
+    // Diagnostic only: lets the console identify the exact event that opened
+    // or closed a control overlay during classroom use.
+    const controlTraceSourceRef = useRef('');
     const [slideElementsMap, setSlideElementsMap] = useState({});
     const [slideTransitions, setSlideTransitions] = useState({});
     const [diaporamaActive, setDiaporamaActive] = useState(false);
@@ -564,7 +595,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sequenceCutVideoRef = useRef(null);
     const coursePlayerRef = useRef(null);
     const presentationIframeRef = useRef(null);
-    const externalSlidesEditorOpenedRef = useRef(false);
     const completedProjectedVideoRef = useRef('');
     const consumedYoutubePlayVersionRef = useRef(0);
     // The class remote is polled every 650ms. Keep a short guard after a local
@@ -583,6 +613,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const maskDraftDirtyRef = useRef(false);
     const maskAutoSaveTimerRef = useRef(null);
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
+    const traceControl = (event, detail = {}) => {
+        console.info('[CondaWeb contrôle]', {
+            event,
+            at: new Date().toISOString(),
+            courseId: String(playingCourse?._id || ''),
+            ...detail
+        });
+    };
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
     const editPreviewUrl = useMemo(() => getEditUrl(form.slidesUrl), [form.slidesUrl]);
@@ -714,11 +752,34 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     useEffect(() => {
         if (!playingCourse) return undefined;
         const onKeyDown = (event) => {
-            if (event.key === 'Escape') setPlayingCourse(null);
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            // Escape must first close the control window, never discard the
+            // presentation underneath it.
+            if (projectedControl) {
+                traceControl('fermeture-escape', { controlId: String(projectedControl?._id || ''), title: projectedControl?.title || '' });
+                setProjectedControl(null);
+                window.setTimeout(() => coursePlayerRef.current?.focus?.(), 0);
+                return;
+            }
+            closePresentation();
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [playingCourse]);
+    }, [playingCourse, projectedControl]);
+
+    useEffect(() => {
+        if (projectedControl) {
+            traceControl('overlay-ouvert', {
+                source: controlTraceSourceRef.current || 'inconnu',
+                controlId: String(projectedControl._id || ''),
+                title: String(projectedControl.title || '')
+            });
+        } else if (controlTraceSourceRef.current) {
+            traceControl('overlay-ferme', { source: controlTraceSourceRef.current });
+            controlTraceSourceRef.current = '';
+        }
+    }, [projectedControl]);
 
     useEffect(() => {
         if (!playingCourse?._id) {
@@ -879,27 +940,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return undefined;
     }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl, globalClassId]);
 
-    // Refresh the visible Google Slide while it is being edited in another tab.
-    // Returning to CondaWeb also triggers an immediate refresh because browsers
-    // may slow timers down in a background tab.
-    useEffect(() => {
-        if (!playingCourse?._id || isPhone) return undefined;
-        const refreshVisibleSlide = () => setLiveSyncKey(Date.now());
-        const intervalId = window.setInterval(() => {
-            refreshVisibleSlide();
-        }, 2000);
-        const onVisibilityChange = () => {
-            if (document.visibilityState === 'visible') refreshVisibleSlide();
-        };
-        document.addEventListener('visibilitychange', onVisibilityChange);
-        return () => {
-            window.clearInterval(intervalId);
-            document.removeEventListener('visibilitychange', onVisibilityChange);
-        };
-    }, [playingCourse?._id, isPhone]);
-
-
-
     const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
@@ -965,6 +1005,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const selectProjectedSlide = async (nextIndex) => {
         const total = Math.max(1, slideManifest.length || 1);
         const slideIndex = Math.min(total - 1, Math.max(0, Math.floor(Number(nextIndex) || 0)));
+        const slideObjectId = String(slideManifest[slideIndex]?.objectId || '').trim();
         const navigationVersion = slideNavigationVersionRef.current + 1;
         slideNavigationVersionRef.current = navigationVersion;
         pendingSlideSyncRef.current = { slideIndex, requestedAt: Date.now(), navigationVersion };
@@ -996,6 +1037,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 if (navigationVersion !== slideNavigationVersionRef.current) return undefined;
                 return sendPresentationCommand('sync', {
                     slideIndex,
+                    slideObjectId,
                     sceneIndex: 0,
                     sequenceIndex: 0,
                     playerMode,
@@ -1086,6 +1128,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const closePresentation = () => {
         if (playingCourse?._id && !isPhone) fetch(`/api/courses/${playingCourse._id}/presentation-remote/stop`, { method: 'POST' }).catch(() => { });
+        setProjectedControl(null);
         setPlayingCourse(null);
         setPresentationRemote(null);
         setSlideImageUrl('');
@@ -1200,6 +1243,101 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             : `${base}?rm=minimal`;
     }, [playingCourse?.slidesUrl, projectedSlideObjectId]);
 
+    // A slide can be inserted or removed in Google Slides while CondaWeb is
+    // in another tab. Refreshing only the image cannot discover that change.
+    // The manifest is therefore checked every second *only while CondaWeb is
+    // in the background* and once on return.  Keeping the expensive manifest
+    // request out of the normal foreground refresh prevents it from delaying
+    // the first slide.
+    useEffect(() => {
+        if (isPhone || !playingCourse?._id || !playingCourse.slidesUrl) return undefined;
+        let cancelled = false;
+        let inFlight = false;
+        let timerId = null;
+        const syncManifest = async () => {
+            if (cancelled || inFlight) return;
+            inFlight = true;
+            try {
+                const response = await fetch('/api/learning/slides/manifest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+                    body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
+                });
+                const data = await response.json().catch(() => ({}));
+                const nextManifest = Array.isArray(data?.slides) ? data.slides : [];
+                if (!nextManifest.length || cancelled) return;
+                const previousIds = slideManifest.map((slide) => String(slide?.objectId || ''));
+                const nextIds = nextManifest.map((slide) => String(slide?.objectId || ''));
+                const structureChanged = previousIds.join('|') !== nextIds.join('|');
+                if (structureChanged) setSlideManifest(nextManifest);
+
+                const currentObjectId = String(projectedSlideObjectId || '').trim();
+                const nextIndex = currentObjectId
+                    ? nextManifest.findIndex((slide) => String(slide?.objectId || '') === currentObjectId)
+                    : -1;
+                if (nextIndex >= 0 && nextIndex !== projectedSlideIndex) {
+                    const navigationVersion = slideNavigationVersionRef.current + 1;
+                    slideNavigationVersionRef.current = navigationVersion;
+                    pendingSlideSyncRef.current = { slideIndex: nextIndex, requestedAt: Date.now(), navigationVersion };
+                    slideNavigationLockRef.current = { slideIndex: nextIndex, expiresAt: Date.now() + 2500 };
+                    setPresentationRemote((current) => current ? {
+                        ...current,
+                        remote: { ...(current.remote || {}), slideIndex: nextIndex, sceneIndex: 0, sequenceIndex: 0 }
+                    } : current);
+                    fetch(`/api/courses/${playingCourse._id}/presentation-remote/sync`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ slideIndex: nextIndex, sceneIndex: 0, sequenceIndex: 0, playerMode })
+                    }).then((response) => response.json().catch(() => ({})))
+                        .then((syncData) => {
+                            if (Number(syncData?.remote?.slideIndex) === nextIndex
+                                && pendingSlideSyncRef.current?.navigationVersion === navigationVersion) {
+                                pendingSlideSyncRef.current = null;
+                            }
+                        })
+                        .catch(() => {});
+                }
+                // Existing slide content may have changed even when the list
+                // itself did not; the visible thumbnail will be force-refreshed.
+                setLiveSyncKey(Date.now());
+            } catch (_) {
+                // A transient Google/connection failure must not blank the
+                // current presentation.
+            } finally {
+                inFlight = false;
+            }
+        };
+        const schedule = () => {
+            if (cancelled) return;
+            if (timerId) window.clearTimeout(timerId);
+            const delay = document.visibilityState === 'hidden' ? 1000 : 3000;
+            timerId = window.setTimeout(async () => {
+                if (document.visibilityState === 'hidden') {
+                    await syncManifest();
+                } else {
+                    // Visible mode needs a fresh picture, not a full Google
+                    // Slides manifest on every tick.
+                    setLiveSyncKey(Date.now());
+                }
+                schedule();
+            }, delay);
+        };
+        const onVisibilityChange = () => {
+            // Check immediately both when leaving and returning: the former
+            // catches Google edits without waiting a second, the latter makes
+            // an inserted slide available as soon as CondaWeb is reopened.
+            void syncManifest();
+            schedule();
+        };
+        schedule();
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            cancelled = true;
+            if (timerId) window.clearTimeout(timerId);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+    }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl, projectedSlideIndex, projectedSlideObjectId, slideManifest, playerMode]);
+
     // Loads the current image without blanking the previous slide. Adjacent
     // slides are normally already decoded by the preloader below.
     useEffect(() => {
@@ -1289,7 +1427,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // Text/paragaph detection is kept for text selection, never for masks.
     const maxSlideSteps = useMemo(() => {
         return Math.max(1, ...(currentSlideTransition?.masks || [])
-            .filter((mask) => !String(mask?.id || '').startsWith('mask_detected_'))
+            .filter((mask) => !String(mask?.id || '').startsWith('mask_detected_') && mask?.type !== 'control')
             .map((mask) => Number(mask.step) || 1));
     }, [currentSlideTransition?.masks]);
 
@@ -1300,6 +1438,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             .filter((mask) => !String(mask?.id || '').startsWith('mask_detected_'))
             .map((mask, index) => ({
             id: String(mask.id || `manual-${index}`), number: index + 1,
+            type: String(mask.type || ''),
+            controlId: String(mask.controlId || ''),
+            controlTitle: String(mask.controlTitle || 'Contrôle'),
             step: Math.max(1, Number(mask.step) || 1),
             x: Math.max(0, Number(mask.x) || 0),
             y: Math.max(0, Number(mask.y) || 0),
@@ -1309,13 +1450,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [currentSlideTransition?.masks]);
     const nextMaskedStep = useMemo(() => {
         const pendingSteps = currentSlideMasks
-            .filter((mask) => !dismissedPresentationMasks[mask.id] && mask.step > currentDiaporamaStep)
+            .filter((mask) => mask.type !== 'control' && !dismissedPresentationMasks[mask.id] && mask.step > currentDiaporamaStep)
             .map((mask) => mask.step);
         return pendingSteps.length ? Math.min(...pendingSteps) : null;
     }, [currentDiaporamaStep, currentSlideMasks, dismissedPresentationMasks]);
     const focusedPresentationMask = useMemo(() => {
         const pendingMasks = currentSlideMasks.filter((mask) => (
-            !dismissedPresentationMasks[mask.id] && mask.step > currentDiaporamaStep
+            mask.type !== 'control' && !dismissedPresentationMasks[mask.id] && mask.step > currentDiaporamaStep
         ));
         const selected = pendingMasks.find((mask) => mask.id === selectedPresentationMaskId);
         if (selected) return selected;
@@ -1429,8 +1570,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
     }, [presentationRemote?.remote?.diaporamaActive, presentationRemote?.remote?.transitionStep]);
 
-    // Pre-decode nearby slides so arrows, keyboard navigation and the thumbnail
-    // rail all feel immediate.
+    // Pre-decode around the restored/current slide. The active slide is loaded
+    // by the effect above; after it, favour the next slides (the teacher is
+    // normally moving forward), then only the three preceding ones.
     useEffect(() => {
         const presId = extractPresentationId(playingCourse?.slidesUrl);
         if (!presId || !playingCourse?._id) return;
@@ -1438,19 +1580,35 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const indicesToPreload = [
             projectedSlideIndex + 1,
             projectedSlideIndex + 2,
-            projectedSlideIndex - 1
+            projectedSlideIndex + 3,
+            projectedSlideIndex - 1,
+            projectedSlideIndex - 2,
+            projectedSlideIndex - 3
         ].filter((idx) => idx >= 0 && idx < total);
 
-        indicesToPreload.forEach((idx) => {
+        let cancelled = false;
+        const preloadInPriorityOrder = (position = 0) => {
+            if (cancelled || position >= indicesToPreload.length) return;
+            const idx = indicesToPreload[position];
             const pageId = String(slideManifest[idx]?.objectId || '').trim();
             const slideNum = idx + 1;
             const cacheKey = `${presId}:${pageId}:${slideNum}`;
-            if (slideImageCacheRef.current.has(cacheKey)) return;
+            if (slideImageCacheRef.current.has(cacheKey)) {
+                preloadInPriorityOrder(position + 1);
+                return;
+            }
             const url = `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presId)}&pageObjectId=${encodeURIComponent(pageId)}&slideNumber=${slideNum}`;
             const img = new Image();
-            img.onload = () => slideImageCacheRef.current.set(cacheKey, url);
+            const continuePreload = () => preloadInPriorityOrder(position + 1);
+            img.onload = () => {
+                if (!cancelled) slideImageCacheRef.current.set(cacheKey, url);
+                continuePreload();
+            };
+            img.onerror = continuePreload;
             img.src = url;
-        });
+        };
+        preloadInPriorityOrder();
+        return () => { cancelled = true; };
     }, [playingCourse?.slidesUrl, playingCourse?._id, projectedSlideIndex, slideManifest]);
 
     useEffect(() => {
@@ -2099,22 +2257,73 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 extractPresentationId(playingCourse.slidesUrl),
                 extractPresentationId(sourceCourse?.slidesUrl)
             ].filter(Boolean));
+            const courseIds = new Set([
+                String(playingCourse?._id || ''),
+                String(sourceCourse?._id || '')
+            ].filter(Boolean));
             let module = null;
             try {
                 const response = await fetch('/api/learning/all');
                 const modules = response.ok ? await response.json() : [];
-                module = (Array.isArray(modules) ? modules : []).find((item) => (
+                const rows = Array.isArray(modules) ? modules : [];
+                const courseTitle = normaliseSceneName(playingCourse?.title);
+                // A Learning module explicitly remembers the course selected
+                // for its superfiche. This is the strongest link and remains
+                // valid even if Google created a new public Slides URL.
+                module = rows.find((item) => courseIds.has(String(item?.generalSheetCourseId || '')))
+                    || rows.find((item) => (
                     presentationIds.has(extractPresentationId(item?.presentationUrl))
                     || presentationIds.has(extractPresentationId(item?.presentationSourceUrl))
-                )) || null;
+                    ))
+                    // Compatibility for older modules saved before the course
+                    // id was recorded. The title is used only as a last
+                    // resort, after exact course and presentation matches.
+                    || rows.find((item) => courseTitle && normaliseSceneName(item?.generalSheetCourseTitle || item?.title) === courseTitle)
+                    || null;
             } catch (_) {
                 // Keep the mandatory empty scenes when the optional source
                 // of the superfiche is temporarily unavailable.
             }
+            let mediaResources = module ? superficialMediaForModule(module) : undefined;
+            // The Learning Studio's sequence editor stores cuts independently
+            // of the step list. Read those cuts too: each cut becomes one
+            // sequence in the NotebookLM scene, exactly as it was authored.
+            const teacherId = String(user?._id || user?.id || playingCourse?.teacherId || '').trim();
+            if (mediaResources?.notebookSources?.length && teacherId) {
+                const sources = mediaResources.notebookSources;
+                const cutsBySource = await Promise.all(sources.map(async (source) => {
+                    try {
+                        const query = new URLSearchParams({ teacherId, url: source.url });
+                        const response = await fetch(`/api/learning/video-segments?${query.toString()}`);
+                        const rows = response.ok ? await response.json() : [];
+                        return { source, cuts: Array.isArray(rows) ? rows : [] };
+                    } catch (_) {
+                        return { source, cuts: [] };
+                    }
+                }));
+                const sourcesWithCuts = new Set(cutsBySource.filter((row) => row.cuts.length > 0).map((row) => row.source.url));
+                const cutSequences = cutsBySource.flatMap(({ source, cuts }) => cuts.map((cut, index) => makePresentationSequence({
+                    id: `learning_cut_${cut?._id || cut?.id || `${source.id}_${index}`}`,
+                    url: source.url,
+                    name: String(cut?.label || source.name || `Séquence ${index + 1}`),
+                    type: source.type,
+                    startSec: cut?.startSec,
+                    endSec: cut?.endSec
+                }, index)));
+                if (cutSequences.length) {
+                    mediaResources = {
+                        ...mediaResources,
+                        notebook: uniqueSequences(
+                            (mediaResources.notebook || []).filter((item) => !sourcesWithCuts.has(item.url)),
+                            cutSequences
+                        )
+                    };
+                }
+            }
             const slides = ensureChapterMediaScenes(
                 initialSlides,
                 slideCount,
-                module ? superficialMediaForModule(module) : undefined
+                mediaResources
             );
             setVideoSequencer((current) => current && String(current.course?._id) === String(playingCourse._id)
                 ? { ...current, slides }
@@ -2286,6 +2495,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const openControlOnCourse = async () => {
         setAddMenuOpen(false);
+        traceControl('ajout-demande', { displayedSlide: currentSlideNumber, projectedSlide: projectedSlideIndex + 1 });
         try {
             const response = await fetch('/api/controls/all');
             const rows = response.ok ? await response.json() : [];
@@ -2297,10 +2507,84 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 // projectable instead of disappearing from the exam selector.
                 return targets.length === 0 || targets.some(value => String(value || '').replace(/\s/g, '').toUpperCase() === key);
             });
+            traceControl('ajout-controles-charges', { httpStatus: response.status, total: Array.isArray(rows) ? rows.length : 0, disponibles: available.length });
             if (!available.length) return alert('Aucun contrôle actif pour cette classe. Créez-le dans Activités.');
             const choice = available.length === 1 ? available[0] : available.find((_, i) => String(i + 1) === prompt(available.map((row, i) => `${i + 1}. ${row.title}`).join('\n'), '1'));
-            if (choice) setProjectedControl(choice);
-        } catch (_) { alert('Chargement des contrôles impossible.'); }
+            if (!choice || !playingCourse?._id) {
+                traceControl('ajout-annule', { choice: Boolean(choice), hasCourse: Boolean(playingCourse?._id) });
+                return;
+            }
+            // The user is looking at renderedSlideIndex while an image change
+            // can still be in flight.  Attach the control to that visible
+            // slide, never to a possibly-ahead remote index.
+            const slideNumber = currentSlideNumber;
+            const currentConfig = slideTransitions[slideNumber] || {};
+            const currentMasks = Array.isArray(currentConfig.masks) ? currentConfig.masks : [];
+            const existing = currentMasks.find((mask) => mask?.type === 'control' && String(mask?.controlId || '') === String(choice._id || ''));
+            if (existing) {
+                traceControl('ajout-deja-present', { slide: slideNumber, maskId: String(existing.id || ''), controlId: String(choice._id || '') });
+                setSelectedPresentationMaskId(String(existing.id));
+                return;
+            }
+            const maskId = `mask_control_${choice._id}_${Date.now()}`;
+            const nextMasks = [...currentMasks, {
+                id: maskId,
+                type: 'control',
+                controlId: String(choice._id || ''),
+                controlTitle: String(choice.title || 'Contrôle'),
+                // A visible card in the centre of the current slide. It can
+                // subsequently be moved/resized in the mask editor.
+                x: 30, y: 40, width: 40, height: 18, step: 1
+            }];
+            const nextTransitions = {
+                ...slideTransitions,
+                [slideNumber]: { ...currentConfig, enabled: true, masks: nextMasks }
+            };
+            traceControl('ajout-local', { slide: slideNumber, maskId, controlId: String(choice._id || ''), title: String(choice.title || '') });
+            setSlideTransitions(nextTransitions);
+            const saveResponse = await fetch(`/api/courses/${playingCourse._id}/slides/transitions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slideTransitions: nextTransitions })
+            });
+            if (!saveResponse.ok) throw new Error(`save-control-mask:${saveResponse.status}`);
+            const saved = await saveResponse.json().catch(() => ({}));
+            const persistedTransitions = saved?.slideTransitions || nextTransitions;
+            traceControl('ajout-sauvegarde-ok', { slide: slideNumber, maskId, controlId: String(choice._id || ''), httpStatus: saveResponse.status });
+            // Keep all three local copies aligned. Otherwise a later course
+            // refresh can overwrite the newly created control card and make
+            // it appear intermittent.
+            setSlideTransitions(persistedTransitions);
+            setPlayingCourse((current) => current ? { ...current, slideTransitions: persistedTransitions } : current);
+            setCourses((current) => current.map((course) => String(course?._id) === String(playingCourse._id)
+                ? { ...course, slideTransitions: persistedTransitions }
+                : course));
+        } catch (error) {
+            console.error('[CondaWeb contrôle] ajout-erreur', error);
+            traceControl('ajout-erreur', { message: String(error?.message || error || '') });
+            alert('Impossible d’ajouter ce contrôle à la diapositive.');
+        }
+    };
+
+    const openControlFromMask = async (controlId, context = {}) => {
+        traceControl('ouverture-demande', { controlId: String(controlId || ''), ...context });
+        if (!controlId) {
+            traceControl('ouverture-annulee-identifiant-manquant', context);
+            return;
+        }
+        try {
+            const response = await fetch('/api/controls/all');
+            const controls = response.ok ? await response.json() : [];
+            const control = (controls || []).find((row) => String(row?._id || '') === String(controlId));
+            traceControl('ouverture-controles-charges', { controlId: String(controlId), httpStatus: response.status, total: Array.isArray(controls) ? controls.length : 0, found: Boolean(control) });
+            if (!control) throw new Error('missing-control');
+            controlTraceSourceRef.current = 'double-clic-masque';
+            setProjectedControl(control);
+        } catch (error) {
+            console.error('[CondaWeb contrôle] ouverture-erreur', error);
+            traceControl('ouverture-erreur', { controlId: String(controlId), message: String(error?.message || error || '') });
+            alert('Ce contrôle est introuvable ou ne peut pas être ouvert.');
+        }
     };
 
     useEffect(() => {
@@ -2366,6 +2650,28 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (Math.max(0, Number(course?.publishedUntilSlide || 0)) === 0) {
             updatePublishedUntilSlide(course, 1);
         }
+        // Seed the player before its remote request returns. This avoids
+        // downloading slides 1 and 2 while the last viewed slide (for example
+        // slide 50) is already known in the saved presentation state.
+        const savedRemote = (course?.presentationRemote && typeof course.presentationRemote === 'object')
+            ? course.presentationRemote
+            : {};
+        setPresentationRemote({
+            active: true,
+            courseId: String(course?._id || ''),
+            title: course?.title || '',
+            videoSlides: course?.presentationVideoSlides || [],
+            scenes: course?.presentationVideoScenes || [],
+            sequences: course?.presentationVideoSequences || [],
+            remote: {
+                ...savedRemote,
+                active: true,
+                classId: globalClassId || savedRemote.classId || '',
+                slideIndex: Math.max(0, Number(savedRemote.slideIndex || 0)),
+                sceneIndex: Math.max(0, Number(savedRemote.sceneIndex || 0)),
+                sequenceIndex: Math.max(0, Number(savedRemote.sequenceIndex || 0))
+            }
+        });
         setPlayerMode('presentation');
         setPlayingCourse(course);
     };
@@ -2409,7 +2715,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     })
                 }).catch(() => {});
             }
-            externalSlidesEditorOpenedRef.current = true;
             setLastEditSlideNumber(targetSlideIndex + 1);
             setEditSlideNumberDraft('');
         } catch (accessError) {
@@ -2490,25 +2795,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setLiveSyncKey(Date.now());
         } catch (_) { }
     };
-
-    useEffect(() => {
-        if (isPhone || !playingCourse?._id) return undefined;
-        const refreshAfterExternalEdit = () => {
-            if (!externalSlidesEditorOpenedRef.current || document.visibilityState === 'hidden') return;
-            fetch('/api/learning/slides/manifest', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
-            }).then((response) => response.json())
-                .then((data) => setSlideManifest(Array.isArray(data?.slides) ? data.slides : []))
-                .catch(() => { });
-        };
-        window.addEventListener('focus', refreshAfterExternalEdit);
-        document.addEventListener('visibilitychange', refreshAfterExternalEdit);
-        return () => {
-            window.removeEventListener('focus', refreshAfterExternalEdit);
-            document.removeEventListener('visibilitychange', refreshAfterExternalEdit);
-        };
-    }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl]);
 
     const refreshSlidesFromGoogle = () => {
         if (!playingCourse?.slidesUrl) return;
@@ -3139,15 +3425,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
                                 {/* Masques de texte et rectangles créés dans l'éditeur */}
                                 {transitionsEnabled && currentSlideMasks.map((mask) => {
-                                    const isDismissed = dismissedPresentationMasks[mask.id] === true;
-                                    const isMasked = !isDismissed && mask.step > currentDiaporamaStep;
+                                    const isControlMask = mask.type === 'control';
+                                    const isDismissed = !isControlMask && dismissedPresentationMasks[mask.id] === true;
+                                    const isMasked = isControlMask || (!isDismissed && mask.step > currentDiaporamaStep);
                                     const revealedPixels = isMasked ? Number(maskRevealPixels[mask.id] || 0) : 0;
-                                    const activeStep = Math.min(...currentSlideMasks.filter((item) => !dismissedPresentationMasks[item.id] && item.step > currentDiaporamaStep).map((item) => item.step));
-                                    const isActive = isMasked && mask.step === activeStep;
+                                    const activeStep = Math.min(...currentSlideMasks.filter((item) => item.type !== 'control' && !dismissedPresentationMasks[item.id] && item.step > currentDiaporamaStep).map((item) => item.step));
+                                    const isActive = !isControlMask && isMasked && mask.step === activeStep;
                                     return (
                                         <div
                                             key={`mask-${mask.id}`}
-                                            className={`slide-diaporama-mask ${isMasked ? 'is-masked' : 'is-revealed'} ${isActive ? 'is-active' : ''} ${selectedPresentationMaskId === mask.id ? 'is-selected' : ''}`}
+                                            className={`slide-diaporama-mask ${isControlMask ? 'is-control' : ''} ${isMasked ? 'is-masked' : 'is-revealed'} ${isActive ? 'is-active' : ''} ${selectedPresentationMaskId === mask.id ? 'is-selected' : ''}`}
                                             style={{
                                                 left: `${mask.x}%`,
                                                 top: `${mask.y}%`,
@@ -3156,15 +3443,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                 backgroundColor: '#ffffff',
                                                 clipPath: revealedPixels > 0 ? `inset(${revealedPixels.toFixed(2)}px 0 0 0)` : undefined
                                             }}
-                                            onPointerDown={(event) => event.stopPropagation()}
-                                            onPointerUp={(event) => event.stopPropagation()}
+                                            onPointerDown={(event) => {
+                                                event.stopPropagation();
+                                                if (isControlMask) traceControl('masque-pointerdown', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, pointerType: event.pointerType, detail: event.detail });
+                                            }}
+                                            onPointerUp={(event) => {
+                                                event.stopPropagation();
+                                                if (isControlMask) traceControl('masque-pointerup', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, pointerType: event.pointerType, detail: event.detail });
+                                            }}
                                             onClick={(event) => {
                                                 event.stopPropagation();
+                                                if (isControlMask) traceControl('masque-clic', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, clickCount: event.detail, selectedBefore: selectedPresentationMaskId === mask.id });
                                                 if (isMasked) setSelectedPresentationMaskId(mask.id);
                                             }}
                                             onDoubleClick={(event) => {
                                                 event.preventDefault();
                                                 event.stopPropagation();
+                                                if (isControlMask) {
+                                                    traceControl('masque-double-clic', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, clickCount: event.detail });
+                                                    void openControlFromMask(mask.controlId, { slide: currentSlideNumber, maskId: mask.id, title: mask.controlTitle });
+                                                    return;
+                                                }
                                                 if (selectedPresentationMaskId !== mask.id || !isMasked) return;
                                                 console.info('[CondaWeb masques] Retrait par double-clic', {
                                                     slide: currentSlideNumber,
@@ -3173,7 +3472,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                 setDismissedPresentationMasks((current) => ({ ...current, [mask.id]: true }));
                                                 setSelectedPresentationMaskId('');
                                             }}
-                                        ><span className="slide-diaporama-mask-number">{mask.number}</span></div>
+                                        >{isControlMask ? <span className="slide-control-mask-content"><strong>CONTRÔLE</strong><small>{mask.controlTitle}</small><em>Double-clique pour ouvrir</em></span> : <span className="slide-diaporama-mask-number">{mask.number}</span>}</div>
                                     );
                                 })}
                             </div>
@@ -3363,10 +3662,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 )}
                             </div>
                         ) : null}
-                        {projectedControl && <div className="course-control-projection" role="dialog" aria-label={`Examen : ${projectedControl.title}`}>
-                            <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
+                        {projectedControl && <div className="course-control-projection" role="dialog" aria-modal="true" aria-label={`Contrôle : ${projectedControl.title}`} onPointerDown={(event) => event.stopPropagation()}>
+                            <button type="button" className="course-control-close" onClick={() => { traceControl('fermeture-bouton', { controlId: String(projectedControl._id || ''), title: String(projectedControl.title || '') }); setProjectedControl(null); window.setTimeout(() => coursePlayerRef.current?.focus?.(), 0); }} aria-label="Fermer le contrôle et revenir à la présentation">×</button>
                             <div className="course-control-qr">
-                                <span className="course-control-exam-mask">EXAMEN</span>
+                                <span className="course-control-exam-mask">CONTRÔLE</span>
                                 <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(controlPublicUrl)}`} alt={`QR code de l'examen ${projectedControl.title}`} />
                                 <strong>SCANNE POUR COMMENCER</strong>
                                 <span className="course-control-qr-title">{projectedControl.title}</span>
@@ -3508,7 +3807,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     <div className="course-add-menu">
                                         <button type="button" onClick={() => { setAddMenuOpen(false); setTransitionEditMode(true); }}>✨ AJOUTER UNE TRANSITION</button>
                                         <button type="button" onClick={openVideoSequencer}>🎬 AJOUTER UNE ANIMATION</button>
-                                        <button type="button" onClick={openControlOnCourse}>📝 AFFICHER UN CONTRÔLE</button>
+                                        <button type="button" onClick={openControlOnCourse}>📝 AJOUTER UN CONTRÔLE</button>
                                     </div>
                                 )}
                             </div>
@@ -3723,6 +4022,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         useCustomMasks: true,
                                         masks: (transitionDraft.masks || []).map((mask) => ({
                                             id: String(mask.id || `mask_${Date.now()}`),
+                                            ...(mask.type === 'control' ? {
+                                                type: 'control',
+                                                controlId: String(mask.controlId || ''),
+                                                controlTitle: String(mask.controlTitle || 'Contrôle')
+                                            } : {}),
                                             x: Math.max(0, Math.min(100, Number(mask.x) || 0)),
                                             y: Math.max(0, Math.min(100, Number(mask.y) || 0)),
                                             width: Math.max(1, Math.min(100, Number(mask.width) || 1)),
