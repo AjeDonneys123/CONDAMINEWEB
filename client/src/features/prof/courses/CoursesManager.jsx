@@ -705,7 +705,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         return rows
         .filter((row) => {
             const createdAt = new Date(row?.createdAt || 0).getTime();
-            return Number.isFinite(createdAt) && liveClock - createdAt >= 0 && liveClock - createdAt < 3000;
+            // Polling and rendering can easily consume a second; keep the
+            // board notification visible long enough to be read in class.
+            return Number.isFinite(createdAt) && liveClock - createdAt >= 0 && liveClock - createdAt < 8000;
         })
         .slice(-6);
     }, [liveClassroom?.activeScoreAlerts, liveClassroom?.activeStudentBonusAlert, liveClassroom?.activeStudentBonusAlertTime, liveClock]);
@@ -2342,6 +2344,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setPlayingCourse((current) => String(current?._id) === String(saved._id)
                 ? { ...current, presentationVideoSlides: saved.presentationVideoSlides || [] }
                 : current);
+            setPresentationRemote((current) => String(current?.courseId || '') === String(saved._id)
+                ? { ...current, videoSlides: saved.presentationVideoSlides || [], scenes: saved.presentationVideoScenes || [], sequences: saved.presentationVideoSequences || [] }
+                : current);
         } catch (sequenceError) {
             // The two empty scenes remain editable even if the optional
             // superfiche cannot be reached.
@@ -2395,6 +2400,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             if (!response.ok) throw new Error(data.error || 'Enregistrement impossible');
             setCourses((current) => current.map((course) => String(course._id) === String(data._id) ? mergeCourseForCurrentView(course, data) : course));
             setPlayingCourse((current) => String(current?._id) === String(data._id) ? { ...current, presentationVideoSlides: data.presentationVideoSlides || [] } : current);
+            // The active remote is also the data source of the teacher's
+            // phone. Update it immediately rather than waiting for its poll.
+            setPresentationRemote((current) => String(current?.courseId || '') === String(data._id)
+                ? { ...current, videoSlides: data.presentationVideoSlides || [], scenes: data.presentationVideoScenes || [], sequences: data.presentationVideoSequences || [] }
+                : current);
             setVideoSequencer(null);
         } catch (saveError) {
             setError(saveError.message);
@@ -2927,9 +2937,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     )}
                     <label>SCÈNES</label>
                     <div className="course-phone-scenes">
-                        {phoneScenes.map((scene, index) => <button key={scene.id || index} className={index === phoneSceneIndex ? 'selected' : ''} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })}>{index + 1}</button>)}
+                        {phoneScenes.map((scene, index) => <button key={scene.id || index} className={`course-phone-scene-button ${index === phoneSceneIndex ? 'selected' : ''}`} onClick={() => void sendPresentationCommand('scene_select', { sceneIndex: index })} title={`Ouvrir ${scene.name || `Scène ${index + 1}`}`}>
+                            <b>{index + 1}</b><span>{scene.name || `Scène ${index + 1}`}</span>
+                        </button>)}
                     </div>
-                    <label>SÉQUENCES DE LA SCÈNE {phoneSceneIndex + 1}</label>
+                    <label>SÉQUENCES · {phoneScenes[phoneSceneIndex]?.name || `SCÈNE ${phoneSceneIndex + 1}`}</label>
                     <div className="course-phone-sequences">
                         {phoneGroups.map((group, index) => {
                             const isSelected = index === phoneSequenceIndex;
@@ -2941,41 +2953,26 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             )));
                             const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
                             const isAudio = group.some((item) => isAudioSequence(item));
+                            const sequenceName = group.map((item) => String(item?.name || '').trim()).filter(Boolean).join(' + ') || `${isAudio ? 'Chanson' : 'Séquence'} ${index + 1}`;
                             const radius = 19;
                             const circ = 2 * Math.PI * radius; // ~119.38
                             const strokeOffset = circ - (circ * pct) / 100;
-                            return (
+                            return <div className="course-phone-sequence-item" key={group[0]?.id || index}>
                                 <button
-                                    key={group[0]?.id || index}
                                     type="button"
                                     className={`course-phone-seq-camembert ${isSelected ? 'selected' : ''} ${isReady ? 'ready' : ''} ${isAudio ? 'audio' : ''}`}
-                                    disabled={!isReady}
-                                    onClick={() => { if (isReady) void sendPresentationCommand('sequence_select', { sequenceIndex: index }); }}
-                                    title={`${isAudio ? 'Chanson / audio' : 'Séquence'} ${index + 1} : ${pct}% chargé ${isReady ? '(Prêt)' : '(chargement en cours)'}`}
+                                    onClick={() => void sendPresentationCommand('sequence_select', { sequenceIndex: index })}
+                                    title={`${sequenceName} · ${pct}% chargé ${isReady ? '(Prêt)' : '(sélectionnable, chargement en cours)'}`}
                                 >
                                     <svg className="seq-camembert-svg" viewBox="0 0 46 46">
                                         <circle cx="23" cy="23" r={radius} className="seq-camembert-track" />
-                                        <circle
-                                            cx="23"
-                                            cy="23"
-                                            r={radius}
-                                            className={`seq-camembert-progress ${isReady ? 'ready' : ''}`}
-                                            style={{
-                                                strokeDasharray: circ,
-                                                strokeDashoffset: isReady ? 0 : strokeOffset
-                                            }}
-                                        />
+                                        <circle cx="23" cy="23" r={radius} className={`seq-camembert-progress ${isReady ? 'ready' : ''}`} style={{ strokeDasharray: circ, strokeDashoffset: isReady ? 0 : strokeOffset }} />
                                     </svg>
-                                    <div className="seq-camembert-center">
-                                        <span className="seq-camembert-num">{index + 1}</span>
-                                        {isReady ? (
-                                            <span className="seq-camembert-badge ready">✓</span>
-                                        ) : (
-                                            <span className="seq-camembert-badge">{pct}%</span>
-                                        )}
-                                    </div>
+                                    <div className="seq-camembert-center"><span className="seq-camembert-num">{index + 1}</span>{isReady ? <span className="seq-camembert-badge ready">✓</span> : <span className="seq-camembert-badge">{pct}%</span>}</div>
                                 </button>
-                            );
+                                <strong>{sequenceName}</strong>
+                                <small>{isAudio ? '🎵 Chanson' : '🎬 Vidéo'} · {isReady ? 'prête' : `${pct}%`}</small>
+                            </div>;
                         })}
                     </div>
                     <div>
@@ -3714,8 +3711,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {activeScoreAlerts.length > 0 && (
                             <div className="live-score-alert-stack" aria-live="polite">
                                 {activeScoreAlerts.map((alert, index) => (
-                                    <div className="live-score-alert" key={alert?.id || `${alert?.createdAt}-${index}`}>
-                                        {alert?.message}
+                                    <div className={`live-score-alert ${alert?.type === 'negative' ? 'negative' : alert?.type === 'positive' ? 'positive' : ''}`} key={alert?.id || `${alert?.createdAt}-${index}`}>
+                                        {Number.isFinite(Number(alert?.pointsDelta)) && Math.abs(Number(alert.pointsDelta)) > 0 ? <>
+                                            <strong>{alert?.studentName || 'Élève'}</strong>
+                                            <span className="live-score-alert-delta">{Number(alert.pointsDelta) > 0 ? '+' : '−'}{Math.abs(Number(alert.pointsDelta)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} point{Math.abs(Number(alert.pointsDelta)) > 1 ? 's' : ''}</span>
+                                            <small>Nouvelle note : {Number(alert?.score || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}/20</small>
+                                        </> : <strong>{alert?.message}</strong>}
                                     </div>
                                 ))}
                             </div>

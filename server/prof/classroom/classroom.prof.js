@@ -632,7 +632,9 @@ router.post('/behavior', async (req, res) => {
                 const selected = scores.find((row) => String(row?.id || '') === String(r.selectedScoreId || '')) || scores[scores.length - 1];
                 const value = Number(selected?.value || 0);
                 const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1).replace('.', ',');
-                message = `${displayName} ${appliedClassPointDelta > 0 ? '+0,5' : '−0,5'} → ${formatted}`;
+                const absoluteDelta = Math.abs(appliedClassPointDelta);
+                const formattedDelta = Number.isInteger(absoluteDelta) ? String(absoluteDelta) : absoluteDelta.toFixed(1).replace('.', ',');
+                message = `${displayName} ${appliedClassPointDelta > 0 ? '+' : '−'}${formattedDelta} → ${formatted}`;
                 alertType = appliedClassPointDelta > 0 ? 'positive' : 'negative';
             } else if (type === 'TOGGLE_SCORE_WARNING') message = `Avertissement au tableau : ${displayName}`;
             else if (type === 'TOGGLE_SCORE_PUNISHMENT' || type === 'ADD_PUNISHMENT') message = `Punition : ${displayName}`;
@@ -640,7 +642,15 @@ router.post('/behavior', async (req, res) => {
             else if (type === 'ADD_FORCED_SIX') message = `Note forcée à 6 : ${displayName}`;
             if (message) {
                 const now = new Date();
-                const alert = { id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, message, type: alertType, createdAt: now };
+                const alert = {
+                    id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+                    message,
+                    type: alertType,
+                    studentName: displayName,
+                    pointsDelta: appliedClassPointDelta,
+                    score: type === 'ADJUST_SCORE' ? Number((Array.isArray(r.scores) ? r.scores : []).find((row) => String(row?.id || '') === String(r.selectedScoreId || ''))?.value || 0) : null,
+                    createdAt: now
+                };
                 await Classroom.updateOne(
                     { _id: scoreClassId },
                     {
