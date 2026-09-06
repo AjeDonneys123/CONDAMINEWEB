@@ -317,6 +317,26 @@ const normaliseSceneName = (value = '') => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('fr').replace(/[^a-z0-9]/g, '');
 
+const chapterTitleWords = (value = '') => String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !['cours', 'chapitre', 'partie', 'fiche'].includes(word));
+
+const bestMatchingSuperfiche = (modules = [], titles = []) => {
+    const expected = new Set(titles.flatMap(chapterTitleWords));
+    if (!expected.size) return null;
+    const ranked = (Array.isArray(modules) ? modules : []).map((module) => {
+        const words = new Set(chapterTitleWords(`${module?.generalSheetCourseTitle || ''} ${module?.title || ''}`));
+        const score = [...expected].filter((word) => words.has(word)).length;
+        return { module, score };
+    }).sort((a, b) => b.score - a.score);
+    // Two meaningful words (e.g. "premiere guerre") make this a safe
+    // compatibility fallback when an older Superfiche has no course id.
+    return ranked[0]?.score >= 2 ? ranked[0].module : null;
+};
+
 const uniqueSequences = (existing = [], additions = []) => {
     const seen = new Set();
     return [...existing, ...additions].filter((item) => {
@@ -2299,6 +2319,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     // id was recorded. The title is used only as a last
                     // resort, after exact course and presentation matches.
                     || rows.find((item) => courseTitle && normaliseSceneName(item?.generalSheetCourseTitle || item?.title) === courseTitle)
+                    // Older chapters often differ only by H1/CH1 in their
+                    // name. Match their meaningful words rather than their
+                    // whole normalized string.
+                    || bestMatchingSuperfiche(rows, [playingCourse?.title, sourceCourse?.title])
                     || null;
                 console.info('[CondaWeb séquences] Superfiche liée', {
                     courseId: String(playingCourse?._id || ''),
@@ -2312,6 +2336,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 // of the superfiche is temporarily unavailable.
             }
             let mediaResources = module ? superficialMediaForModule(module) : undefined;
+            console.info('[CondaWeb séquences] Médias détectés', {
+                notebook: Number(mediaResources?.notebook?.length || 0),
+                music: Number(mediaResources?.music?.length || 0),
+                videoSources: Number(mediaResources?.notebookSources?.length || 0)
+            });
             // The Learning Studio's sequence editor stores cuts independently
             // of the step list. Read those cuts too: each cut becomes one
             // sequence in the NotebookLM scene, exactly as it was authored.
