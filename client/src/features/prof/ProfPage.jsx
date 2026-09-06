@@ -1,18 +1,22 @@
 // @signatures: ProfPage, getInitialUser, loadProfileAndClasses
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
-import StudentsManager from './students/StudentsManager';
-import ActivityStudio from './activities/ActivityStudio';
-import AdminDashboard from './admin/AdminDashboard';
 import ConsoleReporter from './components/ConsoleReporter';
-import StudioDashboard from './studio/StudioDashboard'; 
-import ClassroomManager from './classroom/ClassroomManager'; 
-import ScansStudio from './scans/ScansStudio';
-import CoursesManager from './courses/CoursesManager';
 import BugReportWidget from '../shared/BugReportWidget';
 import LiveControlCheatAlert from './controls/LiveControlCheatAlert';
 import './ProfPage.css';
+
+// Each workspace contains a large editor/game stack. Loading all of them on
+// the course-list screen created hundreds of Vite requests before the teacher
+// had chosen an area. They now load only when their tab is opened.
+const StudentsManager = lazy(() => import('./students/StudentsManager'));
+const ActivityStudio = lazy(() => import('./activities/ActivityStudio'));
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
+const StudioDashboard = lazy(() => import('./studio/StudioDashboard'));
+const ClassroomManager = lazy(() => import('./classroom/ClassroomManager'));
+const ScansStudio = lazy(() => import('./scans/ScansStudio'));
+const CoursesManager = lazy(() => import('./courses/CoursesManager'));
 
 export default function ProfPage({ user, onLogout }) {
   const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
@@ -181,7 +185,7 @@ export default function ProfPage({ user, onLogout }) {
                 <span className="font-black text-xl uppercase">SÉLECTIONNEZ UNE CLASSE CI-DESSUS</span>
              </div>
           ) : (
-             <>
+             <Suspense fallback={<div className="flex min-h-[400px] items-center justify-center font-black text-slate-400">CHARGEMENT DE L’ESPACE…</div>}>
                 {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
                 {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
@@ -189,7 +193,7 @@ export default function ProfPage({ user, onLogout }) {
                 {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
                 {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
                 {tab === 'admin' && liveUser.isDeveloper && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
-             </>
+             </Suspense>
           )}
         </div>
       </div>

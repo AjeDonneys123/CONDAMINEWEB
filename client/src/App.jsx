@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
-import ProfPage from './features/prof/ProfPage';
-import ElevePage from './features/eleve/ElevePage';
-import ControlRecoveryMobileCapture from './features/eleve/controlRecovery/ControlRecoveryMobileCapture';
-import PublicAssessmentControl from './features/eleve/controls/PublicAssessmentControl';
 import SystemStatus from './features/prof/components/SystemStatus';
 import AutoConsoleBugReporter from './features/shared/AutoConsoleBugReporter';
 import './App.css';
+
+// The professor and student applications have large, unrelated editor/game
+// trees. Do not fetch both trees when only one role is being used.
+const ProfPage = lazy(() => import('./features/prof/ProfPage'));
+const ElevePage = lazy(() => import('./features/eleve/ElevePage'));
+const ControlRecoveryMobileCapture = lazy(() => import('./features/eleve/controlRecovery/ControlRecoveryMobileCapture'));
+const PublicAssessmentControl = lazy(() => import('./features/eleve/controls/PublicAssessmentControl'));
+const AppLoading = () => <div className="min-h-screen grid place-items-center bg-slate-50 font-black text-slate-400">CHARGEMENT…</div>;
 
 const VISITOR_LEVELS = ['5e', '3e', '2de'];
 
@@ -30,12 +34,12 @@ export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const recoveryMobileToken = String(urlParams.get('recoveryMobile') || '').trim();
   if (recoveryMobileToken) {
-    return <ControlRecoveryMobileCapture token={recoveryMobileToken} />;
+    return <Suspense fallback={<AppLoading />}><ControlRecoveryMobileCapture token={recoveryMobileToken} /></Suspense>;
   }
 
   const publicControlId = String(urlParams.get('control') || '').trim();
   if (publicControlId) {
-    return <PublicAssessmentControl controlId={publicControlId} />;
+    return <Suspense fallback={<AppLoading />}><PublicAssessmentControl controlId={publicControlId} /></Suspense>;
   }
 
   const [user, setUser] = useState(null);
@@ -55,7 +59,10 @@ export default function App() {
         }
       } catch (e) {}
     };
-    const timer = setInterval(checkUpdate, 5000);
+    // Deployment checks are a safety net, not a live classroom channel.
+    // Polling every five seconds across every open device creates needless
+    // traffic during a lesson.
+    const timer = setInterval(checkUpdate, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -166,19 +173,21 @@ export default function App() {
       )}
 
       {/* ROUTAGE PRINCIPAL : PROF OU ÉLÈVE UNIQUEMENT */}
-      {(user.isDeveloper || user.role === 'prof' || user.role === 'admin') ? (
-          <ProfPage user={user} onLogout={handleLogout} />
-      ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => {
-            if (user.isVisitorTeacher === true) {
-              const nextUser = { ...user, currentClass: '' };
-              localStorage.setItem('player', JSON.stringify(nextUser));
-              setUser(nextUser);
-              return;
-            }
-            setUser({ ...user, role: "prof" });
-          }} />
-      )}
+      <Suspense fallback={<AppLoading />}>
+        {(user.isDeveloper || user.role === 'prof' || user.role === 'admin') ? (
+            <ProfPage user={user} onLogout={handleLogout} />
+        ) : (
+            <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => {
+              if (user.isVisitorTeacher === true) {
+                const nextUser = { ...user, currentClass: '' };
+                localStorage.setItem('player', JSON.stringify(nextUser));
+                setUser(nextUser);
+                return;
+              }
+              setUser({ ...user, role: "prof" });
+            }} />
+        )}
+      </Suspense>
     </div>
   );
 }

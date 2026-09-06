@@ -35,8 +35,11 @@ export default function LiveControlCheatAlert() {
 
   useEffect(() => {
     let mounted = true;
+    let inFlight = false;
 
     const pollAlerts = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const res = await fetch('/api/controls/live-alerts');
         if (!res.ok) return;
@@ -55,11 +58,16 @@ export default function LiveControlCheatAlert() {
             }
           }
         }
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        inFlight = false;
+      }
     };
 
     pollAlerts();
-    const interval = setInterval(pollAlerts, 1500);
+    // There is normally no active control. Five seconds avoids a permanent
+    // background request while still showing a cheating alert promptly.
+    const interval = setInterval(pollAlerts, 5000);
 
     return () => {
       mounted = false;

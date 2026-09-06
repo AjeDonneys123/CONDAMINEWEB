@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
-const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Chapter } = require('../models/prof.models');
+const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Chapter, Course } = require('../models/prof.models');
 const fetch = require('node-fetch');
 const multer = require('multer');
 const fs = require('fs');
@@ -219,6 +219,133 @@ const timelineSegmentCompare = (a, b) => {
     const be = beRaw > 0 ? beRaw : Number.MAX_SAFE_INTEGER;
     if (ae !== be) return ae - be;
     return String(a?._id || '').localeCompare(String(b?._id || ''));
+};
+
+const isAudioLearningMedia = (media = {}) => {
+    const type = String(media?.type || media?.mimeType || '').toLowerCase();
+    const text = `${String(media?.url || '')} ${String(media?.name || media?.title || '')}`.toLowerCase();
+    return type.startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|oga|flac)(?:[?#].*)?$/.test(text);
+};
+
+const presentationSequenceFromMedia = (media = {}, index = 0) => {
+    const url = String(media?.url || media?.videoUrl || '').trim();
+    const audio = isAudioLearningMedia(media);
+    const isYoutube = /(?:youtu\.be|youtube\.com)\//i.test(url);
+    return {
+        id: String(media?.id || `learning_media_${index}_${url}`).slice(0, 180),
+        name: String(media?.name || media?.title || (audio ? `Chanson ${index + 1}` : `Vidéo NotebookLM ${index + 1}`)).trim().slice(0, 160),
+        url,
+        sourceType: audio ? 'audio' : (isYoutube ? 'youtube' : 'mp4'),
+        mimeType: String(media?.type || media?.mimeType || (audio ? 'audio/mpeg' : 'video/mp4')).slice(0, 100),
+        mergeWithNext: false,
+        closeAfterSequence: false,
+        startSec: Math.max(0, Number(media?.startSec || 0)),
+        endSec: Math.max(0, Number(media?.endSec || 0))
+    };
+};
+
+const uniquePresentationSequences = (rows = []) => {
+    const seen = new Set();
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+        const url = String(row?.url || '').trim();
+        const key = `${url}|${String(row?.name || '').trim().toLowerCase()}|${Number(row?.startSec || 0)}|${Number(row?.endSec || 0)}`;
+        if (!url || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+};
+
+const slideNumbersFromFocus = (value = '') => {
+    const results = new Set();
+    String(value || '').split(/[,;\s]+/).forEach((part) => {
+        const range = part.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+        if (range) {
+            const start = Math.max(1, Number(range[1]));
+            const end = Math.max(start, Number(range[2]));
+            for (let n = start; n <= Math.min(end, start + 300); n += 1) results.add(n);
+            return;
+        }
+        const number = Number(part);
+        if (Number.isInteger(number) && number > 0) results.add(number);
+    });
+    return [...results].sort((a, b) => a - b);
+};
+
+// Publishing an apprentissage makes its media immediately usable in the
+// course player. Auto scenes are always appended after teacher-created scenes
+// and are replaced on later publications (never duplicated).
+const syncLearningMediaToCourse = async (module = {}) => {
+    const courseId = String(module?.generalSheetCourseId || '').trim();
+    if (!courseId) return { synced: false, reason: 'no-course' };
+    const course = await Course.findById(courseId);
+    if (!course) return { synced: false, reason: 'course-not-found' };
+
+    const steps = Array.isArray(module?.steps) ? module.steps : [];
+    const sheetMedia = steps.flatMap((step, stepIndex) => Array.isArray(step?.sheetMediaItems) && step.sheetMediaItems.length
+        ? step.sheetMediaItems
+        : (step?.sheetMediaUrl ? [{
+            id: `${step?.id || 'sheet'}_${stepIndex}`, url: step.sheetMediaUrl, name: step.sheetMediaName,
+            type: step.sheetMediaType, startSec: step.sheetMediaStartSec, endSec: step.sheetMediaEndSec
+        }] : []));
+    const videoSteps = steps.filter((step) => String(step?.videoUrl || '').trim());
+    const notebookBase = [
+        ...sheetMedia.filter((media) => !isAudioLearningMedia(media)),
+        ...videoSteps.map((step) => ({ id: step.id, url: step.videoUrl, name: step.videoSourceName || step.title, type: step.mimeType, startSec: step.startSec, endSec: step.endSec }))
+    ].map(presentationSequenceFromMedia);
+    const music = uniquePresentationSequences(sheetMedia.filter(isAudioLearningMedia).map(presentationSequenceFromMedia));
+
+    const teacherId = String(module?.teacherId || '').trim();
+    const sourceUrls = [...new Set(videoSteps.map((step) => normalizeVideoUrl(step.videoUrl)).filter(Boolean))];
+    const segments = teacherId && sourceUrls.length
+        ? await VideoSegment.find({ teacherId, normalizedUrl: { $in: sourceUrls } }).lean()
+        : [];
+    const cutsByUrl = new Map();
+    segments.sort(timelineSegmentCompare).forEach((segment) => {
+        const key = String(segment?.normalizedUrl || '');
+        if (!cutsByUrl.has(key)) cutsByUrl.set(key, []);
+        cutsByUrl.get(key).push(segment);
+    });
+    const notebook = uniquePresentationSequences(videoSteps.flatMap((step, stepIndex) => {
+        const cuts = cutsByUrl.get(normalizeVideoUrl(step.videoUrl)) || [];
+        if (!cuts.length) return [presentationSequenceFromMedia({ id: step.id, url: step.videoUrl, name: step.videoSourceName || step.title, type: step.mimeType, startSec: step.startSec, endSec: step.endSec }, stepIndex)];
+        return cuts.map((cut, cutIndex) => presentationSequenceFromMedia({
+            id: `learning_cut_${cut?._id || `${step.id}_${cutIndex}`}`,
+            url: step.videoUrl,
+            name: cut?.label || step.videoSourceName || step.title,
+            type: step.mimeType,
+            startSec: cut.startSec,
+            endSec: cut.endSec
+        }, cutIndex));
+    }).concat(notebookBase.filter((row) => !videoSteps.some((step) => String(step.videoUrl || '').trim() === String(row.url || '').trim()))));
+
+    const requestedSlides = slideNumbersFromFocus(module?.presentationSlidesFocus);
+    const targetSlides = requestedSlides.length ? requestedSlides : [1];
+    const existing = Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [];
+    const byNumber = new Map(existing.map((slide) => [Number(slide?.slideNumber || 1), slide]));
+    const moduleKey = String(module?._id || 'learning');
+    targetSlides.forEach((slideNumber) => {
+        const current = byNumber.get(slideNumber) || { slideNumber, scenes: [] };
+        const manualScenes = (Array.isArray(current.scenes) ? current.scenes : []).filter((scene) => (
+            String(scene?.learningModuleId || '') !== moduleKey
+            && !['scenenotebooklm', 'scenemusique'].includes(String(scene?.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
+        ));
+        const autoScenes = [
+            { id: `learning_${moduleKey}_notebook_${slideNumber}`, learningModuleId: moduleKey, name: 'Scène NotebookLM', sequences: notebook },
+            { id: `learning_${moduleKey}_music_${slideNumber}`, learningModuleId: moduleKey, name: 'Scène Musique', sequences: music }
+        ];
+        byNumber.set(slideNumber, { ...current, slideNumber, scenes: [...manualScenes, ...autoScenes] });
+    });
+    const slides = [...byNumber.values()].sort((a, b) => Number(a.slideNumber) - Number(b.slideNumber));
+    course.presentationVideoSlides = slides;
+    const first = slides.find((slide) => Number(slide.slideNumber) === targetSlides[0]) || slides[0] || { scenes: [] };
+    course.presentationVideoScenes = first.scenes || [];
+    course.presentationVideoSequences = (first.scenes || []).flatMap((scene) => scene.sequences || []);
+    course.markModified('presentationVideoSlides');
+    course.markModified('presentationVideoScenes');
+    course.markModified('presentationVideoSequences');
+    await course.save();
+    console.info('[CondaWeb apprentissage → scènes]', { moduleId: moduleKey, courseId, slides: targetSlides, notebook: notebook.length, music: music.length });
+    return { synced: true, courseId, slides: targetSlides, notebook: notebook.length, music: music.length };
 };
 
 const resequenceVideoSegments = async (teacherId = '', normalizedUrl = '', stepId = '') => {
@@ -1545,7 +1672,8 @@ router.post('/', async (req, res) => {
         const saved = data._id
             ? await LearningModule.findByIdAndUpdate(data._id, data, { new: true })
             : await LearningModule.create(data);
-        res.json(saved);
+        const presentationSync = await syncLearningMediaToCourse(saved);
+        res.json({ ...saved.toObject(), presentationSync });
     } catch (e) {
         res.status(Number(e.status || 500)).json({ error: e.message });
     }

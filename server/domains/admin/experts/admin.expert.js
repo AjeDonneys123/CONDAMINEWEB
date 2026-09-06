@@ -25,14 +25,19 @@ const AdminExpert = {
         
         const dump = {};
         
-        for (const m of models) {
+        await Promise.all(models.map(async (m) => {
             try {
                 if (mongoose.models[m]) {
                     const collectionName = mongoose.models[m].collection.name;
-                    dump[collectionName] = await mongoose.model(m).find({}).limit(200).lean();
+                    const query = mongoose.model(m).find({}).limit(200);
+                    if (m === 'StudioProject') {
+                        query.select('-scenes');
+                    }
+                    dump[collectionName] = await query.lean();
                 }
             } catch (e) { }
-        }
+        }));
+
         return dump;
     }
 };

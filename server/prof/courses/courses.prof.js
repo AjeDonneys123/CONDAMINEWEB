@@ -100,8 +100,17 @@ router.get('/', async (req, res) => {
         const selectedClass = await Classroom.findById(classId, 'name level').lean();
         if (!selectedClass) return res.status(404).json({ error: 'Classe introuvable' });
         const selectedLevel = academicLevel(selectedClass.level || selectedClass.name);
+        // The course shelf must be light: nativeSlides contains every detected
+        // element of every Google slide and is only useful once a course is
+        // actually opened. Loading it for all courses made the initial page
+        // request take tens of seconds.
         const [rows, sections] = await Promise.all([
-            Course.find({}).sort({ date: -1, createdAt: -1 }).lean(),
+            // Keep the broad lookup for legacy LEVEL courses: many of them
+            // point to a historical source-class id while their targetLevel is
+            // the authoritative visibility rule below.
+            Course.find({})
+                .select('-nativeSlides')
+                .sort({ date: -1, createdAt: -1 }).lean(),
             CourseSection.find({}).lean()
         ]);
         const sectionById = new Map(sections.map((section) => [String(section._id), section]));
@@ -907,16 +916,22 @@ router.post('/:id/presentation-remote/start', async (req, res) => {
                 // temporarily unavailable while starting the presentation.
             }
         }
-        const isContinuing = existingRemote.active && String(existingRemote.classId || '') === classId;
         course.presentationRemote = {
             active: true,
             classId,
             slideIndex: savedSlideIndex,
             slideObjectId: savedSlideObjectId,
-            sceneIndex: isContinuing ? Number(existingRemote.sceneIndex || 0) : 0,
-            sequenceIndex: isContinuing ? Number(existingRemote.sequenceIndex || 0) : 0,
-            sequenceCompleted: isContinuing ? existingRemote.sequenceCompleted === true : false,
+            // Only the slide position is resumed between lessons. Scenes and
+            // sequences always start at 1; a stale remote session must never
+            // select or launch content without a fresh teacher click.
+            sceneIndex: 0,
+            sequenceIndex: 0,
+            sequenceCompleted: false,
             animationVisible: false,
+            // Opening (or reopening) a presentation must never resume a
+            // previously playing clip.  The teacher explicitly presses Play.
+            animationPlaying: false,
+            pauseVersion: Number(existingRemote.pauseVersion || 0) + 1,
             classPlanVisible: Boolean(existingRemote.classPlanVisible),
             playVersion: Number(existingRemote.playVersion || 0),
             sequenceBuffers: existingRemote.sequenceBuffers || {},
@@ -989,26 +1004,25 @@ router.post('/:id/presentation-remote/stop', async (req, res) => {
 
 router.post('/:id/presentation-remote/buffer-status', async (req, res) => {
     try {
-        const course = await Course.findById(req.params.id);
-        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
-        const remote = course.presentationRemote || { active: true };
-        const slideIndex = Math.max(0, Number(req.body?.slideIndex ?? remote.slideIndex ?? 0));
-        const sceneIndex = Math.max(0, Number(req.body?.sceneIndex ?? remote.sceneIndex ?? 0));
-        const sequenceIndex = Math.max(0, Number(req.body?.sequenceIndex ?? remote.sequenceIndex ?? 0));
+        // Buffer reports are sent by several preloaded YouTube players.  They
+        // must never rewrite the full remote object: doing so could put back a
+        // stale scene/sequence immediately after the teacher selected another.
+        const slideIndex = Math.max(0, Number(req.body?.slideIndex ?? 0));
+        const sceneIndex = Math.max(0, Number(req.body?.sceneIndex ?? 0));
+        const sequenceIndex = Math.max(0, Number(req.body?.sequenceIndex ?? 0));
         const bufferPct = Math.min(100, Math.max(0, Math.round(Number(req.body?.bufferPct || 0))));
-        const isReady = req.body?.isReady === true || bufferPct >= 65;
-        const currentBuffers = (remote.sequenceBuffers && typeof remote.sequenceBuffers === 'object') ? { ...remote.sequenceBuffers } : {};
-        currentBuffers[`${slideIndex}_${sceneIndex}_${sequenceIndex}`] = bufferPct;
-        remote.sequenceBuffers = currentBuffers;
-        if (Number(remote.slideIndex) === slideIndex && Number(remote.sceneIndex) === sceneIndex && Number(remote.sequenceIndex) === sequenceIndex) {
-            remote.isReady = isReady;
-            remote.currentBufferPct = bufferPct;
-        }
-        remote.updatedAt = new Date();
-        course.presentationRemote = remote;
-        course.markModified('presentationRemote');
-        await course.save();
-        return res.json({ ok: true, remote });
+        const bufferKey = `${slideIndex}_${sceneIndex}_${sequenceIndex}`;
+        const result = await Course.updateOne(
+            { _id: req.params.id },
+            {
+                $set: {
+                    [`presentationRemote.sequenceBuffers.${bufferKey}`]: bufferPct,
+                    'presentationRemote.updatedAt': new Date()
+                }
+            }
+        );
+        if (!result.matchedCount) return res.status(404).json({ error: 'Cours introuvable' });
+        return res.json({ ok: true, bufferKey, bufferPct });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -1020,6 +1034,10 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         if (!course) return res.status(404).json({ error: 'Cours introuvable' });
         const remote = { active: true, slideIndex: 0, sceneIndex: 0, sequenceIndex: 0, animationVisible: false, animationPlaying: false, classPlanVisible: false, playVersion: 0, pauseVersion: 0, googleAnimationVersion: 0, ...(course.presentationRemote || {}) };
         const action = String(req.body?.action || '');
+        console.info('[CondaWeb remote commande]', {
+            courseId: String(req.params.id), action,
+            before: { slide: remote.slideIndex, scene: remote.sceneIndex, sequence: remote.sequenceIndex, playing: remote.animationPlaying }
+        });
         const slideTotal = Math.max(1, Number(req.body?.slideTotal || 1));
         const storedSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
             ? course.presentationVideoSlides
@@ -1132,17 +1150,17 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
             remote.animationVisible = true;
             remote.animationPlaying = true;
         }
-        if (action === 'sequence_previous') { remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1); remote.sequenceCompleted = false; }
-        if (action === 'sequence_next') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1); remote.sequenceCompleted = false; }
-        if (action === 'sequence_select') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0))); remote.sequenceCompleted = false; remote.animationVisible = false; }
+        if (action === 'sequence_previous') { remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1); remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
+        if (action === 'sequence_next') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1); remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
+        if (action === 'sequence_select') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0))); remote.sequenceCompleted = false; if (req.body?.play) { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; remote.animationPlaying = true; } else { remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; } }
         if (action === 'sequence_finished') {
             remote.sequenceCompleted = true;
             remote.animationPlaying = false;
             if (req.body?.closeAfterSequence === true) remote.animationVisible = false;
         }
-        if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
-        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
-        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; }
+        if (action === 'scene_select') { remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body?.sceneIndex || 0))); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
+        if (action === 'scene_previous') { remote.sceneIndex = Math.max(0, Number(remote.sceneIndex || 0) - 1); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
+        if (action === 'scene_next') { remote.sceneIndex = Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0) + 1); remote.sequenceIndex = 0; remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
         if (action === 'mode_change') {
             remote.playerMode = String(req.body?.playerMode || 'presentation');
             if (Number.isInteger(req.body?.slideIndex)) remote.slideIndex = Math.max(0, Number(req.body.slideIndex));
@@ -1174,6 +1192,10 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         course.presentationRemote = remote;
         course.markModified('presentationRemote');
         await course.save();
+        console.info('[CondaWeb remote commande ok]', {
+            courseId: String(req.params.id), action,
+            after: { slide: remote.slideIndex, scene: remote.sceneIndex, sequence: remote.sequenceIndex, visible: remote.animationVisible, playing: remote.animationPlaying, playVersion: remote.playVersion, pauseVersion: remote.pauseVersion }
+        });
         return res.json({ ok: true, remote });
     } catch (error) {
         return res.status(500).json({ error: error.message });

@@ -46,7 +46,12 @@ export function resolveDriveAssetUrl(url) {
 
     const id = extractDriveFileId(raw);
     if (!id) {
-        console.warn(`[driveUrl] Unable to extract fileId from: ${raw}`);
+        // A YouTube or direct HTTPS link is already playable and is not a
+        // malformed Drive URL. Only warn for values that actually claim to be
+        // Drive links, otherwise the console is flooded during publication.
+        if (/drive\.google\.com|googleusercontent\.com|googleapis\.com/i.test(raw)) {
+            console.warn(`[driveUrl] Unable to extract fileId from: ${raw}`);
+        }
         return raw;
     }
     return `/api/proxy/${id}`;

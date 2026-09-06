@@ -36,6 +36,7 @@ try {
     console.log("📦 Chargement des Modèles...");
     require('./prof/models/prof.models');
     require('./models/Enrollment');
+    require('./models/AcademicYear');
     require('./web5e/models.web5e');
     console.log("✅ Modèles chargés.");
 } catch (e) {

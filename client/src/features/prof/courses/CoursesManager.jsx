@@ -111,6 +111,18 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
     const playAuthorizedRef = useRef(false);
     const monitorEndRef = useRef(() => {});
 
+    const logYoutube = (event, detail = {}) => console.info('[CondaWeb YouTube]', {
+        event,
+        videoId: getYoutubeVideoId(video?.url),
+        name: String(video?.name || ''),
+        playVersion: Number(playVersion || 0),
+        isVisible: Boolean(isVisibleRef.current),
+        ...detail
+    });
+    const youtubeStateName = (state) => ({
+        '-1': 'NON_DEMARRE', 0: 'TERMINEE', 1: 'LECTURE', 2: 'PAUSE', 3: 'TAMPON', 5: 'CUED'
+    }[String(state)] || `INCONNU_${state}`);
+
     useEffect(() => {
         let cancelled = false;
         const stopEndTimer = () => {
@@ -183,9 +195,11 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
                     mute: 1,
                     rel: 0,
                     playsinline: 1,
-                    controls: 0,
-                    disablekb: 1,
-                    fs: 0,
+                    // Keep YouTube's own Play button available as a reliable
+                    // fallback when a browser refuses an API autoplay request.
+                    controls: 1,
+                    disablekb: 0,
+                    fs: 1,
                     iv_load_policy: 3,
                     modestbranding: 1,
                     start: startSec
@@ -193,6 +207,10 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
                 events: {
                     onReady: (event) => {
                         readyRef.current = true;
+                        logYoutube('ready', {
+                            iframeSrc: String(event.target?.getIframe?.()?.src || ''),
+                            duration: Number(event.target?.getDuration?.() || 0)
+                        });
                         startBufferMonitoring(event.target);
                         // YouTube ne garantit pas un téléchargement intégral en pause. La
                         // disponibilité du lecteur API est donc l'état réellement utile :
@@ -203,12 +221,23 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
                             playAuthorizedRef.current = true;
                             monitorEnd(event.target);
                             setHasStarted(true);
-                            event.target.unMute();
+                            // Chrome authorises de façon beaucoup plus fiable un
+                            // lancement IFrame muet; l'élève/prof peut ensuite
+                            // remettre le son via le contrôle YouTube natif.
+                            event.target.mute();
                             event.target.playVideo();
+                            logYoutube('play-api-ready');
                             mountedPlayVersionRef.current = requestedPlayVersionRef.current;
                         }
                     },
                     onStateChange: (event) => {
+                        logYoutube('state', {
+                            state: event.data,
+                            stateName: youtubeStateName(event.data),
+                            time: Number(event.target?.getCurrentTime?.() || 0),
+                            duration: Number(event.target?.getDuration?.() || 0),
+                            iframeSrc: String(event.target?.getIframe?.()?.src || '')
+                        });
                         if (event.data === window.YT.PlayerState.ENDED && playAuthorizedRef.current && isVisibleRef.current) finishAtLastFrame(event.target);
                         if (event.data === window.YT.PlayerState.PLAYING) {
                             if (!isVisibleRef.current) {
@@ -222,7 +251,11 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
                         if (event.data === window.YT.PlayerState.BUFFERING) {
                             try { onBufferProgress?.(event.target.getVideoLoadedFraction?.() || 0.1); } catch (_) { }
                         }
-                    }
+                    },
+                    onError: (event) => logYoutube('error', {
+                        code: event.data,
+                        reason: ({ 2: 'identifiant vidéo invalide', 5: 'HTML5 indisponible', 100: 'vidéo supprimée ou privée', 101: 'lecture intégrée interdite', 150: 'lecture intégrée interdite' }[Number(event.data)] || 'erreur YouTube inconnue')
+                    })
                 }
             });
         };
@@ -248,6 +281,11 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
 
     useEffect(() => {
         if (!readyRef.current || !playerRef.current) return;
+        logYoutube('visibility-change', {
+            visible: Boolean(isVisible),
+            playingRequested: Boolean(isPlaying),
+            pauseVersion: Number(pauseVersion || 0)
+        });
         if (!isVisible) {
             try {
                 playerRef.current.mute();
@@ -258,7 +296,7 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
             endTimerRef.current = null;
         } else {
             try {
-                playerRef.current.unMute();
+                playerRef.current.mute();
             } catch (_) { }
         }
     }, [isVisible]);
@@ -266,6 +304,12 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
     useEffect(() => {
         const nextVersion = Number(playVersion || 0);
         if (nextVersion <= mountedPlayVersionRef.current) return;
+        logYoutube('play-version-request', {
+            requestedVersion: nextVersion,
+            previousVersion: mountedPlayVersionRef.current,
+            ready: readyRef.current,
+            visible: Boolean(isVisible)
+        });
         requestedPlayVersionRef.current = nextVersion;
         finishedRef.current = false;
         if (readyRef.current && isVisible) {
@@ -273,15 +317,44 @@ function YoutubeSequencePlayer({ video, playVersion, pauseVersion = 0, isPlaying
                 playAuthorizedRef.current = true;
                 monitorEndRef.current(playerRef.current);
                 setHasStarted(true);
-                playerRef.current.unMute();
+                playerRef.current.mute();
                 playerRef.current.playVideo();
+                logYoutube('play-api-version');
                 mountedPlayVersionRef.current = nextVersion;
             } catch (_) { }
         }
     }, [playVersion, isVisible]);
 
     useEffect(() => {
+        const onDirectRequest = (event) => {
+            if (!readyRef.current || !playerRef.current || !isVisibleRef.current) return;
+            const action = String(event?.detail?.action || '');
+            try {
+                if (action === 'play') {
+                    finishedRef.current = false;
+                    playAuthorizedRef.current = true;
+                    monitorEndRef.current(playerRef.current);
+                    setHasStarted(true);
+                    playerRef.current.mute();
+                    playerRef.current.playVideo();
+                    logYoutube('play-direct-user-gesture');
+                }
+                if (action === 'stop') {
+                    playerRef.current.pauseVideo();
+                    playAuthorizedRef.current = false;
+                    logYoutube('pause-direct-user-gesture');
+                }
+            } catch (error) {
+                logYoutube('direct-error', { message: String(error?.message || error || '') });
+            }
+        };
+        window.addEventListener('conda-youtube-play-request', onDirectRequest);
+        return () => window.removeEventListener('conda-youtube-play-request', onDirectRequest);
+    }, [video?.url, video?.name, playVersion]);
+
+    useEffect(() => {
         if (!readyRef.current || !playerRef.current || isPlaying) return;
+        logYoutube('pause-state-request', { pauseVersion: Number(pauseVersion || 0), isPlaying: Boolean(isPlaying) });
         try { playerRef.current.pauseVideo(); } catch (_) { }
         playAuthorizedRef.current = false;
         if (endTimerRef.current) window.clearInterval(endTimerRef.current);
@@ -317,18 +390,31 @@ const normaliseSceneName = (value = '') => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('fr').replace(/[^a-z0-9]/g, '');
 
-const chapterTitleWords = (value = '') => String(value || '')
+const expandTitleTokens = (value = '') => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('fr')
+    .replace(/\b1(?:[eè]re?|er)\b/g, ' premiere ')
+    .replace(/\b2(?:[eè]me?|nde?|nd)\b/g, ' seconde ')
+    .replace(/\b3[eè]me?\b/g, ' troisieme ')
+    .replace(/\b4[eè]me?\b/g, ' quatrieme ')
+    .replace(/\b5[eè]me?\b/g, ' cinquieme ')
+    .replace(/\b6[eè]me?\b/g, ' sixieme ')
+    .replace(/\bgm\b/g, ' guerre mondiale ')
+    .replace(/\bdemographie\b/g, ' demographique ')
     .replace(/[^a-z0-9]+/g, ' ')
     .split(/\s+/)
-    .filter((word) => word.length >= 4 && !['cours', 'chapitre', 'partie', 'fiche'].includes(word));
+    .filter((word) => word.length >= 3 && !['cours', 'chapitre', 'partie', 'fiche', 'sequence', 'lecon', 'ch1', 'ch2', 'ch3', 'ch4', 'ch5', 'ch6', 'ch7', 'ch8', 'ch9', 'ch10'].includes(word));
 
-const bestMatchingSuperfiche = (modules = [], titles = []) => {
+const chapterTitleWords = (value = '') => expandTitleTokens(value);
+
+const bestMatchingSuperfiche = (modules = [], titles = [], chapters = []) => {
     const expected = new Set(titles.flatMap(chapterTitleWords));
     if (!expected.size) return null;
+    const chapterMap = new Map((Array.isArray(chapters) ? chapters : []).map((c) => [String(c._id || c.id || ''), c]));
     const ranked = (Array.isArray(modules) ? modules : []).map((module) => {
-        const words = new Set(chapterTitleWords(`${module?.generalSheetCourseTitle || ''} ${module?.title || ''}`));
+        const modChapter = module?.chapterId ? chapterMap.get(String(module.chapterId)) : null;
+        const stepTitles = Array.isArray(module?.steps) ? module.steps.map((s) => s?.title || '').join(' ') : '';
+        const words = new Set(chapterTitleWords(`${module?.generalSheetCourseTitle || ''} ${module?.title || ''} ${modChapter?.title || ''} ${stepTitles}`));
         const score = [...expected].filter((word) => words.has(word)).length;
         return { module, score };
     }).sort((a, b) => b.score - a.score);
@@ -341,10 +427,8 @@ const uniqueSequences = (existing = [], additions = []) => {
     const seen = new Set();
     return [...existing, ...additions].filter((item) => {
         const url = String(item?.url || '').trim();
-        // A single NotebookLM video can intentionally occur several times:
-        // one saved sequence per time range.  The old URL-only key erased all
-        // but the first of those ranges.
-        const key = `${url}|${Math.max(0, Number(item?.startSec || 0))}|${Math.max(0, Number(item?.endSec || 0))}`;
+        // Preserves distinct sequences (e.g. Introduction, Partie I) while deduping exact repeats
+        const key = `${url}|${String(item?.name || item?.id || '').trim().toLowerCase()}|${Math.max(0, Number(item?.startSec || 0))}|${Math.max(0, Number(item?.endSec || 0))}`;
         if (!url || seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -354,13 +438,16 @@ const uniqueSequences = (existing = [], additions = []) => {
 const makePresentationSequence = (media = {}, index = 0) => {
     const url = String(media?.url || media?.videoUrl || '').trim();
     const mimeType = String(media?.type || media?.mimeType || '').trim();
-    const audio = mimeType.toLowerCase().startsWith('audio/') || AUDIO_FILE_PATTERN.test(url);
+    const name = String(media?.name || media?.title || '').trim();
+    const audio = mimeType.toLowerCase().startsWith('audio/')
+        || AUDIO_FILE_PATTERN.test(url)
+        || AUDIO_FILE_PATTERN.test(name);
     return {
         id: String(media?.id || `superfiche_media_${index}_${url}`).slice(0, 180),
-        name: String(media?.name || media?.title || (audio ? `Chanson ${index + 1}` : `Vidéo NotebookLM ${index + 1}`)).trim(),
+        name: name || (audio ? `Chanson ${index + 1}` : `Vidéo NotebookLM ${index + 1}`),
         url,
         sourceType: audio ? 'audio' : (getYoutubeVideoId(url) ? 'youtube' : 'mp4'),
-        mimeType,
+        mimeType: mimeType || (audio ? 'audio/mpeg' : 'video/mp4'),
         mergeWithNext: false,
         closeAfterSequence: false,
         startSec: Math.max(0, Number(media?.startSec || 0)),
@@ -372,18 +459,22 @@ const makePresentationSequence = (media = {}, index = 0) => {
 // optional: an empty scene is intentional, so a teacher can add it later.
 const ensureChapterMediaScenes = (slides = [], slideCount = 1, resources = {}) => {
     const existingByNumber = new Map((Array.isArray(slides) ? slides : []).map((slide) => [Number(slide?.slideNumber), slide]));
-    const notebookSequences = Array.isArray(resources.notebook) ? resources.notebook : [];
-    const musicSequences = Array.isArray(resources.music) ? resources.music : [];
+    const notebookSequences = Array.isArray(resources?.notebook) ? resources.notebook : [];
+    const musicSequences = Array.isArray(resources?.music) ? resources.music : [];
     const total = Math.max(1, Number(slideCount || 1));
     const ensureScene = (scenes, name, key, additions, slideNumber) => {
         const target = normaliseSceneName(name);
         const index = scenes.findIndex((scene) => normaliseSceneName(scene?.name) === target);
         if (index >= 0) {
             const current = scenes[index];
-            const next = { ...current, name, sequences: uniqueSequences(current.sequences, additions) };
+            const hasExisting = Array.isArray(current?.sequences) && current.sequences.some((s) => String(s?.url || '').trim().length > 0);
+            const sequences = hasExisting
+                ? uniqueSequences(current.sequences, additions)
+                : additions.map((item) => ({ ...item }));
+            const next = { ...current, name, sequences };
             return [...scenes.slice(0, index), next, ...scenes.slice(index + 1)];
         }
-        return [{ id: `scene_${key}_${slideNumber}`, name, sequences: additions.map((item) => ({ ...item })) }, ...scenes];
+        return [...scenes, { id: `scene_${key}_${slideNumber}`, name, sequences: additions.map((item) => ({ ...item })) }];
     };
     return Array.from({ length: total }, (_, index) => {
         const slideNumber = index + 1;
@@ -392,8 +483,8 @@ const ensureChapterMediaScenes = (slides = [], slideCount = 1, resources = {}) =
         let scenes = (current?.scenes || []).filter((scene) => !(
             normaliseSceneName(scene?.name) === 'scene1' && !(scene?.sequences || []).length
         )).map((scene) => ({ ...scene, sequences: [...(scene.sequences || [])] }));
-        scenes = ensureScene(scenes, 'Scène Musique', 'musique', musicSequences, slideNumber);
         scenes = ensureScene(scenes, 'Scène NotebookLM', 'notebooklm', notebookSequences, slideNumber);
+        scenes = ensureScene(scenes, 'Scène Musique', 'musique', musicSequences, slideNumber);
         return { slideNumber, scenes };
     });
 };
@@ -415,12 +506,10 @@ const superficialMediaForModule = (module = {}) => {
     // Videos and songs can be attached directly to any generated sub-fiche,
     // not only to the general-sheet master.  Gather every sheet in its saved
     // order; inherited media collapse naturally through uniqueSequences.
-    const sheetMedia = steps.flatMap((step, index) => step?.type === 'sheet'
-        ? sheetMediaForStep(step, index)
-        : []);
-    const videoSteps = steps.filter((step) => step?.type === 'video' && String(step?.videoUrl || '').trim());
+    const sheetMedia = steps.flatMap((step, index) => sheetMediaForStep(step, index));
+    const videoSteps = steps.filter((step) => String(step?.videoUrl || '').trim());
     const notebookMedia = [
-        ...sheetMedia.filter((media) => !String(media?.type || '').toLowerCase().startsWith('audio/') && !AUDIO_FILE_PATTERN.test(String(media?.url || ''))),
+        ...sheetMedia.filter((media) => !String(media?.type || '').toLowerCase().startsWith('audio/') && !AUDIO_FILE_PATTERN.test(String(media?.url || media?.name || ''))),
         ...videoSteps.map((step) => ({
             id: step.id, url: step.videoUrl, name: step.title, type: step.mimeType || '', startSec: step.startSec, endSec: step.endSec
         }))
@@ -628,9 +717,39 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const transitionStepLockRef = useRef(null);
     const slideNavigationVersionRef = useRef(0);
     const slideNavigationQueueRef = useRef(Promise.resolve());
+    // Commands from the scene/sequence menu must reach MongoDB in their click
+    // order. Concurrent fetches were the source of scene 2 → scene 1 → scene 2.
+    const presentationCommandQueueRef = useRef(Promise.resolve());
+    const presentationCommandVersionRef = useRef(0);
     const maskHoldDelayRef = useRef(null);
     const maskHoldProgressRef = useRef(null);
     const maskHoldCompletedRef = useRef(false);
+
+    // Mouchard de présentation : chaque bouton de CondaWeb laisse une trace
+    // lisible dans la console avec l'état exact du lecteur au moment du clic.
+    // Les clics à l'intérieur d'un iframe YouTube restent isolés par le
+    // navigateur, mais ses événements sont tracés par YoutubeSequencePlayer.
+    useEffect(() => {
+        if (!playingCourse?._id) return undefined;
+        const traceButtonClick = (event) => {
+            const button = event.target?.closest?.('button');
+            if (!button) return;
+            const remote = presentationRemote?.remote || {};
+            console.info('[CondaWeb clic bouton]', {
+                label: String(button.innerText || button.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 140),
+                ariaLabel: String(button.getAttribute('aria-label') || ''),
+                title: String(button.getAttribute('title') || ''),
+                slide: Number(remote.slideIndex || 0) + 1,
+                scene: Number(remote.sceneIndex || 0) + 1,
+                sequence: Number(remote.sequenceIndex || 0) + 1,
+                playing: remote.animationPlaying === true
+            });
+        };
+        // Pointerdown is used because several presentation buttons deliberately
+        // prevent the later click event to avoid advancing the slide.
+        window.addEventListener('pointerdown', traceButtonClick, true);
+        return () => window.removeEventListener('pointerdown', traceButtonClick, true);
+    }, [playingCourse?._id, presentationRemote?.remote?.slideIndex, presentationRemote?.remote?.sceneIndex, presentationRemote?.remote?.sequenceIndex, presentationRemote?.remote?.animationPlaying]);
     const maskHoldActiveRef = useRef(false);
     const maskEditorDragRef = useRef(null);
     const maskDraftDirtyRef = useRef(false);
@@ -682,7 +801,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             return undefined;
         }
 
+        let inFlight = false;
         const fetchLiveStatus = async () => {
+            if (inFlight) return;
+            inFlight = true;
             try {
                 const teacherId = user.id || user._id || '';
                 const [res, studentsRes] = await Promise.all([
@@ -696,11 +818,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 }
             } catch (e) {
                 console.error("Live polling error:", e);
+            } finally {
+                inFlight = false;
             }
         };
 
         fetchLiveStatus(); // immediate call
-        const interval = setInterval(fetchLiveStatus, 750);
+        // These two endpoints return the full classroom roster. Polling them
+        // four times per second made requests queue indefinitely on Slow 4G.
+        const interval = setInterval(fetchLiveStatus, 2500);
         return () => clearInterval(interval);
     }, [playingCourse, globalClassId, user.id, user._id]);
 
@@ -751,6 +877,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const loadCourses = async () => {
         if (!globalClassId) return;
+        const startedAt = performance.now();
+        console.info('[CondaWeb chargement cours] début', { classId: globalClassId });
         setLoading(true);
         setError('');
         try {
@@ -763,7 +891,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             if (!sectionsResponse.ok) throw new Error(sectionsData?.error || 'Chargement des sections impossible');
             setCourses(Array.isArray(data) ? data : []);
             setCourseSections(Array.isArray(sectionsData) ? sectionsData : []);
+            console.info('[CondaWeb chargement cours] terminé', {
+                classId: globalClassId,
+                courses: Array.isArray(data) ? data.length : 0,
+                durationMs: Math.round(performance.now() - startedAt)
+            });
         } catch (loadError) {
+            console.error('[CondaWeb chargement cours] erreur', { classId: globalClassId, message: loadError.message, durationMs: Math.round(performance.now() - startedAt) });
             setError(loadError.message);
         } finally {
             setLoading(false);
@@ -843,8 +977,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [playingCourse?._id]);
 
     useEffect(() => {
-        if (!globalClassId) return undefined;
+        // There is no remote player to synchronise while the teacher only
+        // browses the course list. Avoid a permanent network loop before a
+        // presentation has actually been opened.
+        if (!globalClassId || !playingCourse?._id) return undefined;
+        let inFlight = false;
         const poll = async () => {
+            // On a slow connection, never pile up remote polls: the old code
+            // started one every 650ms even if prior requests were still pending.
+            if (inFlight) return;
+            inFlight = true;
             try {
                 const response = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
                 const data = await response.json();
@@ -867,14 +1009,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     // reach the same slide number, then be followed by another
                     // older request from the queue.
                     if (pending && remoteSlideIndex !== pending.slideIndex) return current;
+
+                    if (window.__conda_remote_lock && Date.now() < window.__conda_remote_lock) {
+                        return current;
+                    }
+
                     return data;
                 });
-            } catch (_) { }
+            } catch (error) {
+                console.warn('[CondaWeb remote poll] erreur', { message: String(error?.message || error || '') });
+            } finally {
+                inFlight = false;
+            }
         };
         poll();
-        const interval = window.setInterval(poll, 650);
+        const interval = window.setInterval(poll, 1500);
         return () => window.clearInterval(interval);
-    }, [globalClassId]);
+    }, [globalClassId, playingCourse?._id]);
 
     useEffect(() => {
         const projectedClassId = String(presentationRemote?.remote?.classId || globalClassId || '');
@@ -971,21 +1122,111 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const sendPresentationCommand = async (action, options = {}, remoteData = presentationRemote) => {
         const courseId = String(remoteData?.courseId || playingCourse?._id || '');
         if (!courseId) return;
+        const commandVersion = presentationCommandVersionRef.current + 1;
+        presentationCommandVersionRef.current = commandVersion;
+        const remoteBeforeCommand = remoteData?.remote || {};
+        console.info('[CondaWeb commande]', {
+            action,
+            courseId,
+            options,
+            slide: Number(remoteBeforeCommand.slideIndex || 0) + 1,
+            scene: Number(remoteBeforeCommand.sceneIndex || 0) + 1,
+            sequence: Number(remoteBeforeCommand.sequenceIndex || 0) + 1,
+            playing: remoteBeforeCommand.animationPlaying === true
+        });
+        // This dispatch happens during the physical click handler, before the
+        // network request. It preserves the browser's user gesture so the
+        // YouTube IFrame API is authorised to start playback.
+        if (action === 'play' || (action === 'sequence_select' && options.play)) {
+            window.dispatchEvent(new CustomEvent('conda-youtube-play-request', {
+                detail: { action: 'play', source: 'presentation-command' }
+            }));
+        } else if (action === 'animation_hide') {
+            window.dispatchEvent(new CustomEvent('conda-youtube-play-request', {
+                detail: { action: 'stop', source: 'presentation-command' }
+            }));
+        }
         if (['play', 'play_pause', 'animation_hide', 'slide_previous', 'slide_next', 'sequence_previous', 'sequence_next', 'sequence_select', 'scene_previous', 'scene_next', 'scene_select', 'sync'].includes(action)) {
             setHeldProjectedVideo(null);
         }
+        window.__conda_remote_lock = Date.now() + 120000;
         const slideIndex = Math.max(0, Number(remoteData?.remote?.slideIndex || 0));
         const localVideoSlides = playingCourse?._id ? normalizeVideoSlides(playingCourse) : [];
         const videoSlides = localVideoSlides.length ? localVideoSlides : (remoteData?.videoSlides?.length ? remoteData.videoSlides : []);
         const scenes = getScenesForSlide(videoSlides, slideIndex + 1);
         const sceneIndex = Math.min(scenes.length - 1, Math.max(0, Number(remoteData?.remote?.sceneIndex || 0)));
         const sequenceTotal = Math.max(1, Number(options.sequenceTotal || groupSceneSequences(scenes[sceneIndex]).length));
-        const response = await fetch(`/api/courses/${courseId}/presentation-remote/command`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, ...options, slideTotal: Math.max(1, slideManifest.length || 1), sceneTotal: Math.max(1, Number(options.sceneTotal || scenes.length)), sequenceTotal })
+
+        // Optimistic UI Update
+        setPresentationRemote((current) => {
+            if (!current?.remote) return current;
+            const optimistic = { ...current.remote };
+            if (action === 'scene_select') {
+                optimistic.sceneIndex = Math.max(0, Number(options.sceneIndex || 0));
+                optimistic.sequenceIndex = 0;
+                optimistic.animationVisible = false;
+                optimistic.animationPlaying = false;
+                optimistic.pauseVersion = Number(optimistic.pauseVersion || 0) + 1;
+            }
+            if (action === 'sequence_select') {
+                optimistic.sequenceIndex = Math.max(0, Number(options.sequenceIndex || 0));
+                if (options.play) {
+                    optimistic.animationVisible = true;
+                    optimistic.animationPlaying = true;
+                } else {
+                    optimistic.animationVisible = false;
+                    optimistic.animationPlaying = false;
+                    optimistic.pauseVersion = Number(optimistic.pauseVersion || 0) + 1;
+                }
+            }
+            if (action === 'animation_toggle') {
+                optimistic.animationVisible = !optimistic.animationVisible;
+            }
+            if (action === 'animation_hide') {
+                optimistic.animationVisible = false;
+                optimistic.animationPlaying = false;
+            }
+            if (action === 'play' || action === 'play_pause') {
+                optimistic.animationVisible = true;
+                if (action === 'play') optimistic.animationPlaying = true;
+            }
+            if (action === 'sequence_previous' || action === 'sequence_next') {
+                optimistic.sequenceIndex = Math.max(0, Number(optimistic.sequenceIndex || 0) + (action === 'sequence_next' ? 1 : -1));
+                optimistic.animationVisible = false;
+                optimistic.animationPlaying = false;
+                optimistic.pauseVersion = Number(optimistic.pauseVersion || 0) + 1;
+            }
+            return { ...current, remote: optimistic };
         });
+
+        const requestBody = { action, ...options, slideTotal: Math.max(1, slideManifest.length || 1), sceneTotal: Math.max(1, Number(options.sceneTotal || scenes.length)), sequenceTotal };
+        const queuedRequest = presentationCommandQueueRef.current
+            .catch(() => undefined)
+            .then(() => fetch(`/api/courses/${courseId}/presentation-remote/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            }));
+        presentationCommandQueueRef.current = queuedRequest;
+        const response = await queuedRequest;
         const data = await response.json().catch(() => ({}));
+        window.__conda_remote_lock = 0;
+        console.info('[CondaWeb commande réponse]', {
+            action,
+            status: response.status,
+            ok: response.ok,
+            slide: Number(data?.remote?.slideIndex || 0) + 1,
+            scene: Number(data?.remote?.sceneIndex || 0) + 1,
+            sequence: Number(data?.remote?.sequenceIndex || 0) + 1,
+            playing: data?.remote?.animationPlaying === true
+        });
         if (response.ok) setPresentationRemote((current) => {
+            // An earlier click may only receive its HTTP response after a more
+            // recent click. The server command is ordered above; do not let the
+            // old response visually undo the newer optimistic state.
+            if (commandVersion !== presentationCommandVersionRef.current) {
+                console.info('[CondaWeb commande réponse ignorée]', { action, commandVersion, latest: presentationCommandVersionRef.current });
+                return current;
+            }
             const pending = pendingSlideSyncRef.current;
             const remoteSlideIndex = Number(data?.remote?.slideIndex || 0);
             const navigationVersion = Number(options.localNavigationVersion || 0);
@@ -1285,6 +1526,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const syncManifest = async () => {
             if (cancelled || inFlight) return;
             inFlight = true;
+            const startedAt = performance.now();
+            console.info('[CondaWeb synchro Google Slides] début', { hidden: document.visibilityState === 'hidden' });
             try {
                 const response = await fetch('/api/learning/slides/manifest', {
                     method: 'POST',
@@ -1328,7 +1571,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 // Existing slide content may have changed even when the list
                 // itself did not; the visible thumbnail will be force-refreshed.
                 setLiveSyncKey(Date.now());
+                console.info('[CondaWeb synchro Google Slides] terminé', {
+                    slides: nextManifest.length,
+                    structureChanged,
+                    durationMs: Math.round(performance.now() - startedAt)
+                });
             } catch (_) {
+                console.error('[CondaWeb synchro Google Slides] erreur', { durationMs: Math.round(performance.now() - startedAt) });
                 // A transient Google/connection failure must not blank the
                 // current presentation.
             } finally {
@@ -1338,7 +1587,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const schedule = () => {
             if (cancelled) return;
             if (timerId) window.clearTimeout(timerId);
-            const delay = document.visibilityState === 'hidden' ? 1000 : 3000;
+            // A visible projected slide is already updated as soon as the
+            // teacher returns to CondaWeb. A forced thumbnail every 3 seconds
+            // only creates a request backlog, especially on classroom Wi‑Fi.
+            const delay = document.visibilityState === 'hidden' ? 1000 : 15000;
             timerId = window.setTimeout(async () => {
                 if (document.visibilityState === 'hidden') {
                     await syncManifest();
@@ -1830,10 +2082,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 action = 'slide_previous';
             } else if (event.key === 'ArrowRight' || event.key === 'PageDown') {
                 action = 'slide_next';
-            } else if (event.key === 'ArrowUp') {
-                action = 'sequence_previous';
-            } else if (event.key === 'ArrowDown') {
-                action = 'sequence_next';
             }
             if (!action) return;
             event.preventDefault();
@@ -2303,14 +2551,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             ].filter(Boolean));
             let module = null;
             try {
-                const response = await fetch('/api/learning/all');
-                const modules = response.ok ? await response.json() : [];
+                const [learningResponse, chaptersResponse] = await Promise.all([
+                    fetch('/api/learning/all'),
+                    fetch('/api/structure/chapters').catch(() => null)
+                ]);
+                const modules = learningResponse.ok ? await learningResponse.json() : [];
+                const chapters = (chaptersResponse && chaptersResponse.ok) ? await chaptersResponse.json() : [];
                 const rows = Array.isArray(modules) ? modules : [];
                 const courseTitle = normaliseSceneName(playingCourse?.title);
+
+                const matchedChapter = (Array.isArray(chapters) ? chapters : []).find((ch) => {
+                    if (playingCourse?.chapterId && String(ch?._id) === String(playingCourse.chapterId)) return true;
+                    const chWords = new Set(chapterTitleWords(ch?.title));
+                    const cWords = chapterTitleWords(playingCourse?.title);
+                    return cWords.filter((w) => chWords.has(w)).length >= 2;
+                }) || null;
+
                 // A Learning module explicitly remembers the course selected
                 // for its superfiche. This is the strongest link and remains
                 // valid even if Google created a new public Slides URL.
                 module = rows.find((item) => courseIds.has(String(item?.generalSheetCourseId || '')))
+                    || (matchedChapter ? rows.find((item) => String(item?.chapterId) === String(matchedChapter?._id)) : null)
                     || rows.find((item) => (
                     presentationIds.has(extractPresentationId(item?.presentationUrl))
                     || presentationIds.has(extractPresentationId(item?.presentationSourceUrl))
@@ -2322,7 +2583,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     // Older chapters often differ only by H1/CH1 in their
                     // name. Match their meaningful words rather than their
                     // whole normalized string.
-                    || bestMatchingSuperfiche(rows, [playingCourse?.title, sourceCourse?.title])
+                    || bestMatchingSuperfiche(rows, [playingCourse?.title, sourceCourse?.title, matchedChapter?.title], chapters)
                     || null;
                 console.info('[CondaWeb séquences] Superfiche liée', {
                     courseId: String(playingCourse?._id || ''),
@@ -3368,34 +3629,89 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         )}
                         <div className="course-presentation-layout">
-                            <nav className="course-slide-thumbnail-rail" aria-label="Navigateur de diapositives">
-                                <div className="course-slide-thumbnail-rail-title">DIAPOS</div>
-                                <div className="course-slide-thumbnail-list">
-                                    {slideManifest.map((slide, index) => {
-                                        const slideNumber = Number(slide?.slideNumber || index + 1);
-                                        const thumbnailUrl = slide?.thumbnailProxyUrl || slide?.thumbnailPublicUrl || '';
-                                        const isActive = index === projectedSlideIndex;
-                                        return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, position: 'relative', zIndex: 10000 }}>
+                                <nav className="course-slide-thumbnail-rail" aria-label="Navigateur de diapositives" style={{ flex: '1', minHeight: 0 }}>
+                                    <div className="course-slide-thumbnail-rail-title">DIAPOS</div>
+                                    <div className="course-slide-thumbnail-list">
+                                        {slideManifest.map((slide, index) => {
+                                            const slideNumber = Number(slide?.slideNumber || index + 1);
+                                            const thumbnailUrl = slide?.thumbnailProxyUrl || slide?.thumbnailPublicUrl || '';
+                                            const isActive = index === projectedSlideIndex;
+                                            return (
+                                                <button
+                                                    key={slide?.objectId || `${slideNumber}-${index}`}
+                                                    type="button"
+                                                    className={`course-slide-thumbnail-button ${isActive ? 'active' : ''}`}
+                                                    onClick={() => void selectProjectedSlide(index)}
+                                                    aria-label={`Aller à la diapositive ${slideNumber}`}
+                                                    aria-current={isActive ? 'true' : undefined}
+                                                    title={`Diapositive ${slideNumber}`}
+                                                >
+                                                    {thumbnailUrl ? (
+                                                        <img src={thumbnailUrl} alt="" loading={Math.abs(index - projectedSlideIndex) <= 2 ? 'eager' : 'lazy'} draggable="false" />
+                                                    ) : (
+                                                        <span className="course-slide-thumbnail-placeholder">{slideNumber}</span>
+                                                    )}
+                                                    <span className="course-slide-thumbnail-number">{slideNumber}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </nav>
+                                <div style={{ flex: '0 0 auto', marginTop: 'auto', marginBottom: '18px', background: 'rgba(15, 23, 42, 0.94)', borderRadius: '18px', padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 10px 28px rgba(0, 0, 0, 0.26)' }}>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', overflowX: 'visible', paddingBottom: '2px' }}>
+                                        {projectedScenes.map((scene, index) => (
                                             <button
-                                                key={slide?.objectId || `${slideNumber}-${index}`}
-                                                type="button"
-                                                className={`course-slide-thumbnail-button ${isActive ? 'active' : ''}`}
-                                                onClick={() => void selectProjectedSlide(index)}
-                                                aria-label={`Aller à la diapositive ${slideNumber}`}
-                                                aria-current={isActive ? 'true' : undefined}
-                                                title={`Diapositive ${slideNumber}`}
+                                                key={scene.id || index}
+                                                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); void sendPresentationCommand('scene_select', { sceneIndex: index }); }}
+                                                style={{ flex: '0 0 auto', padding: '6px 8px', borderRadius: '8px', background: projectedSceneIndex === index ? '#ef4444' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '11px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}
+                                                title={scene.name || `Scène ${index + 1}`}
                                             >
-                                                {thumbnailUrl ? (
-                                                    <img src={thumbnailUrl} alt="" loading={Math.abs(index - projectedSlideIndex) <= 2 ? 'eager' : 'lazy'} draggable="false" />
-                                                ) : (
-                                                    <span className="course-slide-thumbnail-placeholder">{slideNumber}</span>
-                                                )}
-                                                <span className="course-slide-thumbnail-number">{slideNumber}</span>
+                                                S{index + 1}
                                             </button>
-                                        );
-                                    })}
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', overflowX: 'visible', paddingBottom: '2px' }}>
+                                        {projectedGroups.map((group, index) => {
+                                            const isSelected = projectedSequenceIndex === index;
+                                            const bufferMap = presentationRemote?.remote?.sequenceBuffers || {};
+                                            const specificKey = `${projectedSlideIndex}_${projectedSceneIndex}_${index}`;
+                                            const pct = Math.min(100, Math.max(0, Number(bufferMap[specificKey] ?? 0)));
+                                            const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
+                                            const isAudio = group.some((item) => isAudioSequence(item));
+                                            return (
+                                                <button
+                                                    key={group[0]?.id || index}
+                                                    onPointerDown={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        const now = Date.now();
+                                                        const isDouble = window.__conda_last_seq_click === index && (now - (window.__conda_last_seq_time || 0) < 400);
+                                                        window.__conda_last_seq_click = index;
+                                                        window.__conda_last_seq_time = now;
+                                                        if (isDouble) {
+                                                            window.__conda_last_seq_click = -1;
+                                                            void sendPresentationCommand('sequence_select', { sequenceIndex: index, play: true });
+                                                        } else {
+                                                            void sendPresentationCommand('sequence_select', { sequenceIndex: index });
+                                                        }
+                                                    }}
+                                                    style={{ flex: '0 0 auto', padding: '6px 8px', borderRadius: '8px', background: isSelected ? (isReady ? '#10b981' : '#f59e0b') : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '10px', fontWeight: 'bold', border: 'none', cursor: 'pointer', opacity: isReady ? 1 : 0.6 }}
+                                                    title={group.map((item) => String(item?.name || '').trim()).filter(Boolean).join(' + ') || `Séquence ${index + 1}`}
+                                                >
+                                                    {isAudio ? '🎵' : '🎬'} {index + 1}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <button
+                                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); void sendPresentationCommand(presentationRemote?.remote?.animationPlaying ? 'animation_hide' : 'play'); }}
+                                        style={{ width: '100%', padding: '8px', borderRadius: '10px', background: presentationRemote?.remote?.animationPlaying ? '#3b82f6' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '11px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}
+                                    >
+                                        {presentationRemote?.remote?.animationPlaying ? '🎬 STOPPER' : '🎬 LANCER'}
+                                    </button>
                                 </div>
-                            </nav>
+                            </div>
 
                             {/* Rendu direct haute fidélité de la diapositive active */}
                             <div
@@ -4138,14 +4454,29 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         </div>
                         <div className="course-video-sequencer-body">
                             <div className="course-video-editor-help"><strong>✂ ÉDITEUR DE SÉQUENCES</strong><span>Après avoir ajouté une vidéo, clique sur le bouton violet situé sous son aperçu pour choisir précisément son début et sa fin.</span></div>
-                            <div className="course-video-slide-tabs">{Array.from({ length: Math.max(1, slideManifest.length || Number(videoSequencer.course.publishedUntilSlide || 1)) }, (_, index) => index + 1).map((number) => <button type="button" className={number === videoSequencer.activeSlideNumber ? 'selected' : ''} key={number} onClick={() => setVideoSequencer((current) => ({ ...current, activeSlideNumber: number, slides: current.slides.some((slide) => Number(slide.slideNumber) === number) ? current.slides : [...current.slides, { slideNumber: number, scenes: [{ id: `scene_${Date.now()}`, name: 'Scène 1', sequences: [] }] }] }))}>SLIDE {number}</button>)}</div>
+                            <div className="course-video-slide-tabs">{Array.from({ length: Math.max(1, slideManifest.length || Number(videoSequencer.course.publishedUntilSlide || 1)) }, (_, index) => index + 1).map((number) => <button type="button" className={number === videoSequencer.activeSlideNumber ? 'selected' : ''} key={number} onClick={() => setVideoSequencer((current) => {
+                                if (current.slides.some((slide) => Number(slide.slideNumber) === number)) {
+                                    return { ...current, activeSlideNumber: number };
+                                }
+                                const template = current.slides.find((s) => (s.scenes || []).some((sc) => (sc.sequences || []).length > 0)) || current.slides[0];
+                                const defaultScenes = (template?.scenes || []).map((sc, idx) => ({
+                                    id: `scene_${idx}_${number}_${Date.now()}`,
+                                    name: sc.name,
+                                    sequences: (sc.sequences || []).map((item) => ({ ...item }))
+                                }));
+                                return {
+                                    ...current,
+                                    activeSlideNumber: number,
+                                    slides: [...current.slides, { slideNumber: number, scenes: defaultScenes.length > 0 ? defaultScenes : [{ id: `scene_notebooklm_${number}`, name: 'Scène NotebookLM', sequences: [] }, { id: `scene_musique_${number}`, name: 'Scène Musique', sequences: [] }] }]
+                                };
+                            })}>SLIDE {number}</button>)}</div>
                             <button type="button" className="course-video-add-scene" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: [...slide.scenes, { id: `scene_${Date.now()}`, name: `Scène ${slide.scenes.length + 1}`, sequences: [] }] } : slide) }))}>＋ AJOUTER UNE SCÈNE</button>
                             {videoSequencerScenes.map((scene, sceneIndex) => <section className="course-video-scene" key={scene.id}>
                                 <div className="course-video-scene-head"><span>{sceneIndex + 1}</span><input value={scene.name} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.map((item, index) => index === sceneIndex ? { ...item, name: event.target.value } : item) } : slide) }))} /><label className="course-video-upload-button">{uploadingSequenceVideos ? 'IMPORT…' : '＋ MÉDIA'}<input type="file" accept="video/*,audio/*,.mp3,.m4a,.aac,.wav,.ogg,.oga,.flac,.mp4,.webm" multiple hidden disabled={uploadingSequenceVideos} onChange={(event) => void uploadSequenceVideos(event.target.files, sceneIndex)} /></label>{videoSequencerScenes.length > 1 ? <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: current.slides.map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: slide.scenes.filter((_, index) => index !== sceneIndex) } : slide) }))}>×</button> : null}</div>
                                 <div className="course-video-youtube-add"><input type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Coller un lien YouTube" value={youtubeDrafts[sceneIndex] || ''} onChange={(event) => setYoutubeDrafts((current) => ({ ...current, [sceneIndex]: event.target.value }))} onPaste={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); addYoutubeSequence(sceneIndex); } }} /><button type="button" onClick={() => addYoutubeSequence(sceneIndex)}>＋ AJOUTER LE LIEN</button></div>
                                 {scene.sequences.length === 0 ? <div className={`course-video-empty ${draggedSequence ? 'drop-ready' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={() => moveSequenceVideo(sceneIndex, 0)}>Importe les vidéos de cette scène.</div> : null}
                                 <div className="course-video-sequence-list">{scene.sequences.map((sequence, index) => <div className={`course-video-sequence-row ${draggedSequence?.sceneIndex === sceneIndex && draggedSequence?.videoIndex === index ? 'dragging' : ''}`} key={sequence.id || index} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={() => moveSequenceVideo(sceneIndex, index)}>
-                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position du média ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /><div className={`course-video-media-cell ${isAudioSequence(sequence) ? 'audio' : ''}`}>{sequence.sourceType === 'youtube' || getYoutubeVideoId(sequence.url) ? <iframe src={getYoutubeEmbedUrl(sequence.url)} title={sequence.name || 'Vidéo YouTube'} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : isAudioSequence(sequence) ? <audio src={sequence.url} preload="metadata" controls /> : <video src={sequence.url} preload="metadata" controls />}<button type="button" className="course-open-sequence-editor" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); openSequenceCutEditor(sceneIndex, index, sequence); }}><strong>✂ OUVRIR L’ÉDITEUR</strong><span>{Math.max(0, Number(sequence.startSec || 0))}s → {Number(sequence.endSec || 0) > 0 ? `${Number(sequence.endSec)}s` : 'fin du média'}</span></button></div>
+                                    <span className="course-video-drag-handle" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(sequence.id || index)); setDraggedSequence({ sceneIndex, videoIndex: index }); }} onDragEnd={() => setDraggedSequence(null)} title="Glisser pour déplacer">⋮⋮</span><input className="course-video-sequence-number" type="number" min="1" max={scene.sequences.length} defaultValue={index + 1} key={`${sequence.id || index}_${index}`} aria-label={`Position du média ${index + 1}`} onBlur={(event) => moveSequenceVideoByNumber(sceneIndex, index, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /><div className={`course-video-media-cell ${isAudioSequence(sequence) ? 'audio' : ''}`}><div className="course-video-preview-wrap" style={{ position: 'relative', cursor: 'pointer', display: 'flex' }} onClick={(event) => { event.stopPropagation(); openSequenceCutEditor(sceneIndex, index, sequence); }}><div className="course-video-preview-overlay" style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'transparent' }} title="Cliquer pour voir la séquence" />{sequence.sourceType === 'youtube' || getYoutubeVideoId(sequence.url) ? <iframe src={getYoutubeEmbedUrl(sequence.url)} title={sequence.name || 'Vidéo YouTube'} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : isAudioSequence(sequence) ? <audio src={sequence.url} preload="metadata" controls /> : <video src={sequence.url} preload="metadata" controls />}</div><button type="button" className="course-open-sequence-editor" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); openSequenceCutEditor(sceneIndex, index, sequence); }}><strong>✂ OUVRIR L’ÉDITEUR</strong><span>{Math.max(0, Number(sequence.startSec || 0))}s → {Number(sequence.endSec || 0) > 0 ? `${Number(sequence.endSec)}s` : 'fin du média'}</span></button></div>
                                     <input value={sequence.name || ''} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, name: event.target.value } : video) } : item) } : slide) }))} />
                                     <label className="course-video-close-after"><input type="checkbox" checked={sequence.closeAfterSequence === true} onChange={(event) => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).map((video, vIndex) => vIndex === index ? { ...video, closeAfterSequence: event.target.checked } : video) } : item) } : slide) }))} /> Fermer après</label>
                                     <button type="button" className="course-video-delete" onClick={() => setVideoSequencer((current) => ({ ...current, slides: (current.slides || []).map((slide) => slide.slideNumber === current.activeSlideNumber ? { ...slide, scenes: (slide.scenes || []).map((item, sIndex) => sIndex === sceneIndex ? { ...item, sequences: (item.sequences || []).filter((_, vIndex) => vIndex !== index) } : item) } : slide) }))}>×</button>
