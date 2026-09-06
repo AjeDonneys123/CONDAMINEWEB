@@ -313,6 +313,87 @@ const normalizeVideoSlides = (course = {}) => {
     return [{ slideNumber: 1, scenes: normalizeVideoScenes(course) }];
 };
 
+const normaliseSceneName = (value = '') => String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr').replace(/[^a-z0-9]/g, '');
+
+const uniqueSequences = (existing = [], additions = []) => {
+    const seen = new Set();
+    return [...existing, ...additions].filter((item) => {
+        const url = String(item?.url || '').trim();
+        if (!url || seen.has(url)) return false;
+        seen.add(url);
+        return true;
+    });
+};
+
+const makePresentationSequence = (media = {}, index = 0) => {
+    const url = String(media?.url || media?.videoUrl || '').trim();
+    const mimeType = String(media?.type || media?.mimeType || '').trim();
+    const audio = mimeType.toLowerCase().startsWith('audio/') || AUDIO_FILE_PATTERN.test(url);
+    return {
+        id: String(media?.id || `superfiche_media_${index}_${url}`).slice(0, 180),
+        name: String(media?.name || media?.title || (audio ? `Chanson ${index + 1}` : `Vidéo NotebookLM ${index + 1}`)).trim(),
+        url,
+        sourceType: audio ? 'audio' : (getYoutubeVideoId(url) ? 'youtube' : 'mp4'),
+        mimeType,
+        mergeWithNext: false,
+        closeAfterSequence: false,
+        startSec: Math.max(0, Number(media?.startSec || 0)),
+        endSec: Math.max(0, Number(media?.endSec || 0))
+    };
+};
+
+// Each presentation slide exposes the same two predictable scenes. Media is
+// optional: an empty scene is intentional, so a teacher can add it later.
+const ensureChapterMediaScenes = (slides = [], slideCount = 1, resources = {}) => {
+    const existingByNumber = new Map((Array.isArray(slides) ? slides : []).map((slide) => [Number(slide?.slideNumber), slide]));
+    const notebookSequences = Array.isArray(resources.notebook) ? resources.notebook : [];
+    const musicSequences = Array.isArray(resources.music) ? resources.music : [];
+    const total = Math.max(1, Number(slideCount || 1));
+    const ensureScene = (scenes, name, key, additions, slideNumber) => {
+        const target = normaliseSceneName(name);
+        const index = scenes.findIndex((scene) => normaliseSceneName(scene?.name) === target);
+        if (index >= 0) {
+            const current = scenes[index];
+            const next = { ...current, name, sequences: uniqueSequences(current.sequences, additions) };
+            return [...scenes.slice(0, index), next, ...scenes.slice(index + 1)];
+        }
+        return [{ id: `scene_${key}_${slideNumber}`, name, sequences: additions.map((item) => ({ ...item })) }, ...scenes];
+    };
+    return Array.from({ length: total }, (_, index) => {
+        const slideNumber = index + 1;
+        const current = existingByNumber.get(slideNumber);
+        // Do not keep the old empty placeholder once the two real scenes exist.
+        let scenes = (current?.scenes || []).filter((scene) => !(
+            normaliseSceneName(scene?.name) === 'scene1' && !(scene?.sequences || []).length
+        )).map((scene) => ({ ...scene, sequences: [...(scene.sequences || [])] }));
+        scenes = ensureScene(scenes, 'Scène Musique', 'musique', musicSequences, slideNumber);
+        scenes = ensureScene(scenes, 'Scène NotebookLM', 'notebooklm', notebookSequences, slideNumber);
+        return { slideNumber, scenes };
+    });
+};
+
+const superficialMediaForModule = (module = {}) => {
+    const steps = Array.isArray(module?.steps) ? module.steps : [];
+    const master = steps.find((step) => step?.type === 'sheet' && step?.isGeneralSheetMaster === true);
+    const sheetMedia = master
+        ? (Array.isArray(master.sheetMediaItems) && master.sheetMediaItems.length
+            ? master.sheetMediaItems
+            : (master.sheetMediaUrl ? [{ id: 'superfiche_legacy_media', url: master.sheetMediaUrl, name: master.sheetMediaName, type: master.sheetMediaType, startSec: master.sheetMediaStartSec, endSec: master.sheetMediaEndSec }] : []))
+        : [];
+    const notebookMedia = [
+        ...sheetMedia.filter((media) => !String(media?.type || '').toLowerCase().startsWith('audio/') && !AUDIO_FILE_PATTERN.test(String(media?.url || ''))),
+        ...steps.filter((step) => step?.type === 'video' && String(step?.videoUrl || '').trim()).map((step) => ({
+            id: step.id, url: step.videoUrl, name: step.title, type: step.mimeType || '', startSec: step.startSec, endSec: step.endSec
+        }))
+    ].map(makePresentationSequence);
+    const musicMedia = sheetMedia
+        .filter((media) => String(media?.type || '').toLowerCase().startsWith('audio/') || AUDIO_FILE_PATTERN.test(String(media?.url || media?.name || '')))
+        .map(makePresentationSequence);
+    return { notebook: uniqueSequences([], notebookMedia), music: uniqueSequences([], musicMedia) };
+};
+
 const groupSceneSequences = (scene = {}) => {
     return (Array.isArray(scene?.sequences) ? scene.sequences : []).map((video) => [video]);
 };
@@ -1998,14 +2079,65 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         }
     };
 
-    const openVideoSequencer = () => {
+    const openVideoSequencer = async () => {
         setAddMenuOpen(false);
         if (!playingCourse) return;
+        const slideCount = Math.max(1, slideManifest.length || Number(playingCourse.publishedUntilSlide || 0) || projectedSlideIndex + 1);
+        const initialSlides = ensureChapterMediaScenes(normalizeVideoSlides(playingCourse), slideCount);
         setVideoSequencer({
             course: playingCourse,
             activeSlideNumber: projectedSlideIndex + 1,
-            slides: normalizeVideoSlides(playingCourse)
+            slides: initialSlides
         });
+
+        try {
+            // A split presentation keeps the id of its source course. Match
+            // the learning module through either presentation id so its
+            // superfiche remains available after the chapter split.
+            const sourceCourse = courses.find((course) => String(course?._id) === String(playingCourse.sourceCourseId));
+            const presentationIds = new Set([
+                extractPresentationId(playingCourse.slidesUrl),
+                extractPresentationId(sourceCourse?.slidesUrl)
+            ].filter(Boolean));
+            let module = null;
+            try {
+                const response = await fetch('/api/learning/all');
+                const modules = response.ok ? await response.json() : [];
+                module = (Array.isArray(modules) ? modules : []).find((item) => (
+                    presentationIds.has(extractPresentationId(item?.presentationUrl))
+                    || presentationIds.has(extractPresentationId(item?.presentationSourceUrl))
+                )) || null;
+            } catch (_) {
+                // Keep the mandatory empty scenes when the optional source
+                // of the superfiche is temporarily unavailable.
+            }
+            const slides = ensureChapterMediaScenes(
+                initialSlides,
+                slideCount,
+                module ? superficialMediaForModule(module) : undefined
+            );
+            setVideoSequencer((current) => current && String(current.course?._id) === String(playingCourse._id)
+                ? { ...current, slides }
+                : current);
+
+            // These two scenes are not a draft: they are the default structure
+            // of a chapter and are therefore saved immediately.
+            const saveResponse = await fetch(`/api/courses/${playingCourse._id}/video-sequences`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slides })
+            });
+            const saved = await saveResponse.json().catch(() => ({}));
+            if (!saveResponse.ok) throw new Error(saved.error || 'Création des scènes impossible');
+            setCourses((current) => current.map((course) => String(course._id) === String(saved._id) ? mergeCourseForCurrentView(course, saved) : course));
+            setPlayingCourse((current) => String(current?._id) === String(saved._id)
+                ? { ...current, presentationVideoSlides: saved.presentationVideoSlides || [] }
+                : current);
+        } catch (sequenceError) {
+            // The two empty scenes remain editable even if the optional
+            // superfiche cannot be reached.
+            setError(sequenceError.message || 'Médias de la superfiche impossibles à charger.');
+        }
     };
 
     const uploadSequenceVideos = async (fileList, sceneIndex) => {

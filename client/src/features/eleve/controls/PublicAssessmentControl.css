@@ -276,16 +276,19 @@
   letter-spacing: 0.05em;
   border: none;
   border-radius: 18px;
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  color: white;
-  box-shadow: 0 10px 25px -4px rgba(79, 70, 229, 0.4);
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 10px 25px -4px rgba(21, 128, 61, 0.4);
   cursor: pointer;
   transition: transform 0.12s, box-shadow 0.12s;
 }
 
 .public-control-submit-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px -4px rgba(79, 70, 229, 0.5);
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 28px -4px rgba(21, 128, 61, 0.5);
 }
 
 .public-control-submit-btn:disabled {
