@@ -1584,6 +1584,11 @@ export default function StudentsManager({ globalClassId }) {
                                             extractId(s._id) === String(copy.studentId) ||
                                             norm(`${s.firstName} ${s.lastName}`) === norm(copy.studentName)
                                         );
+                                        // This value is used by the visual state of each copy below.
+                                        // Keep it scoped to this row: previously it was referenced without
+                                        // being declared, which crashed the whole CondaWeb view as soon as
+                                        // a control with a submission was displayed.
+                                        const contested = isCopyContested(copy);
                                         const studentAlerts = (control.alerts || []).filter(a =>
                                             (copy.studentId && String(a.studentId) === String(copy.studentId)) ||
                                             (a.studentName && norm(a.studentName) === norm(copy.studentName))

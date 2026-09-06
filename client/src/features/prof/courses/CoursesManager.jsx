@@ -441,6 +441,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [sequenceCutPlayhead, setSequenceCutPlayhead] = useState(0);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [projectedControl, setProjectedControl] = useState(null);
+    // The QR code must open the same CondaWeb instance that is presenting the
+    // exam (production, preview or local network), rather than a hard-coded
+    // deployment URL.
+    const controlPublicUrl = projectedControl
+        ? `${window.location.origin}/?control=${encodeURIComponent(projectedControl._id)}`
+        : '';
     const [presentationRemote, setPresentationRemote] = useState(null);
     const [slideManifest, setSlideManifest] = useState([]);
     const [liveSyncKey, setLiveSyncKey] = useState(Date.now());
@@ -451,6 +457,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // deliberately local to the presentation: going back and forth must not
     // wait for a new request to Google Slides.
     const slideImageCacheRef = useRef(new Map());
+    const requestedSlideImageKeyRef = useRef('');
     const renderedSlideIndexRef = useRef(null);
     const [slideElementsMap, setSlideElementsMap] = useState({});
     const [slideTransitions, setSlideTransitions] = useState({});
@@ -462,6 +469,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [savingTransitions, setSavingTransitions] = useState(false);
     const [transitionDraft, setTransitionDraft] = useState({ enabled: true, perParagraph: true, stepsMap: {}, masks: [] });
     const [selectedMaskId, setSelectedMaskId] = useState('');
+    const [selectedPresentationMaskId, setSelectedPresentationMaskId] = useState('');
+    const [dismissedPresentationMasks, setDismissedPresentationMasks] = useState({});
     const [editingMaskId, setEditingMaskId] = useState('');
     const [maskRevealPixels, setMaskRevealPixels] = useState({});
     const [editSlideNumberDraft, setEditSlideNumberDraft] = useState('');
@@ -482,6 +491,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const pendingSlideSyncRef = useRef(null);
     const slideNavigationLockRef = useRef(null);
     const diaporamaToggleLockRef = useRef(null);
+    const transitionStepLockRef = useRef(null);
     const slideNavigationVersionRef = useRef(0);
     const slideNavigationQueueRef = useRef(Promise.resolve());
     const maskHoldDelayRef = useRef(null);
@@ -489,6 +499,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const maskHoldCompletedRef = useRef(false);
     const maskHoldActiveRef = useRef(false);
     const maskEditorDragRef = useRef(null);
+    const maskDraftDirtyRef = useRef(false);
+    const maskAutoSaveTimerRef = useRef(null);
     const isPhone = useMemo(() => /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769, []);
 
     const previewUrl = useMemo(() => getEmbedUrl(form.slidesUrl), [form.slidesUrl]);
@@ -997,12 +1009,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setPresentationRemote(null);
         setSlideImageUrl('');
         setRenderedSlideIndex(null);
+        requestedSlideImageKeyRef.current = '';
         renderedSlideIndexRef.current = null;
         setSlideImageLoading(false);
         slideImageCacheRef.current.clear();
         pendingSlideSyncRef.current = null;
         slideNavigationLockRef.current = null;
         diaporamaToggleLockRef.current = null;
+        transitionStepLockRef.current = null;
         slideNavigationVersionRef.current += 1;
         slideNavigationQueueRef.current = Promise.resolve();
     };
@@ -1088,6 +1102,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const projectedSlideObjectId = String(
         slideManifest[projectedSlideIndex]?.objectId || playingCourse?.editSlideObjectId || ''
     ).trim();
+    // Written during render, before effect cleanups run. It lets a thumbnail
+    // request survive the 2-second live refresh when it still targets the
+    // same slide, but discards it immediately after a real navigation.
+    const requestedSlideImageKey = `${extractPresentationId(playingCourse?.slidesUrl)}:${projectedSlideObjectId}:${projectedSlideIndex + 1}`;
+    requestedSlideImageKeyRef.current = requestedSlideImageKey;
     const presentationReloadNonce = Number(playingCourse?.presentationReloadNonce || 0);
     const projectedSlidesUrl = projectedSlideObjectId
         ? `${getEmbedUrl(playingCourse?.slidesUrl)}&slide=id.${encodeURIComponent(projectedSlideObjectId)}&condaReload=${presentationReloadNonce}`
@@ -1108,9 +1127,20 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const pageId = String(projectedSlideObjectId || slideManifest[projectedSlideIndex]?.objectId || '').trim();
         const slideNum = projectedSlideIndex + 1;
         const cacheKey = `${presId}:${pageId}:${slideNum}`;
+        const manifestThumbnailUrl = String(
+            slideManifest[projectedSlideIndex]?.thumbnailProxyUrl
+            || slideManifest[projectedSlideIndex]?.thumbnailPublicUrl
+            || ''
+        ).trim();
         // `force=1` bypasses the server thumbnail cache: edits made in another
         // Google Slides tab therefore appear on the projected slide within 2s.
-        const targetUrl = `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presId)}&pageObjectId=${encodeURIComponent(pageId)}&slideNumber=${slideNum}&force=1&refresh=${liveSyncKey}`;
+        const freshUrl = `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presId)}&pageObjectId=${encodeURIComponent(pageId)}&slideNumber=${slideNum}&force=1&refresh=${liveSyncKey}`;
+        // The rail already owns a working thumbnail URL. Use it for the first
+        // paint of a slide instead of keeping the whole stage blank while a
+        // forced live-refresh is pending.
+        const targetUrl = renderedSlideIndexRef.current === projectedSlideIndex
+            ? freshUrl
+            : (manifestThumbnailUrl || freshUrl);
         const cachedUrl = slideImageCacheRef.current.get(cacheKey);
         const commitVisibleSlide = (url) => {
             // Reset transition state in the same React update as the visual
@@ -1119,6 +1149,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             if (renderedSlideIndexRef.current !== projectedSlideIndex) {
                 setCurrentDiaporamaStep(1);
                 setMaskRevealPixels({});
+                setSelectedPresentationMaskId('');
+                setDismissedPresentationMasks({});
+                transitionStepLockRef.current = null;
             }
             renderedSlideIndexRef.current = projectedSlideIndex;
             setSlideImageUrl(url);
@@ -1133,18 +1166,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const img = new Image();
         img.src = targetUrl;
         img.onload = () => {
-            if (!isCancelled) {
+            if (!isCancelled && requestedSlideImageKeyRef.current === cacheKey) {
                 slideImageCacheRef.current.set(cacheKey, targetUrl);
                 commitVisibleSlide(targetUrl);
                 setSlideImageLoading(false);
             }
         };
         img.onerror = () => {
-            if (!isCancelled) {
+            if (!isCancelled && requestedSlideImageKeyRef.current === cacheKey) {
                 setSlideImageLoading(false);
             }
         };
-        return () => { isCancelled = true; };
+        return () => {
+            // Do not starve the first image when liveSyncKey changes while it
+            // is still loading. Only a navigation makes this request stale.
+            if (requestedSlideImageKeyRef.current !== cacheKey) isCancelled = true;
+        };
     }, [playingCourse?.slidesUrl, projectedSlideIndex, projectedSlideObjectId, slideManifest, liveSyncKey]);
 
     // Keep the old image and its masks together until the next slide image has
@@ -1191,10 +1228,19 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     }, [currentSlideTransition?.masks]);
     const nextMaskedStep = useMemo(() => {
         const pendingSteps = currentSlideMasks
-            .filter((mask) => mask.step > currentDiaporamaStep)
+            .filter((mask) => !dismissedPresentationMasks[mask.id] && mask.step > currentDiaporamaStep)
             .map((mask) => mask.step);
         return pendingSteps.length ? Math.min(...pendingSteps) : null;
-    }, [currentDiaporamaStep, currentSlideMasks]);
+    }, [currentDiaporamaStep, currentSlideMasks, dismissedPresentationMasks]);
+    const focusedPresentationMask = useMemo(() => {
+        const pendingMasks = currentSlideMasks.filter((mask) => (
+            !dismissedPresentationMasks[mask.id] && mask.step > currentDiaporamaStep
+        ));
+        const selected = pendingMasks.find((mask) => mask.id === selectedPresentationMaskId);
+        if (selected) return selected;
+        const nextStep = pendingMasks.length ? Math.min(...pendingMasks.map((mask) => mask.step)) : null;
+        return pendingMasks.find((mask) => mask.step === nextStep) || null;
+    }, [currentDiaporamaStep, currentSlideMasks, dismissedPresentationMasks, selectedPresentationMaskId]);
 
     const advanceDiaporama = useCallback(() => {
         if (isSlideSwitching) return;
@@ -1210,6 +1256,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     .map((mask) => mask.step))].sort((a, b) => a - b)
             });
             setCurrentDiaporamaStep(nextStep);
+            transitionStepLockRef.current = { step: nextStep, expiresAt: Date.now() + 1800 };
             setPresentationRemote((current) => current ? {
                 ...current,
                 remote: { ...(current.remote || {}), transitionStep: nextStep }
@@ -1240,27 +1287,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const startMaskHold = useCallback(() => {
         maskHoldCompletedRef.current = false;
-        if (!diaporamaActive || !transitionsEnabled || nextMaskedStep === null) return;
+        if (transitionEditMode || !transitionsEnabled || !focusedPresentationMask) return;
         maskHoldDelayRef.current = window.setTimeout(() => {
-            const nextStep = nextMaskedStep;
+            const focusedMaskId = focusedPresentationMask.id;
             const startedAt = Date.now();
-            const initialPixels = Number(maskRevealPixels[nextStep] || 0);
+            const initialPixels = Number(maskRevealPixels[focusedMaskId] || 0);
             maskHoldActiveRef.current = true;
             maskHoldProgressRef.current = window.setInterval(() => {
-                // 12px every 500ms = 24px/s. Updates every 16ms preserve a
-                // continuous motion while making the progressive reveal useful
-                // at presentation speed.
-                const revealedPixels = initialPixels + ((Date.now() - startedAt) * 0.024);
-                setMaskRevealPixels((current) => ({ ...current, [nextStep]: revealedPixels }));
+                // 15.18px every 500ms = 30.36px/s (+15%, then +10%). Updating every 16ms
+                // keeps the reduction from the top fluid.
+                const revealedPixels = initialPixels + ((Date.now() - startedAt) * 0.03036);
+                setMaskRevealPixels((current) => ({ ...current, [focusedMaskId]: revealedPixels }));
             }, 16);
         }, 180);
-    }, [transitionsEnabled, diaporamaActive, maskRevealPixels, nextMaskedStep]);
+    }, [transitionsEnabled, transitionEditMode, maskRevealPixels, focusedPresentationMask]);
 
     const reverseDiaporama = useCallback(() => {
         const hasTransitions = transitionsEnabled && maxSlideSteps > 1;
         if (hasTransitions && currentDiaporamaStep > 1) {
             const prevStep = currentDiaporamaStep - 1;
             setCurrentDiaporamaStep(prevStep);
+            transitionStepLockRef.current = { step: prevStep, expiresAt: Date.now() + 1800 };
             setPresentationRemote((current) => current ? {
                 ...current,
                 remote: { ...(current.remote || {}), transitionStep: prevStep }
@@ -1288,7 +1335,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             }
         }
         if (Number.isInteger(presentationRemote?.remote?.transitionStep)) {
-            setCurrentDiaporamaStep(presentationRemote.remote.transitionStep);
+            const remoteStep = presentationRemote.remote.transitionStep;
+            const stepLock = transitionStepLockRef.current;
+            // The remote is polled every 650 ms. A response started just
+            // before a click used to restore the old step and make the same
+            // mask blink/reappear. Hold the local step briefly until the
+            // server state has propagated everywhere.
+            if (!stepLock || Date.now() >= stepLock.expiresAt || remoteStep === stepLock.step) {
+                setCurrentDiaporamaStep(remoteStep);
+                if (stepLock && Date.now() >= stepLock.expiresAt) transitionStepLockRef.current = null;
+            }
         }
     }, [presentationRemote?.remote?.diaporamaActive, presentationRemote?.remote?.transitionStep]);
 
@@ -1340,19 +1396,60 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             masks: editableMasks
         });
         setSelectedMaskId('');
-    }, [transitionEditMode, currentSlideNumber, slideTransitions, currentSlideTransitionItems]);
+    }, [transitionEditMode, currentSlideNumber]);
+
+    // Masks are saved automatically. The short debounce preserves a fluid drag
+    // while avoiding one request for every pointer-move event.
+    useEffect(() => {
+        if (!transitionEditMode || !maskDraftDirtyRef.current || !playingCourse?._id) return;
+        if (maskAutoSaveTimerRef.current) window.clearTimeout(maskAutoSaveTimerRef.current);
+        const masks = Array.isArray(transitionDraft.masks) ? transitionDraft.masks : [];
+        const nextTransitions = {
+            ...slideTransitions,
+            [currentSlideNumber]: {
+                enabled: true,
+                perParagraph: false,
+                useCustomMasks: true,
+                masks,
+                steps: []
+            }
+        };
+        setSlideTransitions(nextTransitions);
+        maskDraftDirtyRef.current = false;
+        maskAutoSaveTimerRef.current = window.setTimeout(() => {
+            fetch(`/api/courses/${playingCourse._id}/slides/transitions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slideTransitions: nextTransitions })
+            }).catch((error) => console.error('[CondaWeb masques] Sauvegarde automatique impossible', error));
+        }, 350);
+    }, [transitionEditMode, transitionDraft.masks, currentSlideNumber, playingCourse?._id]);
 
     useEffect(() => {
         if (!transitionEditMode) return undefined;
         const onPointerMove = (event) => {
             const drag = maskEditorDragRef.current;
             if (!drag) return;
+            maskDraftDirtyRef.current = true;
             const deltaX = ((event.clientX - drag.startX) / drag.bounds.width) * 100;
             const deltaY = ((event.clientY - drag.startY) / drag.bounds.height) * 100;
             setTransitionDraft((previous) => ({
                 ...previous,
                 masks: (previous.masks || []).map((mask) => {
                     if (mask.id !== drag.id) return mask;
+                    if (drag.mode === 'create') {
+                        const endX = Math.max(0, Math.min(100, ((event.clientX - drag.bounds.left) / drag.bounds.width) * 100));
+                        const endY = Math.max(0, Math.min(100, ((event.clientY - drag.bounds.top) / drag.bounds.height) * 100));
+                        const x = Math.min(drag.startPercentX, endX);
+                        const y = Math.min(drag.startPercentY, endY);
+                        return {
+                            ...mask,
+                            x,
+                            y,
+                            width: Math.max(2, Math.abs(endX - drag.startPercentX)),
+                            height: Math.max(2, Math.abs(endY - drag.startPercentY))
+                        };
+                    }
                     if (drag.mode === 'resize') return {
                         ...mask,
                         width: Math.max(2, Math.min(100 - Number(drag.mask.x || 0), Number(drag.mask.width || 0) + deltaX)),
@@ -1371,6 +1468,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const tag = String(event.target?.tagName || '').toLowerCase();
             if ((event.key !== 'Delete' && event.key !== 'Backspace') || !selectedMaskId || ['input', 'textarea', 'select'].includes(tag)) return;
             event.preventDefault();
+            maskDraftDirtyRef.current = true;
             setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).filter((mask) => mask.id !== selectedMaskId) }));
             setSelectedMaskId('');
         };
@@ -1401,10 +1499,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             if (!res.ok) throw new Error(data?.error || 'Erreur enregistrement transitions');
             setSlideTransitions(nextTransitions);
             setTransitionEditMode(false);
-            if (updatedConfig.enabled) {
-                setDiaporamaActive(true);
-                setCurrentDiaporamaStep(1);
-            }
+            setCurrentDiaporamaStep(1);
+            setMaskRevealPixels({});
         } catch (err) {
             alert(`Impossible d’enregistrer les transitions : ${err.message}`);
         } finally {
@@ -1440,26 +1536,24 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const tag = String(event.target?.tagName || '').toLowerCase();
             if (['input', 'textarea', 'select', 'button'].includes(tag) || event.target?.isContentEditable || event.repeat) return;
 
-            if (diaporamaActive) {
-                if (event.code === 'Space') {
-                    event.preventDefault();
-                    startMaskHold();
-                    return;
-                }
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void sendPresentationCommand('animation_toggle');
-                    return;
-                }
-                if (event.key === 'ArrowRight' || event.key === 'PageDown') {
-                    event.preventDefault();
-                    advanceDiaporama();
-                    return;
-                } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
-                    event.preventDefault();
-                    reverseDiaporama();
-                    return;
-                }
+            if (event.code === 'Space') {
+                event.preventDefault();
+                startMaskHold();
+                return;
+            }
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                void sendPresentationCommand('animation_toggle');
+                return;
+            }
+            if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+                event.preventDefault();
+                advanceDiaporama();
+                return;
+            } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+                event.preventDefault();
+                reverseDiaporama();
+                return;
             }
 
             let action = '';
@@ -1479,9 +1573,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             void sendPresentationCommand(action);
         };
         const handlePresentationKeyUp = (event) => {
-            if (diaporamaActive && event.code === 'Space') {
+            if (event.code === 'Space') {
                 event.preventDefault();
-                stopMaskHold(true);
+                // Space only reveals the focused mask progressively. A click
+                // on the slide is the sole action that advances the sequence.
+                stopMaskHold(false);
             }
         };
         window.addEventListener('keydown', handlePresentationShortcut, true);
@@ -1490,7 +1586,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             window.removeEventListener('keydown', handlePresentationShortcut, true);
             window.removeEventListener('keyup', handlePresentationKeyUp, true);
         };
-    }, [isPhone, playingCourse?._id, playerMode, presentationRemote, slideManifest.length, videoSequencer, sequenceCutEditor, transitionEditMode, diaporamaActive, advanceDiaporama, reverseDiaporama, sendPresentationCommand, startMaskHold, stopMaskHold]);
+    }, [isPhone, playingCourse?._id, playerMode, presentationRemote, slideManifest.length, videoSequencer, sequenceCutEditor, transitionEditMode, advanceDiaporama, reverseDiaporama, sendPresentationCommand, startMaskHold, stopMaskHold]);
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return;
@@ -2062,7 +2158,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const response = await fetch('/api/controls/all');
             const rows = response.ok ? await response.json() : [];
             const key = String(globalClass || '').replace(/\s/g, '').toUpperCase();
-            const available = (rows || []).filter(row => row.active !== false && (row.targetClassrooms || []).some(value => String(value || '').replace(/\s/g, '').toUpperCase() === key));
+            const available = (rows || []).filter((row) => {
+                if (row.active === false) return false;
+                const targets = Array.isArray(row.targetClassrooms) ? row.targetClassrooms : [];
+                // Older controls may not have a target class. They remain
+                // projectable instead of disappearing from the exam selector.
+                return targets.length === 0 || targets.some(value => String(value || '').replace(/\s/g, '').toUpperCase() === key);
+            });
             if (!available.length) return alert('Aucun contrôle actif pour cette classe. Créez-le dans Activités.');
             const choice = available.length === 1 ? available[0] : available.find((_, i) => String(i + 1) === prompt(available.map((row, i) => `${i + 1}. ${row.title}`).join('\n'), '1'));
             if (choice) setProjectedControl(choice);
@@ -2816,16 +2918,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
                             {/* Rendu direct haute fidélité de la diapositive active */}
                             <div
-                                className={`google-slide-stage-container ${diaporamaActive ? 'is-diaporama' : ''}`}
-                                onPointerDown={diaporamaActive ? (event) => {
+                                className="google-slide-stage-container is-diaporama"
+                                onPointerDown={!transitionEditMode ? (event) => {
                                     event.currentTarget.setPointerCapture?.(event.pointerId);
                                     startMaskHold();
                                 } : undefined}
-                                onPointerUp={diaporamaActive ? (event) => {
+                                onPointerUp={!transitionEditMode ? (event) => {
                                     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
                                     stopMaskHold(true);
                                 } : undefined}
-                                onPointerCancel={diaporamaActive ? (event) => {
+                                onPointerCancel={!transitionEditMode ? (event) => {
                                     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
                                     stopMaskHold(false);
                                 } : undefined}
@@ -2904,15 +3006,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 ))}
 
                                 {/* Masques de texte et rectangles créés dans l'éditeur */}
-                                {diaporamaActive && transitionsEnabled && currentSlideMasks.map((mask) => {
-                                    const isMasked = mask.step > currentDiaporamaStep;
-                                    const revealedPixels = isMasked ? Number(maskRevealPixels[mask.step] || 0) : 0;
-                                    const activeStep = Math.min(...currentSlideMasks.filter((item) => item.step > currentDiaporamaStep).map((item) => item.step));
+                                {transitionsEnabled && currentSlideMasks.map((mask) => {
+                                    const isDismissed = dismissedPresentationMasks[mask.id] === true;
+                                    const isMasked = !isDismissed && mask.step > currentDiaporamaStep;
+                                    const revealedPixels = isMasked ? Number(maskRevealPixels[mask.id] || 0) : 0;
+                                    const activeStep = Math.min(...currentSlideMasks.filter((item) => !dismissedPresentationMasks[item.id] && item.step > currentDiaporamaStep).map((item) => item.step));
                                     const isActive = isMasked && mask.step === activeStep;
                                     return (
                                         <div
                                             key={`mask-${mask.id}`}
-                                            className={`slide-diaporama-mask ${isMasked ? 'is-masked' : 'is-revealed'} ${isActive ? 'is-active' : ''}`}
+                                            className={`slide-diaporama-mask ${isMasked ? 'is-masked' : 'is-revealed'} ${isActive ? 'is-active' : ''} ${selectedPresentationMaskId === mask.id ? 'is-selected' : ''}`}
                                             style={{
                                                 left: `${mask.x}%`,
                                                 top: `${mask.y}%`,
@@ -2920,6 +3023,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                 height: `${mask.height}%`,
                                                 backgroundColor: '#ffffff',
                                                 clipPath: revealedPixels > 0 ? `inset(${revealedPixels.toFixed(2)}px 0 0 0)` : undefined
+                                            }}
+                                            onPointerDown={(event) => event.stopPropagation()}
+                                            onPointerUp={(event) => event.stopPropagation()}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                if (isMasked) setSelectedPresentationMaskId(mask.id);
+                                            }}
+                                            onDoubleClick={(event) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                if (selectedPresentationMaskId !== mask.id || !isMasked) return;
+                                                console.info('[CondaWeb masques] Retrait par double-clic', {
+                                                    slide: currentSlideNumber,
+                                                    mask: { id: mask.id, number: mask.number, step: mask.step }
+                                                });
+                                                setDismissedPresentationMasks((current) => ({ ...current, [mask.id]: true }));
+                                                setSelectedPresentationMaskId('');
                                             }}
                                         ><span className="slide-diaporama-mask-number">{mask.number}</span></div>
                                     );
@@ -2930,29 +3050,25 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 <div className="course-transition-stage-editor" onPointerDown={(event) => {
                                     if (event.target !== event.currentTarget) return;
                                     const bounds = event.currentTarget.getBoundingClientRect();
-                                    const x = Math.max(0, Math.min(85, ((event.clientX - bounds.left) / bounds.width) * 100 - 7.5));
-                                    const y = Math.max(0, Math.min(90, ((event.clientY - bounds.top) / bounds.height) * 100 - 5));
-                                    setTransitionDraft((previous) => ({ ...previous, masks: [...(previous.masks || []), { id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, x, y, width: 15, height: 10, step: (previous.masks || []).length + 2 }]}));
+                                    const x = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100));
+                                    const y = Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100));
+                                    const id = `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                                    maskDraftDirtyRef.current = true;
+                                    setSelectedMaskId(id);
+                                    setTransitionDraft((previous) => ({ ...previous, masks: [...(previous.masks || []), { id, x, y, width: 2, height: 2, step: (previous.masks || []).length + 2 }]}));
+                                    maskEditorDragRef.current = { id, mode: 'create', startX: event.clientX, startY: event.clientY, bounds, startPercentX: x, startPercentY: y };
+                                    event.currentTarget.setPointerCapture?.(event.pointerId);
                                 }}>
                                     {(transitionDraft.masks || []).map((mask, index) => <button key={mask.id || index} type="button" className={`course-transition-stage-mask ${selectedMaskId === mask.id ? 'selected' : ''}`} style={{ left: `${mask.x}%`, top: `${mask.y}%`, width: `${mask.width}%`, height: `${mask.height}%` }} onPointerDown={(event) => {
                                         event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id);
                                         const bounds = event.currentTarget.parentElement.getBoundingClientRect();
                                         maskEditorDragRef.current = { id: mask.id, mode: event.target.dataset.resize === 'true' ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, bounds, mask: { ...mask } };
                                         event.currentTarget.setPointerCapture?.(event.pointerId);
-                                    }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id); setEditingMaskId(mask.id); }}>{editingMaskId === mask.id ? <input className="course-transition-stage-number-input" type="number" min="1" autoFocus defaultValue={Number(mask.step || index + 2)} onPointerDown={(event) => event.stopPropagation()} onBlur={() => setEditingMaskId('')} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onChange={(event) => setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).map((row) => row.id === mask.id ? { ...row, step: Math.max(1, Number(event.target.value) || 1) } : row) }))} /> : Number(mask.step || index + 2)}<span className="course-transition-stage-resize" data-resize="true" /></button>)}
+                                    }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id); setEditingMaskId(mask.id); }}>{editingMaskId === mask.id ? <input className="course-transition-stage-number-input" type="number" min="1" autoFocus defaultValue={Number(mask.step || index + 2)} onPointerDown={(event) => event.stopPropagation()} onBlur={() => setEditingMaskId('')} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onChange={(event) => { maskDraftDirtyRef.current = true; setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).map((row) => row.id === mask.id ? { ...row, step: Math.max(1, Number(event.target.value) || 1) } : row) })); }} /> : Number(mask.step || index + 2)}<span className="course-transition-stage-resize" data-resize="true" /></button>)}
                                     <div className="course-transition-stage-toolbar">
-                                        <span>Mode édition des masques · Clique dans une zone vide pour ajouter · Suppr pour enlever</span>
-                                        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setTransitionEditMode(false)}>ANNULER</button>
-                                        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void saveSlideTransitions({ enabled: true, perParagraph: transitionDraft.perParagraph !== false, useCustomMasks: true, masks: transitionDraft.masks || [], steps: currentSlideTransition?.steps || [] })}>ENREGISTRER</button>
+                                        <span>Mode édition des masques · Glisse dans une zone vide pour dessiner · Sauvegarde automatique</span>
+                                        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setTransitionEditMode(false)}>FERMER</button>
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Bannière Mode Diaporama */}
-                            {diaporamaActive && (
-                                <div className="course-diaporama-banner">
-                                    <span className="diaporama-badge">📽️ MODE DIAPORAMA ACTIF</span>
-                                    <span>Étape {currentDiaporamaStep} / {maxSlideSteps} (Clique ou appuie sur Espace)</span>
                                 </div>
                             )}
 
@@ -3115,12 +3231,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 )}
                             </div>
                         ) : null}
-                        {projectedControl && <div className="course-control-projection">
+                        {projectedControl && <div className="course-control-projection" role="dialog" aria-label={`Examen : ${projectedControl.title}`}>
                             <button type="button" className="course-control-close" onClick={() => setProjectedControl(null)}>×</button>
                             <div className="course-control-qr">
-                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://condaweb.vercel.app/?control=${projectedControl._id}`)}`} alt="QR code du contrôle" />
+                                <span className="course-control-exam-mask">EXAMEN</span>
+                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(controlPublicUrl)}`} alt={`QR code de l'examen ${projectedControl.title}`} />
                                 <strong>SCANNE POUR COMMENCER</strong>
-                                <a href={`/?control=${projectedControl._id}`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-black underline text-violet-700 hover:text-violet-900 mt-1">
+                                <span className="course-control-qr-title">{projectedControl.title}</span>
+                                <a href={controlPublicUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-black underline text-violet-700 hover:text-violet-900 mt-1">
                                     ↗ Ouvrir le contrôle
                                 </a>
                             </div>
@@ -3213,21 +3331,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                             <button
                                 type="button"
-                                className={`course-diaporama-toggle-btn ${diaporamaActive ? 'active' : ''}`}
+                                className={`course-diaporama-toggle-btn ${transitionEditMode ? 'active' : ''}`}
                                 onClick={() => {
-                                    const nextActive = !diaporamaActive;
-                                    diaporamaToggleLockRef.current = { value: nextActive, expiresAt: Date.now() + 2500 };
-                                    setDiaporamaActive(nextActive);
-                                    setCurrentDiaporamaStep(1);
-                                    setPresentationRemote((current) => current ? {
-                                        ...current,
-                                        remote: { ...(current.remote || {}), diaporamaActive: nextActive, transitionStep: 1 }
-                                    } : current);
-                                    sendPresentationCommand('diaporama_toggle', { diaporamaActive: nextActive }).catch(() => {});
+                                    setTransitionEditMode((active) => !active);
+                                    setSelectedMaskId('');
                                 }}
-                                title="Activer/désactiver le Mode Diaporama avec transitions au clic"
+                                title="Créer, déplacer, redimensionner ou supprimer les masques de cette diapositive"
                             >
-                                {diaporamaActive ? '📽️ QUITTER DIAPORAMA' : '📽️ MODE DIAPORAMA'}
+                                {transitionEditMode ? '✏️ QUITTER L’ÉDITION' : '✏️ ÉDITER LES MASQUES'}
                             </button>
                             <button
                                 type="button"
