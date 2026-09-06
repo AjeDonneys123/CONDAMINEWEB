@@ -50,7 +50,11 @@ router.get('/:id', async (req, res) => {
         const Control = mongoose.model('AssessmentControl');
         const row = await Control.findById(req.params.id).lean();
         if (!row || row.active === false) return res.status(404).json({ error: 'Contrôle indisponible' });
-        res.json(publicControl(row));
+        const studentId = String(req.query?.studentId || '').trim();
+        const submitted = mongoose.Types.ObjectId.isValid(studentId)
+            ? (row.submissions || []).find((submission) => String(submission?.studentId || '') === studentId) || null
+            : null;
+        res.json(publicControl({ ...row, submitted }));
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
@@ -138,7 +142,9 @@ router.post('/:id/submit', async (req, res) => {
             answers,
             score: Math.round(score * 100) / 100,
             total: Math.round(total * 100) / 100,
-            submittedAt: new Date()
+            submittedAt: new Date(),
+            reviewClosed: false,
+            reviewClosedAt: null
         };
 
         const submissions = Array.isArray(row.submissions) ? [...row.submissions] : [];
@@ -146,6 +152,9 @@ router.post('/:id/submit', async (req, res) => {
             (assignedStudentId && String(s.studentId) === assignedStudentId) ||
             (assignedStudentName && norm(s.studentName) === norm(assignedStudentName))
         );
+        if (existingIndex >= 0 && submissions[existingIndex]?.reviewClosed === true) {
+            return res.status(409).json({ error: 'Cette copie est définitivement terminée. Les contestations ont été transmises au professeur.' });
+        }
         if (existingIndex >= 0) {
             submissions[existingIndex] = { ...submissions[existingIndex], ...submission, id: submissions[existingIndex].id || submission.id };
         } else {
@@ -207,6 +216,26 @@ router.post('/:id/contest', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.post('/:id/finish-review', async (req, res) => {
+    try {
+        const Control = mongoose.model('AssessmentControl');
+        const row = await Control.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
+        const submissionId = String(req.body?.submissionId || '').trim();
+        const studentId = String(req.body?.studentId || '').trim();
+        const submission = (row.submissions || []).find((entry) =>
+            (submissionId && String(entry?.id || '') === submissionId)
+            || (studentId && String(entry?.studentId || '') === studentId)
+        );
+        if (!submission) return res.status(404).json({ error: 'Copie introuvable' });
+        submission.reviewClosed = true;
+        submission.reviewClosedAt = new Date();
+        row.markModified('submissions');
+        await row.save();
+        res.json({ ok: true, reviewClosed: true, reviewClosedAt: submission.reviewClosedAt });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 router.post('/:id/cheat-alert', async (req, res) => {
     try {
         const Control = mongoose.model('AssessmentControl');
@@ -253,4 +282,3 @@ router.post('/:id/cheat-alert', async (req, res) => {
 });
 
 module.exports = router;
-

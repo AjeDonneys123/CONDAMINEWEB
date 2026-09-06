@@ -176,6 +176,29 @@ router.get('/sections/list', async (req, res) => {
     }
 });
 
+// A split chapter is displayed as a child course, while a Superfiche can stay
+// linked to its original presentation.  Expose that small relationship so the
+// player can recover the chapter media without guessing from a title.
+router.get('/:id/source-context', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id).lean();
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const sourceId = String(course.sourceCourseId || '');
+        const source = sourceId ? await Course.findById(sourceId).lean() : null;
+        res.json({
+            courseId: String(course._id),
+            sourceCourseId: sourceId,
+            sourceCourse: source ? {
+                _id: String(source._id),
+                title: String(source.title || ''),
+                slidesUrl: String(source.slidesUrl || '')
+            } : null
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/sections', async (req, res) => {
     try {
         const name = String(req.body?.name || '').trim();

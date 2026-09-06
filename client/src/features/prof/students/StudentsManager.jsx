@@ -95,6 +95,20 @@ export default function StudentsManager({ globalClassId }) {
     setPromptsDraft({});
   };
 
+  const handleDeleteAssessmentControl = async (control) => {
+    if (!control?._id) return;
+    if (!window.confirm(`Supprimer définitivement le contrôle « ${control.title || 'Contrôle'} » et toutes ses copies ?`)) return;
+    try {
+      const response = await fetch(`/api/controls/${encodeURIComponent(control._id)}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Suppression impossible');
+      setAssessmentControls((current) => current.filter((item) => String(item?._id) !== String(control._id)));
+      if (String(viewingControlCopy?.control?._id || '') === String(control._id)) setViewingControlCopy(null);
+    } catch (error) {
+      alert(error.message || 'Suppression impossible');
+    }
+  };
+
   const handleSaveControlScore = async () => {
     if (!viewingControlCopy) return;
     setSavingControlScore(true);
@@ -180,6 +194,32 @@ export default function StudentsManager({ globalClassId }) {
     if (!globalClassId) return;
     loadMatrix();
   }, [globalClassId]);
+
+  // Contestations are sent from the pupil's phone after the initial copy was
+  // submitted. Refresh only this small dataset so the professor sees them
+  // without having to leave/reload the classroom dashboard.
+  useEffect(() => {
+    if (!globalClassId || !className || students.length === 0) return undefined;
+    let cancelled = false;
+    const refreshControls = async () => {
+      try {
+        const response = await fetch('/api/controls/all');
+        const controls = response.ok ? await response.json() : [];
+        if (cancelled) return;
+        const currentClassNorm = norm(className);
+        const ids = new Set(students.map((student) => extractId(student._id)));
+        const names = new Set(students.map((student) => norm(`${student.firstName || ''} ${student.lastName || ''}`)));
+        setAssessmentControls((Array.isArray(controls) ? controls : []).filter((row) => {
+          const targets = (row.targetClassrooms || []).map(norm);
+          return targets.length === 0 || targets.includes(currentClassNorm)
+            || (row.submissions || []).some((copy) => (copy.studentId && ids.has(String(copy.studentId))) || (copy.studentName && names.has(norm(copy.studentName))));
+        }));
+      } catch (_) {}
+    };
+    refreshControls();
+    const timer = window.setInterval(refreshControls, 2000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [globalClassId, className, students]);
 
   useEffect(() => {
     const studentId = extractId(viewingStudent?._id);
@@ -1573,6 +1613,15 @@ export default function StudentsManager({ globalClassId }) {
                                         </span>
                                     )}
                                 </div>
+                                <button
+                                    type="button"
+                                    title="Supprimer ce contrôle et ses copies"
+                                    aria-label={`Supprimer ${control.title}`}
+                                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleDeleteAssessmentControl(control); }}
+                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-red-200 bg-white text-lg font-black leading-none text-red-500 hover:bg-red-600 hover:text-white"
+                                >
+                                    ×
+                                </button>
                             </summary>
 
                             <div className="mt-3 space-y-2">

@@ -2260,7 +2260,19 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             // A split presentation keeps the id of its source course. Match
             // the learning module through either presentation id so its
             // superfiche remains available after the chapter split.
-            const sourceCourse = courses.find((course) => String(course?._id) === String(playingCourse.sourceCourseId));
+            let sourceCourse = courses.find((course) => String(course?._id) === String(playingCourse.sourceCourseId));
+            // Source presentations are normally hidden once their child
+            // chapters exist, so they are absent from `courses`. Retrieve the
+            // real source instead of falling back to an unreliable title match.
+            if (!sourceCourse && playingCourse.sourceCourseId) {
+                try {
+                    const sourceResponse = await fetch(`/api/courses/${encodeURIComponent(playingCourse._id)}/source-context`);
+                    const sourceData = sourceResponse.ok ? await sourceResponse.json() : null;
+                    sourceCourse = sourceData?.sourceCourse || null;
+                } catch (_) {
+                    sourceCourse = null;
+                }
+            }
             const presentationIds = new Set([
                 extractPresentationId(playingCourse.slidesUrl),
                 extractPresentationId(sourceCourse?.slidesUrl)
@@ -2288,6 +2300,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                     // resort, after exact course and presentation matches.
                     || rows.find((item) => courseTitle && normaliseSceneName(item?.generalSheetCourseTitle || item?.title) === courseTitle)
                     || null;
+                console.info('[CondaWeb séquences] Superfiche liée', {
+                    courseId: String(playingCourse?._id || ''),
+                    sourceCourseId: String(sourceCourse?._id || ''),
+                    moduleId: String(module?._id || ''),
+                    moduleTitle: String(module?.title || ''),
+                    stepCount: Array.isArray(module?.steps) ? module.steps.length : 0
+                });
             } catch (_) {
                 // Keep the mandatory empty scenes when the optional source
                 // of the superfiche is temporarily unavailable.

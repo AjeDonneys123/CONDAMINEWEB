@@ -17,6 +17,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
 
   // Resultat de correction
   const [submissionResult, setSubmissionResult] = useState(null);
+  const [finishingReview, setFinishingReview] = useState(false);
 
   // Contestations en cours: { [key]: { message: string, sending: boolean, done: boolean } }
   // key: `${itemId}` ou `${itemId}_${blankIndex}`
@@ -123,10 +124,16 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
     const loadControl = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/eleve/controls/${encodeURIComponent(controlId)}`);
+        const studentId = String(currentUser?._id || currentUser?.id || '').trim();
+        const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
+        const res = await fetch(`/api/eleve/controls/${encodeURIComponent(controlId)}${query}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || 'Contrôle introuvable ou indisponible.');
         setControl(data);
+        if (data?.submitted) {
+          setSubmissionResult(data.submitted);
+          return;
+        }
 
         // Pre-initialiser les reponses
         const initial = {};
@@ -146,7 +153,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
       }
     };
     loadControl();
-  }, [controlId]);
+  }, [controlId, currentUser?._id, currentUser?.id]);
 
   const handleUpdateChoice = (itemId, choiceIndex) => {
     setAnswers((prev) => ({
@@ -245,6 +252,29 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
     }
   };
 
+  const handleFinishReview = async () => {
+    if (!submissionResult || finishingReview) return;
+    setFinishingReview(true);
+    try {
+      const res = await fetch(`/api/eleve/controls/${encodeURIComponent(controlId)}/finish-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submissionId: submissionResult.id || '',
+          studentId: currentUser?._id || currentUser?.id || ''
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Impossible de terminer la copie.');
+      setSubmissionResult((current) => current ? { ...current, reviewClosed: true, reviewClosedAt: data.reviewClosedAt || new Date().toISOString() } : current);
+      setActiveContestKey('');
+    } catch (err) {
+      alert(err.message || 'Impossible de terminer la copie.');
+    } finally {
+      setFinishingReview(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="public-control-shell">
@@ -274,6 +304,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
   // ==================== RENDU : PHASE DE CORRECTION ====================
   if (submissionResult) {
     const corrections = submissionResult.corrections || [];
+    const reviewClosed = submissionResult.reviewClosed === true;
     return (
       <div className="public-control-shell">
         <div className="public-control-container">
@@ -286,6 +317,12 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
               ✓ Devoir validé et transmis à ton professeur pour {submissionResult.studentName || `${firstName} ${lastName}`}.
             </div>
           </div>
+
+          {reviewClosed ? (
+            <div className="public-control-score-notice" style={{ marginTop: 18, textAlign: 'center' }}>
+              ✓ Contrôle définitivement terminé. Tes éventuelles contestations ont été transmises au professeur.
+            </div>
+          ) : <>
 
           <div style={{ marginBottom: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -540,6 +577,15 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
               </div>
             );
           })}
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '28px 0 8px' }}>
+            <button type="button" className="public-control-submit-button" onClick={handleFinishReview} disabled={finishingReview}>
+              {finishingReview ? 'TERMINE…' : '✓ TERMINER LA COPIE'}
+            </button>
+          </div>
+          <p style={{ textAlign: 'center', color: '#64748b', fontSize: 12, fontWeight: 700, margin: 0 }}>
+            Après cette étape, la copie est fermée et ne peut plus être modifiée.
+          </p>
+          </>}
         </div>
       </div>
     );
