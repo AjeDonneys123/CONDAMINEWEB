@@ -1205,6 +1205,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
                         <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A–Z</button>
                     </div>
+                    {renderProjectorButton()}
                     <button
                         className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
                         onClick={toggleVoiceFinder}
@@ -1236,7 +1237,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR</button>
-                            {renderProjectorButton()}
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button

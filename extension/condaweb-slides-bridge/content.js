@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.14';
+    const BRIDGE_VERSION = '1.0.15';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -64,7 +64,7 @@
     window.__CONDA_BRIDGE_SESSION__ = bridgeSession;
 
     function isExtensionContextError(error) {
-        return /extension context invalidated|message channel closed|receiving end does not exist|listener indicated an asynchronous response/i.test(String(error?.message || error || ''));
+        return /extension context invalidated|extension runtime non disponible|message channel closed|receiving end does not exist|listener indicated an asynchronous response/i.test(String(error?.message || error || ''));
     }
 
     function stopForExtensionReload(error) {
