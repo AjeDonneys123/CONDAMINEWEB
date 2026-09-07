@@ -265,6 +265,8 @@ router.get('/bridge-state/:classId', async (req, res) => {
             activeStudentBonusAlert: classroom.activeStudentBonusAlert || '',
             activeStudentBonusAlertTime: classroom.activeStudentBonusAlertTime || null,
             activeScoreAlerts: Array.isArray(classroom.activeScoreAlerts) ? classroom.activeScoreAlerts : [],
+            scoreAlertSyncVersion: Number(classroom.scoreAlertSyncVersion || 0),
+            scoreAlertReplayId: String(classroom.scoreAlertReplayId || ''),
             activeHourWarnings: Array.isArray(classroom.activeHourWarnings) ? classroom.activeHourWarnings : [],
             planStudents: students.map((student) => ({
                 _id: String(student._id),
@@ -274,6 +276,36 @@ router.get('/bridge-state/:classId', async (req, res) => {
                 seatX: student.seatX !== null && student.seatX !== undefined && Number.isFinite(Number(student.seatX)) ? Number(student.seatX) : null,
                 seatY: student.seatY !== null && student.seatY !== undefined && Number.isFinite(Number(student.seatY)) ? Number(student.seatY) : null
             }))
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// The extension normally polls classroom state, but a teacher can explicitly
+// request a replay after a score change.  The version is durable, so a slow
+// Google Slides tab cannot silently miss the instruction.
+router.post('/:classId/score-alerts/sync', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
+        const alerts = Array.isArray(classroom.activeScoreAlerts) ? classroom.activeScoreAlerts : [];
+        const latest = alerts[alerts.length - 1];
+        if (!latest?.id) return res.json({ ok: true, replayed: false, scoreAlertSyncVersion: Number(classroom.scoreAlertSyncVersion || 0) });
+
+        classroom.scoreAlertSyncVersion = Number(classroom.scoreAlertSyncVersion || 0) + 1;
+        classroom.scoreAlertReplayId = String(latest.id);
+        await classroom.save();
+        console.info('[CondaWeb notes] synchronisation demandée', {
+            classId: String(classroom._id),
+            alertId: classroom.scoreAlertReplayId,
+            version: classroom.scoreAlertSyncVersion
+        });
+        return res.json({
+            ok: true,
+            replayed: true,
+            scoreAlertSyncVersion: classroom.scoreAlertSyncVersion,
+            scoreAlertReplayId: classroom.scoreAlertReplayId
         });
     } catch (e) {
         return res.status(500).json({ error: e.message });

@@ -74,6 +74,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const responseData = await response.json().catch(() => ({}));
                 sendResponse({ ok: response.ok, status: response.status, data: responseData });
             } catch (err) {
+                console.warn('[CondaWeb Bridge] proxy indisponible', { fullUrl, message: err?.message || String(err) });
                 sendResponse({ ok: false, error: err.message });
             }
         });

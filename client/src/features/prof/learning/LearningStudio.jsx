@@ -589,12 +589,22 @@ const formatGeneratedSheetBlock = (text = '', innerHtml = '', numberedIdeasPlain
             const doc = new DOMParser().parseFromString(`<div id="sheet-block">${content}</div>`, 'text/html');
             const root = doc.getElementById('sheet-block');
             if (numberedIdeasPlain) {
-                // Les mini-fiches de 5e/6e ne doivent pas récupérer le vert,
-                // le gras hiérarchique ou le soulignement du format 3e.
+                // Les mini-fiches de 5e/6e ne doivent pas récupérer le vert
+                // ni le soulignement du format 3e. Les mots-clés restent gras.
                 root?.querySelectorAll('*').forEach((element) => {
                     element.style.color = '';
                     if (!['STRONG', 'B'].includes(element.tagName)) element.style.fontWeight = '';
                     if (!['STRONG', 'B'].includes(element.tagName)) element.style.textDecoration = '';
+                });
+                root?.querySelectorAll('u').forEach((underline) => {
+                    const keyword = doc.createElement('strong');
+                    keyword.innerHTML = underline.innerHTML;
+                    underline.replaceWith(keyword);
+                });
+                root?.querySelectorAll('strong, b').forEach((keyword) => {
+                    keyword.style.color = '#111827';
+                    keyword.style.fontWeight = '700';
+                    keyword.style.textDecoration = '';
                 });
             } else {
                 root?.querySelectorAll('strong, b').forEach((keyword) => {
@@ -1052,8 +1062,8 @@ const scoreCourseForChapter = (course = {}, chapter = {}) => {
     const courseDescription = normalizeCourseMatchText(course?.description || '');
     if (!chapterText || (!courseTitle && !courseDescription)) return 0;
     let score = 0;
-    if (courseTitle.includes(chapterText) || chapterText.includes(courseTitle)) score += 120;
-    if (courseDescription.includes(chapterText) || chapterText.includes(courseDescription)) score += 100;
+    if (courseTitle.length >= 5 && chapterText.length >= 5 && (courseTitle.includes(chapterText) || chapterText.includes(courseTitle))) score += 120;
+    if (courseDescription.length >= 5 && chapterText.length >= 5 && (courseDescription.includes(chapterText) || chapterText.includes(courseDescription))) score += 100;
     const chapterTokens = [...new Set(getCourseMatchTokens(chapterText))];
     const titleTokens = new Set(getCourseMatchTokens(courseTitle));
     const descriptionTokens = new Set(getCourseMatchTokens(courseDescription));
@@ -1065,11 +1075,27 @@ const scoreCourseForChapter = (course = {}, chapter = {}) => {
 };
 
 export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, globalClassId = '', onClose, allStudents: propStudents, allClasses: propClasses }) {
-    const usesPlainNumberedIdeas = /(?:^|\D)[56](?:\s*(?:e|ème)?)(?=\D|$)/i.test(String(targetLevel || ''));
+    // targetLevel is absent for some entry points (notably a classroom such
+    // as “5D”). Resolve the level from the actual destination as well, so a
+    // 5e Superfiche can never silently receive the 3e green-heading format.
+    const resolvedLearningLevel = normalizeLearningLevel(
+        targetLevel
+        || initialData?.targetLevel
+        || (initialData?.targetClassrooms || []).map(inferLearningLevelFromClass).find(Boolean)
+        || ''
+    );
+    const usesPlainNumberedIdeas = resolvedLearningLevel === '5' || resolvedLearningLevel === '6';
     // Le contentEditable peut contenir une frappe plus récente que le dernier rendu React.
     // Ce registre synchrone garantit que « Inspecter fiche » utilise toujours ce qui est
     // réellement visible dans l'éditeur au moment du clic.
     const sheetDraftsRef = useRef(new Map());
+    // Même principe pour la Superfiche : la frappe peut précéder d'un rendu
+    // React le clic « Créer le parcours ». Cette référence évite de ventiler
+    // une version précédente de la fiche.
+    const generalSheetDraftRef = useRef({ text: '', html: '' });
+    // Les étapes déjà chargées servent uniquement à amorcer la source du
+    // module ouvert. Elles ne doivent pas contaminer un chapitre choisi après.
+    const videoSourceSeededChapterRef = useRef('');
     const [formData, setFormData] = useState(() => ({
         ...(() => {
             const sections = normalizeLoadedSections(initialData?.sections);
@@ -1159,6 +1185,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [recordingQuestionCell, setRecordingQuestionCell] = useState(null); // { rowIdx, field, zoneIdx? }
     const [testingFillBlankKey, setTestingFillBlankKey] = useState('');
     const [sourcePickerKind, setSourcePickerKind] = useState(''); // '' | 'video' | 'sheet'
+    const [sourcePickerChapterId, setSourcePickerChapterId] = useState('');
     const [sourcePickerExistingUrl, setSourcePickerExistingUrl] = useState('');
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
     const [sourcePickerVideoName, setSourcePickerVideoName] = useState('');
@@ -1172,6 +1199,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [globalSheetSourceUrl, setGlobalSheetSourceUrl] = useState('');
     const [globalVideoSourceUrl, setGlobalVideoSourceUrl] = useState('');
     const [globalVideoSourceName, setGlobalVideoSourceName] = useState('');
+    const [globalVideoSourceChapterId, setGlobalVideoSourceChapterId] = useState('');
     const [globalSlidesWarmup, setGlobalSlidesWarmup] = useState({ active: false, percent: 0, loaded: 0, total: 0, ready: false, error: '' });
     const [savedVideoSources, setSavedVideoSources] = useState([]);
     const [savingVideoSource, setSavingVideoSource] = useState(false);
@@ -1375,21 +1403,27 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     }, [availableChapters, formData.chapterId]);
 
     useEffect(() => {
+        let cancelled = false;
         const loadSavedVideoSources = async () => {
             const chapterId = String(formData.chapterId || '').trim();
             if (!teacherId || !chapterId) {
-                setSavedVideoSources([]);
+                if (!cancelled) setSavedVideoSources([]);
                 return;
             }
             try {
                 const res = await fetch(`/api/learning/video-sources?teacherId=${encodeURIComponent(teacherId)}&chapterId=${encodeURIComponent(chapterId)}`);
                 const rows = res.ok ? await res.json() : [];
-                setSavedVideoSources(Array.isArray(rows) ? rows : []);
+                // Une réponse du chapitre précédent ne doit jamais remplacer
+                // la bibliothèque du chapitre actuellement sélectionné.
+                if (!cancelled && String(formData.chapterId || '').trim() === chapterId) {
+                    setSavedVideoSources(Array.isArray(rows) ? rows : []);
+                }
             } catch (_) {
-                setSavedVideoSources([]);
+                if (!cancelled) setSavedVideoSources([]);
             }
         };
         loadSavedVideoSources();
+        return () => { cancelled = true; };
     }, [teacherId, formData.chapterId]);
     useEffect(() => {
         const steps = Array.isArray(formData.steps) ? formData.steps : [];
@@ -1397,12 +1431,17 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const firstSheetUrl = steps.find((s) => s?.type === 'sheet' && String(s?.sheetUrl || '').trim())?.sheetUrl || '';
             if (firstSheetUrl) setGlobalSheetSourceUrl(String(firstSheetUrl).trim());
         }
-        if (!globalVideoSourceUrl) {
+        const currentChapterId = String(formData.chapterId || '').trim();
+        if (!globalVideoSourceUrl && !videoSourceSeededChapterRef.current) {
             const firstVideo = steps.find((s) => s?.type === 'video' && String(s?.videoUrl || '').trim());
-            if (firstVideo?.videoUrl) setGlobalVideoSourceUrl(String(firstVideo.videoUrl).trim());
+            if (firstVideo?.videoUrl) {
+                setGlobalVideoSourceUrl(String(firstVideo.videoUrl).trim());
+                setGlobalVideoSourceChapterId(currentChapterId);
+            }
             if (firstVideo?.videoSourceName) setGlobalVideoSourceName(String(firstVideo.videoSourceName).trim());
+            videoSourceSeededChapterRef.current = currentChapterId || '__no_chapter__';
         }
-    }, [formData.steps, globalSheetSourceUrl, globalVideoSourceUrl]);
+    }, [formData.steps, formData.chapterId, globalSheetSourceUrl, globalVideoSourceUrl]);
 
     const updateStep = (idx, patch) => {
         setFormData(prev => {
@@ -1555,7 +1594,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const getCandidateVideos = () => {
         const chapterId = String(formData.chapterId || '');
         const all = [];
-        const globalUrl = String(globalVideoSourceUrl || '').trim();
+        const globalSourceMatchesChapter = !globalVideoSourceChapterId
+            || globalVideoSourceChapterId === chapterId;
+        const globalUrl = globalSourceMatchesChapter ? String(globalVideoSourceUrl || '').trim() : '';
         const globalName = String(globalVideoSourceName || '').trim();
         if (globalUrl) {
             all.push({
@@ -5188,19 +5229,28 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const generateLearningFromGeneralSheet = () => {
         const startMarker = '=== DÉBUT FICHE CONDAWEB ===';
         const endMarker = '=== FIN FICHE CONDAWEB ===';
-        const rawGeneralText = String(generalSheetText || '');
+        const currentDraft = generalSheetDraftRef.current || {};
+        const rawGeneralText = String(currentDraft.text || generalSheetText || '');
+        const currentGeneralHtml = String(currentDraft.html || generalSheetHtml || '');
         const startIndex = rawGeneralText.toUpperCase().indexOf(startMarker);
         const endIndex = rawGeneralText.toUpperCase().indexOf(endMarker);
         const importText = startIndex >= 0 && endIndex > startIndex
             ? rawGeneralText.slice(startIndex + startMarker.length, endIndex).trim()
             : rawGeneralText.trim();
-        const rawBlocks = generalSheetHtmlToBlocks(generalSheetHtml, usesPlainNumberedIdeas);
+        const rawBlocks = generalSheetHtmlToBlocks(currentGeneralHtml, usesPlainNumberedIdeas);
         const htmlStartIndex = rawBlocks.findIndex((block) => String(block?.text || '').trim().toUpperCase() === startMarker);
         const htmlEndIndex = rawBlocks.findIndex((block, index) => index > htmlStartIndex && String(block?.text || '').trim().toUpperCase() === endMarker);
         const importHtml = htmlStartIndex >= 0 && htmlEndIndex > htmlStartIndex
             ? rawBlocks.slice(htmlStartIndex + 1, htmlEndIndex).map((block) => block.html).join('')
-            : String(generalSheetHtml || '').trim();
+            : currentGeneralHtml.trim();
         const parsed = splitGeneralSheetIntoParts(importText, importHtml, usesPlainNumberedIdeas);
+        console.info('[CondaWeb Superfiche] ventilation', {
+            chapterId: String(formData.chapterId || ''),
+            level: resolvedLearningLevel || 'non défini',
+            numberedIdeasPlain: usesPlainNumberedIdeas,
+            characters: importText.length,
+            parts: parsed.parts.map((part) => part.title)
+        });
         if (!parsed.parts.length) {
             alert('Aucune grande partie détectée. Utilise des titres comme « 1. Titre », « 2. Titre » ou « I. Titre », « II. Titre ».');
             return;
@@ -5374,6 +5424,12 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setFormData((prev) => ({ ...prev, sections, steps: orderedSteps }));
         setActiveStep(0);
         setShowGeneralSheetBuilder(false);
+        if (formData._id) {
+            api.post(`/learning/${formData._id}/sync-scenes`).catch(() => {});
+        }
+        if (formData.generalSheetCourseId) {
+            api.post(`/learning/sync-by-course/${formData.generalSheetCourseId}`).catch(() => {});
+        }
     };
 
     const getGeneralSheetMaster = () => (Array.isArray(formData.steps) ? formData.steps : [])
@@ -5381,8 +5437,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const openGeneralSheetBuilder = () => {
         const master = getGeneralSheetMaster();
-        setGeneralSheetText(String(master?.sheetText || ''));
-        setGeneralSheetHtml(String(master?.sheetTextHtml || ''));
+        const text = String(master?.sheetText || '');
+        const html = String(master?.sheetTextHtml || '');
+        generalSheetDraftRef.current = { text, html };
+        setGeneralSheetText(text);
+        setGeneralSheetHtml(html);
         setGeneralSheetMedia(master?.sheetMediaUrl ? {
             url: master.sheetMediaUrl,
             name: master.sheetMediaName,
@@ -5403,6 +5462,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         });
         setGeneralSheetText('');
         setGeneralSheetHtml('');
+        generalSheetDraftRef.current = { text: '', html: '' };
         setGlobalSheetSourceUrl('');
         setActiveStep(0);
         setShowGeneralSheetBuilder(false);
@@ -5754,7 +5814,9 @@ VÉRIFICATION AVANT DE RÉPONDRE
             .find((s) => s?.type === 'video' && String(s?.videoUrl || '').trim());
         const inferredVideo = String(inferredVideoRow?.videoUrl || '').trim();
         const inferredVideoName = String(inferredVideoRow?.videoSourceName || '').trim();
+        const chapterId = String(formData.chapterId || '').trim();
         setSourcePickerKind(k);
+        setSourcePickerChapterId(chapterId);
         if (k === 'sheet') {
             const globalUrl = String(globalSheetSourceUrl || inferredSheet || '').trim();
             setSourcePickerExistingUrl(globalUrl);
@@ -5762,18 +5824,24 @@ VÉRIFICATION AVANT DE RÉPONDRE
             setSourcePickerVideoName('');
             return;
         }
-        const globalUrl = String(globalVideoSourceUrl || inferredVideo || '').trim();
+        const globalMatchesChapter = !globalVideoSourceChapterId || globalVideoSourceChapterId === chapterId;
+        const globalUrl = String((globalMatchesChapter ? globalVideoSourceUrl : '') || inferredVideo || '').trim();
         setSourcePickerExistingUrl(globalUrl);
         setSourcePickerCustomUrl(globalUrl);
         setSourcePickerVideoName(String(globalVideoSourceName || inferredVideoName || '').trim());
     };
     const closeSourcePicker = () => {
         setSourcePickerKind('');
+        setSourcePickerChapterId('');
         setSourcePickerExistingUrl('');
         setSourcePickerCustomUrl('');
         setSourcePickerVideoName('');
     };
     const openGeneralVideoEditor = async () => {
+        if (sourcePickerChapterId && sourcePickerChapterId !== String(formData.chapterId || '').trim()) {
+            alert('Le chapitre a changé : rouvre le sélecteur vidéo pour choisir une source de ce chapitre.');
+            return;
+        }
         const url = String(sourcePickerCustomUrl || sourcePickerExistingUrl || '').trim();
         if (!url) return alert("Ajoute ou choisis une URL vidéo.");
         const videoName = String(sourcePickerVideoName || '').trim();
@@ -5802,6 +5870,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
         }
         setGlobalVideoSourceUrl(url);
         setGlobalVideoSourceName(videoName);
+        setGlobalVideoSourceChapterId(String(formData.chapterId || '').trim());
         closeSourcePicker();
         setActiveStep(Math.max(0, targetIndex));
         setPendingVideoEditorStepId(targetId);
@@ -5816,9 +5885,15 @@ VÉRIFICATION AVANT DE RÉPONDRE
         }
         const videoName = String(sourcePickerVideoName || '').trim();
 
+        if (kind === 'video' && sourcePickerChapterId && sourcePickerChapterId !== String(formData.chapterId || '').trim()) {
+            alert('Le chapitre a changé : rouvre le sélecteur vidéo pour choisir une source de ce chapitre.');
+            return;
+        }
+
         if (kind === 'video') {
             setGlobalVideoSourceUrl(url);
             setGlobalVideoSourceName(videoName);
+            setGlobalVideoSourceChapterId(String(formData.chapterId || '').trim());
             const segments = await refreshKnownSegments(url, '');
             const existingVideo = (formData.steps || []).find((row) => row?.type === 'video' && (
                 String(row?.videoUrl || '').trim() === url || String(row?.segmentSourceUrl || '').trim() === url
@@ -6018,7 +6093,14 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     sections: formData.sections || [],
                     steps: synchronizedSteps
                 };
-                await api.post('/learning', payload);
+                const saveRes = await api.post('/learning', payload);
+                const savedId = saveRes?.data?._id || (formData._id && i === 0 ? formData._id : null);
+                if (savedId) {
+                    await api.post(`/learning/${savedId}/sync-scenes`).catch(() => {});
+                }
+                if (payload.generalSheetCourseId) {
+                    await api.post(`/learning/sync-by-course/${payload.generalSheetCourseId}`).catch(() => {});
+                }
             }
             onClose();
         } catch (e) {
@@ -6300,6 +6382,13 @@ VÉRIFICATION AVANT DE RÉPONDRE
                         value={formData.chapterId}
                         onChange={(e) => {
                             const ch = (chapters || []).find(x => String(x._id) === String(e.target.value));
+                            // Une vidéo d'un ancien chapitre ne doit jamais être
+                            // proposée ni copiée dans le chapitre nouvellement choisi.
+                            setGlobalVideoSourceUrl('');
+                            setGlobalVideoSourceName('');
+                            setGlobalVideoSourceChapterId('');
+                            setSavedVideoSources([]);
+                            closeSourcePicker();
                             setFormData(prev => ({ ...prev, chapterId: e.target.value, subject: ch?.section || prev.subject }));
                         }}
                     >
@@ -6528,6 +6617,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                 plainText={generalSheetText}
                                 numberedIdeasPlain={usesPlainNumberedIdeas}
                                 onChange={({ html, text }) => {
+                                    generalSheetDraftRef.current = { html, text };
                                     setGeneralSheetHtml(html);
                                     setGeneralSheetText(text);
                                 }}

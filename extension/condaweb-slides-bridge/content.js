@@ -1,11 +1,15 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    if (window.__CONDA_BRIDGE_ACTIVE__) {
+    const BRIDGE_VERSION = '1.0.6';
+    // Older bridge versions stored `true` here.  Do not let that old marker
+    // block an upgraded content script: it must replace the old click handler
+    // without requiring the teacher to hunt for an extension reload.
+    if (window.__CONDA_BRIDGE_ACTIVE__ === BRIDGE_VERSION) {
         console.log('[CondaWeb Bridge] Déjà actif sur cette page Google Slides.');
         return;
     }
-    window.__CONDA_BRIDGE_ACTIVE__ = true;
+    window.__CONDA_BRIDGE_ACTIVE__ = BRIDGE_VERSION;
 
     console.log('[CondaWeb Bridge] 🚀 Initialisation dans Google Slides...');
 
@@ -18,10 +22,14 @@
     let lastHandledPauseVersion = 0;
     let overlayRoot = null;
     const displayedAlertIds = new Set();
+    const replayableAlertIds = new Set();
+    let lastScoreAlertSyncVersion = 0;
+    let scoreAlertSyncVersionKnown = false;
 
     let currentClassroomState = null;
     let currentRemoteState = null;
     let syncInFlight = false;
+    let manualConnectInFlight = false;
     let consecutiveSyncFailures = 0;
     let hasSuccessfulClassSync = false;
 
@@ -156,7 +164,7 @@
     }
 
     // Auto-connexion intelligente : relie automatiquement le diaporama Google au bon cours CondaWeb
-    async function autoConnectPresentation() {
+    async function autoConnectPresentation({ replaceClass = false } = {}) {
         const { presentationId, title, slideObjectId } = getSlideInfo();
         if (!presentationId && !title) return;
 
@@ -167,15 +175,19 @@
                     presentationId,
                     title,
                     slideIndex: 0,
-                    classHint: activeClassId
+                    // A manual reconnect must not keep a stale class stored
+                    // in the extension as the source of truth.
+                    classHint: replaceClass ? '' : activeClassId
                 }
             });
             if (data?.ok && data.courseId) {
                 currentCourseId = data.courseId;
                 currentCourseTitle = data.title || title;
-                // La classe choisie explicitement dans la popup reste prioritaire.
-                if (!activeClassId && data.classId) activeClassId = data.classId;
-                if (!activeClassName && data.className) activeClassName = data.className;
+                if ((replaceClass || !activeClassId) && data.classId) activeClassId = String(data.classId);
+                if ((replaceClass || !activeClassName) && data.className) activeClassName = String(data.className);
+                if (replaceClass && activeClassId && chrome?.storage?.local) {
+                    chrome.storage.local.set({ activeClassId, activeClassName });
+                }
                 isConnected = true;
                 hasAutoConnected = true;
 
@@ -196,6 +208,47 @@
             }
         } catch (e) {
             console.warn('[CondaWeb Bridge] Auto-connect en attente…', e.message);
+        }
+    }
+
+    // This is the explicit action behind the badge.  It does not wait for the
+    // background poll: it reconnects the presentation, verifies the class and
+    // sends the current Google slide to the phone immediately.
+    async function connectAndSynchronizeNow() {
+        if (manualConnectInFlight) return;
+        manualConnectInFlight = true;
+        renderBadge(false, 'Connexion et synchronisation…');
+        console.info('[CondaWeb Bridge] synchronisation manuelle demandée');
+        try {
+            await autoConnectPresentation({ replaceClass: true });
+            if (!activeClassId) throw new Error('Aucune classe associée à cette présentation');
+
+            const classData = await callCondaApi(`/api/classroom/bridge-state/${activeClassId}?manual=${Date.now()}`);
+            currentClassroomState = classData;
+            const remoteData = await callCondaApi(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(activeClassId)}&manual=${Date.now()}`);
+            currentRemoteState = remoteData;
+            currentCourseId = String(remoteData?.courseId || currentCourseId || '');
+            currentCourseTitle = String(remoteData?.title || currentCourseTitle || '');
+
+            const { slideObjectId } = getSlideInfo();
+            if (currentCourseId && slideObjectId) {
+                await callCondaApi(`/api/courses/${currentCourseId}/presentation-remote/sync`, {
+                    method: 'POST', body: { slideObjectId }
+                });
+            }
+            isConnected = true;
+            hasSuccessfulClassSync = true;
+            consecutiveSyncFailures = 0;
+            renderAllOverlays();
+            console.info('[CondaWeb Bridge] synchronisation manuelle terminée', { activeClassId, currentCourseId, slideObjectId });
+        } catch (error) {
+            isConnected = false;
+            console.error('[CondaWeb Bridge] synchronisation manuelle impossible', {
+                message: error?.message || String(error), activeClassId, currentCourseId
+            });
+            renderBadge(false, 'Connexion impossible — clique pour réessayer');
+        } finally {
+            manualConnectInFlight = false;
         }
     }
 
@@ -319,6 +372,21 @@
         try {
             // Récupère l'état de la classe (alertes élèves, avertissements)
             const classData = await callCondaApi(`/api/classroom/bridge-state/${activeClassId}?live=${Date.now()}`);
+            const scoreAlertSyncVersion = Number(classData?.scoreAlertSyncVersion || 0);
+            const replayId = String(classData?.scoreAlertReplayId || '');
+            if (!scoreAlertSyncVersionKnown) {
+                lastScoreAlertSyncVersion = scoreAlertSyncVersion;
+                scoreAlertSyncVersionKnown = true;
+            } else if (scoreAlertSyncVersion > lastScoreAlertSyncVersion) {
+                // Later versions are explicit teacher requests and must replay
+                // even if this alert was already rendered before.
+                if (replayId) {
+                    displayedAlertIds.delete(replayId);
+                    replayableAlertIds.add(replayId);
+                    console.info('[CondaWeb Bridge notes] rediffusion demandée', { replayId, scoreAlertSyncVersion });
+                }
+                lastScoreAlertSyncVersion = scoreAlertSyncVersion;
+            }
             currentClassroomState = classData;
             isConnected = true;
             hasSuccessfulClassSync = true;
@@ -396,15 +464,6 @@
             root.appendChild(badge);
             console.log('[CondaWeb Bridge] ✅ Badge affiché à l\'écran (bas-droite).');
 
-            badge.onclick = () => {
-                const newClass = prompt("ID de la classe CondaWeb active :", activeClassId);
-                if (newClass) {
-                    activeClassId = newClass.trim();
-                    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-                        chrome.storage.local.set({ activeClassId });
-                    }
-                }
-            };
         } else {
             const dot = badge.querySelector('.conda-bridge-dot');
             if (dot) {
@@ -416,6 +475,9 @@
                 label.textContent = `⚡ ${text}`;
             }
         }
+        // Set this on every render.  This deliberately overwrites the prompt
+        // handler left by old bridge versions already present in the tab.
+        badge.onclick = () => { void connectAndSynchronizeNow(); };
     }
 
     // Alertes élèves (sans innerHTML)
@@ -443,8 +505,13 @@
         alerts.forEach((alert, index) => {
             const createdAt = new Date(alert?.createdAt || 0).getTime();
             const alertId = String(alert?.id || `${createdAt}-${alert?.message || index}`);
-            if (displayedAlertIds.has(alertId) || !createdAt || now - createdAt > 5000) return;
+            // A bridge poll can be delayed by Google Slides or by a slow
+            // connection.  Five seconds made alerts disappear before their
+            // first render.  Keep score changes readable for thirty seconds.
+            const isExplicitReplay = replayableAlertIds.has(alertId);
+            if (displayedAlertIds.has(alertId) || !createdAt || (!isExplicitReplay && Math.abs(now - createdAt) > 30000)) return;
             displayedAlertIds.add(alertId);
+            replayableAlertIds.delete(alertId);
             const isNegative = alert.type === 'negative' || /(?:−|-|–)0[,\.]5/.test(String(alert.message || ''));
             const isWarning = !isNegative && (alert.isPenalty || ['warning', 'highlight'].includes(alert.type) || (alert.message && alert.message.toLowerCase().includes('avertissement')));
             const toast = document.createElement('div');
@@ -758,7 +825,10 @@
 
     // Lancement immédiat et écoute des états
     init();
-    setInterval(syncWithCondaWeb, 800);
+    // Two requests are made per cycle.  A 800 ms timer made those requests
+    // pile up on a real classroom connection; the manual badge remains
+    // instant and score alerts now persist long enough for this 2s heartbeat.
+    setInterval(syncWithCondaWeb, 2000);
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

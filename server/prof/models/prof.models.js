@@ -189,6 +189,10 @@ const Models = {
         activeStudentBonusAlert: { type: String, default: null },
         activeStudentBonusAlertTime: { type: Date, default: null },
         activeScoreAlerts: { type: Array, default: [] },
+        // Incremented when the teacher explicitly asks the Google Slides
+        // bridge to replay the latest score variation on the board.
+        scoreAlertSyncVersion: { type: Number, default: 0 },
+        scoreAlertReplayId: { type: String, default: '' },
         activeHourWarnings: { type: Array, default: [] },
         classPlanVisible: { type: Boolean, default: false }
     }),

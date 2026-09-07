@@ -197,6 +197,18 @@ const serializePlainText = (root) => {
 const applySheetHeadingColors = (root, numberedIdeasPlain = false) => {
   if (!root) return false;
   const blockTags = new Set(['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+  const convertUnderlinesToKeywords = (line) => {
+    let changed = false;
+    // In the lightweight 5e/6e layout, underline is not a hierarchy marker.
+    // Preserve its pedagogical meaning as a black bold keyword instead.
+    line.querySelectorAll('u').forEach((underline) => {
+      const strong = document.createElement('strong');
+      strong.innerHTML = underline.innerHTML;
+      underline.replaceWith(strong);
+      changed = true;
+    });
+    return changed;
+  };
   const styleLine = (line) => {
     const text = String(line.textContent || '').replace(/\u00a0/g, ' ').trim();
     if (/^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(text)) {
@@ -211,8 +223,12 @@ const applySheetHeadingColors = (root, numberedIdeasPlain = false) => {
         // internes gardent naturellement le rôle de mots-clés.
         line.style.color = '#111827';
         line.style.fontWeight = '400';
+        line.removeAttribute('color');
+        convertUnderlinesToKeywords(line);
         line.querySelectorAll('strong, b').forEach((keyword) => {
           keyword.style.textDecoration = '';
+          keyword.style.color = '#111827';
+          keyword.style.fontWeight = '700';
         });
         return true;
       }
@@ -275,7 +291,16 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
   useEffect(() => {
     if (!editorRef.current || editorRef.current.innerHTML === displayedHtml) return;
     editorRef.current.innerHTML = displayedHtml;
-  }, [displayedHtml]);
+    if (!numberedIdeasPlain) return;
+    const before = editorRef.current.innerHTML;
+    applySheetHeadingColors(editorRef.current, true);
+    const normalizedHtml = editorRef.current.innerHTML;
+    // Persist the correction immediately: a newly generated Superfiche must
+    // not become green again after reopening it.
+    if (normalizedHtml !== before) {
+      onChange({ html: normalizedHtml, text: serializePlainText(editorRef.current) });
+    }
+  }, [displayedHtml, numberedIdeasPlain, onChange]);
 
   const emitChange = () => {
     if (!editorRef.current) return;

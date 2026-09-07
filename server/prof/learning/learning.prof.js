@@ -271,81 +271,289 @@ const slideNumbersFromFocus = (value = '') => {
     return [...results].sort((a, b) => a - b);
 };
 
+const extractPresentationId = (url = '') => {
+    const match = String(url || '').match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : '';
+};
+
+const normalizeCourseTokens = (str = '') => String(str || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b1ere?\b/g, 'premiere')
+    .replace(/\b2nde?\b/g, 'seconde')
+    .replace(/\b3eme?\b/g, 'troisieme')
+    .replace(/\bgm\b/g, 'guerre mondiale')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !['cours', 'chapitre', 'sequence', 'partie', 'fiche', 'lecon', 'h1', 'h2', 'h3', 'h4', 'g1', 'g2', 'g3', 'g4'].includes(t));
+
+const findCoursesForLearningModule = async (module = {}) => {
+    // 1. Match direct par ID de cours enregistré
+    const courseId = String(module?.generalSheetCourseId || '').trim();
+    if (courseId && mongoose.Types.ObjectId.isValid(courseId)) {
+        const direct = await Course.findById(courseId);
+        if (direct) {
+            const children = await Course.find({ sourceCourseId: String(direct._id) });
+            if (children.length > 0) {
+                const chapter = module?.chapterId && mongoose.Types.ObjectId.isValid(module.chapterId)
+                    ? await Chapter.findById(module.chapterId).select('title').lean()
+                    : null;
+                const modTokens = new Set([
+                    ...normalizeCourseTokens(module?.title),
+                    ...normalizeCourseTokens(module?.generalSheetCourseTitle),
+                    ...normalizeCourseTokens(chapter?.title)
+                ]);
+                const matchingChild = children.find((c) => {
+                    const cTokens = normalizeCourseTokens(c.title);
+                    return cTokens.filter((t) => modTokens.has(t)).length >= 1;
+                });
+                if (matchingChild) return [matchingChild];
+                return children;
+            }
+            return [direct];
+        }
+    }
+
+    // 2. Match par URL de présentation Google Slides
+    const presUrl = String(module?.presentationUrl || '').trim();
+    const sourcePresUrl = String(module?.presentationSourceUrl || '').trim();
+    const presId = extractPresentationId(presUrl) || extractPresentationId(sourcePresUrl);
+    if (presId) {
+        const byUrl = await Course.find({ slidesUrl: new RegExp(presId, 'i') });
+        if (byUrl.length > 0) return byUrl;
+    }
+
+    // 3. Match par chapitre lié
+    if (module?.chapterId && mongoose.Types.ObjectId.isValid(module.chapterId)) {
+        const byChapter = await Course.find({ chapterId: module.chapterId });
+        if (byChapter.length > 0) return byChapter;
+    }
+
+    // 4. Match sémantique par mots-clés du titre et du chapitre
+    const chapter = module?.chapterId && mongoose.Types.ObjectId.isValid(module.chapterId)
+        ? await Chapter.findById(module.chapterId).select('title').lean()
+        : null;
+
+    const modTokens = new Set([
+        ...normalizeCourseTokens(module?.title),
+        ...normalizeCourseTokens(module?.generalSheetCourseTitle),
+        ...normalizeCourseTokens(chapter?.title)
+    ]);
+
+    if (modTokens.size >= 1) {
+        const allCourses = await Course.find({}).select('_id title slidesUrl chapterId sourceCourseId').lean();
+        const scored = allCourses.map((c) => {
+            const cTokens = normalizeCourseTokens(c.title);
+            const matches = cTokens.filter((t) => modTokens.has(t));
+            return { course: c, score: matches.length };
+        }).filter((item) => item.score >= 2).sort((a, b) => b.score - a.score);
+
+        if (scored.length > 0) {
+            const bestScore = scored[0].score;
+            const matchedCourses = scored.filter((item) => item.score >= bestScore).map((item) => item.course);
+            const ids = matchedCourses.map((c) => c._id);
+            return await Course.find({ _id: { $in: ids } });
+        }
+    }
+
+    return [];
+};
+
 // Publishing an apprentissage makes its media immediately usable in the
 // course player. Auto scenes are always appended after teacher-created scenes
 // and are replaced on later publications (never duplicated).
 const syncLearningMediaToCourse = async (module = {}) => {
-    const courseId = String(module?.generalSheetCourseId || '').trim();
-    if (!courseId) return { synced: false, reason: 'no-course' };
-    const course = await Course.findById(courseId);
-    if (!course) return { synced: false, reason: 'course-not-found' };
+    const targetCourses = await findCoursesForLearningModule(module);
+    if (!targetCourses || targetCourses.length === 0) {
+        return { synced: false, reason: 'course-not-found' };
+    }
 
     const steps = Array.isArray(module?.steps) ? module.steps : [];
+
+    // 1. Extraire la musique / chansons
     const sheetMedia = steps.flatMap((step, stepIndex) => Array.isArray(step?.sheetMediaItems) && step.sheetMediaItems.length
         ? step.sheetMediaItems
         : (step?.sheetMediaUrl ? [{
             id: `${step?.id || 'sheet'}_${stepIndex}`, url: step.sheetMediaUrl, name: step.sheetMediaName,
             type: step.sheetMediaType, startSec: step.sheetMediaStartSec, endSec: step.sheetMediaEndSec
         }] : []));
-    const videoSteps = steps.filter((step) => String(step?.videoUrl || '').trim());
-    const notebookBase = [
-        ...sheetMedia.filter((media) => !isAudioLearningMedia(media)),
-        ...videoSteps.map((step) => ({ id: step.id, url: step.videoUrl, name: step.videoSourceName || step.title, type: step.mimeType, startSec: step.startSec, endSec: step.endSec }))
-    ].map(presentationSequenceFromMedia);
-    const music = uniquePresentationSequences(sheetMedia.filter(isAudioLearningMedia).map(presentationSequenceFromMedia));
+    const rawAudioItems = sheetMedia.filter(isAudioLearningMedia);
+    const music = uniquePresentationSequences(rawAudioItems.map((media, index) => {
+        const base = presentationSequenceFromMedia(media, index);
+        return {
+            ...base,
+            name: media.name || `Chanson ${index + 1}`
+        };
+    }));
 
-    const teacherId = String(module?.teacherId || '').trim();
-    const sourceUrls = [...new Set(videoSteps.map((step) => normalizeVideoUrl(step.videoUrl)).filter(Boolean))];
-    const segments = teacherId && sourceUrls.length
-        ? await VideoSegment.find({ teacherId, normalizedUrl: { $in: sourceUrls } }).lean()
-        : [];
+    // 2. Extraire les vidéos et leurs séquences / découpages
+    const videoSteps = steps.filter((step) => String(step?.videoUrl || '').trim());
+    const cleanUrl = (url = '') => String(url || '').replace(/[&?]t=\d+s?/g, '').trim();
+
+    const rawUrls = videoSteps.map((s) => cleanUrl(s.videoUrl)).filter(Boolean);
+    const normalizedUrls = [...new Set(videoSteps.map((s) => normalizeVideoUrl(s.videoUrl)).filter(Boolean))];
+    const lookupUrls = [...new Set([...rawUrls, ...normalizedUrls])];
+
+    let segments = [];
+    if (lookupUrls.length > 0) {
+        const teacherId = String(module?.teacherId || '').trim();
+        const query = {
+            $or: [
+                { normalizedUrl: { $in: lookupUrls } },
+                { originalUrl: { $in: lookupUrls } }
+            ]
+        };
+        if (teacherId && mongoose.Types.ObjectId.isValid(teacherId)) {
+            query.teacherId = teacherId;
+            segments = await VideoSegment.find(query).lean();
+        }
+        if (!segments.length) {
+            delete query.teacherId;
+            segments = await VideoSegment.find(query).lean();
+        }
+    }
+
     const cutsByUrl = new Map();
     segments.sort(timelineSegmentCompare).forEach((segment) => {
-        const key = String(segment?.normalizedUrl || '');
-        if (!cutsByUrl.has(key)) cutsByUrl.set(key, []);
-        cutsByUrl.get(key).push(segment);
+        const keys = [
+            cleanUrl(segment?.normalizedUrl),
+            cleanUrl(segment?.originalUrl),
+            normalizeVideoUrl(segment?.normalizedUrl),
+            normalizeVideoUrl(segment?.originalUrl)
+        ].filter(Boolean);
+        keys.forEach((key) => {
+            if (!cutsByUrl.has(key)) cutsByUrl.set(key, []);
+            if (!cutsByUrl.get(key).some((s) => String(s._id) === String(segment._id))) {
+                cutsByUrl.get(key).push(segment);
+            }
+        });
     });
-    const notebook = uniquePresentationSequences(videoSteps.flatMap((step, stepIndex) => {
-        const cuts = cutsByUrl.get(normalizeVideoUrl(step.videoUrl)) || [];
-        if (!cuts.length) return [presentationSequenceFromMedia({ id: step.id, url: step.videoUrl, name: step.videoSourceName || step.title, type: step.mimeType, startSec: step.startSec, endSec: step.endSec }, stepIndex)];
-        return cuts.map((cut, cutIndex) => presentationSequenceFromMedia({
-            id: `learning_cut_${cut?._id || `${step.id}_${cutIndex}`}`,
-            url: step.videoUrl,
-            name: cut?.label || step.videoSourceName || step.title,
-            type: step.mimeType,
-            startSec: cut.startSec,
-            endSec: cut.endSec
-        }, cutIndex));
-    }).concat(notebookBase.filter((row) => !videoSteps.some((step) => String(step.videoUrl || '').trim() === String(row.url || '').trim()))));
 
-    const requestedSlides = slideNumbersFromFocus(module?.presentationSlidesFocus);
-    const targetSlides = requestedSlides.length ? requestedSlides : [1];
-    const existing = Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [];
-    const byNumber = new Map(existing.map((slide) => [Number(slide?.slideNumber || 1), slide]));
-    const moduleKey = String(module?._id || 'learning');
-    targetSlides.forEach((slideNumber) => {
-        const current = byNumber.get(slideNumber) || { slideNumber, scenes: [] };
-        const manualScenes = (Array.isArray(current.scenes) ? current.scenes : []).filter((scene) => (
-            String(scene?.learningModuleId || '') !== moduleKey
-            && !['scenenotebooklm', 'scenemusique'].includes(String(scene?.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
-        ));
-        const autoScenes = [
-            { id: `learning_${moduleKey}_notebook_${slideNumber}`, learningModuleId: moduleKey, name: 'Scène NotebookLM', sequences: notebook },
-            { id: `learning_${moduleKey}_music_${slideNumber}`, learningModuleId: moduleKey, name: 'Scène Musique', sequences: music }
-        ];
-        byNumber.set(slideNumber, { ...current, slideNumber, scenes: [...manualScenes, ...autoScenes] });
+    const processedVideoUrls = new Set();
+    const notebookSequences = [];
+    videoSteps.forEach((step) => {
+        const stepClean = cleanUrl(step.videoUrl);
+        const stepNorm = normalizeVideoUrl(step.videoUrl);
+        const urlKey = stepClean || stepNorm;
+        if (!urlKey || processedVideoUrls.has(urlKey)) return;
+        processedVideoUrls.add(urlKey);
+
+        const cuts = cutsByUrl.get(stepClean) || cutsByUrl.get(stepNorm) || [];
+        cuts.sort((a, b) => Number(a.startSec || 0) - Number(b.startSec || 0));
+
+        if (cuts.length > 0) {
+            cuts.forEach((cut, cutIndex) => {
+                notebookSequences.push(presentationSequenceFromMedia({
+                    id: `learning_cut_${cut?._id || `${step.id}_${cutIndex + 1}`}`,
+                    url: step.videoUrl,
+                    name: cut?.label && !/^S[ée]quence\s*0$/i.test(cut.label)
+                        ? cut.label
+                        : `Séquence ${notebookSequences.length + 1}`,
+                    type: step.mimeType,
+                    startSec: Math.max(0, Number(cut.startSec || 0)),
+                    endSec: Math.max(0, Number(cut.endSec || 0))
+                }, notebookSequences.length));
+            });
+        } else {
+            // Règle : si juste vidéo sans séquence, toute la vidéo devient Séquence 1
+            const startSec = Math.max(0, Number(step.startSec || 0));
+            const endSec = Math.max(0, Number(step.endSec || 0));
+            notebookSequences.push(presentationSequenceFromMedia({
+                id: step.id || `learning_video_${notebookSequences.length + 1}`,
+                url: step.videoUrl,
+                name: step.videoSourceName || step.title || `Séquence ${notebookSequences.length + 1}`,
+                type: step.mimeType,
+                startSec,
+                endSec
+            }, notebookSequences.length));
+        }
     });
-    const slides = [...byNumber.values()].sort((a, b) => Number(a.slideNumber) - Number(b.slideNumber));
-    course.presentationVideoSlides = slides;
-    const first = slides.find((slide) => Number(slide.slideNumber) === targetSlides[0]) || slides[0] || { scenes: [] };
-    course.presentationVideoScenes = first.scenes || [];
-    course.presentationVideoSequences = (first.scenes || []).flatMap((scene) => scene.sequences || []);
-    course.markModified('presentationVideoSlides');
-    course.markModified('presentationVideoScenes');
-    course.markModified('presentationVideoSequences');
-    await course.save();
-    console.info('[CondaWeb apprentissage → scènes]', { moduleId: moduleKey, courseId, slides: targetSlides, notebook: notebook.length, music: music.length });
-    return { synced: true, courseId, slides: targetSlides, notebook: notebook.length, music: music.length };
+
+    // Ajouter les vidéos éventuelles dans sheetMediaItems absentes de videoSteps
+    sheetMedia.filter((m) => !isAudioLearningMedia(m)).forEach((media) => {
+        if (!videoSteps.some((v) => cleanUrl(v.videoUrl) === cleanUrl(media.url))) {
+            notebookSequences.push(presentationSequenceFromMedia(media, notebookSequences.length));
+        }
+    });
+
+    const notebook = uniquePresentationSequences(notebookSequences);
+    const moduleKey = String(module?._id || 'learning');
+    const requestedSlides = slideNumbersFromFocus(module?.presentationSlidesFocus);
+
+    const syncedCourses = [];
+    for (const targetCourse of targetCourses) {
+        const totalSlides = Math.max(1, targetCourse.nativeSlides?.length || targetCourse.sourceSlideCount || (targetCourse.presentationVideoSlides || []).length || 30);
+        const targetSlides = requestedSlides.length ? requestedSlides : Array.from({ length: totalSlides }, (_, i) => i + 1);
+
+        const existing = Array.isArray(targetCourse.presentationVideoSlides) ? targetCourse.presentationVideoSlides : [];
+        const byNumber = new Map(existing.map((slide) => [Number(slide?.slideNumber || 1), slide]));
+
+        targetSlides.forEach((slideNumber) => {
+            const current = byNumber.get(slideNumber) || { slideNumber, scenes: [] };
+            const manualScenes = (Array.isArray(current.scenes) ? current.scenes : []).filter((scene) => (
+                String(scene?.learningModuleId || '') !== moduleKey
+            ));
+            const autoScenes = [];
+            if (Array.isArray(notebook) && notebook.length > 0) {
+                autoScenes.push({
+                    id: `learning_${moduleKey}_notebook_${slideNumber}`,
+                    learningModuleId: moduleKey,
+                    name: 'Scène NotebookLM',
+                    sequences: notebook
+                });
+            }
+            if (Array.isArray(music) && music.length > 0) {
+                autoScenes.push({
+                    id: `learning_${moduleKey}_music_${slideNumber}`,
+                    learningModuleId: moduleKey,
+                    name: 'Scène Musique',
+                    sequences: music
+                });
+            }
+            const nextScenes = [...manualScenes, ...autoScenes];
+            if (nextScenes.length > 0) {
+                byNumber.set(slideNumber, { ...current, slideNumber, scenes: nextScenes });
+            } else {
+                byNumber.delete(slideNumber);
+            }
+        });
+
+        const slides = [...byNumber.values()].sort((a, b) => Number(a.slideNumber) - Number(b.slideNumber));
+        const first = slides.find((slide) => Number(slide.slideNumber) === targetSlides[0]) || slides[0] || { scenes: [] };
+        const scenes = first.scenes || [];
+        const sequences = scenes.flatMap((scene) => scene.sequences || []);
+        await Course.findByIdAndUpdate(targetCourse._id, {
+            $set: {
+                presentationVideoSlides: slides,
+                presentationVideoScenes: scenes,
+                presentationVideoSequences: sequences
+            }
+        });
+        syncedCourses.push(String(targetCourse._id));
+        console.info('[CondaWeb apprentissage → scènes] synchronisé', {
+            courseId: String(targetCourse._id),
+            courseTitle: targetCourse.title,
+            slidesCount: slides.length,
+            notebookSequences: notebook.length,
+            musicSequences: music.length
+        });
+    }
+
+    // Sauvegarder la liaison sur le module s'il n'était pas associé
+    if (module?._id && targetCourses[0] && String(module.generalSheetCourseId || '') !== String(targetCourses[0]._id)) {
+        await LearningModule.findByIdAndUpdate(module._id, {
+            generalSheetCourseId: String(targetCourses[0]._id),
+            generalSheetCourseTitle: targetCourses[0].title
+        }).catch(() => {});
+    }
+
+    return {
+        synced: true,
+        syncedCourses,
+        slides: requestedSlides.length ? requestedSlides : 'all',
+        notebook: notebook.length,
+        music: music.length
+    };
 };
 
 const resequenceVideoSegments = async (teacherId = '', normalizedUrl = '', stepId = '') => {
@@ -1885,13 +2093,75 @@ router.post('/media/upload', learningMediaUpload.single('file'), async (req, res
     }
 });
 
-router.delete('/:id', async (req, res) => {
+router.post('/:id/sync-scenes', async (req, res) => {
     try {
-        await LearningModule.findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
+        const module = await LearningModule.findById(req.params.id);
+        if (!module) return res.status(404).json({ error: 'Apprentissage introuvable' });
+        const result = await syncLearningMediaToCourse(module);
+        res.json({ ok: true, result });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/sync-by-course/:courseId', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.courseId);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+
+        const allModules = await LearningModule.find({});
+        let targetModule = allModules.find((m) => String(m.generalSheetCourseId || '') === String(course._id));
+        if (!targetModule && course.chapterId) {
+            targetModule = allModules.find((m) => String(m.chapterId || '') === String(course.chapterId));
+        }
+        if (!targetModule && course.slidesUrl) {
+            const presId = extractPresentationId(course.slidesUrl);
+            if (presId) {
+                targetModule = allModules.find((m) => extractPresentationId(m.presentationUrl) === presId || extractPresentationId(m.presentationSourceUrl) === presId);
+            }
+        }
+        if (!targetModule) {
+            const cTokens = normalizeCourseTokens(course.title);
+            let bestScore = 0;
+            for (const m of allModules) {
+                const modTokens = new Set([
+                    ...normalizeCourseTokens(m.title),
+                    ...normalizeCourseTokens(m.generalSheetCourseTitle)
+                ]);
+                const score = cTokens.filter((t) => modTokens.has(t)).length;
+                if (score > bestScore && score >= 2) {
+                    bestScore = score;
+                    targetModule = m;
+                }
+            }
+        }
+
+        if (!targetModule) {
+            return res.json({ ok: false, reason: 'no-matching-superfiche' });
+        }
+
+        const result = await syncLearningMediaToCourse(targetModule);
+        const updatedCourse = await Course.findById(course._id);
+        res.json({ ok: true, result, course: updatedCourse });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/sync-all-scenes', async (_req, res) => {
+    try {
+        const modules = await LearningModule.find({});
+        const results = [];
+        for (const m of modules) {
+            const r = await syncLearningMediaToCourse(m);
+            results.push({ moduleId: m._id, title: m.title, ...r });
+        }
+        res.json({ ok: true, count: results.length, results });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
 module.exports = router;
+// Exposé uniquement pour le test d'intégration de la fusion des scènes.
+module.exports.__testables = { syncLearningMediaToCourse };

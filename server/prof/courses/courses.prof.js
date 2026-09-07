@@ -497,11 +497,13 @@ router.patch('/:id/video-sequences', async (req, res) => {
             .map((scene, sceneIndex) => ({
                 id: String(scene?.id || `scene_${Date.now()}_${sceneIndex}`),
                 name: String(scene?.name || `Scène ${sceneIndex + 1}`).trim().slice(0, 160),
+                learningModuleId: String(scene?.learningModuleId || '').trim().slice(0, 120),
                 sequences: normalizeSequences(scene?.sequences)
             }));
         const normalizeScenes = (value = []) => (Array.isArray(value) ? value : []).map((scene, sceneIndex) => ({
             id: String(scene?.id || `scene_${Date.now()}_${sceneIndex}`),
             name: String(scene?.name || `Scène ${sceneIndex + 1}`).trim().slice(0, 160),
+            learningModuleId: String(scene?.learningModuleId || '').trim().slice(0, 120),
             sequences: normalizeSequences(scene?.sequences)
         }));
         const slides = (Array.isArray(req.body?.slides) ? req.body.slides : []).map((slide, index) => ({
@@ -515,6 +517,49 @@ router.patch('/:id/video-sequences', async (req, res) => {
         ).lean();
         if (!row) return res.status(404).json({ error: 'Cours introuvable' });
         return res.json(row);
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.delete('/:id/video-sequences', async (req, res) => {
+    try {
+        const row = await Course.findByIdAndUpdate(
+            req.params.id,
+            {
+                $set: {
+                    presentationVideoSequences: [],
+                    presentationVideoScenes: [],
+                    presentationVideoSlides: [],
+                    'presentationRemote.sceneIndex': 0,
+                    'presentationRemote.sequenceIndex': 0,
+                    'presentationRemote.animationPlaying': false,
+                    'presentationRemote.animationVisible': false
+                }
+            },
+            { new: true }
+        ).lean();
+        if (!row) return res.status(404).json({ error: 'Cours introuvable' });
+        return res.json({ ok: true, course: row });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/wipe-scenes', async (req, res) => {
+    try {
+        const result = await Course.updateMany({}, {
+            $set: {
+                presentationVideoSequences: [],
+                presentationVideoScenes: [],
+                presentationVideoSlides: [],
+                'presentationRemote.sceneIndex': 0,
+                'presentationRemote.sequenceIndex': 0,
+                'presentationRemote.animationPlaying': false,
+                'presentationRemote.animationVisible': false
+            }
+        });
+        return res.json({ ok: true, modifiedCount: result.modifiedCount });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -542,20 +587,11 @@ router.get('/presentation-remote/active', async (req, res) => {
         }
         if (!course) return res.json({ ok: true, active: false });
         const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
-        const legacyScenes = Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
-            ? course.presentationVideoScenes
-            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }];
-        const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
-            ? course.presentationVideoSlides
-            : [{ slideNumber: 1, scenes: legacyScenes }];
+        const legacyScenes = Array.isArray(course.presentationVideoScenes) ? course.presentationVideoScenes : [];
+        const videoSlides = Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [];
         const remote = course.presentationRemote || {};
         const requestedSlideNumber = Math.max(1, Number(remote.slideIndex || 0) + 1);
         let currentSlide = videoSlides.find((slide) => Number(slide?.slideNumber) === requestedSlideNumber);
-        if (!currentSlide) {
-            const configuredSlides = videoSlides.filter((slide) => Array.isArray(slide?.scenes)
-                && slide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length));
-            if (configuredSlides.length === 1) currentSlide = configuredSlides[0];
-        }
         const currentScenes = Array.isArray(currentSlide?.scenes) ? currentSlide.scenes : [];
         const currentScene = currentScenes[Math.max(0, Math.min(currentScenes.length - 1, Number(remote.sceneIndex || 0)))];
         const currentSequences = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
@@ -973,20 +1009,21 @@ router.post('/:id/presentation-remote/sync', async (req, res) => {
                 const matchedIndex = (Array.isArray(manifest?.slides) ? manifest.slides : [])
                     .findIndex((slide) => String(slide?.objectId || '') === slideObjectId);
                 if (matchedIndex >= 0) {
+                    const slideChanged = matchedIndex !== Number(remote.slideIndex ?? -1);
                     remote.slideIndex = matchedIndex;
-                    remote.sceneIndex = 0;
-                    remote.sequenceIndex = 0;
-                    remote.sequenceCompleted = false;
-                    remote.animationVisible = false;
-                    remote.animationPlaying = false;
+                    if (slideChanged) {
+                        remote.sceneIndex = 0;
+                        remote.sequenceIndex = 0;
+                        remote.sequenceCompleted = false;
+                        remote.animationVisible = false;
+                        remote.animationPlaying = false;
+                    }
                 }
             } catch (manifestError) {
                 console.warn('[presentation-remote/sync] slideObjectId non résolu:', manifestError.message);
             }
         }
-        course.presentationRemote = remote;
-        course.markModified('presentationRemote');
-        await course.save();
+        await Course.findByIdAndUpdate(course._id, { $set: { presentationRemote: remote } });
         return res.json({ ok: true, remote });
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -1041,21 +1078,15 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         const slideTotal = Math.max(1, Number(req.body?.slideTotal || 1));
         const storedSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
             ? course.presentationVideoSlides
-            : [{ slideNumber: 1, scenes: Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
-                ? course.presentationVideoScenes
-                : [{ id: 'scene_1', name: 'Scène 1', sequences: Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [] }] }];
+            : [];
         let currentSlide = storedSlides
             .find((slide) => Number(slide?.slideNumber) === Number(remote.slideIndex || 0) + 1);
-        const currentSlideHasSequences = Array.isArray(currentSlide?.scenes)
-            && currentSlide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0);
-        if (!currentSlideHasSequences) {
-            const configuredSlides = storedSlides.filter((slide) => Array.isArray(slide?.scenes)
-                && slide.scenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0));
-            if (configuredSlides.length === 1 && Number(configuredSlides[0]?.slideNumber) === 1) currentSlide = configuredSlides[0];
-        }
         const currentScenes = Array.isArray(currentSlide?.scenes) ? currentSlide.scenes : [];
         const sceneTotal = Math.max(1, currentScenes.length || Number(req.body?.sceneTotal || 1));
-        const currentScene = currentScenes[Math.max(0, Math.min(currentScenes.length - 1, Number(remote.sceneIndex || 0)))];
+        const effectiveSceneIndex = Number.isInteger(req.body?.sceneIndex)
+            ? Math.min(sceneTotal - 1, Math.max(0, Number(req.body.sceneIndex)))
+            : Math.max(0, Math.min(sceneTotal - 1, Number(remote.sceneIndex || 0)));
+        const currentScene = currentScenes[effectiveSceneIndex];
         const currentVideos = Array.isArray(currentScene?.sequences) ? currentScene.sequences : [];
         const storedSequenceTotal = currentVideos.length;
         const sequenceTotal = Math.max(1, storedSequenceTotal || Number(req.body?.sequenceTotal || 1));
@@ -1152,7 +1183,22 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         }
         if (action === 'sequence_previous') { remote.sequenceIndex = Math.max(0, Number(remote.sequenceIndex || 0) - 1); remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
         if (action === 'sequence_next') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Number(remote.sequenceIndex || 0) + 1); remote.sequenceCompleted = false; remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; }
-        if (action === 'sequence_select') { remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0))); remote.sequenceCompleted = false; if (req.body?.play) { remote.playVersion = Number(remote.playVersion || 0) + 1; remote.animationVisible = true; remote.animationPlaying = true; } else { remote.animationVisible = false; remote.animationPlaying = false; remote.pauseVersion = Number(remote.pauseVersion || 0) + 1; } }
+        if (action === 'sequence_select') {
+            if (Number.isInteger(req.body?.sceneIndex)) {
+                remote.sceneIndex = Math.min(sceneTotal - 1, Math.max(0, Number(req.body.sceneIndex)));
+            }
+            remote.sequenceIndex = Math.min(sequenceTotal - 1, Math.max(0, Number(req.body?.sequenceIndex || 0)));
+            remote.sequenceCompleted = false;
+            if (req.body?.play) {
+                remote.playVersion = Number(remote.playVersion || 0) + 1;
+                remote.animationVisible = true;
+                remote.animationPlaying = true;
+            } else {
+                remote.animationVisible = false;
+                remote.animationPlaying = false;
+                remote.pauseVersion = Number(remote.pauseVersion || 0) + 1;
+            }
+        }
         if (action === 'sequence_finished') {
             remote.sequenceCompleted = true;
             remote.animationPlaying = false;
@@ -1175,6 +1221,9 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
             // already-revealed step to the next slide.
             if (requestedSlideIndex !== Number(remote.slideIndex || 0)) {
                 remote.transitionStep = 1;
+                remote.animationVisible = false;
+                remote.animationPlaying = false;
+                remote.pauseVersion = Number(remote.pauseVersion || 0) + 1;
             }
             remote.slideIndex = requestedSlideIndex;
             if (String(req.body?.slideObjectId || '').trim()) {
@@ -1189,9 +1238,7 @@ router.post('/:id/presentation-remote/command', async (req, res) => {
         remote.isReady = remote.currentBufferPct >= 65;
         remote.version = Date.now();
         remote.updatedAt = new Date();
-        course.presentationRemote = remote;
-        course.markModified('presentationRemote');
-        await course.save();
+        await Course.findByIdAndUpdate(course._id, { $set: { presentationRemote: remote } });
         console.info('[CondaWeb remote commande ok]', {
             courseId: String(req.params.id), action,
             after: { slide: remote.slideIndex, scene: remote.sceneIndex, sequence: remote.sequenceIndex, visible: remote.animationVisible, playing: remote.animationPlaying, playVersion: remote.playVersion, pauseVersion: remote.pauseVersion }
