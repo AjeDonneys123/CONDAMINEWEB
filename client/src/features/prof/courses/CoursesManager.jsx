@@ -740,6 +740,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // wait for a new request to Google Slides.
     const slideImageCacheRef = useRef(new Map());
     const slideManifestCacheRef = useRef(new Map());
+    const alertSlotMapRef = useRef(new Map());
+    const alertGlobalCounterRef = useRef(0);
     const requestedSlideImageKeyRef = useRef('');
     const renderedSlideIndexRef = useRef(null);
     // Diagnostic only: lets the console identify the exact event that opened
@@ -920,17 +922,32 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (fallbackTime && fallbackMessage && !rows.some((row) => String(row?.message || '') === fallbackMessage && String(row?.createdAt || '') === String(fallbackTime))) {
             rows.push({ id: `score-fallback-${fallbackTime}`, message: fallbackMessage, createdAt: fallbackTime });
         }
-        return rows
-        .filter((row) => {
+        const ALERT_LIFETIME_MS = 4500;
+        const recentAlerts = rows.filter((row) => {
             const createdAt = new Date(row?.createdAt || 0).getTime();
-            // Polling and rendering can easily consume a second; keep the
-            // board notification visible long enough to be read in class.
-            // The classroom server and the browser can have slightly different
-            // clocks on CondaWeb.  A strict "future timestamp" check hid the
-            // alert entirely in that situation.
-            return Number.isFinite(createdAt) && Math.abs(liveClock - createdAt) < 30000;
-        })
-        .slice(-6);
+            return Number.isFinite(createdAt) && Math.abs(liveClock - createdAt) < ALERT_LIFETIME_MS;
+        });
+
+        if (alertSlotMapRef.current.size > 50) {
+            const currentKeys = new Set(recentAlerts.map((a) => String(a?.id || a?.createdAt || a?.message)));
+            for (const k of alertSlotMapRef.current.keys()) {
+                if (!currentKeys.has(k)) alertSlotMapRef.current.delete(k);
+            }
+        }
+
+        // Attribution cyclique sur 3 lignes max (slotIndex 0, 1, 2) : 1->0, 2->1, 3->2, 4->0, 5->1, 6->2, 7->0...
+        return recentAlerts.map((alert) => {
+            const key = String(alert?.id || alert?.createdAt || alert?.message);
+            if (!alertSlotMapRef.current.has(key)) {
+                const nextSlot = alertGlobalCounterRef.current % 3;
+                alertGlobalCounterRef.current += 1;
+                alertSlotMapRef.current.set(key, nextSlot);
+            }
+            return {
+                ...alert,
+                slotIndex: alertSlotMapRef.current.get(key)
+            };
+        });
     }, [liveClassroom?.activeScoreAlerts, liveClassroom?.activeStudentBonusAlert, liveClassroom?.activeStudentBonusAlertTime, liveClock]);
 
     const activeHourWarnings = useMemo(() => {
@@ -3938,15 +3955,50 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
                         {activeScoreAlerts.length > 0 && (
                             <div className="live-score-alert-stack" aria-live="polite">
-                                {activeScoreAlerts.map((alert, index) => (
-                                    <div className={`live-score-alert ${alert?.type === 'negative' ? 'negative' : alert?.type === 'positive' ? 'positive' : ''}`} key={alert?.id || `${alert?.createdAt}-${index}`}>
-                                        {Number.isFinite(Number(alert?.pointsDelta)) && Math.abs(Number(alert.pointsDelta)) > 0 ? <>
-                                            <strong>{alert?.studentName || 'Élève'}</strong>
-                                            <span className="live-score-alert-delta">{Number(alert.pointsDelta) > 0 ? '+' : '−'}{Math.abs(Number(alert.pointsDelta)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} point{Math.abs(Number(alert.pointsDelta)) > 1 ? 's' : ''}</span>
-                                            <small>Nouvelle note : {Number(alert?.score || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}/20</small>
-                                        </> : <strong>{alert?.message}</strong>}
-                                    </div>
-                                ))}
+                                {[0, 1, 2].map((slotIndex) => {
+                                    const slotAlerts = activeScoreAlerts.filter((alert) => alert.slotIndex === slotIndex);
+                                    if (slotAlerts.length === 0) return null;
+                                    return (
+                                        <div
+                                            className="live-score-alert-slot"
+                                            key={`alert-slot-${slotIndex}`}
+                                            style={{ gridRow: slotIndex + 1 }}
+                                        >
+                                            {slotAlerts.map((alert, alertIndex) => {
+                                                const isLatest = alertIndex === slotAlerts.length - 1;
+                                                return (
+                                                    <div
+                                                        className={`live-score-alert ${alert?.type === 'negative' ? 'negative' : alert?.type === 'positive' ? 'positive' : ''} ${isLatest ? 'latest' : 'underneath'}`}
+                                                        key={alert?.id || `${alert?.createdAt}-${alertIndex}`}
+                                                        style={{
+                                                            zIndex: 10 + alertIndex,
+                                                            position: alertIndex > 0 ? 'absolute' : 'relative',
+                                                            top: 0,
+                                                            right: 0,
+                                                            left: 0
+                                                        }}
+                                                    >
+                                                        {Number.isFinite(Number(alert?.pointsDelta)) && Math.abs(Number(alert.pointsDelta)) > 0 ? (
+                                                            <>
+                                                                <strong>{alert?.studentName || 'Élève'}</strong>
+                                                                <span className="live-score-alert-delta">
+                                                                    {Number(alert.pointsDelta) > 0 ? '+' : '−'}
+                                                                    {Math.abs(Number(alert.pointsDelta)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}{' '}
+                                                                    point{Math.abs(Number(alert.pointsDelta)) > 1 ? 's' : ''}
+                                                                </span>
+                                                                <small>
+                                                                    Nouvelle note : {Number(alert?.score || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}/20
+                                                                </small>
+                                                            </>
+                                                        ) : (
+                                                            <strong>{alert?.message}</strong>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
 
