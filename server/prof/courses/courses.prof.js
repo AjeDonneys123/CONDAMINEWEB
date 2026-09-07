@@ -40,6 +40,35 @@ const classroomsForLevel = async (Classroom, selectedClass) => {
     };
 };
 
+// A course may survive the deletion/recreation of a classroom. Its stored ID
+// then becomes invalid even though its displayed name (e.g. "5B") is still
+// correct. The Slides bridge must never publish that dead ID: resolve the
+// existing classroom and repair the course atomically during auto-connect.
+const resolveCourseClassroom = async (course, classHint = '') => {
+    const candidateIds = [
+        course?.targetClassroomId,
+        course?.presentationRemote?.classId,
+        classHint
+    ].map((value) => String(value || '').trim()).filter(Boolean);
+
+    for (const id of candidateIds) {
+        const classroom = await Classroom.findById(id, 'name level').lean().catch(() => null);
+        if (classroom?._id) return classroom;
+    }
+
+    const candidateNames = [
+        course?.targetClassroomName,
+        course?.presentationRemote?.className,
+        // A non-ID hint can legitimately be a classroom name.
+        /^[a-f\d]{24}$/i.test(String(classHint || '')) ? '' : classHint
+    ].map((value) => String(value || '').trim()).filter(Boolean);
+
+    if (!candidateNames.length) return null;
+    const classrooms = await Classroom.find({}, 'name level').lean();
+    return classrooms.find((classroom) => candidateNames
+        .some((name) => normalizeClassKey(classroom.name) === normalizeClassKey(name))) || null;
+};
+
 const extractPresentationId = (value = '') => {
     const text = String(value || '').trim();
     if (!text) return '';
@@ -668,12 +697,34 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
         // Désactive les autres cours actifs
         await Course.updateMany({ _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
 
-        const targetClassId = classHint || course.presentationRemote?.classId || course.targetClassroomId || '';
+        const classroom = await resolveCourseClassroom(course, classHint);
+        if (!classroom?._id) {
+            return res.status(409).json({
+                ok: false,
+                error: `Classe introuvable pour le cours « ${course.title} »`,
+                code: 'COURSE_CLASSROOM_MISSING'
+            });
+        }
+        const targetClassId = String(classroom._id);
+        const targetClassName = String(classroom.name || course.targetClassroomName || 'Classe active');
         const existingRemote = (course.presentationRemote && typeof course.presentationRemote === 'object') ? course.presentationRemote : {};
+
+        // Self-heal the stale course association once, rather than asking the
+        // extension to retry a deleted class ID forever.
+        const courseClassWasStale = String(course.targetClassroomId || '') !== targetClassId
+            || String(course.targetClassroomName || '') !== targetClassName;
+        if (courseClassWasStale) {
+            console.info('[CondaWeb Bridge] association classe réparée', {
+                courseId: String(course._id), from: course.targetClassroomId, to: targetClassId, name: targetClassName
+            });
+            course.targetClassroomId = targetClassId;
+            course.targetClassroomName = targetClassName;
+        }
 
         course.presentationRemote = {
             active: true,
             classId: targetClassId,
+            className: targetClassName,
             slideIndex: Number.isInteger(req.body?.slideIndex) ? slideIndex : Number(existingRemote.slideIndex || 0),
             sceneIndex: Number(existingRemote.sceneIndex || 0),
             sequenceIndex: Number(existingRemote.sequenceIndex || 0),
@@ -701,19 +752,13 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
             ? course.presentationVideoSlides
             : [{ slideNumber: 1, scenes: legacyScenes }];
 
-        let className = course.targetClassroomName || '';
-        if (!className && targetClassId) {
-            const clsObj = await require('mongoose').model('Classroom').findById(targetClassId, 'name').lean().catch(() => null);
-            if (clsObj?.name) className = clsObj.name;
-        }
-
         return res.json({
             ok: true,
             active: true,
             courseId: String(course._id),
             title: course.title,
             classId: targetClassId,
-            className: className || 'Classe active',
+            className: targetClassName,
             videoSlides,
             scenes: legacyScenes,
             sequences: legacySequences,

@@ -58,10 +58,10 @@ export default function ClassroomManager({ globalClassId, user }) {
         let mounted = true;
         const checkActiveRemote = async () => {
             try {
-                const res = await fetch(`/api/courses/presentation-remote/active?classId=${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
+                const res = await fetch(`/api/classroom/bridge-state/${encodeURIComponent(globalClassId)}`, { cache: 'no-store' });
                 const data = await res.json().catch(() => ({}));
                 if (mounted && res.ok) {
-                    setClassPlanProjected(data?.remote?.classPlanVisible === true);
+                    setClassPlanProjected(data?.classPlanVisible === true);
                 }
             } catch (_) {}
         };
@@ -76,18 +76,21 @@ export default function ClassroomManager({ globalClassId, user }) {
     const toggleTableauPlan = async () => {
         if (!globalClassId || togglingPlan) return;
         setTogglingPlan(true);
-        setClassPlanProjected((prev) => !prev);
+        const requestedVisible = !classPlanProjected;
+        setClassPlanProjected(requestedVisible);
         try {
-            const res = await fetch('/api/courses/presentation-remote/toggle-plan', {
-                method: 'POST',
+            const res = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/bridge-plan`, {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId: globalClassId })
+                body: JSON.stringify({ visible: requestedVisible })
             });
             const data = await res.json().catch(() => ({}));
-            if (res.ok && data?.remote) {
-                setClassPlanProjected(data.remote.classPlanVisible === true);
+            if (res.ok) {
+                setClassPlanProjected(data.classPlanVisible === true);
+            } else {
+                setClassPlanProjected(!requestedVisible);
             }
-        } catch (_) {}
+        } catch (_) { setClassPlanProjected(!requestedVisible); }
         finally {
             setTogglingPlan(false);
         }
@@ -1048,10 +1051,10 @@ export default function ClassroomManager({ globalClassId, user }) {
                 </div>
                 {renderFrenchAssignmentPanel()}
                 <div className="alpha-plan-board">
-                    <div className="grid-header-row alpha-header-row" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>
+                    <div className="grid-header-row alpha-header-row" style={{ '--grid-cols': gridSize.cols, gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>
                         {Array.from({ length: gridSize.cols }).map((_, x) => <div key={x} className="col-header-cell">COL {x + 1}</div>)}
                     </div>
-                    <div className="interactive-grid alpha-grid" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${alphaRows}, var(--cell-size, 100px))` }}>
+                    <div className="interactive-grid alpha-grid" style={{ '--grid-cols': gridSize.cols, '--grid-rows': alphaRows, gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${alphaRows}, var(--cell-size, 100px))` }}>
                         {Array.from({ length: gridSize.cols * alphaRows }).map((_, idx) => {
                             const student = filtered[idx] || null;
                             const col = idx % gridSize.cols;
@@ -1200,6 +1203,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="cm-header-center">
                     <div className="view-switcher">
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
+                        <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A–Z</button>
                     </div>
                     <button
                         className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
@@ -1279,8 +1283,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     )}
                     
                     <div className="grid-container custom-scrollbar">
-                        <div className="grid-header-row" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>{renderHeaders()}</div>
-                        <div className="interactive-grid" style={{ gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${effectivePlanRows}, var(--cell-size, 100px))` }}>{renderGrid()}</div>
+                        <div className="grid-header-row" style={{ '--grid-cols': gridSize.cols, gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>{renderHeaders()}</div>
+                        <div className="interactive-grid" style={{ '--grid-cols': gridSize.cols, '--grid-rows': effectivePlanRows, gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${effectivePlanRows}, var(--cell-size, 100px))` }}>{renderGrid()}</div>
                     </div>
                 </>
             ) : renderList()}

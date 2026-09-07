@@ -66,6 +66,27 @@ async function getStudentsForClassOrGroup(classId) {
     return { clsObj, students: [...byId.values()] };
 }
 
+async function resolveBridgeClass(classId, className = '') {
+    let clsObj = await Classroom.findById(classId).lean().catch(() => null);
+    if (clsObj || !String(className || '').trim()) return clsObj;
+
+    // An old Slides tab can retain the id of a deleted/recreated classroom.
+    // Its displayed class name (for example "5B") is stable, so repair that
+    // association here instead of making the board permanently disconnected.
+    const escapedName = String(className).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!escapedName) return null;
+    clsObj = await Classroom.findOne({ name: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') })
+        .sort({ updatedAt: -1 })
+        .lean();
+    return clsObj;
+}
+
+async function getBridgeStudents(classroom) {
+    if (!classroom?._id) return [];
+    const { students } = await getStudentsForClassOrGroup(classroom._id);
+    return students;
+}
+
 async function assignPunishmentTemplate(student, teacherId) {
     const { raw, clean } = normalizeClassName(student.currentClass || '');
     if (!raw) return false;
@@ -251,9 +272,10 @@ router.get('/debts/:classId', async (req, res) => {
 // État léger et stable destiné à l'extension Google Slides.
 router.get('/bridge-state/:classId', async (req, res) => {
     try {
-        const { clsObj, students } = await getStudentsForClassOrGroup(req.params.classId);
-        if (!clsObj) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
-        const classroom = typeof clsObj.toObject === 'function' ? clsObj.toObject() : clsObj;
+        const fallbackName = String(req.query.className || '').trim();
+        const classroom = await resolveBridgeClass(req.params.classId, fallbackName);
+        if (!classroom) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
+        const students = await getBridgeStudents(classroom);
         return res.json({
             _id: String(classroom._id || req.params.classId),
             name: classroom.name || '',
@@ -277,6 +299,21 @@ router.get('/bridge-state/:classId', async (req, res) => {
                 seatY: student.seatY !== null && student.seatY !== undefined && Number.isFinite(Number(student.seatY)) ? Number(student.seatY) : null
             }))
         });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// The classroom phone and the Google Slides bridge share this state directly.
+// It deliberately does not require an active course/presentation.
+router.put('/:classId/bridge-plan', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
+        classroom.classPlanVisible = Boolean(req.body?.visible);
+        await classroom.save();
+        console.info('[CondaWeb bridge] plan de classe', { classId: String(classroom._id), visible: classroom.classPlanVisible });
+        return res.json({ ok: true, classId: String(classroom._id), classPlanVisible: classroom.classPlanVisible });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }
@@ -686,7 +723,12 @@ router.post('/behavior', async (req, res) => {
                 await Classroom.updateOne(
                     { _id: scoreClassId },
                     {
-                        $set: { activeStudentBonusAlert: message, activeStudentBonusAlertTime: now },
+                        $set: {
+                            activeStudentBonusAlert: message,
+                            activeStudentBonusAlertTime: now,
+                            scoreAlertReplayId: alert.id
+                        },
+                        $inc: { scoreAlertSyncVersion: 1 },
                         $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } }
                     }
                 );
@@ -754,6 +796,8 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         cls.activeStudentBonusAlert = alert.message;
         cls.activeStudentBonusAlertTime = now;
         cls.activeScoreAlerts = [...(Array.isArray(cls.activeScoreAlerts) ? cls.activeScoreAlerts : []), alert].slice(-6);
+        cls.scoreAlertSyncVersion = Number(cls.scoreAlertSyncVersion || 0) + 1;
+        cls.scoreAlertReplayId = alert.id;
         await cls.save();
 
         res.json({ ok: true, adjustedStudents: studentDocs.length, appliedDelta: totalAppliedDelta, classPoints: cls.classPoints, alert });
@@ -789,8 +833,10 @@ router.post('/:classId/live-action', async (req, res) => {
                 {
                     $set: {
                         activeStudentBonusAlert: alert.message,
-                        activeStudentBonusAlertTime: now
+                        activeStudentBonusAlertTime: now,
+                        scoreAlertReplayId: alert.id
                     },
+                    $inc: { scoreAlertSyncVersion: 1 },
                     $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } }
                 }
             );
