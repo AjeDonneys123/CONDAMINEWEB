@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
-const { Course, CourseSection, Classroom } = require('../models/prof.models');
+const { Course, CourseSection, Classroom, AssessmentControl } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 
 const SOURCE_SECTION_ID = 'sources';
@@ -744,13 +744,14 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
         course.markModified('presentationRemote');
         await course.save();
 
-        const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
-        const legacyScenes = Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
+        const lightBridge = req.body?.light === true;
+        const legacySequences = lightBridge ? [] : (Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : []);
+        const legacyScenes = lightBridge ? [] : (Array.isArray(course.presentationVideoScenes) && course.presentationVideoScenes.length
             ? course.presentationVideoScenes
-            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }];
-        const videoSlides = Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
+            : [{ id: 'scene_1', name: 'Scène 1', sequences: legacySequences }]);
+        const videoSlides = lightBridge ? [] : (Array.isArray(course.presentationVideoSlides) && course.presentationVideoSlides.length
             ? course.presentationVideoSlides
-            : [{ slideNumber: 1, scenes: legacyScenes }];
+            : [{ slideNumber: 1, scenes: legacyScenes }]);
 
         return res.json({
             ok: true,
@@ -914,6 +915,66 @@ router.post('/:id/slides/transitions', async (req, res) => {
         course.markModified('slideTransitions');
         await course.save();
         return res.json({ ok: true, slideTransitions: course.slideTransitions });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Resolve the Google object id only when the teacher explicitly opens or
+// attaches a control. It is intentionally not part of the live plan/notes
+// polling path used by the Slides extension.
+const resolveSlideNumberForBridge = async (course, slideObjectId) => {
+    const objectId = String(slideObjectId || '').trim();
+    if (!objectId) return 0;
+    const nativeIndex = (Array.isArray(course.nativeSlides) ? course.nativeSlides : [])
+        .findIndex((slide) => String(slide?.objectId || '') === objectId);
+    if (nativeIndex >= 0) return nativeIndex + 1;
+    if (!course.slidesUrl) return 0;
+    const manifest = await ProfDrive.getGoogleSlidesManifest(course.slidesUrl, [], '', false);
+    return (Array.isArray(manifest?.slides) ? manifest.slides : [])
+        .findIndex((slide) => String(slide?.objectId || '') === objectId) + 1;
+};
+
+router.get('/:id/slides/control-at', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const slideNumber = await resolveSlideNumberForBridge(course, req.query?.slideObjectId);
+        const config = slideNumber > 0 ? (course.slideTransitions?.[slideNumber] || {}) : {};
+        const mask = (Array.isArray(config?.masks) ? config.masks : []).find((item) => item?.type === 'control');
+        return res.json({ ok: true, slideNumber, control: mask || null });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/slides/attach-control', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'Cours introuvable' });
+        const control = await AssessmentControl.findOne({ _id: req.body?.controlId, active: { $ne: false } }).lean();
+        if (!control) return res.status(404).json({ error: 'Contrôle introuvable ou fermé' });
+        const slideNumber = await resolveSlideNumberForBridge(course, req.body?.slideObjectId);
+        if (slideNumber < 1) return res.status(400).json({ error: 'Diapositive Google introuvable' });
+
+        const transitions = course.slideTransitions && typeof course.slideTransitions === 'object'
+            ? { ...course.slideTransitions } : {};
+        const current = transitions[slideNumber] || {};
+        const masks = Array.isArray(current.masks) ? [...current.masks] : [];
+        const existing = masks.find((item) => item?.type === 'control' && String(item?.controlId || '') === String(control._id));
+        const mask = existing || {
+            id: `mask_control_${String(control._id)}_${Date.now()}`,
+            type: 'control',
+            controlId: String(control._id),
+            controlTitle: String(control.title || 'Contrôle'),
+            x: 30, y: 40, width: 40, height: 18, step: 1
+        };
+        if (!existing) masks.push(mask);
+        transitions[slideNumber] = { ...current, enabled: true, masks };
+        course.slideTransitions = transitions;
+        course.markModified('slideTransitions');
+        await course.save();
+        return res.json({ ok: true, slideNumber, control: mask, alreadyAttached: Boolean(existing) });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }

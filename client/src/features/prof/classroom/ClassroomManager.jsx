@@ -1180,6 +1180,21 @@ export default function ClassroomManager({ globalClassId, user }) {
                             gridTemplateRows: `repeat(${effectivePlanRows}, minmax(0, 1fr))`
                         }}
                     >
+                        {Array.from({ length: gridSize.cols * effectivePlanRows }).map((_, index) => {
+                            const x = index % gridSize.cols;
+                            const y = Math.floor(index / gridSize.cols);
+                            return (
+                                <div
+                                    key={`empty-seat-${x}-${y}`}
+                                    className="cm-local-plan-empty-seat"
+                                    style={{
+                                        gridColumn: gridSize.cols - x,
+                                        gridRow: effectivePlanRows - y
+                                    }}
+                                    aria-label={`Place vide ${x + 1}-${y + 1}`}
+                                />
+                            );
+                        })}
                         {students.filter((student) => Number.isInteger(student.seatX) && Number.isInteger(student.seatY)).map((student) => (
                             <div
                                 key={student._id}

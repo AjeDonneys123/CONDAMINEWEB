@@ -56,6 +56,240 @@
     box-shadow: 0 0 10px #ef4444;
 }
 
+/* Outils que Google Slides ne propose pas nativement : attacher un contrôle
+   CondaWeb à la diapositive actuellement affichée. */
+.conda-slide-control-dock {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 2147483646;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: min(78vw, 760px);
+    pointer-events: auto;
+}
+.conda-slide-plan-toggle,
+.conda-slide-control-add {
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 16px;
+    background: #15803d;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(21, 128, 61, .4);
+    font-size: 12px;
+    font-weight: 950;
+    letter-spacing: .02em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.conda-slide-plan-toggle {
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 15px;
+    background: #1d4ed8;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(29, 78, 216, .34);
+    font-size: 12px;
+    font-weight: 950;
+    letter-spacing: .02em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.conda-slide-plan-toggle:hover { background: #1e40af; transform: translateY(-1px); }
+.conda-slide-plan-toggle.active {
+    background: #b45309;
+    box-shadow: 0 8px 24px rgba(180, 83, 9, .36);
+}
+.conda-slide-control-add:hover { background: #166534; transform: translateY(-1px); }
+.conda-slide-control-menu {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 9px);
+    transform: translateX(-50%);
+    display: grid;
+    gap: 6px;
+    width: min(330px, 88vw);
+    max-height: min(48vh, 370px);
+    overflow-y: auto;
+    padding: 9px;
+    border: 2px solid rgba(21, 128, 61, .7);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, .97);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+}
+.conda-slide-control-menu button {
+    border: 1px solid rgba(134, 239, 172, .38);
+    border-radius: 9px;
+    padding: 9px 10px;
+    background: #f0fdf4;
+    color: #14532d;
+    font-size: 12px;
+    font-weight: 900;
+    text-align: left;
+    cursor: pointer;
+}
+.conda-slide-control-menu button:hover { background: #bbf7d0; }
+.conda-slide-control-menu span {
+    padding: 8px;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 750;
+    text-align: center;
+}
+.conda-slide-control-card {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 2147483645;
+    display: grid;
+    gap: 1px;
+    width: min(480px, 58vw);
+    min-width: 220px;
+    padding: 26px 18px;
+    transform: translate(-50%, -50%);
+    border: 4px solid #16a34a;
+    border-radius: 18px;
+    background: rgba(240, 253, 244, .97);
+    color: #14532d;
+    box-shadow: 0 12px 35px rgba(20, 83, 45, .34);
+    cursor: pointer;
+    pointer-events: auto;
+}
+.conda-slide-control-card:hover { background: #dcfce7; }
+.conda-slide-control-card strong { font-size: 22px; letter-spacing: .1em; }
+.conda-slide-control-card span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #172033; font-size: 17px; font-weight: 850; }
+@media (max-width: 700px) {
+    .conda-slide-control-dock { bottom: 12px; max-width: 94vw; gap: 5px; }
+    .conda-slide-plan-toggle,
+    .conda-slide-control-add { padding: 8px 10px; font-size: 10px; }
+    .conda-slide-control-card { width: min(390px, 80vw); min-width: 0; padding: 18px 12px; }
+    .conda-slide-control-card strong { font-size: 16px; }
+    .conda-slide-control-card span { font-size: 12px; }
+}
+
+/* Fenêtre QR d'un contrôle : elle reste dans Google Slides et peut être
+   déplacée avec l'en-tête puis redimensionnée par son coin inférieur droit. */
+.conda-control-qr-window {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2147483647;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    width: min(360px, 88vw);
+    min-width: 230px;
+    min-height: 280px;
+    max-width: 90vw;
+    max-height: 88vh;
+    padding: 12px;
+    overflow: auto;
+    resize: both;
+    pointer-events: auto;
+    border: 3px solid #16a34a;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .985);
+    color: #172033;
+    box-shadow: 0 24px 66px rgba(0, 0, 0, .65);
+}
+.conda-projected-control-window {
+    position: fixed;
+    top: 47%;
+    left: 43%;
+    transform: translate(-50%, -50%);
+    z-index: 2147483644;
+    width: min(720px, 72vw);
+    min-width: 300px;
+    min-height: 330px;
+    max-width: 86vw;
+    max-height: 82vh;
+    padding: 14px;
+    overflow: auto;
+    resize: both;
+    pointer-events: auto;
+    border: 3px solid #2563eb;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .985);
+    color: #172033;
+    box-shadow: 0 24px 66px rgba(0, 0, 0, .55);
+}
+.conda-projected-control-window header,
+.conda-control-qr-window header {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 950;
+    cursor: move;
+    touch-action: none;
+    user-select: none;
+}
+.conda-projected-control-window header button,
+.conda-control-qr-window header button {
+    width: 27px;
+    height: 27px;
+    border: 0;
+    border-radius: 50%;
+    background: #dc2626;
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+.conda-projected-control-window h2 {
+    margin: 6px 0 3px;
+    color: #1d4ed8;
+    font-size: 24px;
+    text-align: center;
+}
+.conda-projected-control-window > p {
+    margin: 0 0 12px;
+    color: #475569;
+    font-weight: 750;
+    text-align: center;
+}
+.conda-projected-control-questions {
+    display: grid;
+    gap: 10px;
+}
+.conda-projected-control-questions article {
+    padding: 10px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    background: #f8fbff;
+}
+.conda-projected-control-questions article > strong { color: #1e3a8a; font-size: 15px; }
+.conda-projected-control-questions p { margin: 6px 0; white-space: pre-wrap; font-size: 14px; font-weight: 650; }
+.conda-projected-control-questions ol { margin: 4px 0 0 22px; font-size: 13px; font-weight: 650; }
+.conda-control-qr-window strong { text-align: center; font-size: 16px; }
+.conda-control-qr-window img {
+    display: block;
+    width: min(285px, 100%);
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: contain;
+}
+.conda-control-qr-window a {
+    border-radius: 9px;
+    padding: 8px 12px;
+    background: #15803d;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    text-decoration: none;
+}
+.conda-control-qr-window small { color: #475569; font-weight: 750; text-align: center; }
+@media (max-width: 700px) {
+    .conda-projected-control-window { width: 84vw; min-width: 0; min-height: 250px; }
+}
+
 /* 2. Pile des alertes et avertissements élèves */
 .conda-alerts-stack {
     position: absolute;

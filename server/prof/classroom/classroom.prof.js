@@ -87,6 +87,56 @@ async function getBridgeStudents(classroom) {
     return students;
 }
 
+// The phone board can place pupils which do not yet have a persisted seat.
+// The Slides board must use the exact same projection: otherwise those pupils
+// silently disappear from the mirrored plan and only the manually seated ones
+// are displayed.
+function buildBridgePlanStudents(classroom, students = []) {
+    const cols = Math.max(1, Number(classroom?.layout?.cols || 6));
+    const rows = Math.max(1, Number(classroom?.layout?.rows || 5), Math.ceil(students.length / cols));
+    const isValidSeat = (student) => Number.isInteger(student?.seatX)
+        && Number.isInteger(student?.seatY)
+        && student.seatX >= 0 && student.seatX < cols
+        && student.seatY >= 0 && student.seatY < rows;
+
+    const validStudents = students.filter(isValidSeat);
+    const uniqueSeats = new Set(validStudents.map((student) => `${student.seatX}-${student.seatY}`));
+    const hasMeaningfulPlan = uniqueSeats.size > 1 || students.length <= 1;
+    const occupied = new Set();
+    const placedIds = new Set();
+    const projected = [];
+
+    if (hasMeaningfulPlan) {
+        validStudents.forEach((student) => {
+            const seatKey = `${student.seatX}-${student.seatY}`;
+            if (occupied.has(seatKey)) return;
+            occupied.add(seatKey);
+            placedIds.add(String(student._id));
+            projected.push({ ...student, seatX: student.seatX, seatY: student.seatY });
+        });
+    }
+
+    const unplaced = students
+        .filter((student) => !placedIds.has(String(student?._id)))
+        .sort((a, b) => {
+            const first = String(a?.firstName || '').localeCompare(String(b?.firstName || ''), 'fr', { sensitivity: 'base' });
+            return first || String(a?.lastName || '').localeCompare(String(b?.lastName || ''), 'fr', { sensitivity: 'base' });
+        });
+
+    let nextCell = 0;
+    unplaced.forEach((student) => {
+        while (nextCell < cols * rows && occupied.has(`${nextCell % cols}-${Math.floor(nextCell / cols)}`)) nextCell += 1;
+        if (nextCell >= cols * rows) return;
+        const seatX = nextCell % cols;
+        const seatY = Math.floor(nextCell / cols);
+        occupied.add(`${seatX}-${seatY}`);
+        projected.push({ ...student, seatX, seatY });
+        nextCell += 1;
+    });
+
+    return { cols, rows, students: projected };
+}
+
 async function assignPunishmentTemplate(student, teacherId) {
     const { raw, clean } = normalizeClassName(student.currentClass || '');
     if (!raw) return false;
@@ -276,10 +326,19 @@ router.get('/bridge-state/:classId', async (req, res) => {
         const classroom = await resolveBridgeClass(req.params.classId, fallbackName);
         if (!classroom) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
         const students = await getBridgeStudents(classroom);
+        const projectedPlan = buildBridgePlanStudents(classroom, students);
+        console.info('[CondaWeb bridge] état plan extension', {
+            classId: String(classroom._id),
+            className: classroom.name,
+            sourceStudents: students.length,
+            projectedStudents: projectedPlan.students.length,
+            cols: projectedPlan.cols,
+            rows: projectedPlan.rows
+        });
         return res.json({
             _id: String(classroom._id || req.params.classId),
             name: classroom.name || '',
-            layout: classroom.layout || { cols: 6, rows: 5, separators: [] },
+            layout: { ...(classroom.layout || {}), cols: projectedPlan.cols, rows: projectedPlan.rows },
             classPlanVisible: classroom.classPlanVisible === true,
             classPoints: Number(classroom.classPoints ?? 10),
             activeStudentHighlight: classroom.activeStudentHighlight || '',
@@ -290,7 +349,8 @@ router.get('/bridge-state/:classId', async (req, res) => {
             scoreAlertSyncVersion: Number(classroom.scoreAlertSyncVersion || 0),
             scoreAlertReplayId: String(classroom.scoreAlertReplayId || ''),
             activeHourWarnings: Array.isArray(classroom.activeHourWarnings) ? classroom.activeHourWarnings : [],
-            planStudents: students.map((student) => ({
+            planStudentCount: projectedPlan.students.length,
+            planStudents: projectedPlan.students.map((student) => ({
                 _id: String(student._id),
                 firstName: student.firstName || '',
                 nickname: student.nickname || '',

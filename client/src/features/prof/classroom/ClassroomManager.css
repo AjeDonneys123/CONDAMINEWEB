@@ -707,6 +707,15 @@
     border-radius: 18px;
     background: rgba(2, 6, 23, .74);
 }
+.cm-local-plan-empty-seat {
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    opacity: .98;
+}
 .cm-local-plan-seat {
     min-width: 0;
     min-height: 0;

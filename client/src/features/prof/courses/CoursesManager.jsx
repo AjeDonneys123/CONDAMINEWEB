@@ -739,6 +739,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // deliberately local to the presentation: going back and forth must not
     // wait for a new request to Google Slides.
     const slideImageCacheRef = useRef(new Map());
+    const slideManifestCacheRef = useRef(new Map());
     const requestedSlideImageKeyRef = useRef('');
     const renderedSlideIndexRef = useRef(null);
     // Diagnostic only: lets the console identify the exact event that opened
@@ -957,7 +958,20 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const [data, sectionsData] = await Promise.all([response.json(), sectionsResponse.json()]);
             if (!response.ok) throw new Error(data?.error || 'Chargement impossible');
             if (!sectionsResponse.ok) throw new Error(sectionsData?.error || 'Chargement des sections impossible');
-            setCourses(Array.isArray(data) ? data : []);
+            const coursesList = Array.isArray(data) ? data : [];
+            setCourses(coursesList);
+            coursesList.forEach((c) => {
+                if (c?.slidesUrl && Array.isArray(c.nativeSlides) && c.nativeSlides.length > 0) {
+                    if (!slideManifestCacheRef.current.has(c.slidesUrl)) {
+                        slideManifestCacheRef.current.set(c.slidesUrl, c.nativeSlides.map((s, idx) => ({
+                            objectId: s.objectId || `slide-${idx + 1}`,
+                            slideNumber: Number(s.slideNumber || idx + 1),
+                            thumbnailProxyUrl: `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(extractPresentationId(c.slidesUrl))}&pageObjectId=${encodeURIComponent(String(s.objectId || ''))}&slideNumber=${idx + 1}`,
+                            thumbnailPublicUrl: `https://docs.google.com/presentation/d/${encodeURIComponent(extractPresentationId(c.slidesUrl))}/export/png?pageid=${encodeURIComponent(String(s.objectId || ''))}`
+                        })));
+                    }
+                }
+            });
             setCourseSections(Array.isArray(sectionsData) ? sectionsData : []);
             console.info('[CondaWeb chargement cours] terminé', {
                 classId: globalClassId,
@@ -1025,24 +1039,26 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             setSlideTransitions({});
         }
 
-        fetch(`/api/courses/${playingCourse._id}/slides/native`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data?.nativeSlides || data?.slides)) {
-                    const list = data.nativeSlides || data.slides;
-                    const map = {};
-                    list.forEach((s) => {
-                        const num = Number(s.slideNumber || 1);
-                        map[num] = {
-                            elements: Array.isArray(s.elements) ? s.elements : [],
-                            backgroundColor: s.background?.color || s.backgroundColor || '#ffffff'
-                        };
-                    });
-                    setSlideElementsMap(map);
-                }
-            })
-            .catch(() => {});
-    }, [playingCourse?._id]);
+        if (editorOpen || playerMode === 'edit') {
+            fetch(`/api/courses/${playingCourse._id}/slides/native`)
+                .then((r) => r.json())
+                .then((data) => {
+                    if (Array.isArray(data?.nativeSlides || data?.slides)) {
+                        const list = data.nativeSlides || data.slides;
+                        const map = {};
+                        list.forEach((s) => {
+                            const num = Number(s.slideNumber || 1);
+                            map[num] = {
+                                elements: Array.isArray(s.elements) ? s.elements : [],
+                                backgroundColor: s.background?.color || s.backgroundColor || '#ffffff'
+                            };
+                        });
+                        setSlideElementsMap(map);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [playingCourse?._id, editorOpen, playerMode]);
 
     useEffect(() => {
         // There is no remote player to synchronise while the teacher only
@@ -1180,10 +1196,25 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 remote: data.remote
             });
         }).catch(() => { });
-        fetch('/api/learning/slides/manifest', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
-        }).then((response) => response.json()).then((data) => setSlideManifest(Array.isArray(data?.slides) ? data.slides : [])).catch(() => setSlideManifest([]));
+        if (playingCourse?.slidesUrl) {
+            const cached = slideManifestCacheRef.current.get(playingCourse.slidesUrl);
+            if (Array.isArray(cached) && cached.length > 0) {
+                setSlideManifest(cached);
+            }
+            fetch('/api/learning/slides/manifest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false })
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (Array.isArray(data?.slides) && data.slides.length > 0) {
+                        slideManifestCacheRef.current.set(playingCourse.slidesUrl, data.slides);
+                        setSlideManifest(data.slides);
+                    }
+                })
+                .catch(() => {});
+        }
         return undefined;
     }, [isPhone, playingCourse?._id, playingCourse?.slidesUrl, globalClassId]);
 
@@ -1482,6 +1513,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 gridTemplateRows: `repeat(${projectedClassPlan.rows}, minmax(0, 1fr))`
                             }}
                         >
+                            {Array.from({ length: projectedClassPlan.cols * projectedClassPlan.rows }).map((_, index) => {
+                                const x = index % projectedClassPlan.cols;
+                                const y = Math.floor(index / projectedClassPlan.cols);
+                                return (
+                                    <div
+                                        className="course-projected-empty-seat"
+                                        key={`empty-seat-${x}-${y}`}
+                                        style={{
+                                            gridColumn: projectedClassPlan.cols - x,
+                                            gridRow: projectedClassPlan.rows - y
+                                        }}
+                                        aria-label={`Place vide ${x + 1}-${y + 1}`}
+                                    />
+                                );
+                            })}
                             {projectedClassPlan.seats.map(({ student, x, y }) => (
                                 <div
                                     className="course-projected-seat"
@@ -1660,7 +1706,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 const previousIds = slideManifest.map((slide) => String(slide?.objectId || ''));
                 const nextIds = nextManifest.map((slide) => String(slide?.objectId || ''));
                 const structureChanged = previousIds.join('|') !== nextIds.join('|');
-                if (structureChanged) setSlideManifest(nextManifest);
+                if (structureChanged) {
+                    setSlideManifest(nextManifest);
+                    setPlayingCourse((cur) => cur ? { ...cur, presentationReloadNonce: Date.now() } : cur);
+                }
 
                 const currentObjectId = String(projectedSlideObjectId || '').trim();
                 const nextIndex = currentObjectId
@@ -1726,6 +1775,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             // Check immediately both when leaving and returning: the former
             // catches Google edits without waiting a second, the latter makes
             // an inserted slide available as soon as CondaWeb is reopened.
+            if (document.visibilityState === 'visible') {
+                setPlayingCourse((cur) => cur ? { ...cur, presentationReloadNonce: Date.now() } : cur);
+            }
             void syncManifest();
             schedule();
         };
@@ -1741,6 +1793,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // Loads the current image without blanking the previous slide. Adjacent
     // slides are normally already decoded by the preloader below.
     useEffect(() => {
+        if (playerMode !== 'edit' && !editorOpen) return;
         const presId = extractPresentationId(playingCourse?.slidesUrl);
         if (!presId) return;
         const pageId = String(projectedSlideObjectId || slideManifest[projectedSlideIndex]?.objectId || '').trim();
@@ -1801,7 +1854,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             // is still loading. Only a navigation makes this request stale.
             if (requestedSlideImageKeyRef.current !== cacheKey) isCancelled = true;
         };
-    }, [playingCourse?.slidesUrl, projectedSlideIndex, projectedSlideObjectId, slideManifest, liveSyncKey]);
+    }, [playingCourse?.slidesUrl, projectedSlideIndex, projectedSlideObjectId, slideManifest, liveSyncKey, playerMode, editorOpen]);
 
     // Keep the old image and its masks together until the next slide image has
     // been decoded. This prevents masks from flashing on the wrong slide.
@@ -2175,53 +2228,19 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const tag = String(event.target?.tagName || '').toLowerCase();
             if (['input', 'textarea', 'select', 'button'].includes(tag) || event.target?.isContentEditable || event.repeat) return;
 
-            if (event.code === 'Space') {
-                event.preventDefault();
-                startMaskHold();
-                return;
-            }
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                void sendPresentationCommand('animation_toggle');
-                return;
-            }
             if (event.key === 'ArrowRight' || event.key === 'PageDown') {
                 event.preventDefault();
-                advanceDiaporama();
-                return;
+                void selectProjectedSlide(projectedSlideIndex + 1);
             } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
                 event.preventDefault();
-                reverseDiaporama();
-                return;
-            }
-
-            let action = '';
-            if (event.key === 'Enter') {
-                action = 'animation_toggle';
-            } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
-                action = 'slide_previous';
-            } else if (event.key === 'ArrowRight' || event.key === 'PageDown') {
-                action = 'slide_next';
-            }
-            if (!action) return;
-            event.preventDefault();
-            void sendPresentationCommand(action);
-        };
-        const handlePresentationKeyUp = (event) => {
-            if (event.code === 'Space') {
-                event.preventDefault();
-                // Space only reveals the focused mask progressively. A click
-                // on the slide is the sole action that advances the sequence.
-                stopMaskHold(false);
+                void selectProjectedSlide(projectedSlideIndex - 1);
             }
         };
         window.addEventListener('keydown', handlePresentationShortcut, true);
-        window.addEventListener('keyup', handlePresentationKeyUp, true);
         return () => {
             window.removeEventListener('keydown', handlePresentationShortcut, true);
-            window.removeEventListener('keyup', handlePresentationKeyUp, true);
         };
-    }, [isPhone, playingCourse?._id, playerMode, presentationRemote, slideManifest.length, videoSequencer, sequenceCutEditor, transitionEditMode, advanceDiaporama, reverseDiaporama, sendPresentationCommand, startMaskHold, stopMaskHold]);
+    }, [isPhone, playingCourse?._id, playerMode, projectedSlideIndex, slideManifest.length, videoSequencer, sequenceCutEditor, transitionEditMode, selectProjectedSlide]);
 
     useEffect(() => {
         if (isPhone || !playingCourse?._id || playerMode !== 'presentation') return;
@@ -2938,6 +2957,35 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setSequenceCutEditor(null);
     };
 
+    const toggleProjectedControl = async () => {
+        if (projectedControl) {
+            setProjectedControl(null);
+            return;
+        }
+        try {
+            const response = await fetch('/api/controls/all');
+            const rows = response.ok ? await response.json() : [];
+            const key = String(globalClass || '').replace(/\s/g, '').toUpperCase();
+            const available = (rows || []).filter((row) => {
+                if (row.active === false) return false;
+                const targets = Array.isArray(row.targetClassrooms) ? row.targetClassrooms : [];
+                return targets.length === 0 || targets.some((value) => String(value || '').replace(/\s/g, '').toUpperCase() === key);
+            });
+            if (!available.length) {
+                alert('Aucun contrôle actif pour cette classe. Créez-le dans Activités.');
+                return;
+            }
+            const choice = available.length === 1
+                ? available[0]
+                : available.find((_, i) => String(i + 1) === prompt(available.map((row, i) => `${i + 1}. ${row.title}`).join('\n'), '1'));
+            if (!choice) return;
+            setProjectedControl(choice);
+        } catch (err) {
+            console.error('[CondaWeb] Erreur lors du chargement des contrôles', err);
+            alert('Impossible de charger les contrôles.');
+        }
+    };
+
     const openControlOnCourse = async () => {
         setAddMenuOpen(false);
         traceControl('ajout-demande', { displayedSlide: currentSlideNumber, projectedSlide: projectedSlideIndex + 1 });
@@ -3130,21 +3178,20 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             }
         });
         setPlayerMode('presentation');
-        setPlayingCourse(course);
-        if (course?._id && (!course.presentationVideoSlides?.length || !course.presentationVideoSlides.some((s) => s.scenes?.length > 0))) {
-            fetch(`/api/learning/sync-by-course/${encodeURIComponent(course._id)}`, { method: 'POST' })
-                .then((r) => r.ok ? r.json() : null)
-                .then((data) => {
-                    if (data?.course?.presentationVideoSlides?.length) {
-                        setPlayingCourse((current) => String(current?._id) === String(course._id) ? { ...current, presentationVideoSlides: data.course.presentationVideoSlides } : current);
-                        setCourses((current) => current.map((c) => String(c._id) === String(course._id) ? { ...c, presentationVideoSlides: data.course.presentationVideoSlides } : c));
-                        setPresentationRemote((current) => String(current?.courseId || '') === String(course._id)
-                            ? { ...current, videoSlides: data.course.presentationVideoSlides }
-                            : current);
-                    }
-                })
-                .catch(() => {});
+        // Pré-remplissage instantané du manifest depuis le cache mémoire ou les slides natives (0ms de latence)
+        const cachedManifest = slideManifestCacheRef.current.get(course?.slidesUrl)
+            || (Array.isArray(course?.nativeSlides) && course.nativeSlides.length
+                ? course.nativeSlides.map((s, idx) => ({
+                    objectId: s.objectId || `slide-${idx + 1}`,
+                    slideNumber: Number(s.slideNumber || idx + 1),
+                    thumbnailProxyUrl: `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(extractPresentationId(course.slidesUrl))}&pageObjectId=${encodeURIComponent(String(s.objectId || ''))}&slideNumber=${idx + 1}`,
+                    thumbnailPublicUrl: `https://docs.google.com/presentation/d/${encodeURIComponent(extractPresentationId(course.slidesUrl))}/export/png?pageid=${encodeURIComponent(String(s.objectId || ''))}`
+                }))
+                : null);
+        if (cachedManifest && cachedManifest.length > 0) {
+            setSlideManifest(cachedManifest);
         }
+        setPlayingCourse(course);
     };
 
     const openModification = (course, requestedSlideIndex = projectedSlideIndex) => {
@@ -3762,8 +3809,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {!presentationRemote?.remote?.classPlanVisible && (
                             <button type="button" className="course-player-close" onClick={closePresentation} aria-label="Fermer la présentation">×</button>
                         )}
-                        <div className="course-presentation-layout">
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, position: 'relative', zIndex: 10000 }}>
+                        <div className="course-presentation-layout" style={{ display: presentationRemote?.remote?.classPlanVisible ? 'none' : undefined }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, position: 'relative', zIndex: 10 }}>
                                 <nav className="course-slide-thumbnail-rail" aria-label="Navigateur de diapositives" style={{ flex: '1', minHeight: 0 }}>
                                     <div className="course-slide-thumbnail-rail-title">DIAPOS</div>
                                     <div className="course-slide-thumbnail-list">
@@ -3792,396 +3839,54 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         })}
                                     </div>
                                 </nav>
-                                {projectedScenes.some((scene) => Array.isArray(scene?.sequences) && scene.sequences.length > 0) && (
-                                    <div style={{ flex: '0 0 auto', marginTop: 'auto', marginBottom: '18px', background: 'rgba(15, 23, 42, 0.94)', borderRadius: '18px', padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 10px 28px rgba(0, 0, 0, 0.26)' }}>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', overflowX: 'visible', paddingBottom: '2px' }}>
-                                            {projectedScenes.map((scene, index) => (
-                                                <button
-                                                    key={scene.id || index}
-                                                    onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); void sendPresentationCommand('scene_select', { sceneIndex: index }); }}
-                                                    style={{ flex: '0 0 auto', padding: '6px 8px', borderRadius: '8px', background: projectedSceneIndex === index ? '#ef4444' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '11px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}
-                                                    title={scene.name || `Scène ${index + 1}`}
-                                                >
-                                                    S{index + 1}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', overflowX: 'visible', paddingBottom: '2px' }}>
-                                            {projectedGroups.map((group, index) => {
-                                                const isSelected = projectedSequenceIndex === index;
-                                                const bufferMap = presentationRemote?.remote?.sequenceBuffers || {};
-                                                const specificKey = `${projectedSlideIndex}_${projectedSceneIndex}_${index}`;
-                                                const pct = Math.min(100, Math.max(0, Number(bufferMap[specificKey] ?? 0)));
-                                                const isReady = pct >= 65 || (isSelected && presentationRemote?.remote?.isReady === true);
-                                                const isAudio = group.some((item) => isAudioSequence(item));
-                                                return (
-                                                    <button
-                                                        key={group[0]?.id || index}
-                                                        onPointerDown={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            const now = Date.now();
-                                                            const isDouble = window.__conda_last_seq_click === index && (now - (window.__conda_last_seq_time || 0) < 400);
-                                                            window.__conda_last_seq_click = index;
-                                                            window.__conda_last_seq_time = now;
-                                                            if (isDouble) {
-                                                                window.__conda_last_seq_click = -1;
-                                                                void sendPresentationCommand('sequence_select', { sequenceIndex: index, play: true });
-                                                            } else {
-                                                                if (presentationRemote?.remote?.animationPlaying) return;
-                                                                void sendPresentationCommand('sequence_select', { sequenceIndex: index });
-                                                            }
-                                                        }}
-                                                        style={{ flex: '0 0 auto', padding: '6px 8px', borderRadius: '8px', background: isSelected ? (isReady ? '#10b981' : '#f59e0b') : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '10px', fontWeight: 'bold', border: 'none', cursor: 'pointer', opacity: isReady ? 1 : 0.6 }}
-                                                        title={group.map((item) => String(item?.name || '').trim()).filter(Boolean).join(' + ') || `Séquence ${index + 1}`}
-                                                    >
-                                                        {isAudio ? '🎵' : '🎬'} {index + 1}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                        <button
-                                            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); void sendPresentationCommand(presentationRemote?.remote?.animationPlaying ? 'animation_hide' : 'play'); }}
-                                            style={{ width: '100%', padding: '8px', borderRadius: '10px', background: presentationRemote?.remote?.animationPlaying ? '#3b82f6' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '11px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}
-                                        >
-                                            {presentationRemote?.remote?.animationPlaying ? '🎬 STOPPER' : '🎬 LANCER'}
-                                        </button>
-                                    </div>
-                                )}
                             </div>
 
-                            {/* Rendu direct haute fidélité de la diapositive active */}
-                            <div
-                                className="google-slide-stage-container is-diaporama"
-                                onPointerDown={!transitionEditMode ? (event) => {
-                                    event.currentTarget.setPointerCapture?.(event.pointerId);
-                                    startMaskHold();
-                                } : undefined}
-                                onPointerUp={!transitionEditMode ? (event) => {
-                                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
-                                    stopMaskHold(true);
-                                } : undefined}
-                                onPointerCancel={!transitionEditMode ? (event) => {
-                                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
-                                    stopMaskHold(false);
-                                } : undefined}
-                            >
-                            {slideImageUrl ? (
-                                <img
-                                    key={`google-slide-${visibleSlideIndex}`}
-                                    src={slideImageUrl}
-                                    alt={`Google Slide ${visibleSlideIndex + 1}`}
-                                    className="google-slide-image-display"
-                                    draggable={false}
-                                />
-                            ) : (
-                                <div className="conda-slides-loader-stage">
-                                    <div className="conda-slides-spinner" />
-                                    <span>Chargement de la présentation Google Slides…</span>
-                                </div>
-                            )}
-
-                            {/* Calque des éléments transparents et sélectionnables + Masques de diaporama */}
-                            <div className="google-slide-elements-overlay">
-                                {/* Boîtes de texte transparentes sélectionnables */}
-                                {currentSlideTransitionItems.map((item) => (
-                                    <div
-                                        key={`text-box-${item.id}`}
-                                        className="slide-selectable-text-box"
-                                        style={{
-                                            left: `${item.left}%`,
-                                            top: `${item.top}%`,
-                                            width: `${item.width}%`,
-                                            height: `${item.height}%`,
-                                        }}
-                                        onPointerDown={(e) => {
-                                            e.stopPropagation();
-                                        }}
-                                        onClick={(e) => {
-                                            const sel = window.getSelection()?.toString()?.trim();
-                                            if (sel) {
-                                                e.stopPropagation();
-                                            }
-                                        }}
-                                    >
-                                        <div
-                                            className="slide-selectable-text-content"
-                                            style={{
-                                                fontSize: item.style?.fontSize ? `${Math.max(12, Math.round(Number(item.style.fontSize) * 0.9))}px` : undefined,
-                                                textAlign: item.style?.align || 'left',
-                                                fontWeight: item.style?.bold ? 'bold' : 'normal',
-                                                fontStyle: item.style?.italic ? 'italic' : 'normal',
-                                            }}
-                                            title="Texte sélectionnable"
-                                        >
-                                            {item.text}
-                                        </div>
-                                    </div>
-                                ))}
-
-                                {/* Les miniatures Google Slides sont des PNG : une vidéo intégrée
-                                    doit donc être rendue séparément à sa position d'origine. */}
-                                {currentSlideElements.filter((item) => item?.type === 'video_youtube' && getGoogleSlidesVideoEmbedUrl(item.url)).map((video) => (
+                            {/* Rendu direct de la présentation Google Slides */}
+                            <div className="google-slide-stage-container">
+                                {projectedSlidesUrl ? (
                                     <iframe
-                                        key={`google-slide-video-${video.id}`}
-                                        className="google-slide-embedded-video"
-                                        src={getGoogleSlidesVideoEmbedUrl(video.url)}
-                                        title="Vidéo intégrée à la diapositive Google Slides"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        key={`google-slides-embed-${extractPresentationId(playingCourse?.slidesUrl)}-${presentationReloadNonce}`}
+                                        src={projectedSlidesUrl}
+                                        title={playingCourse?.title || "Google Slides"}
+                                        className="google-slide-embed-frame"
+                                        allow="autoplay; fullscreen"
                                         allowFullScreen
-                                        style={{
-                                            left: `${video.x}%`,
-                                            top: `${video.y}%`,
-                                            width: `${video.width}%`,
-                                            height: `${video.height}%`,
-                                            pointerEvents: transitionEditMode ? 'none' : 'auto',
-                                        }}
-                                    />
-                                ))}
-
-                                {/* Masques de texte et rectangles créés dans l'éditeur */}
-                                {transitionsEnabled && currentSlideMasks.map((mask) => {
-                                    const isControlMask = mask.type === 'control';
-                                    const isDismissed = !isControlMask && dismissedPresentationMasks[mask.id] === true;
-                                    const isMasked = isControlMask || (!isDismissed && mask.step > currentDiaporamaStep);
-                                    const revealedPixels = isMasked ? Number(maskRevealPixels[mask.id] || 0) : 0;
-                                    const activeStep = Math.min(...currentSlideMasks.filter((item) => item.type !== 'control' && !dismissedPresentationMasks[item.id] && item.step > currentDiaporamaStep).map((item) => item.step));
-                                    const isActive = !isControlMask && isMasked && mask.step === activeStep;
-                                    return (
-                                        <div
-                                            key={`mask-${mask.id}`}
-                                            className={`slide-diaporama-mask ${isControlMask ? 'is-control' : ''} ${isMasked ? 'is-masked' : 'is-revealed'} ${isActive ? 'is-active' : ''} ${selectedPresentationMaskId === mask.id ? 'is-selected' : ''}`}
-                                            style={{
-                                                left: `${mask.x}%`,
-                                                top: `${mask.y}%`,
-                                                width: `${mask.width}%`,
-                                                height: `${mask.height}%`,
-                                                backgroundColor: '#ffffff',
-                                                clipPath: revealedPixels > 0 ? `inset(${revealedPixels.toFixed(2)}px 0 0 0)` : undefined
-                                            }}
-                                            onPointerDown={(event) => {
-                                                event.stopPropagation();
-                                                if (isControlMask) traceControl('masque-pointerdown', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, pointerType: event.pointerType, detail: event.detail });
-                                            }}
-                                            onPointerUp={(event) => {
-                                                event.stopPropagation();
-                                                if (isControlMask) traceControl('masque-pointerup', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, pointerType: event.pointerType, detail: event.detail });
-                                            }}
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                if (isControlMask) traceControl('masque-clic', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, clickCount: event.detail, selectedBefore: selectedPresentationMaskId === mask.id });
-                                                if (isMasked) setSelectedPresentationMaskId(mask.id);
-                                            }}
-                                            onDoubleClick={(event) => {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                if (isControlMask) {
-                                                    if (!event.isTrusted || event.detail < 2) {
-                                                        traceControl('masque-double-clic-ignore', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, trusted: event.isTrusted, clickCount: event.detail });
-                                                        return;
-                                                    }
-                                                    traceControl('masque-double-clic', { slide: currentSlideNumber, maskId: mask.id, controlId: mask.controlId, clickCount: event.detail });
-                                                    void openControlFromMask(mask.controlId, { slide: currentSlideNumber, maskId: mask.id, title: mask.controlTitle });
-                                                    return;
-                                                }
-                                                if (selectedPresentationMaskId !== mask.id || !isMasked) return;
-                                                console.info('[CondaWeb masques] Retrait par double-clic', {
-                                                    slide: currentSlideNumber,
-                                                    mask: { id: mask.id, number: mask.number, step: mask.step }
-                                                });
-                                                setDismissedPresentationMasks((current) => ({ ...current, [mask.id]: true }));
-                                                setSelectedPresentationMaskId('');
-                                            }}
-                                        >{isControlMask ? <span className="slide-control-mask-content"><strong>CONTRÔLE</strong><small>{mask.controlTitle}</small><em>Double-clique pour ouvrir</em></span> : <span className="slide-diaporama-mask-number">{mask.number}</span>}</div>
-                                    );
-                                })}
-                            </div>
-
-                            {transitionEditMode && (
-                                <div className="course-transition-stage-editor" onPointerDown={(event) => {
-                                    if (event.target !== event.currentTarget) return;
-                                    const bounds = event.currentTarget.getBoundingClientRect();
-                                    const x = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100));
-                                    const y = Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100));
-                                    const id = `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-                                    maskDraftDirtyRef.current = true;
-                                    setSelectedMaskId(id);
-                                    setTransitionDraft((previous) => ({ ...previous, masks: [...(previous.masks || []), { id, x, y, width: 2, height: 2, step: (previous.masks || []).length + 2 }]}));
-                                    maskEditorDragRef.current = { id, mode: 'create', startX: event.clientX, startY: event.clientY, bounds, startPercentX: x, startPercentY: y };
-                                    event.currentTarget.setPointerCapture?.(event.pointerId);
-                                }}>
-                                    {(transitionDraft.masks || []).map((mask, index) => <button key={mask.id || index} type="button" className={`course-transition-stage-mask ${selectedMaskId === mask.id ? 'selected' : ''}`} style={{ left: `${mask.x}%`, top: `${mask.y}%`, width: `${mask.width}%`, height: `${mask.height}%` }} onPointerDown={(event) => {
-                                        event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id);
-                                        const bounds = event.currentTarget.parentElement.getBoundingClientRect();
-                                        maskEditorDragRef.current = { id: mask.id, mode: event.target.dataset.resize === 'true' ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, bounds, mask: { ...mask } };
-                                        event.currentTarget.setPointerCapture?.(event.pointerId);
-                                    }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedMaskId(mask.id); setEditingMaskId(mask.id); }}>{editingMaskId === mask.id ? <input className="course-transition-stage-number-input" type="number" min="1" autoFocus defaultValue={Number(mask.step || index + 2)} onPointerDown={(event) => event.stopPropagation()} onBlur={() => setEditingMaskId('')} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onChange={(event) => { maskDraftDirtyRef.current = true; setTransitionDraft((previous) => ({ ...previous, masks: (previous.masks || []).map((row) => row.id === mask.id ? { ...row, step: Math.max(1, Number(event.target.value) || 1) } : row) })); }} /> : Number(mask.step || index + 2)}<span className="course-transition-stage-resize" data-resize="true" /></button>)}
-                                    <div className="course-transition-stage-toolbar">
-                                        <span>Mode édition des masques · Glisse dans une zone vide pour dessiner · Sauvegarde automatique</span>
-                                        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setTransitionEditMode(false)}>FERMER</button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Flèches latérales de navigation au survol */}
-                            {projectedSlideIndex > 0 && (
-                                <button
-                                    type="button"
-                                    className="course-stage-nav-arrow prev"
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); void selectProjectedSlide(projectedSlideIndex - 1); }}
-                                    aria-label="Diapositive précédente"
-                                    title="Diapositive précédente"
-                                >
-                                    ‹
-                                </button>
-                            )}
-                            {projectedSlideIndex < Math.max(0, (slideManifest.length || 1) - 1) && (
-                                <button
-                                    type="button"
-                                    className="course-stage-nav-arrow next"
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); void selectProjectedSlide(projectedSlideIndex + 1); }}
-                                    aria-label="Diapositive suivante"
-                                    title="Diapositive suivante"
-                                >
-                                    ›
-                                </button>
-                            )}
-                            </div>
-                        </div>
-                        {projectedGroups.length > 0 && <div className="course-scene-sequence-counter"><b>{projectedSceneIndex + 1}</b><span>{projectedSequenceIndex + 1}</span></div>}
-                        {renderProjectedClassPlan()}
-                        {preloadItems.length > 0 ? (
-                            preloadItems.map((item) => {
-                                const heldVideoKey = String(heldProjectedVideo?.video?.id || heldProjectedVideo?.video?.url || '');
-                                const itemVideoKey = String(item.video?.id || item.video?.url || '');
-                                const hasHeldFrame = Boolean(heldVideoKey && heldProjectedVideo?.playVersion === currentPlayVersion);
-                                const isHeldItem = hasHeldFrame && heldVideoKey === itemVideoKey;
-                                const isCurrentActive = presentationRemote?.remote?.animationVisible
-                                    && (hasHeldFrame ? isHeldItem : item.isCurrent);
-                                const isYoutube = item.video?.sourceType === 'youtube' || getYoutubeVideoId(item.video?.url);
-                                const isAudio = isAudioSequence(item.video);
-                                const itemKey = `${item.slideIndex}_${item.sceneIndex}_${item.sequenceIndex}_${item.video?.id || item.video?.url || ''}`;
-                                return (
-                                    <div
-                                        key={itemKey}
-                                        className={`course-sequence-video-layer ${isCurrentActive ? 'active' : 'prewarming'} ${isAudio ? 'audio' : ''}`}
-                                    >
-                                        {isYoutube ? (
-                                            <YoutubeSequencePlayer
-                                                video={item.video}
-                                                playVersion={item.isCurrent ? presentationRemote?.remote?.playVersion : 0}
-                                                pauseVersion={presentationRemote?.remote?.pauseVersion}
-                                                isPlaying={item.isCurrent && presentationRemote?.remote?.animationPlaying === true}
-                                                isVisible={isCurrentActive}
-                                                autoplayOnMount={item.isCurrent ? youtubeAutoplayOnMount : false}
-                                                onEnded={item.isCurrent ? finishProjectedVideo : undefined}
-                                                onBufferProgress={(fraction) => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, fraction)}
-                                            />
-                                        ) : isAudio ? (
-                                            <audio
-                                                ref={item.isCurrent ? sequenceVideoRef : undefined}
-                                                src={item.video.url}
-                                                preload="auto"
-                                                onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(item.video.startSec || 0)); }}
-                                                onLoadedData={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, .25)}
-                                                onCanPlay={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, .65)}
-                                                onCanPlayThrough={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, 1)}
-                                                onProgress={(event) => handleNativeItemProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, event)}
-                                                onTimeUpdate={(event) => {
-                                                    handleNativeItemProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, event);
-                                                    const end = Math.max(0, Number(item.video.endSec || 0));
-                                                    if (item.isCurrent && end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); }
-                                                }}
-                                                onEnded={item.isCurrent ? finishProjectedVideo : undefined}
-                                            />
-                                        ) : (
-                                            <video
-                                                ref={item.isCurrent ? sequenceVideoRef : undefined}
-                                                src={item.video.url}
-                                                playsInline
-                                                preload="auto"
-                                                muted={!isCurrentActive}
-                                                onLoadedMetadata={(event) => {
-                                                    event.currentTarget.currentTime = Math.max(0, Number(item.video.startSec || 0));
-                                                }}
-                                                onLoadedData={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, .25)}
-                                                onCanPlay={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, .65)}
-                                                onCanPlayThrough={() => handleItemBufferProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, 1)}
-                                                onProgress={(event) => handleNativeItemProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, event)}
-                                                onTimeUpdate={(event) => {
-                                                    handleNativeItemProgress(item.slideIndex, item.sceneIndex, item.sequenceIndex, event);
-                                                    if (item.isCurrent) {
-                                                        const end = Math.max(0, Number(item.video.endSec || 0));
-                                                        if (end > 0 && event.currentTarget.currentTime >= end) {
-                                                            event.currentTarget.pause();
-                                                            finishProjectedVideo();
-                                                        }
-                                                    }
-                                                }}
-                                                onEnded={item.isCurrent ? finishProjectedVideo : undefined}
-                                            />
-                                        )}
-                                    </div>
-                                );
-                            })
-                        ) : visibleProjectedVideo ? (
-                            <div className={`course-sequence-video-layer ${presentationRemote?.remote?.animationVisible ? 'active' : 'prewarming'} ${isAudioSequence(visibleProjectedVideo) ? 'audio' : ''}`}>
-                                {visibleVideoIsYoutube ? (
-                                    <YoutubeSequencePlayer
-                                        video={visibleProjectedVideo}
-                                        playVersion={presentationRemote?.remote?.playVersion}
-                                        pauseVersion={presentationRemote?.remote?.pauseVersion}
-                                        isPlaying={presentationRemote?.remote?.animationPlaying === true}
-                                        isVisible={presentationRemote?.remote?.animationVisible === true}
-                                        autoplayOnMount={youtubeAutoplayOnMount}
-                                        onEnded={finishProjectedVideo}
-                                        onBufferProgress={(fraction) => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, fraction)}
-                                    />
-                                ) : isAudioSequence(visibleProjectedVideo) ? (
-                                    <audio
-                                        ref={sequenceVideoRef}
-                                        src={visibleProjectedVideo.url}
-                                        preload="auto"
-                                        onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0)); }}
-                                        onLoadedData={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, .25)}
-                                        onCanPlay={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, .65)}
-                                        onCanPlayThrough={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, 1)}
-                                        onProgress={(event) => handleNativeItemProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, event)}
-                                        onTimeUpdate={(event) => {
-                                            handleNativeItemProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, event);
-                                            const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0));
-                                            if (end > 0 && event.currentTarget.currentTime >= end) { event.currentTarget.pause(); finishProjectedVideo(); }
-                                        }}
-                                        onEnded={finishProjectedVideo}
                                     />
                                 ) : (
-                                    <video
-                                        ref={sequenceVideoRef}
-                                        src={visibleProjectedVideo.url}
-                                        playsInline
-                                        preload="auto"
-                                        onLoadedMetadata={(event) => {
-                                            event.currentTarget.currentTime = Math.max(0, Number(visibleProjectedVideo.startSec || 0));
-                                        }}
-                                        onLoadedData={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, .25)}
-                                        onCanPlay={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, .65)}
-                                        onCanPlayThrough={() => handleItemBufferProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, 1)}
-                                        onProgress={(event) => handleNativeItemProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, event)}
-                                        onTimeUpdate={(event) => {
-                                            handleNativeItemProgress(projectedSlideIndex, projectedSceneIndex, projectedSequenceIndex, event);
-                                            const end = Math.max(0, Number(visibleProjectedVideo.endSec || 0));
-                                            if (end > 0 && event.currentTarget.currentTime >= end) {
-                                                event.currentTarget.pause();
-                                                finishProjectedVideo();
-                                            }
-                                        }}
-                                        onEnded={finishProjectedVideo}
-                                    />
+                                    <div className="conda-slides-loader-stage">
+                                        <div className="conda-slides-spinner" />
+                                        <span>Chargement de la présentation Google Slides…</span>
+                                    </div>
+                                )}
+
+                                {/* Flèches latérales de navigation au survol */}
+                                {projectedSlideIndex > 0 && (
+                                    <button
+                                        type="button"
+                                        className="course-stage-nav-arrow prev"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => { e.stopPropagation(); void selectProjectedSlide(projectedSlideIndex - 1); }}
+                                        aria-label="Diapositive précédente"
+                                        title="Diapositive précédente"
+                                    >
+                                        ‹
+                                    </button>
+                                )}
+                                {projectedSlideIndex < Math.max(0, (slideManifest.length || 1) - 1) && (
+                                    <button
+                                        type="button"
+                                        className="course-stage-nav-arrow next"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => { e.stopPropagation(); void selectProjectedSlide(projectedSlideIndex + 1); }}
+                                        aria-label="Diapositive suivante"
+                                        title="Diapositive suivante"
+                                    >
+                                        ›
+                                    </button>
                                 )}
                             </div>
-                        ) : null}
+                        </div>
+                        {renderProjectedClassPlan()}
                         {projectedControl && <div className="course-control-projection" role="dialog" aria-modal="true" aria-label={`Contrôle : ${projectedControl.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
                             <button type="button" className="course-control-close" onClick={(event) => { event.preventDefault(); event.stopPropagation(); traceControl('fermeture-bouton', { controlId: String(projectedControl._id || ''), title: String(projectedControl.title || '') }); setProjectedControl(null); window.setTimeout(() => coursePlayerRef.current?.focus?.(), 0); }} aria-label="Fermer le contrôle et revenir à la présentation">×</button>
                             <div className="course-control-qr">
@@ -4245,98 +3950,38 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             </div>
                         )}
 
-                        {(playingCourse.overlays || []).length > 0 && <div className="course-overlay-layer" aria-hidden="true">
-                            {(playingCourse.overlays || []).map((overlay, index) => (
-                                overlay.type === 'video' ? (
-                                    <video
-                                        key={`${overlay.sourceUrl}-${index}`}
-                                        src={overlay.sourceUrl}
-                                        autoPlay
-                                        muted
-                                        playsInline
-                                        style={{ left: `${overlay.x}%`, top: `${overlay.y}%`, width: `${overlay.width}%` }}
-                                    />
-                                ) : (
-                                    <img
-                                        key={`${overlay.sourceUrl}-${index}`}
-                                        src={overlay.sourceUrl}
-                                        alt=""
-                                        style={{ left: `${overlay.x}%`, top: `${overlay.y}%`, width: `${overlay.width}%` }}
-                                    />
-                                )
-                            ))}
-                        </div>}
-
                         <div className="course-player-mode-switch" aria-label="Commandes de la présentation">
-                            <div className="course-player-slide-stepper">
-                                <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex - 1)} disabled={projectedSlideIndex <= 0} aria-label="Diapo précédente">‹</button>
-                                <label>
-                                    <span>DIAPO</span>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max={Math.max(1, slideManifest.length || 1)}
-                                        value={projectedSlideIndex + 1}
-                                        onChange={(event) => void selectProjectedSlide(Number(event.target.value) - 1)}
-                                        onKeyDown={(event) => event.stopPropagation()}
-                                        aria-label="Numéro de la diapo active"
-                                    />
-                                </label>
-                                <button type="button" onClick={() => void selectProjectedSlide(projectedSlideIndex + 1)} disabled={projectedSlideIndex >= Math.max(0, (slideManifest.length || 1) - 1)} aria-label="Diapo suivante">›</button>
-                            </div>
                             <button
                                 type="button"
-                                className={`course-diaporama-toggle-btn ${transitionEditMode ? 'active' : ''}`}
+                                className={`course-toolbar-action-btn control-btn ${projectedControl ? 'active' : ''}`}
+                                onClick={() => void toggleProjectedControl()}
+                                title={projectedControl ? "Fermer le contrôle affiché" : "Afficher un contrôle pour la classe"}
+                            >
+                                📝 {projectedControl ? 'FERMER LE CONTRÔLE' : 'CONTRÔLE'}
+                            </button>
+                            <button
+                                type="button"
+                                className="course-toolbar-action-btn google-btn"
+                                onClick={() => void openGoogleSlidesExternal(playingCourse, projectedSlideIndex)}
+                                title="Ouvrir dans Google Slides pour modifier"
+                            >
+                                ↗ OUVRIR DANS GOOGLE SLIDES
+                            </button>
+                            <button
+                                type="button"
+                                className={`course-toolbar-action-btn plan-btn ${presentationRemote?.remote?.classPlanVisible ? 'active' : ''}`}
                                 onClick={() => {
-                                    setTransitionEditMode((active) => !active);
-                                    setSelectedMaskId('');
+                                    setPresentationRemote((current) => current ? {
+                                        ...current,
+                                        remote: { ...(current.remote || {}), classPlanVisible: !current.remote?.classPlanVisible }
+                                    } : current);
+                                    void sendPresentationCommand('class_plan_toggle');
                                 }}
-                                title="Créer, déplacer, redimensionner ou supprimer les masques de cette diapositive"
+                                title="Afficher ou cacher le plan de classe"
                             >
-                                {transitionEditMode ? '✏️ QUITTER L’ÉDITION' : '✏️ ÉDITER LES MASQUES'}
+                                🗺️ {presentationRemote?.remote?.classPlanVisible ? 'CACHER LE PLAN' : 'PLAN'}
                             </button>
-                            <button
-                                type="button"
-                                className={`course-diaporama-toggle-btn ${presentationRemote?.remote?.animationVisible ? 'active' : ''}`}
-                                onClick={() => void sendPresentationCommand('animation_toggle')}
-                                title="Afficher ou cacher l’animation de la diapositive (raccourci : Entrée)"
-                            >
-                                {presentationRemote?.remote?.animationVisible ? '🎬 CACHER L’ANIMATION' : '🎬 AFFICHER L’ANIMATION'}
-                            </button>
-                            <div className="course-edit-mode-control">
-                                <span className="course-live-sync-pill" title="Les modifications apportées dans Google Slides sont automatiquement répercutées ici toutes les 2 secondes">
-                                    <span className="live-sync-dot pulsing" />
-                                    <span>Google Slides live (2s)</span>
-                                </span>
-                                <button
-                                    type="button"
-                                    className="course-google-ext-btn"
-                                    onClick={() => void openGoogleSlidesExternal(playingCourse, projectedSlideIndex)}
-                                    title={`Ouvrir la slide ${projectedSlideIndex + 1} dans Google Slides pour modifier`}
-                                >
-                                    ↗ Ouvrir dans Google Slides
-                                </button>
-                            </div>
-                            <button type="button" className="course-sync-board-button" onClick={() => void forceSyncRemote()} disabled={scoreSyncing} title="Synchroniser la diapo et rediffuser immédiatement la dernière variation de note dans Google Slides">
-                                {scoreSyncing ? '↻ SYNCHRONISATION…' : '↻ SYNCHRONISER TÉLÉPHONE + NOTES'}
-                            </button>
-                            <button type="button" className="course-sync-board-button" onClick={reimportFromGoogleSlides} title="Réimporter toutes les diapositives depuis Google Slides">
-                                ↻ RÉIMPORTER DEPUIS GOOGLE
-                            </button>
-                            <div className="course-add-wrap">
-                                <button type="button" className="course-animation-button" onClick={() => setAddMenuOpen((current) => !current)}>
-                                    ＋ AJOUTER
-                                </button>
-                                {addMenuOpen && (
-                                    <div className="course-add-menu">
-                                        <button type="button" onClick={() => { setAddMenuOpen(false); setTransitionEditMode(true); }}>✨ AJOUTER UNE TRANSITION</button>
-                                        <button type="button" onClick={openVideoSequencer}>🎬 AJOUTER UNE ANIMATION</button>
-                                        <button type="button" onClick={openControlOnCourse}>📝 AJOUTER UN CONTRÔLE</button>
-                                    </div>
-                                )}
-                            </div>
                         </div>
-
                     </div>
                 </div>
             )}

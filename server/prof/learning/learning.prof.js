@@ -1244,6 +1244,9 @@ router.post('/slides/extract-text', async (req, res) => {
     }
 });
 
+const slideManifestCache = new Map();
+const MANIFEST_CACHE_TTL_MS = 60 * 1000;
+
 router.post('/slides/manifest', async (req, res) => {
     try {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -1254,7 +1257,15 @@ router.post('/slides/manifest', async (req, res) => {
         const filterCondition = String(req.body?.filterCondition || '').trim();
         const includeThumbnails = req.body?.includeThumbnails !== false;
         const outlineOnly = req.body?.outlineOnly === true;
+        const forceRefresh = req.body?.force === true;
         if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
+
+        const cacheKey = `${presentationUrl}_${slideSelection}_${filterCondition}_${includeThumbnails}_${outlineOnly}`;
+        const cached = slideManifestCache.get(cacheKey);
+        if (!forceRefresh && cached && (Date.now() - cached.timestamp < MANIFEST_CACHE_TTL_MS)) {
+            return res.json(cached.payload);
+        }
+
         const selectedSlides = parseSlideSelection(slideSelection);
         const preparedSource = outlineOnly
             ? await ProfDrive.ensureNativeGoogleSlides(presentationUrl)
@@ -1270,14 +1281,16 @@ router.post('/slides/manifest', async (req, res) => {
             thumbnailProxyUrl: `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presentationId)}&pageObjectId=${encodeURIComponent(String(s?.objectId || ''))}&slideNumber=${encodeURIComponent(String(s?.slideNumber || ''))}`,
             thumbnailPublicUrl: `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/export/png?pageid=${encodeURIComponent(String(s?.objectId || ''))}`
         }));
-        res.json({
+        const payload = {
             ok: true,
             presentationId,
             title: manifest.title,
             sourcePresentationUrl,
             convertedFromOffice: preparedSource?.converted === true,
             slides
-        });
+        };
+        slideManifestCache.set(cacheKey, { payload, timestamp: Date.now() });
+        res.json(payload);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
