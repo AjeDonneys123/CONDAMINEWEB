@@ -723,6 +723,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const [sequenceCutPlayhead, setSequenceCutPlayhead] = useState(0);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [projectedControl, setProjectedControl] = useState(null);
+    const [fullScreenQr, setFullScreenQr] = useState(false);
     // The QR code must open the same CondaWeb instance that is presenting the
     // exam (production, preview or local network), rather than a hard-coded
     // deployment URL.
@@ -3932,15 +3933,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <button type="button" className="course-control-close" onClick={(event) => { event.preventDefault(); event.stopPropagation(); traceControl('fermeture-bouton', { controlId: String(projectedControl._id || ''), title: String(projectedControl.title || '') }); setProjectedControl(null); window.setTimeout(() => coursePlayerRef.current?.focus?.(), 0); }} aria-label="Fermer le contrôle et revenir à la présentation">×</button>
                             <div className="course-control-qr">
                                 <span className="course-control-exam-mask">CONTRÔLE</span>
-                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(controlPublicUrl)}`} alt={`QR code de l'examen ${projectedControl.title}`} />
+                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(controlPublicUrl)}`} alt={`QR code de l'examen ${projectedControl.title}`} onClick={() => setFullScreenQr(true)} style={{ cursor: 'zoom-in' }} />
                                 <strong>SCANNE POUR COMMENCER</strong>
                                 <span className="course-control-qr-title">{projectedControl.title}</span>
                                 <a href={controlPublicUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-black underline text-violet-700 hover:text-violet-900 mt-1">
                                     ↗ Ouvrir le contrôle
                                 </a>
                             </div>
-                            <div className="course-control-paper"><h1>{projectedControl.title}</h1>{(projectedControl.items || []).map((item, index) => <article key={item.id}><small>{index + 1} · {item.lessonTitle}</small><div>{String(item.prompt || '').replace(/["“«][^"”»]+["”»]/g, '__________')}</div>{item.type === 'qcm' && <ol type="A">{item.choices.map(choice => <li key={choice}>{choice}</li>)}</ol>}</article>)}</div>
+                            <div className="course-control-paper"><h1>{projectedControl.title}</h1>{(projectedControl.items || []).map((item, index) => <article key={item.id}><small>{index + 1} · {item.lessonTitle}</small><div>{String(item.prompt || '').replace(/["“«][^"”»]+["”»]/g, '__________')}</div>{item.type === 'qcm' && <ol className="list-none m-0 p-0 mt-2 flex flex-col gap-1">{item.choices.map((choice, i) => <li key={choice}><strong>{String.fromCharCode(65 + i)}</strong>) {choice}</li>)}</ol>}</article>)}</div>
                         </div>}
+
+                        {fullScreenQr && projectedControl && (
+                            <div className="fixed inset-0 z-[100000] bg-white flex flex-col items-center justify-center p-8" onClick={() => setFullScreenQr(false)}>
+                                <button type="button" className="absolute top-6 right-6 text-6xl font-black text-slate-400 hover:text-slate-800" onClick={(e) => { e.stopPropagation(); setFullScreenQr(false); }}>×</button>
+                                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(controlPublicUrl)}`} alt="QR Code Grand Format" className="w-[80vh] max-w-[80vw] h-[80vh] max-h-[80vw] object-contain" onClick={(e) => e.stopPropagation()} />
+                                <h1 className="mt-8 text-4xl font-black text-slate-800 text-center px-4 leading-tight">{projectedControl.title}</h1>
+                            </div>
+                        )}
 
                         {/* COMPTEUR DE POINTS DE LA CLASSE EN HAUT A DROITE */}
                         <div className="live-class-points" title="Score de la classe" aria-label={`Score de la classe : ${classPoints} points`}>
