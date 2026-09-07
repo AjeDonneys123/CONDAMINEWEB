@@ -975,9 +975,10 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 handlePlaceStudentToCell(x, y);
                                 return;
                             }
-                            if (!isSwapMode && !student && swapSource) {
+                            if (swapSource && !student) {
                                 moveStudentTo(swapSource._id, x, y);
                                 setSwapSource(null);
+                                setIsSwapMode(false);
                             }
                         }}
                     >

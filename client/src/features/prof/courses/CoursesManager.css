@@ -3030,6 +3030,21 @@
     background: rgba(37, 99, 235, 0.9);
 }
 
+.course-player-mode-switch .course-toolbar-action-btn.refresh-btn {
+    border-color: rgba(56, 189, 248, 0.65);
+    color: #38bdf8;
+}
+.course-player-mode-switch .course-toolbar-action-btn.refresh-btn:hover {
+    background: rgba(14, 165, 233, 0.85);
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+}
+.course-player-mode-switch .course-toolbar-action-btn.refresh-btn.loading {
+    opacity: 0.75;
+    cursor: wait;
+}
+
 /* Modal Éditeur de Transitions */
 .course-transition-editor-backdrop {
     position: fixed;

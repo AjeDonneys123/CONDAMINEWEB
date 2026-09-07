@@ -3211,6 +3211,30 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setPlayingCourse(course);
     };
 
+    const [isRefreshingSlides, setIsRefreshingSlides] = useState(false);
+
+    const refreshPresentationSlides = async () => {
+        if (isRefreshingSlides || !playingCourse?._id) return;
+        setIsRefreshingSlides(true);
+        // Force le rechargement de l'iframe Google Slides
+        setPlayingCourse((current) => current ? { ...current, presentationReloadNonce: Date.now() } : current);
+        if (playingCourse.slidesUrl) {
+            try {
+                const response = await fetch('/api/learning/slides/manifest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ presentationUrl: playingCourse.slidesUrl, includeThumbnails: false, force: true })
+                });
+                const data = await response.json();
+                if (Array.isArray(data?.slides) && data.slides.length > 0) {
+                    slideManifestCacheRef.current.set(playingCourse.slidesUrl, data.slides);
+                    setSlideManifest(data.slides);
+                }
+            } catch (_) {}
+        }
+        window.setTimeout(() => setIsRefreshingSlides(false), 800);
+    };
+
     const openModification = (course, requestedSlideIndex = projectedSlideIndex) => {
         openGoogleSlidesExternal(course, requestedSlideIndex);
     };
@@ -4018,6 +4042,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                 title="Ouvrir dans Google Slides pour modifier"
                             >
                                 ↗ OUVRIR DANS GOOGLE SLIDES
+                            </button>
+                            <button
+                                type="button"
+                                className={`course-toolbar-action-btn refresh-btn ${isRefreshingSlides ? 'loading' : ''}`}
+                                onClick={() => void refreshPresentationSlides()}
+                                title="Forcer le rechargement immédiat de la présentation Google Slides"
+                            >
+                                {isRefreshingSlides ? '⏳ CHARGEMENT…' : '🔄 RAFRAÎCHIR'}
                             </button>
                             <button
                                 type="button"
