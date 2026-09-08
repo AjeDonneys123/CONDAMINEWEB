@@ -99,9 +99,10 @@ function readExtensionStorage(keys) {
 }
 
 async function proxyCondaRequest(request) {
+    let serverUrl = '';
     try {
         const data = await readExtensionStorage(['condaServerUrl', 'serverConfiguredByUser']);
-        const serverUrl = resolveCondaServerUrl(data);
+        serverUrl = resolveCondaServerUrl(data);
         // Persist the automatic repair, so all subsequent calls use the same
         // production endpoint even after the service worker is restarted.
         if (serverUrl !== String(data.condaServerUrl || '').replace(/\/$/, '')) {
