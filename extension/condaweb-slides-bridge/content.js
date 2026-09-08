@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.24';
+    const BRIDGE_VERSION = '1.0.25';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -31,12 +31,11 @@
     let lastScoreAlertSyncVersion = 0;
     let scoreAlertSyncVersionKnown = false;
     let lastPlanSignature = '';
+    let lastLiveClassroomSignature = '';
 
     let currentClassroomState = null;
     let currentRemoteState = null;
     let currentSlideControl = null;
-    let lastControlLookupSlideId = '';
-    let controlLookupInFlight = false;
     let controlMenuOpen = false;
     let controlMenuRows = [];
     let currentSlideControlDetails = null;
@@ -55,7 +54,10 @@
     // The classroom state contains the two critical live features: score
     // notifications and the mirrored seating plan. Keep it independent from
     // the heavier presentation/video state.
-    const CLASSROOM_POLL_MS = 800;
+    // The bridge now polls only lightweight note/plan visibility state while
+    // the plan is closed. One request per second keeps grade notices quick
+    // without starving Google Slides or the phone.
+    const CLASSROOM_POLL_MS = 1000;
 
     const bridgeSession = {
         version: BRIDGE_VERSION,
@@ -178,7 +180,9 @@
         const marker = manual ? `manual=${Date.now()}` : `live=${Date.now()}`;
         const name = String(activeClassName || '').trim();
         const suffix = name ? `&className=${encodeURIComponent(name)}` : '';
-        const data = await callCondaApi(`/api/classroom/bridge-state/${encodeURIComponent(activeClassId)}?${marker}${suffix}`);
+        const wantsPlan = currentClassroomState?.classPlanVisible === true;
+        const planSuffix = wantsPlan ? '&includePlan=1' : '';
+        const data = await callCondaApi(`/api/classroom/bridge-state/${encodeURIComponent(activeClassId)}?${marker}${suffix}${planSuffix}`);
         storeResolvedClass(data);
         const planSignature = `${data?._id || activeClassId}:${data?.planStudentCount || data?.planStudents?.length || 0}:${data?.layout?.cols || 0}:${data?.layout?.rows || 0}`;
         if (planSignature !== lastPlanSignature) {
@@ -302,6 +306,11 @@
     function loadConfig() {
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             chrome.storage.local.get(['activeClassId', 'activeClassName'], (res) => {
+                // The presentation association discovered from Google Slides
+                // wins over a stale value kept from a previous class.  Without
+                // this guard, the asynchronous storage callback could replace
+                // the class just detected by auto-connect.
+                if (currentCourseId || activeClassId) return;
                 if (res.activeClassId) activeClassId = res.activeClassId;
                 if (res.activeClassName) activeClassName = res.activeClassName;
             });
@@ -315,10 +324,20 @@
     function onStorageChanged(changes, areaName) {
             if (bridgeStopped) return;
             if (areaName !== 'local') return;
-            if (changes.activeClassId) activeClassId = String(changes.activeClassId.newValue || '');
-            if (changes.activeClassName) activeClassName = String(changes.activeClassName.newValue || '');
-            hasAutoConnected = false;
-            syncWithCondaWeb();
+            const nextClassId = changes.activeClassId ? String(changes.activeClassId.newValue || '') : activeClassId;
+            const nextClassName = changes.activeClassName ? String(changes.activeClassName.newValue || '') : activeClassName;
+            const changedExternally = nextClassId !== activeClassId || nextClassName !== activeClassName;
+            activeClassId = nextClassId;
+            activeClassName = nextClassName;
+            // autoConnectPresentation écrit ces mêmes valeurs dans
+            // chrome.storage. Ne redémarrons pas toute la synchronisation en
+            // réponse à notre propre écriture : cela créait une boucle de
+            // requêtes et pouvait momentanément revenir vers une ancienne
+            // classe.
+            if (changedExternally) {
+                hasAutoConnected = false;
+                void syncWithCondaWeb();
+            }
     }
     if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
         chrome.storage.onChanged.addListener(onStorageChanged);
@@ -410,9 +429,10 @@
 
             const classData = await fetchClassroomState({ manual: true });
             currentClassroomState = classData;
-            // The teacher explicitly requested a synchronization: replay the
-            // latest score variation even if the extension has just started.
-            consumeScoreAlertReplay(classData, { replayOnInitial: true });
+            // A manual reconnect must not replay a score change from a
+            // previous lesson. Only changes received after this connection
+            // are shown on Slides.
+            consumeScoreAlertReplay(classData, { replayOnInitial: false });
             isConnected = true;
             hasSuccessfulClassSync = true;
             consecutiveSyncFailures = 0;
@@ -437,64 +457,29 @@
         if (hash !== lastSeenSlideHash) {
             lastSeenSlideHash = hash;
             console.debug('[CondaWeb Bridge] slide Google détectée (média géré par Google Slides)');
-            void refreshAttachedControl();
         }
     }
 
-    async function refreshAttachedControl({ force = false } = {}) {
-        const { slideObjectId } = getSlideInfo();
-        if (!currentCourseId || !slideObjectId || controlLookupInFlight) return;
-        if (!force && slideObjectId === lastControlLookupSlideId) return;
-        controlLookupInFlight = true;
-        lastControlLookupSlideId = slideObjectId;
-        try {
-            const data = await callCondaApi(`/api/courses/${encodeURIComponent(currentCourseId)}/slides/control-at?slideObjectId=${encodeURIComponent(slideObjectId)}`);
-            currentSlideControl = data?.control || null;
-            if (String(currentSlideControlDetails?._id || '') !== String(currentSlideControl?.controlId || '')) {
-                currentSlideControlDetails = null;
-            }
-            console.info('[CondaWeb Bridge contrôle] contrôle de la diapositive chargé', {
-                slideObjectId,
-                slideNumber: data?.slideNumber,
-                controlId: currentSlideControl?.controlId || null
-            });
-            renderAllOverlays();
-        } catch (error) {
-            // The control tool is optional. It must not affect the live plan
-            // or grade notification channel.
-            console.warn('[CondaWeb Bridge contrôle] lecture impossible', error?.message || String(error));
-        } finally {
-            controlLookupInFlight = false;
-        }
-    }
-
-    async function attachControlToCurrentSlide(choice) {
+    // Controls are opened only after an explicit teacher choice. We do not
+    // persist or reload a control for a slide, so opening Slides can never
+    // cause an exam to appear by itself.
+    async function openSelectedControl(choice) {
         if (!currentCourseId) {
             alert('La présentation CondaWeb est encore en cours de connexion. Réessaie dans une seconde.');
             return;
         }
-        const { slideObjectId } = getSlideInfo();
-        if (!slideObjectId) {
-            alert('Impossible d’identifier la diapositive courante.');
-            return;
-        }
         try {
             if (!choice?._id) return;
-            console.info('[CondaWeb Bridge contrôle] attachement demandé', { courseId: currentCourseId, slideObjectId, controlId: choice._id, title: choice.title });
-            const data = await callCondaApi(`/api/courses/${encodeURIComponent(currentCourseId)}/slides/attach-control`, {
-                method: 'POST',
-                body: { controlId: String(choice._id), slideObjectId }
-            });
-            currentSlideControl = data?.control || null;
+            currentSlideControl = { controlId: String(choice._id), controlTitle: String(choice.title || 'Contrôle') };
             currentSlideControlDetails = choice;
             controlMenuOpen = false;
             controlMenuRows = [];
-            console.info('[CondaWeb Bridge contrôle] attachement enregistré', { slideObjectId, slideNumber: data?.slideNumber, alreadyAttached: data?.alreadyAttached === true });
+            console.info('[CondaWeb Bridge contrôle] ouverture demandée par le professeur', { courseId: currentCourseId, controlId: choice._id, title: choice.title });
             renderAllOverlays();
             void openControlWindows();
         } catch (error) {
-            console.error('[CondaWeb Bridge contrôle] attachement impossible', error?.message || String(error));
-            alert('Impossible d’ajouter ce contrôle à cette diapositive.');
+            console.error('[CondaWeb Bridge contrôle] ouverture impossible', error?.message || String(error));
+            alert('Impossible d’ouvrir ce contrôle.');
         }
     }
 
@@ -523,7 +508,9 @@
             await callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/bridge-plan`, {
                 method: 'PUT', body: { visible }
             });
-            currentClassroomState = { ...(currentClassroomState || {}), classPlanVisible: visible };
+            // Fetch immediately after opening so the complete grid is ready
+            // before the next regular live poll.
+            currentClassroomState = await fetchClassroomState({ manual: true });
             console.info('[CondaWeb Bridge plan] visibilité modifiée depuis Slides', { visible });
             renderAllOverlays();
         } catch (error) {
@@ -655,79 +642,7 @@
         console.info('[CondaWeb Bridge contrôle] contrôle et QR ouverts dans Slides', { controlId: currentSlideControl.controlId });
     }
 
-    // 5. Simuler les touches clavier pour faire avancer les slides et animations depuis le téléphone
-    function advanceGoogleAnimation(direction) {
-        const isPrev = direction === 'previous';
-        const key = isPrev ? 'ArrowLeft' : 'ArrowRight';
-        const keyCode = isPrev ? 37 : 39;
-        const pageKey = isPrev ? 'PageUp' : 'PageDown';
-        const pageKeyCode = isPrev ? 33 : 34;
-        const arrowVertKey = isPrev ? 'ArrowUp' : 'ArrowDown';
-        const arrowVertCode = isPrev ? 38 : 40;
-
-        function fireKey(k, code, codeNum) {
-            const eventProps = {
-                key: k,
-                code: code,
-                keyCode: codeNum,
-                which: codeNum,
-                charCode: 0,
-                bubbles: true,
-                cancelable: true,
-                composed: true,
-                view: window
-            };
-            const targets = [
-                document.activeElement,
-                document.querySelector('.punch-viewer-container'),
-                document.querySelector('.punch-full-window-overlay'),
-                document.querySelector('.punch-present-iframe'),
-                document.querySelector('.docs-editor-container'),
-                document.querySelector('.sketchy-canvas-container'),
-                document.body,
-                document,
-                window
-            ].filter(Boolean);
-
-            targets.forEach(t => {
-                try {
-                    t.dispatchEvent(new KeyboardEvent('keydown', eventProps));
-                    t.dispatchEvent(new KeyboardEvent('keypress', eventProps));
-                    t.dispatchEvent(new KeyboardEvent('keyup', eventProps));
-                } catch (_) {}
-            });
-        }
-
-        // Mode diaporama / plein écran
-        fireKey(key, key, keyCode);
-        fireKey(pageKey, pageKey, pageKeyCode);
-
-        // Mode édition normal : navigation par touches et par clic vignette
-        fireKey(arrowVertKey, arrowVertKey, arrowVertCode);
-
-        try {
-            const filmstrip = document.querySelector('.punch-filmstrip-scroll-container') ||
-                              document.querySelector('.docs-filmstrip-scroll-container') ||
-                              document.querySelector('[role="listbox"]');
-            if (filmstrip) {
-                const currentSelected = filmstrip.querySelector('.punch-filmstrip-thumbnail-selected') ||
-                                        filmstrip.querySelector('[aria-selected="true"]');
-                if (currentSelected) {
-                    const target = isPrev ? currentSelected.previousElementSibling : currentSelected.nextElementSibling;
-                    if (target) {
-                        target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-                        target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-                        target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                        target.scrollIntoView?.({ block: 'nearest' });
-                    }
-                }
-            }
-        } catch (_) {}
-
-        console.log(`[CondaWeb Bridge] 🎮 Télécommande action : ${direction} (${key})`);
-    }
-
-    // 6. Boucle principale de synchronisation avec CondaWeb
+    // 5. Boucle principale de synchronisation avec CondaWeb
     async function syncWithCondaWeb() {
         if (bridgeStopped || syncInFlight) return;
         syncInFlight = true;
@@ -748,8 +663,28 @@
         try {
             // Récupère l'état de la classe (alertes élèves, avertissements)
             const classData = await fetchClassroomState();
-            consumeScoreAlertReplay(classData, { replayOnInitial: true });
+            consumeScoreAlertReplay(classData, { replayOnInitial: false });
             currentClassroomState = classData;
+            const latestAlert = Array.isArray(classData?.activeScoreAlerts)
+                ? classData.activeScoreAlerts[classData.activeScoreAlerts.length - 1]
+                : null;
+            const liveSignature = [
+                classData?.scoreAlertSyncVersion || 0,
+                latestAlert?.id || '',
+                classData?.activeStudentHighlightTime || '',
+                Array.isArray(classData?.activeHourWarnings) ? classData.activeHourWarnings.map((row) => row?.studentId || row?.name || '').join('|') : ''
+            ].join(':');
+            if (liveSignature !== lastLiveClassroomSignature) {
+                lastLiveClassroomSignature = liveSignature;
+                console.info('[CondaWeb Bridge direct] état reçu', {
+                    classId: classData?._id || '',
+                    className: classData?.name || '',
+                    scoreAlertVersion: Number(classData?.scoreAlertSyncVersion || 0),
+                    latestAlert,
+                    highlight: classData?.activeStudentHighlight || '',
+                    hourWarnings: Array.isArray(classData?.activeHourWarnings) ? classData.activeHourWarnings.length : 0
+                });
+            }
             isConnected = true;
             hasSuccessfulClassSync = true;
             consecutiveSyncFailures = 0;
@@ -790,18 +725,7 @@
         }
     }
 
-    // Gestion des commandes de télécommande reçues du téléphone
-    function handleRemoteNavigation() {
-        if (!currentRemoteState?.remote) return;
-        const version = Number(currentRemoteState.remote.googleAnimationVersion || 0);
-        if (version > lastHandledAnimationVersion) {
-            lastHandledAnimationVersion = version;
-            const direction = currentRemoteState.remote.googleAnimationDirection === 'previous' ? 'previous' : 'next';
-            advanceGoogleAnimation(direction);
-        }
-    }
-
-    // 7. Rendu des calques visuels sans innerHTML (conforme Trusted Types de Google Docs)
+    // 6. Rendu des calques visuels sans innerHTML (conforme Trusted Types de Google Docs)
     function renderAllOverlays() {
         const root = ensureOverlayRoot();
         const displayCourse = currentCourseTitle ? (currentCourseTitle.length > 20 ? currentCourseTitle.slice(0, 18) + '…' : currentCourseTitle) : '';
@@ -809,13 +733,20 @@
         renderBadge(isConnected, badgeText);
         renderAlerts(root);
         renderHourWarnings(root);
-        renderVideoModal(root);
+        // Les animations et vidéos sont désormais entièrement gérées par
+        // Google Slides. L'extension ne doit jamais monter un lecteur ou
+        // intercepter leur lecture : elle se limite au plan, aux contrôles
+        // choisis explicitement et aux notifications de notes.
         renderClassPlanModal(root);
         renderGoogleControlTools(root);
     }
 
     function renderGoogleControlTools(root) {
         const existingControlCard = root.querySelector('.conda-slide-control-card');
+        // A selected control opens its own two windows immediately. Do not
+        // leave a persistent card over a Google Slide: it can look like an
+        // exam that opened by itself and it intercepts native Slides clicks.
+        existingControlCard?.remove();
         let dock = root.querySelector('.conda-slide-control-dock');
         if (!dock) {
             dock = document.createElement('div');
@@ -830,6 +761,14 @@
         planButton.textContent = currentClassroomState?.classPlanVisible === true ? '📍 PLAN ON' : '📍 PLAN';
         planButton.onclick = () => { void togglePlanFromSlides(); };
         dock.appendChild(planButton);
+
+        const syncButton = document.createElement('button');
+        syncButton.type = 'button';
+        syncButton.className = 'conda-slide-sync-toggle';
+        syncButton.textContent = '↻ SYNCHRO';
+        syncButton.title = 'Synchroniser Google Slides avec CondaWeb et le téléphone';
+        syncButton.onclick = () => { void connectAndSynchronizeNow(); };
+        dock.appendChild(syncButton);
 
         const addButton = document.createElement('button');
         addButton.type = 'button';
@@ -851,31 +790,12 @@
                 const choice = document.createElement('button');
                 choice.type = 'button';
                 choice.textContent = String(control.title || 'Contrôle');
-                choice.onclick = () => { void attachControlToCurrentSlide(control); };
+                choice.onclick = () => { void openSelectedControl(control); };
                 menu.appendChild(choice);
             });
             dock.appendChild(menu);
         }
 
-        if (currentSlideControl?.controlId) {
-            // Preserve the same DOM node while classroom polling continues:
-            // replacing it every 800 ms would make a double-click unreliable.
-            if (existingControlCard?.dataset.controlId === String(currentSlideControl.controlId)) return;
-            existingControlCard?.remove();
-            const card = document.createElement('button');
-            card.type = 'button';
-            card.className = 'conda-slide-control-card';
-            card.dataset.controlId = String(currentSlideControl.controlId);
-            const label = document.createElement('strong');
-            label.textContent = 'CONTRÔLE';
-            const title = document.createElement('span');
-            title.textContent = `${String(currentSlideControl.controlTitle || 'Contrôle attaché')} · double-clique : QR`;
-            card.ondblclick = () => { void openControlWindows(); };
-            card.append(label, title);
-            root.appendChild(card);
-        } else {
-            existingControlCard?.remove();
-        }
     }
 
     // Badge d'état dans l'angle bas-droite (sans innerHTML)
@@ -927,16 +847,9 @@
         const alerts = Array.isArray(currentClassroomState?.activeScoreAlerts)
             ? [...currentClassroomState.activeScoreAlerts]
             : [];
-        const fallbackMessage = String(currentClassroomState?.activeStudentBonusAlert || '').trim();
-        const fallbackTime = currentClassroomState?.activeStudentBonusAlertTime;
-        if (fallbackMessage && fallbackTime && !alerts.some((row) => String(row?.message || '') === fallbackMessage && String(row?.createdAt || '') === String(fallbackTime))) {
-            alerts.push({ id: `bonus-${fallbackTime}`, message: fallbackMessage, createdAt: fallbackTime });
-        }
-        const highlightMessage = String(currentClassroomState?.activeStudentHighlight || '').trim();
-        const highlightTime = currentClassroomState?.activeStudentHighlightTime;
-        if (highlightMessage && highlightTime) {
-            alerts.push({ id: `highlight-${highlightTime}`, message: highlightMessage, createdAt: highlightTime, type: 'highlight' });
-        }
+        // All new actions are written into activeScoreAlerts by the server.
+        // Do not rebuild alerts from legacy fields here: those fields persist
+        // across reloads and were replaying old pupils such as Pedro.
         const now = Date.now();
         alerts.forEach((alert, index) => {
             const createdAt = new Date(alert?.createdAt || 0).getTime();

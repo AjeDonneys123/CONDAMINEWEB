@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CondaWeb Presentation Bridge",
-  "version": "1.0.24",
-  "description": "Connecte Google Slides en direct avec CondaWeb : alertes élèves, mascottes, vidéos et télécommande par-dessus votre diaporama.",
+  "version": "1.0.25",
+  "description": "Connecte Google Slides à CondaWeb : plan de classe, contrôles choisis et notifications de notes en direct.",
   "permissions": [
     "storage",
     "activeTab",

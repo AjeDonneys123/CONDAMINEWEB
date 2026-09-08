@@ -325,15 +325,39 @@ router.get('/bridge-state/:classId', async (req, res) => {
         const fallbackName = String(req.query.className || '').trim();
         const classroom = await resolveBridgeClass(req.params.classId, fallbackName);
         if (!classroom) return res.status(404).json({ error: 'Classe/Groupe introuvable' });
-        const students = await getBridgeStudents(classroom);
-        const projectedPlan = buildBridgePlanStudents(classroom, students);
+        // Notes and the plan use the same bridge, but the whole student list
+        // is costly to rebuild on every live-score poll. Only send it while
+        // the teacher has explicitly opened the plan.
+        const includePlan = classroom.classPlanVisible === true || String(req.query.includePlan || '') === '1';
+        const students = includePlan ? await getBridgeStudents(classroom) : [];
+        // A warning must never survive a class/group change.  Older records
+        // may contain a pupil from a previous class; validate them against
+        // the current membership before giving them to the extension.
+        const rawHourWarnings = Array.isArray(classroom.activeHourWarnings) ? classroom.activeHourWarnings : [];
+        let activeHourWarnings = rawHourWarnings.filter((row) => Number(row?.expiresAt || 0) > Date.now());
+        if (activeHourWarnings.length) {
+            const warningStudents = includePlan ? students : await getBridgeStudents(classroom);
+            const currentStudentIds = new Set(warningStudents.map((student) => String(student?._id || '')));
+            activeHourWarnings = activeHourWarnings.filter((row) => currentStudentIds.has(String(row?.studentId || '')));
+            if (activeHourWarnings.length !== rawHourWarnings.length) {
+                await Classroom.updateOne({ _id: classroom._id }, { $set: { activeHourWarnings } });
+            }
+        }
+        const projectedPlan = includePlan
+            ? buildBridgePlanStudents(classroom, students)
+            : {
+                cols: Math.max(1, Number(classroom?.layout?.cols || 6)),
+                rows: Math.max(1, Number(classroom?.layout?.rows || 5)),
+                students: []
+            };
         console.info('[CondaWeb bridge] état plan extension', {
             classId: String(classroom._id),
             className: classroom.name,
-            sourceStudents: students.length,
+            sourceStudents: includePlan ? students.length : 0,
             projectedStudents: projectedPlan.students.length,
             cols: projectedPlan.cols,
-            rows: projectedPlan.rows
+            rows: projectedPlan.rows,
+            includePlan
         });
         return res.json({
             _id: String(classroom._id || req.params.classId),
@@ -348,7 +372,7 @@ router.get('/bridge-state/:classId', async (req, res) => {
             activeScoreAlerts: Array.isArray(classroom.activeScoreAlerts) ? classroom.activeScoreAlerts : [],
             scoreAlertSyncVersion: Number(classroom.scoreAlertSyncVersion || 0),
             scoreAlertReplayId: String(classroom.scoreAlertReplayId || ''),
-            activeHourWarnings: Array.isArray(classroom.activeHourWarnings) ? classroom.activeHourWarnings : [],
+            activeHourWarnings,
             planStudentCount: projectedPlan.students.length,
             planStudents: projectedPlan.students.map((student) => ({
                 _id: String(student._id),
@@ -775,6 +799,7 @@ router.post('/behavior', async (req, res) => {
                     id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
                     message,
                     type: alertType,
+                    studentId: String(s._id),
                     studentName: displayName,
                     pointsDelta: appliedClassPointDelta,
                     score: type === 'ADJUST_SCORE' ? Number((Array.isArray(r.scores) ? r.scores : []).find((row) => String(row?.id || '') === String(r.selectedScoreId || ''))?.value || 0) : null,
@@ -873,12 +898,27 @@ router.post('/:classId/live-action', async (req, res) => {
         const cls = await Classroom.findById(classId);
         if (!cls) return res.status(404).json({ error: "Classe introuvable" });
 
+        let liveAlert = null;
         if (action === 'highlight') {
             cls.activeStudentHighlight = message || studentName;
             cls.activeStudentHighlightTime = new Date();
+            liveAlert = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: 'highlight',
+                studentName: String(message || studentName || '').trim(),
+                message: String(message || studentName || '').trim(),
+                createdAt: cls.activeStudentHighlightTime
+            };
         } else if (action === 'bonus') {
             cls.activeStudentBonusAlert = `Félicitations à ${studentName} !`;
             cls.activeStudentBonusAlertTime = new Date();
+            liveAlert = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: 'positive',
+                studentName: String(studentName || '').trim(),
+                message: cls.activeStudentBonusAlert,
+                createdAt: cls.activeStudentBonusAlertTime
+            };
         } else if (action === 'bonus-message') {
             const now = new Date();
             const alert = {
@@ -904,6 +944,12 @@ router.post('/:classId/live-action', async (req, res) => {
         } else if (action === 'class-bonus') {
             cls.activeStudentBonusAlert = message || 'Bravo +1';
             cls.activeStudentBonusAlertTime = new Date();
+            liveAlert = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: 'positive',
+                message: cls.activeStudentBonusAlert,
+                createdAt: cls.activeStudentBonusAlertTime
+            };
         } else if (action === 'hour-warnings') {
             const now = Date.now();
             cls.activeHourWarnings = Array.isArray(warnings)
@@ -922,6 +968,14 @@ router.post('/:classId/live-action', async (req, res) => {
             cls.classPoints = Math.max(0, (cls.classPoints || 0) - 1);
         }
 
+        // Les actions venant du téléphone doivent toujours apparaître dans
+        // le même flux que les variations de notes. Les anciens champs seuls
+        // étaient parfois lus trop tard par le tableau et disparaissaient.
+        if (liveAlert) {
+            cls.activeScoreAlerts = [...(Array.isArray(cls.activeScoreAlerts) ? cls.activeScoreAlerts : []), liveAlert].slice(-6);
+            cls.scoreAlertSyncVersion = Number(cls.scoreAlertSyncVersion || 0) + 1;
+            cls.scoreAlertReplayId = liveAlert.id;
+        }
         await cls.save();
         res.json(cls);
     } catch (e) {

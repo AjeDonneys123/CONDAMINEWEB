@@ -71,7 +71,8 @@
     pointer-events: auto;
 }
 .conda-slide-plan-toggle,
-.conda-slide-control-add {
+.conda-slide-control-add,
+.conda-slide-sync-toggle {
     border: 0;
     border-radius: 999px;
     padding: 10px 16px;
@@ -102,6 +103,11 @@
     background: #b45309;
     box-shadow: 0 8px 24px rgba(180, 83, 9, .36);
 }
+.conda-slide-sync-toggle {
+    background: #7c3aed;
+    box-shadow: 0 8px 24px rgba(124, 58, 237, .35);
+}
+.conda-slide-sync-toggle:hover { background: #6d28d9; transform: translateY(-1px); }
 .conda-slide-control-add:hover { background: #166534; transform: translateY(-1px); }
 .conda-slide-control-menu {
     position: absolute;
@@ -163,7 +169,8 @@
 @media (max-width: 700px) {
     .conda-slide-control-dock { bottom: 12px; max-width: 94vw; gap: 5px; }
     .conda-slide-plan-toggle,
-    .conda-slide-control-add { padding: 8px 10px; font-size: 10px; }
+    .conda-slide-control-add,
+    .conda-slide-sync-toggle { padding: 8px 10px; font-size: 10px; }
     .conda-slide-control-card { width: min(390px, 80vw); min-width: 0; padding: 18px 12px; }
     .conda-slide-control-card strong { font-size: 16px; }
     .conda-slide-control-card span { font-size: 12px; }
@@ -300,7 +307,10 @@
     align-items: center;
     gap: 12px;
     pointer-events: auto;
-    z-index: 10;
+    /* Le plan miroir est une grande fenêtre. Les notes et avertissements
+       restent volontairement au-dessus : ce sont les informations urgentes
+       que la classe doit voir, y compris plan ouvert. */
+    z-index: 30;
 }
 
 .conda-alert-toast {
@@ -376,6 +386,7 @@
     pointer-events: auto;
     max-width: 260px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    z-index: 30;
 }
 
 .conda-hour-warnings-title {
@@ -468,6 +479,7 @@
     color: #ffffff;
     overflow-y: auto;
     animation: conda-modal-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    z-index: 10;
 }
 
 /* Animations */
