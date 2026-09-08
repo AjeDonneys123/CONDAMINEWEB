@@ -14,15 +14,15 @@
 
 /* 1. Badge d'état flottant en bas à droite */
 .conda-bridge-badge {
-    position: fixed !important;
-    bottom: 24px !important;
-    right: 80px !important;
-    z-index: 2147483647 !important;
+    position: static !important;
+    z-index: 1 !important;
     pointer-events: auto !important;
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
-    padding: 8px 16px !important;
+    min-width: 0 !important;
+    max-width: min(340px, 42vw) !important;
+    padding: 10px 14px !important;
     background: rgba(15, 23, 42, 0.94) !important;
     backdrop-filter: blur(16px) !important;
     border: 1.5px solid #7c3aed !important;
@@ -34,6 +34,14 @@
     transition: all 0.2s ease !important;
     user-select: none !important;
     cursor: pointer !important;
+    font-family: inherit !important;
+    text-align: left !important;
+}
+
+.conda-bridge-label {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 .conda-bridge-badge:hover {
@@ -67,12 +75,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    max-width: min(78vw, 760px);
+    max-width: min(96vw, 980px);
     pointer-events: auto;
 }
 .conda-slide-plan-toggle,
-.conda-slide-control-add,
-.conda-slide-sync-toggle {
+.conda-slide-control-add {
     border: 0;
     border-radius: 999px;
     padding: 10px 16px;
@@ -103,11 +110,6 @@
     background: #b45309;
     box-shadow: 0 8px 24px rgba(180, 83, 9, .36);
 }
-.conda-slide-sync-toggle {
-    background: #7c3aed;
-    box-shadow: 0 8px 24px rgba(124, 58, 237, .35);
-}
-.conda-slide-sync-toggle:hover { background: #6d28d9; transform: translateY(-1px); }
 .conda-slide-control-add:hover { background: #166534; transform: translateY(-1px); }
 .conda-slide-control-menu {
     position: absolute;
@@ -169,8 +171,8 @@
 @media (max-width: 700px) {
     .conda-slide-control-dock { bottom: 12px; max-width: 94vw; gap: 5px; }
     .conda-slide-plan-toggle,
-    .conda-slide-control-add,
-    .conda-slide-sync-toggle { padding: 8px 10px; font-size: 10px; }
+    .conda-slide-control-add { padding: 8px 10px; font-size: 10px; }
+    .conda-bridge-badge { max-width: min(190px, 44vw) !important; padding: 8px 10px !important; font-size: 10px !important; }
     .conda-slide-control-card { width: min(390px, 80vw); min-width: 0; padding: 18px 12px; }
     .conda-slide-control-card strong { font-size: 16px; }
     .conda-slide-control-card span { font-size: 12px; }
@@ -370,6 +372,22 @@
     color: #cbd5e1;
     font-weight: 600;
 }
+
+.conda-alert-close {
+    flex: 0 0 auto;
+    width: 25px;
+    height: 25px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .18);
+    color: #fff;
+    cursor: pointer;
+    font-size: 21px;
+    font-weight: 900;
+    line-height: 1;
+}
+.conda-alert-close:hover { background: rgba(255, 255, 255, .34); }
 
 /* 3. Panneau des avertis cette heure */
 .conda-hour-warnings-dock {

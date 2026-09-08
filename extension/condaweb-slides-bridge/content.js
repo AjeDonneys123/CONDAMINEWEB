@@ -736,6 +736,9 @@
             dock.className = 'conda-slide-control-dock';
             root.appendChild(dock);
         }
+        // Keep a reference before clearing the toolbar: the badge is one of
+        // its children after the first render.
+        const connectionBadge = root.querySelector('#conda-bridge-badge');
         while (dock.firstChild) dock.removeChild(dock.firstChild);
 
         const planButton = document.createElement('button');
@@ -745,14 +748,6 @@
         planButton.onclick = () => { void togglePlanFromSlides(); };
         dock.appendChild(planButton);
 
-        const syncButton = document.createElement('button');
-        syncButton.type = 'button';
-        syncButton.className = 'conda-slide-sync-toggle';
-        syncButton.textContent = '↻ SYNCHRO';
-        syncButton.title = 'Synchroniser Google Slides avec CondaWeb et le téléphone';
-        syncButton.onclick = () => { void connectAndSynchronizeNow(); };
-        dock.appendChild(syncButton);
-
         const addButton = document.createElement('button');
         addButton.type = 'button';
         addButton.className = 'conda-slide-control-add';
@@ -760,6 +755,10 @@
         addButton.title = 'Choisir un contrôle à attacher à la diapositive Google courante';
         addButton.onclick = () => { void openControlsMenu(); };
         dock.appendChild(addButton);
+
+        // Keep every extension action on one bottom toolbar. This avoids the
+        // connection action covering the controls on small Slides windows.
+        if (connectionBadge) dock.appendChild(connectionBadge);
 
         if (controlMenuOpen) {
             const menu = document.createElement('div');
@@ -786,10 +785,10 @@
         const root = ensureOverlayRoot();
         let badge = document.getElementById('conda-bridge-badge');
         if (!badge) {
-            badge = document.createElement('div');
+            badge = document.createElement('button');
+            badge.type = 'button';
             badge.id = 'conda-bridge-badge';
             badge.className = 'conda-bridge-badge';
-            badge.style.cssText = 'position: fixed !important; bottom: 24px !important; right: 80px !important; z-index: 2147483647 !important; pointer-events: auto !important; display: flex !important; align-items: center !important; gap: 8px !important; padding: 10px 18px !important; background: #0f172a !important; border: 2px solid #7c3aed !important; border-radius: 999px !important; color: #ffffff !important; font-size: 13px !important; font-weight: 800 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 20px rgba(124,58,237,0.5) !important; cursor: pointer !important; user-select: none !important;';
 
             const dot = document.createElement('div');
             dot.className = 'conda-bridge-dot';
@@ -880,6 +879,18 @@
             body.appendChild(sub);
 
             toast.appendChild(body);
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'conda-alert-close';
+            close.textContent = '×';
+            close.title = 'Fermer cette notification';
+            close.setAttribute('aria-label', 'Fermer cette notification');
+            close.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toast.remove();
+            });
+            toast.appendChild(close);
             stack.appendChild(toast);
             // Remains readable from the back of the classroom.  The alert is
             // still retained server-side for 30 seconds so a delayed bridge
