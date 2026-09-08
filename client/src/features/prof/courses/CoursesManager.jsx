@@ -959,6 +959,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 .slice(0, 8)
             : [];
     }, [liveClassroom]);
+    const visibleHourWarnings = useMemo(() => {
+        const now = Date.now();
+        return activeHourWarnings.filter((row) => Number(dismissedDebtIds[String(row?.studentId || '')] || 0) <= now);
+    }, [activeHourWarnings, dismissedDebtIds]);
 
     const classPoints = liveClassroom?.classPoints ?? 0;
 
@@ -3956,13 +3960,19 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <span aria-hidden="true">🏆</span><strong>{classPoints}</strong>
                         </div>
 
-                        {visibleDebtStudents.length > 0 && (
+                        {(visibleDebtStudents.filter((student) => student.status !== 'warning').length > 0 || visibleHourWarnings.length > 0) && (
                             <div className="course-debt-panel">
                                 <div className="course-debt-title">À régler</div>
-                                {visibleDebtStudents.map((student) => (
+                                {visibleDebtStudents.filter((student) => student.status !== 'warning').map((student) => (
                                     <div key={student.id} className={`course-debt-name ${student.status || 'incomplete'}`}>
-                                        <span>{student.status === 'punishment' ? 'Punition · ' : student.status === 'warning' ? 'Avertissement · ' : 'Travail incomplet · '}{student.name}</span>
+                                        <span>{student.status === 'punishment' ? 'Punition · ' : 'Travail incomplet · '}{student.name}</span>
                                         <button type="button" onClick={() => dismissDebtForCurrentHour(student.id)} title="Masquer jusqu’à la prochaine heure" aria-label={`Masquer ${student.name} jusqu’à la prochaine heure`}>×</button>
+                                    </div>
+                                ))}
+                                {visibleHourWarnings.map((row) => (
+                                    <div key={`warning-${row.studentId || row.name}`} className="course-debt-name warning">
+                                        <span>Avertissement · {row.name}</span>
+                                        <button type="button" onClick={() => dismissDebtForCurrentHour(row.studentId)} title="Masquer jusqu’à la prochaine heure" aria-label={`Masquer ${row.name} jusqu’à la prochaine heure`}>×</button>
                                     </div>
                                 ))}
                             </div>
@@ -3972,17 +3982,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         {isHighlightActive && (
                             <div className="live-student-highlight">
                                 {liveClassroom.activeStudentHighlight}
-                            </div>
-                        )}
-
-                        {activeHourWarnings.length > 0 && (
-                            <div className="live-hour-warning-panel">
-                                <div className="live-hour-warning-title">Avertis cette heure</div>
-                                {activeHourWarnings.map((row) => (
-                                    <div key={row.studentId || row.name} className="live-hour-warning-name">
-                                        {row.name}
-                                    </div>
-                                ))}
                             </div>
                         )}
 

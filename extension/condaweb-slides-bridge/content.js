@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.27';
+    const BRIDGE_VERSION = '1.0.28';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -28,6 +28,7 @@
     let overlayRoot = null;
     const displayedAlertIds = new Set();
     const replayableAlertIds = new Set();
+    const dismissedPersistentNoticeIds = new Set();
     let lastScoreAlertSyncVersion = 0;
     let scoreAlertSyncVersionKnown = false;
     let lastPlanSignature = '';
@@ -909,9 +910,13 @@
     function renderHourWarnings(root) {
         const warnings = Array.isArray(currentClassroomState?.activeHourWarnings) ? currentClassroomState.activeHourWarnings : [];
         const debts = Array.isArray(currentClassroomState?.activePersistentDebts) ? currentClassroomState.activePersistentDebts : [];
+        const notices = [
+            ...debts.map((row) => ({ ...row, noticeType: row.status || 'incomplete' })),
+            ...warnings.map((row) => ({ ...row, noticeType: 'warning', expiresAt: row.expiresAt || '' }))
+        ].filter((row) => !dismissedPersistentNoticeIds.has(`${row.noticeType}:${row.studentId || row.name || ''}:${row.expiresAt || ''}`));
         let dock = root.querySelector('.conda-hour-warnings-dock');
 
-        if (warnings.length === 0 && debts.length === 0) {
+        if (notices.length === 0) {
             if (dock) dock.remove();
             return;
         }
@@ -926,23 +931,34 @@
             dock.removeChild(dock.firstChild);
         }
 
-        const appendList = (titleText, rows) => {
-            if (!rows.length) return;
-            const title = document.createElement('div');
-            title.className = 'conda-hour-warnings-title';
-            title.textContent = titleText;
-            dock.appendChild(title);
-            const ul = document.createElement('ul');
-            rows.forEach((row) => {
-                const li = document.createElement('li');
-                const prefix = row.status === 'punishment' ? 'Punition · ' : (row.status === 'incomplete' ? 'Travail incomplet · ' : '');
-                li.textContent = `${prefix}${row.name || row.studentName || ''}`;
-                ul.appendChild(li);
+        const title = document.createElement('div');
+        title.className = 'conda-hour-warnings-title';
+        title.textContent = 'À RÉGLER';
+        dock.appendChild(title);
+        const ul = document.createElement('ul');
+        notices.forEach((row) => {
+            const noticeId = `${row.noticeType}:${row.studentId || row.name || ''}:${row.expiresAt || ''}`;
+            const li = document.createElement('li');
+            li.className = `conda-persistent-notice ${row.noticeType}`;
+            const label = document.createElement('span');
+            const prefix = row.noticeType === 'punishment' ? 'Punition · ' : (row.noticeType === 'warning' ? 'Avertissement · ' : 'Travail incomplet · ');
+            label.textContent = `${prefix}${row.name || row.studentName || ''}`;
+            li.appendChild(label);
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.textContent = '×';
+            close.title = 'Masquer cette alerte';
+            close.setAttribute('aria-label', 'Masquer cette alerte');
+            close.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                dismissedPersistentNoticeIds.add(noticeId);
+                renderHourWarnings(root);
             });
-            dock.appendChild(ul);
-        };
-        appendList(`📌 À régler (${debts.length})`, debts);
-        appendList(`⚠️ Avertis cette heure (${warnings.length})`, warnings);
+            li.appendChild(close);
+            ul.appendChild(li);
+        });
+        dock.appendChild(ul);
     }
 
     // Lecteur de vidéo / animation incrusté (sans innerHTML)

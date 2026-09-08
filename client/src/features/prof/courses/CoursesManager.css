@@ -535,12 +535,12 @@
     width: 100%;
     margin: 0 0 8px;
     padding: 4px;
-    border: 3px solid transparent;
+    border: 6px solid transparent;
     border-radius: 10px;
     background: #fff;
     cursor: pointer;
 }
-.course-conda-slide-rail-list > button.selected { border-color: #2563eb; background: #dbeafe; }
+.course-conda-slide-rail-list > button.selected { border-color: #ff00ff; background: #dbeafe; }
 .course-conda-slide-rail-list > button > span:first-child {
     position: absolute;
     top: 5px;
@@ -2306,7 +2306,7 @@
 }
 .course-debt-name.punishment { background: #fee2e2; color: #b91c1c; }
 .course-debt-name.incomplete { background: #fef3c7; color: #92400e; }
-.course-debt-name.warning { background: #dbeafe; color: #1d4ed8; }
+.course-debt-name.warning { background: #ffedd5; color: #c2410c; }
 .course-debt-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .course-debt-name button {
     flex: 0 0 auto;
@@ -2644,7 +2644,7 @@
     flex: 0 0 auto;
     overflow: hidden;
     padding: 0;
-    border: 2px solid transparent;
+    border: 6px solid transparent;
     border-radius: 5px;
     background: #1e293b;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
@@ -2660,8 +2660,8 @@
 }
 
 .course-slide-thumbnail-button.active {
-    border-color: #facc15;
-    box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.34), 0 3px 11px rgba(0, 0, 0, 0.5);
+    border-color: #ff00ff;
+    box-shadow: 0 0 0 1px rgba(255, 0, 255, 0.34), 0 3px 11px rgba(0, 0, 0, 0.5);
 }
 
 .course-slide-thumbnail-button img,

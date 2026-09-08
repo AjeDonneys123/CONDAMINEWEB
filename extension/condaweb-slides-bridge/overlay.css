@@ -374,14 +374,16 @@
 /* 3. Panneau des avertis cette heure */
 .conda-hour-warnings-dock {
     position: absolute;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 14px;
-    background: rgba(15, 23, 42, 0.88);
+    top: 18px;
+    left: 18px;
+    bottom: auto;
+    right: auto;
+    padding: 8px;
+    background: rgba(243, 244, 246, 0.97);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    border: 2px solid #94a3b8;
     border-radius: 12px;
-    color: #fef3c7;
+    color: #1e293b;
     font-size: 11px;
     pointer-events: auto;
     max-width: 260px;
@@ -391,7 +393,7 @@
 
 .conda-hour-warnings-title {
     font-weight: 900;
-    color: #f59e0b;
+    color: #334155;
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -400,12 +402,37 @@
 
 .conda-hour-warnings-dock ul {
     margin: 0;
-    padding-left: 14px;
+    padding: 0;
+    list-style: none;
 }
 
-.conda-hour-warnings-dock li {
+.conda-hour-warnings-dock .conda-persistent-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 7px;
     font-weight: 700;
-    margin: 2px 0;
+    margin: 4px 0 0;
+    padding: 5px 6px 5px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+}
+.conda-hour-warnings-dock .conda-persistent-notice.incomplete { background: #fef3c7; color: #92400e; }
+.conda-hour-warnings-dock .conda-persistent-notice.warning { background: #ffedd5; color: #c2410c; }
+.conda-hour-warnings-dock .conda-persistent-notice.punishment { background: #fee2e2; color: #b91c1c; }
+.conda-persistent-notice span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conda-persistent-notice button {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255,255,255,.72);
+    color: inherit;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 900;
+    line-height: 1;
 }
 
 /* 4. Lecteur de séquence vidéo / animation par-dessus */
