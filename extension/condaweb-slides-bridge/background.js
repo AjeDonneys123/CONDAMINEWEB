@@ -1,3 +1,22 @@
+// The extension is distributed to classroom computers: its safe default must
+// always be the deployed application, never the developer's localhost.
+const DEFAULT_CONDA_SERVER_URL = 'https://condaweb.vercel.app';
+
+function isLegacyLocalServer(url) {
+    return /^(?:http:\/\/)?(?:localhost|127\.0\.0\.1):(?:3000|5173)$/i.test(String(url || '').replace(/\/$/, ''));
+}
+
+function resolveCondaServerUrl(data = {}) {
+    const stored = String(data.condaServerUrl || '').replace(/\/$/, '');
+    // A saved local address is honoured only when the teacher deliberately
+    // configured it in the popup. This also repairs old installations without
+    // requiring the user to uninstall/reinstall the extension.
+    if (!stored || (!data.serverConfiguredByUser && isLegacyLocalServer(stored))) {
+        return DEFAULT_CONDA_SERVER_URL;
+    }
+    return stored;
+}
+
 async function injectIntoSlidesTabs() {
     try {
         const tabs = await chrome.tabs.query({ url: 'https://docs.google.com/presentation/*' });
@@ -37,9 +56,13 @@ async function injectIntoSlidesTab(tabId) {
 // Initialisation et auto-injection dès l'installation ou la recharge
 chrome.runtime.onInstalled.addListener(() => {
     console.log('[CondaWeb Bridge] Extension installée/rechargée avec succès');
-    chrome.storage.local.get(['condaServerUrl', 'activeClassId'], (res) => {
-        if (!res.condaServerUrl) {
-            chrome.storage.local.set({ condaServerUrl: 'http://localhost:3000' });
+    chrome.storage.local.get(['condaServerUrl', 'serverConfiguredByUser'], (res) => {
+        const current = String(res.condaServerUrl || '').replace(/\/$/, '');
+        // New installs must talk to the deployed CondaWeb API.  Migrate only
+        // the old automatic localhost default; a teacher who deliberately
+        // saved a local server in the popup keeps that choice.
+        if (!current || (!res.serverConfiguredByUser && isLegacyLocalServer(current))) {
+            chrome.storage.local.set({ condaServerUrl: DEFAULT_CONDA_SERVER_URL });
         }
     });
     // Injecte immédiatement dans tous les onglets Google Slides déjà ouverts !
@@ -77,8 +100,13 @@ function readExtensionStorage(keys) {
 
 async function proxyCondaRequest(request) {
     try {
-        const data = await readExtensionStorage(['condaServerUrl']);
-        const serverUrl = (data.condaServerUrl || 'http://localhost:3000').replace(/\/$/, '');
+        const data = await readExtensionStorage(['condaServerUrl', 'serverConfiguredByUser']);
+        const serverUrl = resolveCondaServerUrl(data);
+        // Persist the automatic repair, so all subsequent calls use the same
+        // production endpoint even after the service worker is restarted.
+        if (serverUrl !== String(data.condaServerUrl || '').replace(/\/$/, '')) {
+            chrome.storage.local.set({ condaServerUrl: serverUrl });
+        }
         const path = String(request?.path || '');
         if (!path.startsWith('/api/')) throw new Error('Chemin CondaWeb refusé');
         const fullUrl = `${serverUrl}${path}`;
@@ -93,7 +121,12 @@ async function proxyCondaRequest(request) {
         console.info('[CondaWeb Bridge proxy] réponse', { requestId: request?.requestId, status: response.status, ok: response.ok });
         return { ok: response.ok, status: response.status, data: responseData, error: responseData?.error || '' };
     } catch (error) {
-        console.warn('[CondaWeb Bridge proxy] échec', { requestId: request?.requestId, message: error?.message || String(error) });
+        console.warn('[CondaWeb Bridge proxy] échec', {
+            requestId: request?.requestId,
+            path: request?.path,
+            serverUrl: typeof serverUrl === 'string' ? serverUrl : undefined,
+            message: error?.message || String(error)
+        });
         return { ok: false, status: 0, error: error?.message || String(error) };
     }
 }

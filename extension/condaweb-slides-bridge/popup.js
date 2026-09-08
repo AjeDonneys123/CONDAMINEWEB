@@ -1,6 +1,7 @@
 // CondaWeb Slides Bridge - Popup Script
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const DEFAULT_CONDA_SERVER_URL = 'https://condaweb.vercel.app';
     const serverInput = document.getElementById('server-url');
     const classSelect = document.getElementById('class-select');
     const saveBtn = document.getElementById('save-btn');
@@ -8,14 +9,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statusSpan = document.getElementById('conn-status');
 
     // Charge la configuration stockée
-    chrome.storage.local.get(['condaServerUrl', 'activeClassId', 'activeClassName'], async (data) => {
-        if (data.condaServerUrl) serverInput.value = data.condaServerUrl;
-        const currentServer = (data.condaServerUrl || 'http://localhost:3000').replace(/\/$/, '');
+    chrome.storage.local.get(['condaServerUrl', 'serverConfiguredByUser', 'activeClassId', 'activeClassName'], async (data) => {
+        const storedServer = String(data.condaServerUrl || '').replace(/\/$/, '');
+        const oldAutomaticLocalServer = /^(?:http:\/\/)?(?:localhost|127\.0\.0\.1):(?:3000|5173)$/i.test(storedServer);
+        const currentServer = (!storedServer || (!data.serverConfiguredByUser && oldAutomaticLocalServer))
+            ? DEFAULT_CONDA_SERVER_URL
+            : storedServer;
+        serverInput.value = currentServer;
+        if (currentServer !== storedServer) chrome.storage.local.set({ condaServerUrl: currentServer });
 
         try {
-            const res = await fetch(`${currentServer}/api/learning/classes`);
+            // /api/auth/config is the stable public configuration endpoint.
+            // /api/learning/classes is interpreted as a learning-module id.
+            const res = await fetch(`${currentServer}/api/auth/config`);
             if (res.ok) {
-                const classes = await res.json();
+                const payload = await res.json();
+                const classes = Array.isArray(payload) ? payload : (payload.classrooms || []);
                 while (classSelect.firstChild) classSelect.removeChild(classSelect.firstChild);
                 if (Array.isArray(classes) && classes.length > 0) {
                     classes.forEach(c => {
@@ -61,7 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const activeClassId = classSelect.value;
         const activeClassName = classSelect.options[classSelect.selectedIndex]?.text || '';
 
-        chrome.storage.local.set({ condaServerUrl, activeClassId, activeClassName }, () => {
+        chrome.storage.local.set({ condaServerUrl, activeClassId, activeClassName, serverConfiguredByUser: true }, () => {
             saveBtn.textContent = '✓ Enregistré !';
             setTimeout(() => { saveBtn.textContent = '💾 Enregistrer les réglages'; }, 1500);
         });

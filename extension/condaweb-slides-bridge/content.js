@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.30';
+    const BRIDGE_VERSION = '1.0.31';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -505,11 +505,11 @@
         return new Promise((resolve) => {
             try {
                 chrome.storage.local.get(['condaServerUrl'], ({ condaServerUrl }) => {
-                    const server = String(condaServerUrl || 'http://localhost:3000');
+                    const server = String(condaServerUrl || 'https://condaweb.vercel.app');
                     const appUrl = server.replace(/:3000\/?$/, ':5173');
                     resolve(`${appUrl.replace(/\/$/, '')}/?control=${encodeURIComponent(controlId)}`);
                 });
-            } catch (_) { resolve(`http://localhost:5173/?control=${encodeURIComponent(controlId)}`); }
+            } catch (_) { resolve(`https://condaweb.vercel.app/?control=${encodeURIComponent(controlId)}`); }
         });
     }
 
