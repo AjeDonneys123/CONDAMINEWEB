@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.28';
+    const BRIDGE_VERSION = '1.0.29';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -83,12 +83,11 @@
 
     function stopForExtensionReload(error) {
         if (bridgeStopped) return;
-        console.warn('[CondaWeb Bridge] ancien contexte arrêté : actualisez Google Slides après le rechargement de l’extension.', {
-            message: error?.message || String(error || '')
-        });
+        // Chrome invalidates the old content-script world while an extension
+        // reloads. This is expected, so it must not pollute the error page.
+        console.info('[CondaWeb Bridge] ancien contexte arrêté après rechargement de l’extension.');
         bridgeSession.dispose();
-        // Rendering the badge is safe: it only touches the current page DOM.
-        renderBadge(false, 'Extension rechargée — actualisez Slides');
+        // The newly injected script recreates the badge and overlays.
     }
 
     function closeBridgePort(error) {

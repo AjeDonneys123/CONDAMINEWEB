@@ -843,10 +843,17 @@ router.post('/behavior', async (req, res) => {
                 const formattedDelta = Number.isInteger(absoluteDelta) ? String(absoluteDelta) : absoluteDelta.toFixed(1).replace('.', ',');
                 message = `${displayName} ${appliedClassPointDelta > 0 ? '+' : '−'}${formattedDelta} → ${formatted}`;
                 alertType = appliedClassPointDelta > 0 ? 'positive' : 'negative';
-            } else if (type === 'TOGGLE_SCORE_WARNING') message = `Avertissement au tableau : ${displayName}`;
-            else if (type === 'TOGGLE_SCORE_PUNISHMENT' || type === 'ADD_PUNISHMENT') message = `Punition : ${displayName}`;
-            else if (type === 'TOGGLE_SCORE_INCOMPLETE') message = `Travail incomplet : ${displayName}`;
-            else if (type === 'ADD_FORCED_SIX') message = `Note forcée à 6 : ${displayName}`;
+            } else {
+                const scores = Array.isArray(r.scores) ? r.scores : [];
+                const selected = scores.find((row) => String(row?.id || '') === String(r.selectedScoreId || '')) || scores[scores.length - 1] || {};
+                // A status toast is an announcement of an addition only.  On
+                // removal, the persistent panel simply updates silently.
+                if (type === 'TOGGLE_SCORE_WARNING' && selected.boardWarning) message = `Avertissement au tableau : ${displayName}`;
+                else if (type === 'TOGGLE_SCORE_PUNISHMENT' && selected.punishment) message = `Punition : ${displayName}`;
+                else if (type === 'ADD_PUNISHMENT') message = `Punition : ${displayName}`;
+                else if (type === 'TOGGLE_SCORE_INCOMPLETE' && selected.workIncomplete) message = `Travail incomplet : ${displayName}`;
+                else if (type === 'ADD_FORCED_SIX') message = `Note forcée à 6 : ${displayName}`;
+            }
             if (message) {
                 const now = new Date();
                 const alert = {
