@@ -3774,6 +3774,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                 <span>{course.title}</span>
                                                 <strong>PRÉSENTER</strong>
                                             </button>
+                                            <button
+                                                type="button"
+                                                className="active-course-open-slides"
+                                                onClick={() => void openGoogleSlidesExternal(course, 0)}
+                                                title="Ouvrir Google Slides et connecter l’extension à cette classe"
+                                                aria-label={`Ouvrir ${course.title} dans Google Slides`}
+                                            >
+                                                ⚡ OUVRIR GOOGLE SLIDES
+                                            </button>
                                             <button type="button" className="active-course-disable" onClick={() => toggleCourseEnabled(course)} title="Inactiver cette présentation" aria-label={`Inactiver ${course.title}`}>×</button>
                                         </div>
                                     ))}
