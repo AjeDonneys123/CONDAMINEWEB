@@ -19,10 +19,8 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
   const [submissionResult, setSubmissionResult] = useState(null);
   const [finishingReview, setFinishingReview] = useState(false);
 
-  // Contestations en cours: { [key]: { message: string, sending: boolean, done: boolean } }
+  // Contestations en cours : l'élève signale directement la question, sans justification.
   // key: `${itemId}` ou `${itemId}_${blankIndex}`
-  const [activeContestKey, setActiveContestKey] = useState('');
-  const [contestMessage, setContestMessage] = useState('');
   const [contestedMap, setContestedMap] = useState({});
 
   // Surveillance anti-triche mobile & plein écran
@@ -224,8 +222,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
 
   const handleSendContest = async (itemId, blankIndex = null) => {
     const key = Number.isInteger(blankIndex) ? `${itemId}_${blankIndex}` : `${itemId}`;
-    const message = contestMessage.trim() || 'Contestation de la réponse saisie';
-    setContestedMap((prev) => ({ ...prev, [key]: { status: 'sending', message } }));
+    setContestedMap((prev) => ({ ...prev, [key]: { status: 'sending' } }));
 
     try {
       const res = await fetch(`/api/eleve/controls/${encodeURIComponent(controlId)}/contest`, {
@@ -235,17 +232,14 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
           submissionId: submissionResult?.id || '',
           studentName: `${firstName.trim()} ${lastName.trim()}`,
           itemId,
-          ...(Number.isInteger(blankIndex) ? { blankIndex } : {}),
-          message
+          ...(Number.isInteger(blankIndex) ? { blankIndex } : {})
         })
       });
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Erreur lors de l’envoi de la contestation.');
 
-      setContestedMap((prev) => ({ ...prev, [key]: { status: 'pending', message } }));
-      setActiveContestKey('');
-      setContestMessage('');
+      setContestedMap((prev) => ({ ...prev, [key]: { status: 'pending' } }));
     } catch (err) {
       alert(err.message || 'Échec de la contestation.');
       setContestedMap((prev) => ({ ...prev, [key]: null }));
@@ -267,7 +261,6 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Impossible de terminer la copie.');
       setSubmissionResult((current) => current ? { ...current, reviewClosed: true, reviewClosedAt: data.reviewClosedAt || new Date().toISOString() } : current);
-      setActiveContestKey('');
     } catch (err) {
       alert(err.message || 'Impossible de terminer la copie.');
     } finally {
@@ -329,7 +322,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
               Correction détaillée
             </h3>
             <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
-              Si une réponse ou un mot saisi a été compté faux alors qu'il est correct, utilise le bouton <strong>Contester</strong> pour le signaler au professeur.
+              Si une réponse a été comptée fausse alors qu'elle est correcte, utilise <strong>Contester</strong> : le professeur verra directement la question signalée.
             </p>
           </div>
 
@@ -337,7 +330,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
             const corr = corrections.find((c) => String(c.itemId) === String(item.id)) || {};
             const isItemCorrect = corr.correct === true;
             const wholeContestKey = String(item.id);
-            const wholeContested = contestedMap[wholeContestKey] || (corr.contestStatus === 'pending' ? { status: 'pending', message: corr.contestMessage } : null);
+            const wholeContested = contestedMap[wholeContestKey] || (corr.contestStatus === 'pending' ? { status: 'pending' } : null);
 
             return (
               <div
@@ -414,44 +407,13 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                       <div style={{ marginTop: 10 }}>
                         {wholeContested ? (
                           <span className="public-control-contest-badge">
-                            ⚠️ Contestation envoyée {wholeContested.message ? `(« ${wholeContested.message} »)` : ''}
+                            ⚠️ Question contestée
                           </span>
-                        ) : activeContestKey === wholeContestKey ? (
-                          <div className="public-control-contest-box">
-                            <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
-                              Pourquoi ta réponse devrait-elle être acceptée ?
-                            </div>
-                            <input
-                              type="text"
-                              placeholder="Ex: Synonyme exact, orthographe proche..."
-                              value={contestMessage}
-                              onChange={(e) => setContestMessage(e.target.value)}
-                            />
-                            <div className="public-control-contest-box-actions">
-                              <button
-                                type="button"
-                                className="public-control-contest-cancel"
-                                onClick={() => setActiveContestKey('')}
-                              >
-                                Annuler
-                              </button>
-                              <button
-                                type="button"
-                                className="public-control-contest-send"
-                                onClick={() => handleSendContest(item.id)}
-                              >
-                                Envoyer au professeur
-                              </button>
-                            </div>
-                          </div>
                         ) : (
                           <button
                             type="button"
                             className="public-control-contest-btn"
-                            onClick={() => {
-                              setActiveContestKey(wholeContestKey);
-                              setContestMessage('');
-                            }}
+                            onClick={() => handleSendContest(item.id)}
                           >
                             ⚠️ Contester cette réponse
                           </button>
@@ -471,13 +433,13 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                         return segments.map((seg, sIdx) => {
                           const hasBlank = sIdx < segments.length - 1;
                           const blankInfo = blankResults[sIdx] || {};
-                          const blankKey = `${item.id}:::${sIdx}`;
+                          const blankKey = `${item.id}_${sIdx}`;
                           const isBlankCorrect = blankInfo.correct === true;
                           const isBlankContested = blankInfo.contestStatus === 'pending' ||
                             (corr.contestStatus === 'pending' && !isBlankCorrect) ||
                             Boolean(contestedMap[blankKey]) ||
                             Boolean(contestedMap[item.id] && !isBlankCorrect);
-                          const blankContestInfo = contestedMap[blankKey] || (blankInfo.contestStatus === 'pending' ? { status: 'pending', message: blankInfo.contestMessage } : null);
+                          const blankContestInfo = contestedMap[blankKey] || (blankInfo.contestStatus === 'pending' ? { status: 'pending' } : null);
 
                           return (
                             <React.Fragment key={sIdx}>
@@ -516,18 +478,15 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                                   {!isBlankCorrect && (
                                     <>
                                       {isBlankContested ? (
-                                        <span className="public-control-contest-badge" title={blankContestInfo?.message || 'Contestation transmise au professeur'}>
+                                        <span className="public-control-contest-badge" title="Contestation transmise au professeur">
                                           ⚠️ Contesté
                                         </span>
-                                      ) : activeContestKey === blankKey ? null : (
+                                      ) : (
                                         <button
                                           type="button"
                                           className="public-control-contest-btn"
                                           title="Contester ce trou"
-                                          onClick={() => {
-                                            setActiveContestKey(blankKey);
-                                            setContestMessage('');
-                                          }}
+                                          onClick={() => handleSendContest(item.id, sIdx)}
                                         >
                                           ⚠️ Contester
                                         </button>
@@ -541,37 +500,6 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                         });
                       })()}
                     </div>
-
-                    {/* Zone de saisie contestation pour un trou ouvert */}
-                    {activeContestKey.startsWith(`${item.id}:::`) && (
-                      <div className="public-control-contest-box">
-                        <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
-                          Contestation pour le trou n°{Number(activeContestKey.split(':::')[1]) + 1} :
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Pourquoi ce mot devrait-il être accepté ?"
-                          value={contestMessage}
-                          onChange={(e) => setContestMessage(e.target.value)}
-                        />
-                        <div className="public-control-contest-box-actions">
-                          <button
-                            type="button"
-                            className="public-control-contest-cancel"
-                            onClick={() => setActiveContestKey('')}
-                          >
-                            Annuler
-                          </button>
-                          <button
-                            type="button"
-                            className="public-control-contest-send"
-                            onClick={() => handleSendContest(item.id, Number(activeContestKey.split(':::')[1]))}
-                          >
-                            Envoyer la contestation
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -719,6 +647,10 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                       type="text"
                       className="public-control-text-input"
                       placeholder="Tape ta réponse ici..."
+                      inputMode="text"
+                      enterKeyHint="next"
+                      autoCapitalize="sentences"
+                      autoCorrect="on"
                       value={currentAnswer.value || ''}
                       onChange={(e) => handleUpdateText(item.id, e.target.value)}
                     />
@@ -739,6 +671,10 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
                               type="text"
                               className="public-control-blank-input"
                               placeholder={`Trou ${sIdx + 1}...`}
+                              inputMode="text"
+                              enterKeyHint="next"
+                              autoCapitalize="sentences"
+                              autoCorrect="on"
                               value={values[sIdx] || ''}
                               onChange={(e) => handleUpdateBlank(item.id, sIdx, e.target.value)}
                             />

@@ -224,13 +224,20 @@
   max-width: 100%;
   margin: 0 4px;
   padding: 5px 10px;
-  font-size: 14px;
+  /* 16px évite le zoom automatique Android et rend le champ manifestement saisissable. */
+  font-size: 16px;
   font-weight: 800;
   color: #1e293b;
   background: #f8fafc;
   border: 2px solid #cbd5e1;
   border-radius: 10px;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 46px;
+  touch-action: manipulation;
+  -webkit-user-select: text;
+  user-select: text;
   transition: border-color 0.15s, background 0.15s;
 }
 
@@ -244,13 +251,19 @@
 .public-control-text-input {
   width: 100%;
   padding: 12px 14px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   border-radius: 12px;
   border: 2px solid #e2e8f0;
   background: #f8fafc;
   color: #0f172a;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 50px;
+  touch-action: manipulation;
+  -webkit-user-select: text;
+  user-select: text;
   box-sizing: border-box;
   transition: border-color 0.15s;
 }

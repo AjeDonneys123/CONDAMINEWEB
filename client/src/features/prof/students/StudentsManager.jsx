@@ -2045,7 +2045,6 @@ export default function StudentsManager({ globalClassId }) {
                                         const segments = String(currentPrompt || '').split(/["“«][^"”»]+["”»]/g);
                                         const blankResults = answer.blankResults || [];
                                         const hasContest = isWholeContested || blankResults.some(b => b.contestStatus === 'pending');
-                                        const contestMsg = blankResults.find(b => b.contestMessage)?.contestMessage || answer.contestMessage;
 
                                         return (
                                             <div className="space-y-3">
@@ -2090,10 +2089,7 @@ export default function StudentsManager({ globalClassId }) {
 
                                                 {hasContest && (
                                                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 flex flex-wrap items-center justify-between gap-2 animate-in">
-                                                        <div className="text-xs text-amber-950 font-bold flex items-center gap-1">
-                                                            <span>⚠️ Contestation élève :</span>
-                                                            <span className="font-black italic">« {contestMsg || 'Non précisé'} »</span>
-                                                        </div>
+                                                        <div className="text-xs text-amber-950 font-bold flex items-center gap-1">⚠️ L'élève conteste cette question.</div>
                                                         <div className="flex items-center gap-2">
                                                             <button
                                                                 type="button"
@@ -2139,9 +2135,7 @@ export default function StudentsManager({ globalClassId }) {
 
                                             {(isWholeContested || answer.contestStatus === 'pending') && (
                                                 <div className="p-3 bg-amber-100 rounded-xl border border-amber-300 flex flex-wrap items-center justify-between gap-2">
-                                                    <div className="font-black text-amber-900 text-xs">
-                                                        ⚠️ Motif élève : « {answer.contestMessage || 'Non précisé'} »
-                                                    </div>
+                                                    <div className="font-black text-amber-900 text-xs">⚠️ L'élève conteste cette question.</div>
                                                     <div className="flex gap-2">
                                                         <button
                                                             type="button"

@@ -117,12 +117,19 @@ const norm = (value = '') => String(value || '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+// Correction conciliante : la présence ou l'absence d'un article français
+// en tête de réponse ne suffit pas à la compter fausse.
+const withoutLeadingArticle = (value = '') => norm(value)
+    .replace(/^(?:(?:le|la|les|un|une|des|du|au|aux|l)\s+|de\s+(?:la|le|les|l)\s+)+/i, '')
+    .trim();
+
 const matchAnswer = (given = '', expected = '') => {
     const givenNorm = norm(given);
-    if (!givenNorm) return false;
+    const relaxedGiven = withoutLeadingArticle(given);
+    if (!givenNorm || !relaxedGiven) return false;
     const variants = String(expected || '').split(/[/|]/).map(v => norm(v)).filter(Boolean);
-    if (variants.length === 0) return givenNorm === norm(expected);
-    return variants.some(v => v === givenNorm);
+    if (variants.length === 0) return givenNorm === norm(expected) || relaxedGiven === withoutLeadingArticle(expected);
+    return variants.some(variant => variant === givenNorm || withoutLeadingArticle(variant) === relaxedGiven);
 };
 
 router.put('/:id/items/:itemId/expected', async (req, res) => {

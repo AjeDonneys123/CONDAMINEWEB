@@ -565,6 +565,12 @@
     }
 
     function fillProjectedControl(panel, control) {
+        // Les mots entre guillemets servent à définir les trous côté professeur.
+        // Ils ne doivent jamais révéler la réponse aux élèves au tableau.
+        const publicPrompt = (value) => String(value || '')
+            .replace(/["“«][^"”»]*["”»]/g, '__________')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
         const title = document.createElement('h2');
         title.textContent = String(control?.title || currentSlideControl?.controlTitle || 'Contrôle');
         panel.appendChild(title);
@@ -584,7 +590,7 @@
             const number = document.createElement('strong');
             number.textContent = `${index + 1}. ${String(item?.lessonTitle || 'Question')}`;
             const prompt = document.createElement('p');
-            prompt.textContent = String(item?.prompt || '');
+            prompt.textContent = publicPrompt(item?.prompt);
             question.append(number, prompt);
             const choices = Array.isArray(item?.choices) ? item.choices : [];
             if (choices.length) {

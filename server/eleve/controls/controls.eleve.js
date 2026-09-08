@@ -6,12 +6,19 @@ const router = express.Router();
 const norm = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’']/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 const classKey = (value = '') => norm(value).replace(/\s/g, '');
 
+// Les articles ne doivent pas transformer une bonne réponse en erreur.
+// Ex. « les Poilus », « poilus » et « des poilus » sont acceptés de la même façon.
+const withoutLeadingArticle = (value = '') => norm(value)
+    .replace(/^(?:(?:le|la|les|un|une|des|du|au|aux|l)\s+|de\s+(?:la|le|les|l)\s+)+/i, '')
+    .trim();
+
 const matchAnswer = (given = '', expected = '') => {
     const givenNorm = norm(given);
-    if (!givenNorm) return false;
+    const relaxedGiven = withoutLeadingArticle(given);
+    if (!givenNorm || !relaxedGiven) return false;
     const variants = String(expected || '').split(/[/|]/).map(v => norm(v)).filter(Boolean);
-    if (variants.length === 0) return givenNorm === norm(expected);
-    return variants.some(v => v === givenNorm);
+    if (variants.length === 0) return givenNorm === norm(expected) || relaxedGiven === withoutLeadingArticle(expected);
+    return variants.some(variant => variant === givenNorm || withoutLeadingArticle(variant) === relaxedGiven);
 };
 
 const publicControl = (row) => ({
@@ -201,13 +208,13 @@ router.post('/:id/contest', async (req, res) => {
             return res.status(400).json({ error: 'Réponse déjà correcte ou introuvable' });
         }
 
-        const message = String(req.body?.message || '').trim().slice(0, 500);
         if (blank) {
             blank.contestStatus = 'pending';
-            blank.contestMessage = message;
+            // Une contestation est désormais un simple signalement : aucun motif requis.
+            delete blank.contestMessage;
         } else {
             answer.contestStatus = 'pending';
-            answer.contestMessage = message;
+            delete answer.contestMessage;
         }
 
         row.markModified('submissions');

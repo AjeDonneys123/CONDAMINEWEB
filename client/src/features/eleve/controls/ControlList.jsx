@@ -113,12 +113,10 @@ function ControlWorkspace({ control, user, onQuit }) {
 
   const correction = id => (result?.corrections || result?.answers || []).find(a => String(a.itemId) === String(id));
   const contest = async (itemId, blankIndex) => {
-    const message = prompt('Explique pourquoi ta réponse est équivalente :');
-    if (!message) return;
     const r = await fetch(`/api/eleve/controls/${control._id}/contest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: user._id || user.id, itemId, blankIndex, message })
+      body: JSON.stringify({ studentId: user._id || user.id, itemId, blankIndex })
     });
     if (r.ok) setResult(v => ({
       ...v,
