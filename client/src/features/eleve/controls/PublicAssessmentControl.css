@@ -296,6 +296,36 @@
   cursor: not-allowed;
 }
 
+.public-control-submit-button {
+  width: 100%;
+  max-width: 420px;
+  padding: 18px 28px;
+  font-size: 17px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: none;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #c026d3 0%, #9333ea 100%) !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 10px 25px -4px rgba(147, 51, 234, 0.4);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.public-control-submit-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #d946ef 0%, #9333ea 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 28px -4px rgba(147, 51, 234, 0.5);
+}
+
+.public-control-submit-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .public-control-error-banner {
   margin-top: 14px;
   padding: 12px 16px;
