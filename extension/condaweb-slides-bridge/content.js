@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.25';
+    const BRIDGE_VERSION = '1.0.27';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -905,12 +905,13 @@
         });
     }
 
-    // Liste des avertis cette heure (sans innerHTML)
+    // Dettes persistantes et avertissements de l'heure (sans innerHTML)
     function renderHourWarnings(root) {
         const warnings = Array.isArray(currentClassroomState?.activeHourWarnings) ? currentClassroomState.activeHourWarnings : [];
+        const debts = Array.isArray(currentClassroomState?.activePersistentDebts) ? currentClassroomState.activePersistentDebts : [];
         let dock = root.querySelector('.conda-hour-warnings-dock');
 
-        if (warnings.length === 0) {
+        if (warnings.length === 0 && debts.length === 0) {
             if (dock) dock.remove();
             return;
         }
@@ -925,18 +926,23 @@
             dock.removeChild(dock.firstChild);
         }
 
-        const title = document.createElement('div');
-        title.className = 'conda-hour-warnings-title';
-        title.textContent = `⚠️ Avertis cette heure (${warnings.length})`;
-        dock.appendChild(title);
-
-        const ul = document.createElement('ul');
-        warnings.forEach(w => {
-            const li = document.createElement('li');
-            li.textContent = w.name || w.studentName || '';
-            ul.appendChild(li);
-        });
-        dock.appendChild(ul);
+        const appendList = (titleText, rows) => {
+            if (!rows.length) return;
+            const title = document.createElement('div');
+            title.className = 'conda-hour-warnings-title';
+            title.textContent = titleText;
+            dock.appendChild(title);
+            const ul = document.createElement('ul');
+            rows.forEach((row) => {
+                const li = document.createElement('li');
+                const prefix = row.status === 'punishment' ? 'Punition · ' : (row.status === 'incomplete' ? 'Travail incomplet · ' : '');
+                li.textContent = `${prefix}${row.name || row.studentName || ''}`;
+                ul.appendChild(li);
+            });
+            dock.appendChild(ul);
+        };
+        appendList(`📌 À régler (${debts.length})`, debts);
+        appendList(`⚠️ Avertis cette heure (${warnings.length})`, warnings);
     }
 
     // Lecteur de vidéo / animation incrusté (sans innerHTML)

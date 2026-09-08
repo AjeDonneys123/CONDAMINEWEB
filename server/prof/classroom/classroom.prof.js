@@ -137,6 +137,21 @@ function buildBridgePlanStudents(classroom, students = []) {
     return { cols, rows, students: projected };
 }
 
+function buildBridgePersistentDebts(students = []) {
+    return students.map((student) => {
+        const records = Array.isArray(student?.behaviorRecords) ? student.behaviorRecords : [];
+        const scores = records.flatMap((record) => Array.isArray(record?.scores) ? record.scores : []);
+        const hasPunishment = scores.some((score) => Boolean(score?.punishment)) || String(student?.punishmentStatus || '') === 'PENDING' || String(student?.punishmentStatus || '') === 'LATE';
+        const hasIncomplete = scores.some((score) => Boolean(score?.workIncomplete)) || records.some((record) => Boolean(record?.workIncomplete));
+        if (!hasPunishment && !hasIncomplete) return null;
+        return {
+            studentId: String(student._id),
+            name: `${String(student.nickname || student.firstName || '').trim()} ${String(student.lastName || '').trim().slice(0, 1)}.`.trim(),
+            status: hasPunishment ? 'punishment' : 'incomplete'
+        };
+    }).filter(Boolean).sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr', { sensitivity: 'base' }));
+}
+
 async function assignPunishmentTemplate(student, teacherId) {
     const { raw, clean } = normalizeClassName(student.currentClass || '');
     if (!raw) return false;
@@ -330,6 +345,14 @@ router.get('/bridge-state/:classId', async (req, res) => {
         // the teacher has explicitly opened the plan.
         const includePlan = classroom.classPlanVisible === true || String(req.query.includePlan || '') === '1';
         const students = includePlan ? await getBridgeStudents(classroom) : [];
+        let activePersistentDebts = Array.isArray(classroom.activePersistentDebts) ? classroom.activePersistentDebts : null;
+        // Migration douce des classes déjà existantes : le premier état lu
+        // reconstitue les dettes à partir des mêmes données que la page prof.
+        if (!activePersistentDebts) {
+            const debtStudents = includePlan ? students : await getBridgeStudents(classroom);
+            activePersistentDebts = buildBridgePersistentDebts(debtStudents);
+            await Classroom.updateOne({ _id: classroom._id }, { $set: { activePersistentDebts } });
+        }
         // A warning must never survive a class/group change.  Older records
         // may contain a pupil from a previous class; validate them against
         // the current membership before giving them to the extension.
@@ -373,6 +396,7 @@ router.get('/bridge-state/:classId', async (req, res) => {
             scoreAlertSyncVersion: Number(classroom.scoreAlertSyncVersion || 0),
             scoreAlertReplayId: String(classroom.scoreAlertReplayId || ''),
             activeHourWarnings,
+            activePersistentDebts,
             planStudentCount: projectedPlan.students.length,
             planStudents: projectedPlan.students.map((student) => ({
                 _id: String(student._id),
@@ -775,6 +799,36 @@ router.post('/behavior', async (req, res) => {
         s.markModified('behaviorRecords');
         await s.save();
         const scoreClassId = String(extraData?.classId || '').trim();
+        if (scoreClassId && mongoose.Types.ObjectId.isValid(scoreClassId) && ['TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'TOGGLE_SCORE_WARNING'].includes(type)) {
+            const classroomForDebts = await Classroom.findById(scoreClassId);
+            if (classroomForDebts) {
+                const displayName = `${String(s.nickname || s.firstName || '').trim()} ${String(s.lastName || '').trim().slice(0, 1)}.`.trim();
+                const scores = Array.isArray(r.scores) ? r.scores : [];
+                const hasPunishment = scores.some((score) => Boolean(score?.punishment)) || String(s.punishmentStatus || '') === 'PENDING' || String(s.punishmentStatus || '') === 'LATE';
+                const hasIncomplete = scores.some((score) => Boolean(score?.workIncomplete)) || Boolean(r.workIncomplete);
+                const studentId = String(s._id);
+                const debts = (Array.isArray(classroomForDebts.activePersistentDebts) ? classroomForDebts.activePersistentDebts : [])
+                    .filter((row) => String(row?.studentId || '') !== studentId);
+                if (hasPunishment || hasIncomplete) debts.push({ studentId, name: displayName, status: hasPunishment ? 'punishment' : 'incomplete' });
+                classroomForDebts.activePersistentDebts = debts.slice(0, 40);
+
+                // Only the board warning is temporary. It expires precisely
+                // when the next hour begins and is removed rather than being
+                // shown again in the following class period.
+                if (type === 'TOGGLE_SCORE_WARNING') {
+                    const selected = scores.find((score) => String(score?.id || '') === String(r.selectedScoreId || '')) || scores[scores.length - 1];
+                    const warnings = (Array.isArray(classroomForDebts.activeHourWarnings) ? classroomForDebts.activeHourWarnings : [])
+                        .filter((row) => Number(row?.expiresAt || 0) > Date.now() && String(row?.studentId || '') !== studentId);
+                    if (selected?.boardWarning) {
+                        const nextHour = new Date();
+                        nextHour.setMinutes(60, 0, 0);
+                        warnings.push({ studentId, name: displayName, expiresAt: nextHour.getTime(), kind: 'board-warning' });
+                    }
+                    classroomForDebts.activeHourWarnings = warnings.slice(0, 8);
+                }
+                await classroomForDebts.save();
+            }
+        }
         const liveAlertTypes = new Set(['ADJUST_SCORE', 'TOGGLE_SCORE_WARNING', 'TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'ADD_PUNISHMENT', 'ADD_FORCED_SIX']);
         if (scoreClassId && mongoose.Types.ObjectId.isValid(scoreClassId) && liveAlertTypes.has(type)) {
             const displayName = String(s.nickname || s.firstName || '').trim();

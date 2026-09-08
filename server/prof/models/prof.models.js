@@ -193,6 +193,10 @@ const Models = {
         // bridge to replay the latest score variation on the board.
         scoreAlertSyncVersion: { type: Number, default: 0 },
         scoreAlertReplayId: { type: String, default: '' },
+        // Dettes visibles de façon persistante sur le tableau : punition et
+        // travail incomplet. Les avertissements tableau restent séparés car
+        // ils expirent à la fin de l'heure.
+        activePersistentDebts: { type: Array, default: [] },
         activeHourWarnings: { type: Array, default: [] },
         classPlanVisible: { type: Boolean, default: false }
     }),
