@@ -637,11 +637,26 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
         const presentationId = String(req.body?.presentationId || '').trim();
         const slideIndex = Math.max(0, Number(req.body?.slideIndex || 0));
         const classHint = String(req.body?.classHint || '').trim();
+        const requestedCourseId = String(req.body?.courseId || '').trim();
+        const requestedClassId = String(req.body?.classId || '').trim();
 
         let course = null;
 
-        // 1. Recherche par drivePresentationId ou slidesUrl
-        if (presentationId) {
+        // 1. The CondaWeb launch URL is authoritative. Never replace its
+        // course by the last active course from another class.
+        if (requestedCourseId) {
+            course = await Course.findById(requestedCourseId);
+            if (!course) return res.status(404).json({ ok: false, error: 'Cours demandé introuvable', code: 'COURSE_NOT_FOUND' });
+            const linkedPresentationId = String(course.drivePresentationId || extractPresentationId(course.slidesUrl) || extractPresentationId(course.externalSlidesUrl) || '');
+            if (presentationId && linkedPresentationId && linkedPresentationId !== presentationId) {
+                return res.status(409).json({ ok: false, error: 'Cette présentation ne correspond pas au cours demandé', code: 'PRESENTATION_MISMATCH' });
+            }
+        }
+
+        // 2. A manually opened presentation can still connect only through an
+        // exact presentation ID. Title / active-course fallbacks are unsafe:
+        // they can silently join the wrong 5e or 2de class.
+        if (!course && presentationId) {
             course = await Course.findOne({
                 $or: [
                     { drivePresentationId: presentationId },
@@ -651,41 +666,8 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
             });
         }
 
-        // 2. Recherche par titre
-        if (!course && title) {
-            const cleanTitle = title.replace(/\s*-\s*Google\s*(Présentations|Slides|Documentos).*/i, '').trim();
-            if (cleanTitle) {
-                course = await Course.findOne({ title: { $regex: cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
-            }
-            if (!course && cleanTitle) {
-                const words = cleanTitle.split(/\s+/).filter(w => w.length > 3 && !['pour', 'dans', 'avec', 'sans', 'sous', 'vers', 'chez'].includes(w.toLowerCase()));
-                for (const word of words) {
-                    course = await Course.findOne({ title: { $regex: word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
-                    if (course) break;
-                }
-            }
-        }
-
-        // 3. Recherche par classe
-        if (!course && classHint) {
-            course = await Course.findOne({
-                $or: [
-                    { targetClassroomId: classHint },
-                    { targetClassroomName: { $regex: classHint, $options: 'i' } }
-                ]
-            }).sort({ updatedAt: -1 });
-        }
-
-        // 4. Fallback sur le cours actif ou le plus récent
         if (!course) {
-            course = await Course.findOne({ 'presentationRemote.active': true }).sort({ 'presentationRemote.updatedAt': -1 });
-        }
-        if (!course) {
-            course = await Course.findOne({}).sort({ updatedAt: -1 });
-        }
-
-        if (!course) {
-            return res.status(404).json({ ok: false, error: 'Aucun cours trouvé' });
+            return res.status(404).json({ ok: false, error: 'Présentation CondaWeb non associée : ouvrez-la depuis la page Cours', code: 'PRESENTATION_NOT_ASSOCIATED' });
         }
 
         // Lie l'ID de présentation Google Drive si absent
@@ -697,7 +679,13 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
         // Désactive les autres cours actifs
         await Course.updateMany({ _id: { $ne: course._id } }, { $set: { 'presentationRemote.active': false } });
 
-        const classroom = await resolveCourseClassroom(course, classHint);
+        const explicitlySelectedClassroom = requestedClassId
+            ? await Classroom.findById(requestedClassId, 'name level').lean().catch(() => null)
+            : null;
+        if (requestedClassId && !explicitlySelectedClassroom?._id) {
+            return res.status(409).json({ ok: false, error: 'Classe sélectionnée introuvable', code: 'CLASSROOM_NOT_FOUND' });
+        }
+        const classroom = explicitlySelectedClassroom || await resolveCourseClassroom(course, classHint);
         if (!classroom?._id) {
             return res.status(409).json({
                 ok: false,

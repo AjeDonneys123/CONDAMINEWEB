@@ -3262,9 +3262,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const data = await response.json();
             if (!response.ok) throw new Error(data?.error || 'Accès en modification impossible');
             const editBaseUrl = getEditUrl(data.editUrl || course.slidesUrl);
-            const targetUrl = editSlideObjectId
-                ? `${editBaseUrl}#slide=id.${encodeURIComponent(editSlideObjectId)}`
-                : editBaseUrl;
+            // The bridge reads these two values from the Google Slides URL.
+            // They make the tab unambiguously belong to the course launched
+            // from this exact CondaWeb class (5A is never confused with 5D).
+            const targetUrlObject = new URL(editBaseUrl);
+            targetUrlObject.searchParams.set('condaCourseId', String(course._id));
+            targetUrlObject.searchParams.set('condaClassId', String(globalClassId || course.targetClassroomId || ''));
+            if (editSlideObjectId) targetUrlObject.hash = `slide=id.${encodeURIComponent(editSlideObjectId)}`;
+            const targetUrl = targetUrlObject.toString();
             if (editorWindow) editorWindow.location.replace(targetUrl);
             else window.open(targetUrl, '_blank', 'noopener,noreferrer');
             if (globalClassId) {

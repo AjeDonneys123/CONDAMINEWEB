@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.29';
+    const BRIDGE_VERSION = '1.0.30';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -171,7 +171,6 @@
         const previousId = activeClassId;
         activeClassId = resolvedId;
         activeClassName = String(classData?.name || activeClassName || 'Classe active');
-        try { chrome?.storage?.local?.set({ activeClassId, activeClassName }); } catch (_) {}
         console.info('[CondaWeb Bridge] classe réparée pour le tableau', { previousId, activeClassId, activeClassName });
     }
 
@@ -302,19 +301,12 @@
         });
     }
 
-    // 3. Charger la configuration stockée
+    // 3. La classe n'est volontairement plus reprise depuis le stockage de
+    // l'extension. Ce stockage est partagé par tous les onglets Google Slides
+    // et mélangeait par exemple 5A et 5D. La page CondaWeb qui ouvre Slides
+    // transmet désormais le couple précis cours + classe dans l'URL.
     function loadConfig() {
-        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-            chrome.storage.local.get(['activeClassId', 'activeClassName'], (res) => {
-                // The presentation association discovered from Google Slides
-                // wins over a stale value kept from a previous class.  Without
-                // this guard, the asynchronous storage callback could replace
-                // the class just detected by auto-connect.
-                if (currentCourseId || activeClassId) return;
-                if (res.activeClassId) activeClassId = res.activeClassId;
-                if (res.activeClassName) activeClassName = res.activeClassName;
-            });
-        }
+        // Kept as a no-op for older initialization code.
     }
     let currentCourseId = '';
     let currentCourseTitle = '';
@@ -322,22 +314,8 @@
 
     loadConfig();
     function onStorageChanged(changes, areaName) {
-            if (bridgeStopped) return;
-            if (areaName !== 'local') return;
-            const nextClassId = changes.activeClassId ? String(changes.activeClassId.newValue || '') : activeClassId;
-            const nextClassName = changes.activeClassName ? String(changes.activeClassName.newValue || '') : activeClassName;
-            const changedExternally = nextClassId !== activeClassId || nextClassName !== activeClassName;
-            activeClassId = nextClassId;
-            activeClassName = nextClassName;
-            // autoConnectPresentation écrit ces mêmes valeurs dans
-            // chrome.storage. Ne redémarrons pas toute la synchronisation en
-            // réponse à notre propre écriture : cela créait une boucle de
-            // requêtes et pouvait momentanément revenir vers une ancienne
-            // classe.
-            if (changedExternally) {
-                hasAutoConnected = false;
-                void syncWithCondaWeb();
-            }
+            // Intentionally ignored: a selection in the popup or another
+            // Slides tab must never change this tab's classroom.
     }
     if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
         chrome.storage.onChanged.addListener(onStorageChanged);
@@ -356,12 +334,19 @@
         const hashMatch = hash.match(/#slide=id\.([a-zA-Z0-9_-]+)/);
         const slideObjectId = hashMatch ? hashMatch[1] : '';
 
-        return { presentationId, title, slideObjectId };
+        const query = new URLSearchParams(window.location.search);
+        return {
+            presentationId,
+            title,
+            slideObjectId,
+            bridgeCourseId: String(query.get('condaCourseId') || '').trim(),
+            bridgeClassId: String(query.get('condaClassId') || '').trim()
+        };
     }
 
     // Auto-connexion intelligente : relie automatiquement le diaporama Google au bon cours CondaWeb
     async function autoConnectPresentation({ replaceClass = false } = {}) {
-        const { presentationId, title, slideObjectId } = getSlideInfo();
+        const { presentationId, title, slideObjectId, bridgeCourseId, bridgeClassId } = getSlideInfo();
         if (!presentationId && !title) return false;
 
         try {
@@ -374,10 +359,11 @@
                     // The Slides bridge now mirrors only plan/notes. Avoid
                     // transferring video scenes on every connection.
                     light: true,
-                    // The backend resolves the course tied to this Google
-                    // presentation and its classroom. Never let a stale ID
-                    // stored by an old tab override that association.
-                    classHint: ''
+                    // The browser tab owns this pair. It is supplied by the
+                    // CondaWeb page that launched the presentation, so two
+                    // classes of the same level can never be mixed.
+                    courseId: bridgeCourseId,
+                    classId: bridgeClassId
                 }
             });
             if (data?.ok && data.courseId) {
@@ -386,9 +372,6 @@
                 const classChanged = Boolean(data.classId) && String(data.classId) !== activeClassId;
                 if (data.classId) activeClassId = String(data.classId);
                 if (data.className) activeClassName = String(data.className);
-                if ((replaceClass || classChanged) && activeClassId && chrome?.storage?.local) {
-                    chrome.storage.local.set({ activeClassId, activeClassName });
-                }
                 isConnected = true;
                 hasAutoConnected = true;
 
