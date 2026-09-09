@@ -290,6 +290,9 @@ const Models = {
         items: { type: [mongoose.Schema.Types.Mixed], default: [] },
         submissions: { type: [mongoose.Schema.Types.Mixed], default: [] },
         alerts: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        // Dernière préparation d'import Pronote. Elle ne contient ni mot de
+        // passe ni session Pronote : seulement les notes déjà attribuées.
+        pronoteExport: { type: mongoose.Schema.Types.Mixed, default: null },
         date: { type: Date, default: Date.now }
     }),
 

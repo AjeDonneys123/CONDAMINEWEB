@@ -12,17 +12,20 @@
     overflow: hidden !important;
 }
 
-/* 1. Badge d'état flottant en bas à droite */
+/* Badge de connexion flottant : séparé des actions Plan / Contrôle afin de
+   pouvoir le déplacer sans couvrir ces actions. */
 .conda-bridge-badge {
-    position: static !important;
-    z-index: 1 !important;
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    z-index: 2147483647 !important;
     pointer-events: auto !important;
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
     min-width: 0 !important;
     max-width: min(340px, 42vw) !important;
-    padding: 10px 14px !important;
+    padding: 8px 10px !important;
     background: rgba(15, 23, 42, 0.94) !important;
     backdrop-filter: blur(16px) !important;
     border: 1.5px solid #7c3aed !important;
@@ -43,6 +46,51 @@
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
 }
+
+.conda-bridge-drag-handle {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 14px !important;
+    color: #c4b5fd !important;
+    font-size: 14px !important;
+    letter-spacing: -4px !important;
+    cursor: grab !important;
+    touch-action: none !important;
+}
+.conda-bridge-drag-handle:active { cursor: grabbing !important; }
+
+.conda-bridge-dismiss {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 19px !important;
+    height: 19px !important;
+    margin-left: 2px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, .16) !important;
+    color: #fff !important;
+    font-size: 17px !important;
+    line-height: 1 !important;
+    font-weight: 900 !important;
+    cursor: pointer !important;
+}
+.conda-bridge-dismiss:hover { background: #ef4444 !important; }
+
+/* Dès que la classe est connectée, le badge est replacé dans la barre du bas
+   et devient un bouton compact normal, sans poignée ni croix. */
+.conda-bridge-badge.is-connected {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    z-index: 1 !important;
+    max-width: min(300px, 36vw) !important;
+}
+.conda-bridge-badge.is-connected .conda-bridge-drag-handle,
+.conda-bridge-badge.is-connected .conda-bridge-dismiss { display: none !important; }
+.conda-bridge-badge.is-connected:hover { transform: none !important; }
 
 .conda-bridge-badge:hover {
     background: #1e1b4b !important;
@@ -172,7 +220,7 @@
     .conda-slide-control-dock { bottom: 12px; max-width: 94vw; gap: 5px; }
     .conda-slide-plan-toggle,
     .conda-slide-control-add { padding: 8px 10px; font-size: 10px; }
-    .conda-bridge-badge { max-width: min(190px, 44vw) !important; padding: 8px 10px !important; font-size: 10px !important; }
+    .conda-bridge-badge { max-width: min(210px, 58vw) !important; padding: 7px 9px !important; font-size: 10px !important; }
     .conda-slide-control-card { width: min(390px, 80vw); min-width: 0; padding: 18px 12px; }
     .conda-slide-control-card strong { font-size: 16px; }
     .conda-slide-control-card span { font-size: 12px; }

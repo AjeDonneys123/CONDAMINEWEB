@@ -33,6 +33,7 @@
     let scoreAlertSyncVersionKnown = false;
     let lastPlanSignature = '';
     let lastLiveClassroomSignature = '';
+    let badgeDismissedForPage = false;
 
     let currentClassroomState = null;
     let currentRemoteState = null;
@@ -139,6 +140,20 @@
             ? event.target.closest('#conda-bridge-badge')
             : null;
         if (!target) return;
+        const dismissButton = event.target instanceof Element
+            ? event.target.closest('.conda-bridge-dismiss')
+            : null;
+        if (dismissButton) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            badgeDismissedForPage = true;
+            target.remove();
+            console.info('[CondaWeb Bridge] badge de connexion masqué pour cette page');
+            return;
+        }
+        // The small grip is reserved for moving the badge. It must never
+        // trigger a synchronization while the teacher is positioning it.
+        if (event.target instanceof Element && event.target.closest('.conda-bridge-drag-handle')) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         console.info('[CondaWeb Bridge] clic badge : reconnexion demandée');
@@ -742,9 +757,6 @@
             dock.className = 'conda-slide-control-dock';
             root.appendChild(dock);
         }
-        // Keep a reference before clearing the toolbar: the badge is one of
-        // its children after the first render.
-        const connectionBadge = root.querySelector('#conda-bridge-badge');
         while (dock.firstChild) dock.removeChild(dock.firstChild);
 
         const planButton = document.createElement('button');
@@ -762,9 +774,11 @@
         addButton.onclick = () => { void openControlsMenu(); };
         dock.appendChild(addButton);
 
-        // Keep every extension action on one bottom toolbar. This avoids the
-        // connection action covering the controls on small Slides windows.
-        if (connectionBadge) dock.appendChild(connectionBadge);
+        // Une fois connecté, le badge revient dans le flux normal de la
+        // barre. Pendant l'attente il reste seul, déplaçable, en haut à
+        // gauche afin de ne pas gêner Google Slides.
+        const connectionBadge = root.querySelector('#conda-bridge-badge');
+        if (isConnected && connectionBadge) dock.appendChild(connectionBadge);
 
         if (controlMenuOpen) {
             const menu = document.createElement('div');
@@ -786,27 +800,90 @@
 
     }
 
-    // Badge d'état dans l'angle bas-droite (sans innerHTML)
+    function restoreBadgePosition(badge) {
+        try {
+            const position = JSON.parse(sessionStorage.getItem('condaBridgeBadgePosition') || 'null');
+            if (!position || !Number.isFinite(position.left) || !Number.isFinite(position.top)) return;
+            badge.style.left = `${Math.max(0, position.left)}px`;
+            badge.style.top = `${Math.max(0, position.top)}px`;
+        } catch (_) {
+            // A malformed saved position must never prevent the bridge UI.
+        }
+    }
+
+    function enableBadgeDrag(badge) {
+        if (badge.dataset.dragReady === '1') return;
+        badge.dataset.dragReady = '1';
+        const grip = badge.querySelector('.conda-bridge-drag-handle');
+        if (!grip) return;
+        grip.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = badge.getBoundingClientRect();
+            const offsetX = event.clientX - rect.left;
+            const offsetY = event.clientY - rect.top;
+            grip.setPointerCapture?.(event.pointerId);
+            const move = (moveEvent) => {
+                const maxLeft = Math.max(0, window.innerWidth - rect.width);
+                const maxTop = Math.max(0, window.innerHeight - rect.height);
+                badge.style.left = `${Math.min(maxLeft, Math.max(0, moveEvent.clientX - offsetX))}px`;
+                badge.style.top = `${Math.min(maxTop, Math.max(0, moveEvent.clientY - offsetY))}px`;
+            };
+            const finish = () => {
+                window.removeEventListener('pointermove', move, true);
+                window.removeEventListener('pointerup', finish, true);
+                const nextRect = badge.getBoundingClientRect();
+                sessionStorage.setItem('condaBridgeBadgePosition', JSON.stringify({ left: nextRect.left, top: nextRect.top }));
+                console.info('[CondaWeb Bridge] badge déplacé', { left: Math.round(nextRect.left), top: Math.round(nextRect.top) });
+            };
+            window.addEventListener('pointermove', move, true);
+            window.addEventListener('pointerup', finish, true);
+        });
+    }
+
+    // Badge d'état flottant en haut à gauche (sans innerHTML)
     function renderBadge(connected, text) {
         const root = ensureOverlayRoot();
         let badge = document.getElementById('conda-bridge-badge');
+        if (connected) badgeDismissedForPage = false;
+        if (badgeDismissedForPage && !connected) {
+            badge?.remove();
+            return;
+        }
         if (!badge) {
-            badge = document.createElement('button');
-            badge.type = 'button';
+            badge = document.createElement('div');
             badge.id = 'conda-bridge-badge';
             badge.className = 'conda-bridge-badge';
 
+            const grip = document.createElement('span');
+            grip.className = 'conda-bridge-drag-handle';
+            grip.title = 'Déplacer le bouton';
+            grip.setAttribute('aria-label', 'Déplacer le bouton CondaWeb');
+            grip.textContent = '⋮⋮';
+            badge.appendChild(grip);
+
             const dot = document.createElement('div');
             dot.className = 'conda-bridge-dot';
-            dot.style.cssText = 'width: 10px; height: 10px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981; flex-shrink: 0;';
+            const dotColor = connected ? '#10b981' : '#ef4444';
+            dot.style.cssText = `width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 10px ${dotColor}; flex-shrink: 0;`;
             badge.appendChild(dot);
 
             const label = document.createElement('span');
             label.className = 'conda-bridge-label';
             label.textContent = `⚡ ${text}`;
             badge.appendChild(label);
+
+            const dismiss = document.createElement('button');
+            dismiss.type = 'button';
+            dismiss.className = 'conda-bridge-dismiss';
+            dismiss.title = 'Masquer le bouton de connexion';
+            dismiss.setAttribute('aria-label', 'Masquer le bouton de connexion');
+            dismiss.textContent = '×';
+            badge.appendChild(dismiss);
             root.appendChild(badge);
-            console.log('[CondaWeb Bridge] ✅ Badge affiché à l\'écran (bas-droite).');
+            restoreBadgePosition(badge);
+            enableBadgeDrag(badge);
+            console.log('[CondaWeb Bridge] ✅ Badge affiché à l\'écran (haut-gauche).');
 
         } else {
             const dot = badge.querySelector('.conda-bridge-dot');
@@ -819,9 +896,10 @@
                 label.textContent = `⚡ ${text}`;
             }
         }
-        // Set this on every render.  This deliberately overwrites the prompt
-        // handler left by old bridge versions already present in the tab.
-        badge.onclick = () => { void connectAndSynchronizeNow(); };
+        badge.classList.toggle('is-connected', Boolean(connected));
+        // A failed reconnection must put the badge back in the floating area.
+        // appendChild moves the existing node without creating a duplicate.
+        if (!connected && badge.parentElement !== root) root.appendChild(badge);
     }
 
     // Alertes élèves (sans innerHTML)

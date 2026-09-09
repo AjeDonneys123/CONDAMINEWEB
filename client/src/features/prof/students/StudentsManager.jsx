@@ -82,6 +82,13 @@ export default function StudentsManager({ globalClassId }) {
   const [editingControlScore, setEditingControlScore] = useState('');
   const [editingControlNote, setEditingControlNote] = useState('');
   const [savingControlScore, setSavingControlScore] = useState(false);
+  const [aiContestModal, setAiContestModal] = useState(null);
+  const [aiContestText, setAiContestText] = useState('');
+  const [applyingAiDecisions, setApplyingAiDecisions] = useState(false);
+  const [pronoteModal, setPronoteModal] = useState(null);
+  const [pronoteDraft, setPronoteDraft] = useState({ title: '', date: '', coefficient: '1', outOf: '20' });
+  const [preparingPronote, setPreparingPronote] = useState(false);
+  const [pronotePrepared, setPronotePrepared] = useState(null);
 
   const isCopyContested = (copy) => (copy?.answers || []).some((a) =>
     a.contestStatus === 'pending' || (a.blankResults || []).some((b) => b.contestStatus === 'pending')
@@ -106,6 +113,40 @@ export default function StudentsManager({ globalClassId }) {
       if (String(viewingControlCopy?.control?._id || '') === String(control._id)) setViewingControlCopy(null);
     } catch (error) {
       alert(error.message || 'Suppression impossible');
+    }
+  };
+
+  const openPronotePreparation = (control) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setPronotePrepared(null);
+    setPronoteDraft({ title: control?.title || 'Contrôle', date: today, coefficient: '1', outOf: '20' });
+    setPronoteModal(control);
+  };
+
+  const preparePronoteImport = async () => {
+    if (!pronoteModal?._id || !globalClassId) {
+      alert('Sélectionnez d’abord une classe pour préparer l’import Pronote.');
+      return;
+    }
+    setPreparingPronote(true);
+    try {
+      const response = await fetch(`/api/controls/${encodeURIComponent(pronoteModal._id)}/pronote-export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classId: globalClassId, ...pronoteDraft })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Préparation Pronote impossible');
+      setPronotePrepared(data.export);
+      setAssessmentControls((current) => current.map((control) =>
+        String(control?._id) === String(pronoteModal._id)
+          ? { ...control, pronoteExport: data.export }
+          : control
+      ));
+    } catch (error) {
+      alert(error.message || 'Préparation Pronote impossible');
+    } finally {
+      setPreparingPronote(false);
     }
   };
 
@@ -154,8 +195,95 @@ export default function StudentsManager({ globalClassId }) {
     }
   };
 
+  // Export volontairement limité aux contestations : les corrections ordinaires
+  // restent locales et gratuites. Le JSON peut être collé dans n'importe quelle
+  // IA, sans appeler une API CondaWeb.
+  const buildAiContestPayload = (control) => {
+    const decisions = [];
+    (control?.submissions || []).forEach((copy) => {
+      (copy.answers || []).forEach((answer) => {
+        const item = (control.items || []).find((candidate) => String(candidate.id) === String(answer.itemId));
+        if (!item) return;
+        const common = {
+          student: { id: String(copy.studentId || ''), name: copy.studentName || 'Élève' },
+          question: {
+            id: String(item.id), type: item.type, prompt: item.prompt,
+            expectedAnswers: item.expectedAnswers || [], expectedKeywords: item.expectedKeywords || [],
+            choices: item.choices || [], correctIndex: item.correctIndex
+          }
+        };
+        const pendingBlanks = (answer.blankResults || []).filter((blank) => blank.contestStatus === 'pending');
+        pendingBlanks.forEach((blank) => decisions.push({
+          decisionId: `${copy.id}:${item.id}:blank:${blank.index}`,
+          kind: 'blank', copyId: String(copy.id), itemId: String(item.id), blankIndex: Number(blank.index),
+          ...common, answer: { value: blank.value || '', expected: blank.expected || '' }
+        }));
+        if (answer.contestStatus === 'pending') decisions.push({
+          decisionId: `${copy.id}:${item.id}:whole`,
+          kind: 'whole', copyId: String(copy.id), itemId: String(item.id),
+          ...common, answer: { value: answer.value ?? (answer.values || []).join(' | '), values: answer.values || [] }
+        });
+      });
+    });
+    return {
+      protocol: 'condaweb-ai-contest-review/v1',
+      instruction: "Décide uniquement les contestations. Ignore accents, majuscules, ponctuation, articles et espaces. Accepte si l'élève démontre qu'il connaît la réponse ; refuse sinon. Retourne UNIQUEMENT le JSON de réponse demandé, sans markdown.",
+      responseFormat: { protocol: 'condaweb-ai-contest-review/v1', controlId: String(control._id), decisions: [{ decisionId: 'identifiant reçu', accepted: true, rationale: 'courte justification facultative' }] },
+      control: { id: String(control._id), title: control.title, total: control.total || null },
+      decisions
+    };
+  };
+
+  const openAiContestExport = async (control) => {
+    const payload = buildAiContestPayload(control);
+    if (!payload.decisions.length) return alert('Aucune contestation en attente pour ce contrôle.');
+    const text = JSON.stringify(payload, null, 2);
+    setAiContestText(text);
+    setAiContestModal({ mode: 'export', control, payload });
+    try { await navigator.clipboard?.writeText(text); } catch (_) { /* le textarea permet toujours une copie manuelle */ }
+  };
+
+  const openAiContestImport = (control) => {
+    setAiContestText('');
+    setAiContestModal({ mode: 'import', control, payload: buildAiContestPayload(control) });
+  };
+
+  const applyAiContestDecisions = async () => {
+    const modal = aiContestModal;
+    if (!modal?.control?._id) return;
+    let parsed;
+    try { parsed = JSON.parse(aiContestText); }
+    catch (_) { return alert("Le retour de l'IA n'est pas un JSON valide."); }
+    if (parsed?.protocol !== 'condaweb-ai-contest-review/v1' || String(parsed?.controlId) !== String(modal.control._id) || !Array.isArray(parsed?.decisions)) {
+      return alert("Ce JSON ne correspond pas à ce contrôle ou n'utilise pas le format CondaWeb demandé.");
+    }
+    const allowed = new Map((modal.payload?.decisions || []).map((decision) => [decision.decisionId, decision]));
+    const selected = parsed.decisions.filter((decision) => allowed.has(decision?.decisionId) && typeof decision.accepted === 'boolean');
+    if (!selected.length) return alert("Aucune décision exploitable n'a été trouvée.");
+    setApplyingAiDecisions(true);
+    try {
+      for (const decision of selected) {
+        const source = allowed.get(decision.decisionId);
+        const response = await fetch(`/api/controls/${encodeURIComponent(modal.control._id)}/contest/${encodeURIComponent(source.copyId)}/${encodeURIComponent(source.itemId)}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accepted: decision.accepted, ...(source.kind === 'blank' ? { blankIndex: source.blankIndex } : {}) })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || 'Une décision n’a pas pu être enregistrée.');
+      }
+      await loadMatrix();
+      setAiContestModal(null);
+      alert(`${selected.length} contestation(s) traitée(s) selon le retour de l'IA.`);
+    } catch (error) {
+      alert(error.message || "Erreur pendant l'import des décisions IA.");
+    } finally {
+      setApplyingAiDecisions(false);
+    }
+  };
+
   const [promptsDraft, setPromptsDraft] = useState({});
   const [isRegradingAll, setIsRegradingAll] = useState(false);
+  const [regradingControlId, setRegradingControlId] = useState('');
 
   const hasPromptModifications = viewingControlCopy && Object.keys(promptsDraft).some((itemId) => {
     const originalItem = (viewingControlCopy.control.items || []).find(i => String(i.id) === String(itemId));
@@ -185,6 +313,62 @@ export default function StudentsManager({ globalClassId }) {
       alert(`Contrôle mis à jour et ${data.updatedCount || 0} copie(s) recalculées avec succès !`);
     } catch (err) {
       alert(err.message || 'Erreur lors de la recorrection');
+    } finally {
+      setIsRegradingAll(false);
+    }
+  };
+
+  const handleRegradeAssessmentControl = async (control) => {
+    if (!control?._id || regradingControlId) return;
+    const copiesCount = (control.submissions || []).length;
+    if (!window.confirm(`Recorriger les ${copiesCount} copie(s) de « ${control.title} » avec les règles tolérantes (accents, articles et espaces) ?`)) return;
+    setRegradingControlId(String(control._id));
+    try {
+      const response = await fetch(`/api/controls/${control._id}/update-and-regrade`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompts: {} })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Erreur lors de la recorrection');
+
+      const updatedControl = data.control;
+      setAssessmentControls((current) => current.map((item) =>
+        String(item._id) === String(updatedControl?._id) ? updatedControl : item
+      ));
+      if (viewingControlCopy && String(viewingControlCopy.control?._id) === String(updatedControl?._id)) {
+        const refreshedCopy = (updatedControl.submissions || []).find((copy) => String(copy.id) === String(viewingControlCopy.copy?.id)) || viewingControlCopy.copy;
+        setViewingControlCopy({ ...viewingControlCopy, control: updatedControl, copy: refreshedCopy });
+        setEditingControlScore(String(refreshedCopy?.score ?? 0));
+      }
+      alert(`${data.updatedCount || copiesCount} copie(s) recorrigée(s) avec succès.`);
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la recorrection');
+    } finally {
+      setRegradingControlId('');
+    }
+  };
+
+  const handleSetQcmCorrectAnswer = async (item, correctIndex) => {
+    if (!viewingControlCopy?.control?._id || isRegradingAll) return;
+    if (!window.confirm(`Définir la réponse ${String.fromCharCode(65 + correctIndex)} comme bonne réponse et recorriger toutes les copies ?`)) return;
+    setIsRegradingAll(true);
+    try {
+      const response = await fetch(`/api/controls/${viewingControlCopy.control._id}/items/${item.id}/expected`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correctIndex })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Modification du QCM impossible');
+      const updatedControl = data.control;
+      const refreshedCopy = (updatedControl.submissions || []).find((copy) => String(copy.id) === String(viewingControlCopy.copy?.id)) || viewingControlCopy.copy;
+      setAssessmentControls((current) => current.map((control) => String(control._id) === String(updatedControl._id) ? updatedControl : control));
+      setViewingControlCopy({ ...viewingControlCopy, control: updatedControl, copy: refreshedCopy });
+      setEditingControlScore(String(refreshedCopy?.score ?? 0));
+      alert(`Bonne réponse modifiée : ${String.fromCharCode(65 + correctIndex)}. ${data.updatedCount || 0} copie(s) ont été recorrigées.`);
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la modification du QCM');
     } finally {
       setIsRegradingAll(false);
     }
@@ -1599,7 +1783,7 @@ export default function StudentsManager({ globalClassId }) {
                             }`}
                             open={hasControlContest}
                         >
-                            <summary className="font-black cursor-pointer flex items-center justify-between">
+                            <summary className="font-black cursor-pointer flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
                                     <span>{control.title} · {submissions.length} copie(s)</span>
                                     {(control.alerts || []).length > 0 && (
@@ -1613,15 +1797,55 @@ export default function StudentsManager({ globalClassId }) {
                                         </span>
                                     )}
                                 </div>
-                                <button
-                                    type="button"
-                                    title="Supprimer ce contrôle et ses copies"
-                                    aria-label={`Supprimer ${control.title}`}
-                                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleDeleteAssessmentControl(control); }}
-                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-red-200 bg-white text-lg font-black leading-none text-red-500 hover:bg-red-600 hover:text-white"
-                                >
-                                    ×
-                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <button
+                                        type="button"
+                                        title="Préparer toutes les notes de ce contrôle pour Pronote"
+                                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); openPronotePreparation(control); }}
+                                        className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-sky-700"
+                                    >
+                                        📤 Préparer Pronote
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="Recalculer toutes les copies avec la correction tolérante"
+                                        aria-label={`Recorriger ${control.title}`}
+                                        disabled={Boolean(regradingControlId)}
+                                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleRegradeAssessmentControl(control); }}
+                                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                                    >
+                                        {regradingControlId === String(control._id) ? '⏳ Recorrige…' : '↻ Recorriger'}
+                                    </button>
+                                    {hasControlContest && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                title="Copier les contestations dans le format demandé à une IA"
+                                                onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openAiContestExport(control); }}
+                                                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-indigo-700"
+                                            >
+                                                🤖 Export IA
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="Coller le JSON de décision renvoyé par l’IA"
+                                                onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAiContestImport(control); }}
+                                                className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-black text-indigo-700 transition hover:bg-indigo-50"
+                                            >
+                                                ⇩ Import IA
+                                            </button>
+                                        </>
+                                    )}
+                                    <button
+                                        type="button"
+                                        title="Supprimer ce contrôle et ses copies"
+                                        aria-label={`Supprimer ${control.title}`}
+                                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleDeleteAssessmentControl(control); }}
+                                        className="flex h-7 w-7 items-center justify-center rounded-full border border-red-200 bg-white text-lg font-black leading-none text-red-500 hover:bg-red-600 hover:text-white"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
                             </summary>
 
                             <div className="mt-3 space-y-2">
@@ -2032,6 +2256,14 @@ export default function StudentsManager({ globalClassId }) {
                                                             {isChosen && <span className="text-[10px] font-black uppercase">(Choix élève)</span>}
                                                             {isChosen && isChoiceContested && <span className="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">⚠️ Contesté</span>}
                                                             {!isChosen && isCorrectChoice && !isItemCorrect && <span className="text-[10px] font-black text-emerald-600 uppercase">(Bonne réponse)</span>}
+                                                            <button
+                                                                type="button"
+                                                                disabled={isRegradingAll || isCorrectChoice}
+                                                                onClick={() => void handleSetQcmCorrectAnswer(item, cIdx)}
+                                                                className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-[9px] font-black uppercase text-emerald-700 hover:bg-emerald-600 hover:text-white disabled:cursor-default disabled:opacity-50"
+                                                            >
+                                                                {isCorrectChoice ? '✓ Bonne réponse' : 'Définir correcte'}
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 );
@@ -2159,6 +2391,94 @@ export default function StudentsManager({ globalClassId }) {
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {pronoteModal && (
+            <div className="fixed inset-0 z-[111] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Préparer l'import Pronote">
+                <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+                        <div>
+                            <div className="text-xl font-black text-slate-900">📤 Préparer l’import Pronote</div>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Un seul lot pour toute la classe. Rien n’est envoyé à Pronote automatiquement.</p>
+                        </div>
+                        <button type="button" onClick={() => setPronoteModal(null)} className="text-3xl font-black leading-none text-slate-400 hover:text-slate-800" aria-label="Fermer">×</button>
+                    </div>
+                    <div className="space-y-4 overflow-y-auto p-5">
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-bold text-sky-950">
+                            Classe : {className || 'classe sélectionnée'} · Contrôle : {pronoteModal.title}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="text-xs font-black text-slate-700">Titre dans Pronote
+                                <input value={pronoteDraft.title} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, title: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
+                            </label>
+                            <label className="text-xs font-black text-slate-700">Date
+                                <input type="date" value={pronoteDraft.date} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, date: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
+                            </label>
+                            <label className="text-xs font-black text-slate-700">Coefficient
+                                <input type="number" min="0" step="0.01" value={pronoteDraft.coefficient} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, coefficient: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
+                            </label>
+                            <label className="text-xs font-black text-slate-700">Notation Pronote
+                                <input type="number" min="1" max="100" step="0.5" value={pronoteDraft.outOf} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, outOf: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
+                            </label>
+                        </div>
+                        {pronotePrepared && (
+                            <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950">
+                                <div className="font-black">✓ Lot prêt : {pronotePrepared.rows?.length || 0} note(s) sur {pronotePrepared.outOf}</div>
+                                <p className="mt-1 font-semibold">Ouvrez dans Pronote la grille de ce devoir, puis cliquez sur l’icône CondaWeb et « Importer les notes préparées ». L’extension affiche un aperçu global avant de remplir les cases.</p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-3 border-t border-slate-200 p-4">
+                        <button type="button" onClick={() => setPronoteModal(null)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Fermer</button>
+                        <button type="button" disabled={preparingPronote} onClick={() => void preparePronoteImport()} className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-50">
+                            {preparingPronote ? 'Préparation…' : '📤 Préparer le lot Pronote'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {aiContestModal && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Correction IA des contestations">
+                <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+                        <div>
+                            <div className="text-lg font-black text-slate-900">🤖 Correction IA des contestations</div>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                                {aiContestModal.mode === 'export'
+                                    ? 'Le JSON a été copié. Collez-le dans votre IA, puis demandez-lui de renvoyer uniquement le format imposé.'
+                                    : 'Collez ici uniquement le JSON renvoyé par l’IA. Seules les contestations listées seront modifiées.'}
+                            </p>
+                        </div>
+                        <button type="button" onClick={() => setAiContestModal(null)} className="text-3xl font-black leading-none text-slate-400 hover:text-slate-800" aria-label="Fermer">×</button>
+                    </div>
+                    <div className="space-y-3 overflow-y-auto p-5">
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs font-semibold leading-relaxed text-indigo-950">
+                            Règle transmise à l’IA : ne pas pénaliser les fautes d’orthographe, accents, majuscules, articles, ponctuation ou espaces si le savoir est démontré. Elle décide uniquement des réponses contestées.
+                        </div>
+                        <textarea
+                            value={aiContestText}
+                            onChange={(event) => setAiContestText(event.target.value)}
+                            readOnly={aiContestModal.mode === 'export'}
+                            spellCheck={false}
+                            className="min-h-[390px] w-full rounded-2xl border border-slate-300 bg-slate-950 p-4 font-mono text-xs leading-relaxed text-emerald-300 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                            aria-label={aiContestModal.mode === 'export' ? 'JSON à envoyer à l’IA' : 'JSON de décision de l’IA'}
+                        />
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-3 border-t border-slate-200 p-4">
+                        {aiContestModal.mode === 'export' ? (
+                            <button type="button" onClick={() => navigator.clipboard?.writeText(aiContestText)} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700">
+                                📋 Copier le JSON
+                            </button>
+                        ) : (
+                            <button type="button" disabled={applyingAiDecisions} onClick={() => void applyAiContestDecisions()} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50">
+                                {applyingAiDecisions ? 'Traitement…' : '✓ Appliquer les décisions IA'}
+                            </button>
+                        )}
+                        <button type="button" onClick={() => setAiContestModal(null)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Fermer</button>
                     </div>
                 </div>
             </div>

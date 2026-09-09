@@ -3,22 +3,35 @@ const mongoose = require('mongoose');
 require('../../prof/models/prof.models');
 const router = express.Router();
 
-const norm = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’']/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+// Même règle que côté professeur : la correction ignore accents, casse,
+// apostrophes, ponctuation et espaces parasites, y compris sur les téléphones.
+const norm = (value = '') => String(value ?? '').normalize('NFKD').replace(/\p{M}/gu, '').replace(/œ/g, 'oe').replace(/æ/g, 'ae').replace(/ß/g, 'ss').toLowerCase().replace(/[’']/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 const classKey = (value = '') => norm(value).replace(/\s/g, '');
 
-// Les articles ne doivent pas transformer une bonne réponse en erreur.
-// Ex. « les Poilus », « poilus » et « des poilus » sont acceptés de la même façon.
-const withoutLeadingArticle = (value = '') => norm(value)
-    .replace(/^(?:(?:le|la|les|un|une|des|du|au|aux|l)\s+|de\s+(?:la|le|les|l)\s+)+/i, '')
-    .trim();
+// Les articles, accents, apostrophes et espaces oubliés ne transforment pas
+// une bonne réponse en erreur. Les mots importants restent comparés.
+const ARTICLE_WORDS = new Set(['le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'au', 'aux', 'l', 'd']);
+const ARTICLE_PREFIXES = ['les', 'des', 'une', 'aux', 'le', 'la', 'un', 'du', 'de', 'au', 'l', 'd'];
+const relaxedAnswerKeys = (value = '') => {
+    const key = norm(value).split(/\s+/).filter(word => word && !ARTICLE_WORDS.has(word)).join('');
+    const keys = new Set(key ? [key] : []);
+    ARTICLE_PREFIXES.forEach(prefix => {
+        if (key.startsWith(prefix) && key.length > prefix.length) keys.add(key.slice(prefix.length));
+    });
+    return [...keys];
+};
 
 const matchAnswer = (given = '', expected = '') => {
     const givenNorm = norm(given);
-    const relaxedGiven = withoutLeadingArticle(given);
-    if (!givenNorm || !relaxedGiven) return false;
-    const variants = String(expected || '').split(/[/|]/).map(v => norm(v)).filter(Boolean);
-    if (variants.length === 0) return givenNorm === norm(expected) || relaxedGiven === withoutLeadingArticle(expected);
-    return variants.some(variant => variant === givenNorm || withoutLeadingArticle(variant) === relaxedGiven);
+    const givenKeys = relaxedAnswerKeys(given);
+    if (!givenNorm || !givenKeys.length) return false;
+    const variants = String(expected || '').split(/[/|]/).map(v => String(v || '').trim()).filter(Boolean);
+    return variants.some(variant => norm(variant) === givenNorm || relaxedAnswerKeys(variant).some(key => givenKeys.includes(key)));
+};
+const containsAnswer = (given = '', expected = '') => {
+    const givenKeys = relaxedAnswerKeys(given);
+    const expectedKeys = relaxedAnswerKeys(expected);
+    return givenKeys.some(givenKey => expectedKeys.some(expectedKey => expectedKey && givenKey.includes(expectedKey)));
 };
 
 const publicControl = (row) => ({
@@ -107,7 +120,7 @@ router.post('/:id/submit', async (req, res) => {
             let correct = false;
             if (item.type === 'qcm') correct = Number(given?.value) === Number(item.correctIndex);
             else if (item.type === 'fill') correct = (item.expectedAnswers || []).every((expected, index) => matchAnswer(values[index], expected));
-            else if ((item.expectedKeywords || []).length) correct = (item.expectedKeywords || []).every(keyword => norm(values[0]).includes(norm(keyword)));
+            else if ((item.expectedKeywords || []).length) correct = (item.expectedKeywords || []).every(keyword => containsAnswer(values[0], keyword));
             else correct = (item.expectedAnswers || []).some(expected => matchAnswer(values[0], expected));
 
             const blankResults = item.type === 'fill' ? (item.expectedAnswers || []).map((expected, index) => ({
@@ -122,7 +135,7 @@ router.post('/:id/submit', async (req, res) => {
             const awardedPoints = item.type === 'fill'
                 ? maxPoints * blankResults.filter(result => result.correct).length / Math.max(1, blankResults.length)
                 : item.type === 'target' && (item.expectedKeywords || []).length
-                    ? maxPoints * (item.expectedKeywords || []).filter(keyword => norm(values[0]).includes(norm(keyword))).length / item.expectedKeywords.length
+                    ? maxPoints * (item.expectedKeywords || []).filter(keyword => containsAnswer(values[0], keyword)).length / item.expectedKeywords.length
                 : (correct ? maxPoints : 0);
 
             return {

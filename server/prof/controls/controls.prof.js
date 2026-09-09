@@ -1,6 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const { AssessmentControl } = require('../models/prof.models');
+const { AssessmentControl, Classroom } = require('../models/prof.models');
 
 const router = express.Router();
 const cleanItems = (items = []) => (Array.isArray(items) ? items : []).map((item, index) => ({
@@ -16,6 +16,86 @@ const cleanItems = (items = []) => (Array.isArray(items) ? items : []).map((item
     correctIndex: Math.max(0, Number(item?.correctIndex || 0)),
     points: Math.max(0.01, Math.min(100, Number(item?.points) || 1))
 })).filter(item => item.prompt && (item.type !== 'qcm' || item.choices.length >= 2)).slice(0, 100);
+
+const pronoteNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+const roundGrade = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+async function preparePronoteExport(control, options = {}) {
+    const classId = String(options.classId || '').trim();
+    if (!mongoose.isValidObjectId(classId)) throw new Error('Classe invalide');
+    const classroom = await Classroom.findById(classId).lean();
+    if (!classroom) throw new Error('Classe introuvable');
+
+    const className = String(classroom.name || '').trim();
+    const targets = (control.targetClassrooms || []).map(value => String(value || '').trim().toUpperCase());
+    if (targets.length && !targets.includes(className.toUpperCase())) {
+        throw new Error(`Le contrôle n’est pas prévu pour la classe ${className}.`);
+    }
+
+    const Student = mongoose.model('Student');
+    const students = await Student.find({ classId }, 'firstName lastName').lean();
+    const studentById = new Map(students.map(student => [String(student._id), student]));
+    const outOf = Math.max(1, Math.min(100, pronoteNumber(options.outOf, 20)));
+    const rows = (control.submissions || []).map(copy => {
+        const student = studentById.get(String(copy.studentId || ''));
+        const total = Math.max(0.01, pronoteNumber(copy.total, 0));
+        const score = pronoteNumber(copy.score, 0);
+        return {
+            studentId: String(copy.studentId || student?._id || ''),
+            firstName: String(student?.firstName || copy.firstName || '').trim(),
+            lastName: String(student?.lastName || copy.lastName || '').trim(),
+            fullName: String(copy.studentName || `${student?.firstName || copy.firstName || ''} ${student?.lastName || copy.lastName || ''}`).trim(),
+            score: roundGrade(score),
+            total: roundGrade(total),
+            grade: roundGrade(score * outOf / total),
+            submittedAt: copy.submittedAt || null
+        };
+    }).filter(row => row.fullName && row.studentId);
+
+    return {
+        id: `pronote_${Date.now()}`,
+        controlId: String(control._id),
+        classId,
+        className,
+        title: String(options.title || control.title || 'Contrôle').trim().slice(0, 180),
+        date: String(options.date || new Date().toISOString().slice(0, 10)),
+        coefficient: Math.max(0, Math.min(100, pronoteNumber(options.coefficient, 1))),
+        outOf,
+        createdAt: new Date().toISOString(),
+        rows
+    };
+}
+
+// Préparation explicite : ce point d'entrée ne touche jamais à Pronote.
+// Il construit seulement le lot que l'extension proposera ensuite en aperçu.
+router.post('/:id/pronote-export', async (req, res) => {
+    try {
+        const control = await AssessmentControl.findById(req.params.id);
+        if (!control) return res.status(404).json({ error: 'Contrôle introuvable' });
+        const payload = await preparePronoteExport(control, req.body || {});
+        control.pronoteExport = payload;
+        control.markModified('pronoteExport');
+        await control.save();
+        res.json({ ok: true, export: payload });
+    } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+// Liste des lots disponibles pour la classe active de l'extension.
+router.get('/pronote/ready', async (req, res) => {
+    try {
+        const classId = String(req.query.classId || '').trim();
+        const controls = await AssessmentControl.find({ 'pronoteExport.classId': classId }, 'title pronoteExport updatedAt').sort({ updatedAt: -1 }).lean();
+        res.json((controls || []).map(control => ({
+            controlId: String(control._id),
+            title: control.title,
+            updatedAt: control.updatedAt,
+            export: control.pronoteExport
+        })).filter(row => row.export?.rows?.length));
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
 
 router.get('/all', async (_req, res) => {
     try { res.json(await AssessmentControl.find({}).sort({ updatedAt: -1 }).lean()); }
@@ -109,27 +189,47 @@ router.patch('/:id/contest/:submissionId/:itemId', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-const norm = (value = '') => String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+// Une réponse libre est une réponse de contenu, pas un exercice d'orthographe.
+// NFKD + \p{M} couvre aussi les caractères accentués composés / collés depuis
+// un téléphone, contrairement à la seule plage U+0300–U+036F.
+const norm = (value = '') => String(value ?? '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/œ/g, 'oe')
+    .replace(/æ/g, 'ae')
+    .replace(/ß/g, 'ss')
     .toLowerCase()
     .replace(/[’']/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-// Correction conciliante : la présence ou l'absence d'un article français
-// en tête de réponse ne suffit pas à la compter fausse.
-const withoutLeadingArticle = (value = '') => norm(value)
-    .replace(/^(?:(?:le|la|les|un|une|des|du|au|aux|l)\s+|de\s+(?:la|le|les|l)\s+)+/i, '')
-    .trim();
+// Correction conciliante : on ne pénalise ni les accents, ni les apostrophes,
+// ni les espaces oubliés, ni les articles français.  La comparaison reste
+// volontairement stricte sur les mots réellement porteurs de sens.
+const ARTICLE_WORDS = new Set(['le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'au', 'aux', 'l', 'd']);
+const ARTICLE_PREFIXES = ['les', 'des', 'une', 'aux', 'le', 'la', 'un', 'du', 'de', 'au', 'l', 'd'];
+const relaxedAnswerKeys = (value = '') => {
+    const key = norm(value).split(/\s+/).filter(word => word && !ARTICLE_WORDS.has(word)).join('');
+    const keys = new Set(key ? [key] : []);
+    // Couvre également « lempire » au lieu de « l'empire » / « l empire ».
+    ARTICLE_PREFIXES.forEach(prefix => {
+        if (key.startsWith(prefix) && key.length > prefix.length) keys.add(key.slice(prefix.length));
+    });
+    return [...keys];
+};
 
 const matchAnswer = (given = '', expected = '') => {
     const givenNorm = norm(given);
-    const relaxedGiven = withoutLeadingArticle(given);
-    if (!givenNorm || !relaxedGiven) return false;
-    const variants = String(expected || '').split(/[/|]/).map(v => norm(v)).filter(Boolean);
-    if (variants.length === 0) return givenNorm === norm(expected) || relaxedGiven === withoutLeadingArticle(expected);
-    return variants.some(variant => variant === givenNorm || withoutLeadingArticle(variant) === relaxedGiven);
+    const givenKeys = relaxedAnswerKeys(given);
+    if (!givenNorm || !givenKeys.length) return false;
+    const variants = String(expected || '').split(/[/|]/).map(v => String(v || '').trim()).filter(Boolean);
+    return variants.some(variant => norm(variant) === givenNorm || relaxedAnswerKeys(variant).some(key => givenKeys.includes(key)));
+};
+
+const containsAnswer = (given = '', expected = '') => {
+    const givenKeys = relaxedAnswerKeys(given);
+    const expectedKeys = relaxedAnswerKeys(expected);
+    return givenKeys.some(givenKey => expectedKeys.some(expectedKey => expectedKey && givenKey.includes(expectedKey)));
 };
 
 router.put('/:id/items/:itemId/expected', async (req, res) => {
@@ -145,7 +245,13 @@ router.put('/:id/items/:itemId/expected', async (req, res) => {
         const expected = String(req.body?.expected || '').trim();
         const blankIndex = Number(req.body?.blankIndex);
 
-        if (item.type === 'fill' && Number.isInteger(blankIndex)) {
+        if (item.type === 'qcm' && Number.isInteger(Number(req.body?.correctIndex))) {
+            const correctIndex = Number(req.body.correctIndex);
+            if (correctIndex < 0 || correctIndex >= (item.choices || []).length) {
+                return res.status(400).json({ error: 'Choix correct invalide' });
+            }
+            item.correctIndex = correctIndex;
+        } else if (item.type === 'fill' && Number.isInteger(blankIndex)) {
             const expList = Array.isArray(item.expectedAnswers) ? [...item.expectedAnswers] : [];
             expList[blankIndex] = expected;
             item.expectedAnswers = expList;
@@ -202,7 +308,13 @@ router.put('/:id/items/:itemId/expected', async (req, res) => {
             } else if (item.type === 'target') {
                 const val = String(answer.value || '');
                 const isOk = (item.expectedAnswers || []).some(exp => matchAnswer(val, exp)) ||
-                    ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every(kw => norm(val).includes(norm(kw))));
+                    ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every(kw => containsAnswer(val, kw)));
+                const maxPts = Number(item.points) || 1;
+                answer.correct = isOk;
+                answer.awardedPoints = isOk ? maxPts : 0;
+                if (isOk && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
+            } else if (item.type === 'qcm') {
+                const isOk = Number(answer.value) === Number(item.correctIndex);
                 const maxPts = Number(item.points) || 1;
                 answer.correct = isOk;
                 answer.awardedPoints = isOk ? maxPts : 0;
@@ -280,7 +392,7 @@ router.put('/:id/update-and-regrade', async (req, res) => {
                 } else if (item.type === 'target') {
                     const val = String(answer.value || '');
                     const isOk = (item.expectedAnswers || []).some(exp => matchAnswer(val, exp)) ||
-                        ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every(kw => norm(val).includes(norm(kw))));
+                        ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every(kw => containsAnswer(val, kw)));
                     const maxPts = Number(item.points) || 1;
                     answer.correct = isOk;
                     answer.awardedPoints = isOk ? maxPts : 0;

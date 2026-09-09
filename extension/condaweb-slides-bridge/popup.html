@@ -87,6 +87,15 @@
         button.secondary:hover {
             background: #475569;
         }
+        .pronote-export-status {
+            min-height: 15px;
+            margin: -7px 2px 6px;
+            color: #94a3b8;
+            font-size: 10px;
+            line-height: 1.35;
+        }
+        .pronote-export-status.error { color: #fca5a5; }
+        .pronote-export-status.ready { color: #6ee7b7; }
         .footer-info {
             margin-top: 14px;
             font-size: 10px;
@@ -113,6 +122,13 @@
 
     <button id="save-btn" type="button">💾 Enregistrer les réglages</button>
     <button id="test-alert-btn" class="secondary" type="button">🔔 Tester une alerte au tableau</button>
+
+    <label for="pronote-export-select" style="margin-top:14px">Import Pronote</label>
+    <select id="pronote-export-select">
+        <option value="">Aucun lot préparé</option>
+    </select>
+    <p id="pronote-export-status" class="pronote-export-status" aria-live="polite"></p>
+    <button id="pronote-import-btn" class="secondary" type="button">📤 Importer les notes préparées</button>
 
     <div class="footer-info">
         Session : vuillet.jean@condamine.edu.ec<br>

@@ -7,6 +7,58 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveBtn = document.getElementById('save-btn');
     const testBtn = document.getElementById('test-alert-btn');
     const statusSpan = document.getElementById('conn-status');
+    const pronoteSelect = document.getElementById('pronote-export-select');
+    const pronoteStatus = document.getElementById('pronote-export-status');
+    const pronoteImportBtn = document.getElementById('pronote-import-btn');
+    let currentServerUrl = DEFAULT_CONDA_SERVER_URL;
+    let pronoteExports = [];
+
+    const setPronoteStatus = (message = '', kind = '') => {
+        if (!pronoteStatus) return;
+        pronoteStatus.textContent = message;
+        pronoteStatus.className = `pronote-export-status ${kind}`.trim();
+    };
+
+    const loadPronoteExports = async (classId) => {
+        const className = classSelect.options[classSelect.selectedIndex]?.text || 'cette classe';
+        pronoteExports = [];
+        setPronoteStatus(`Recherche des lots pour ${className}…`);
+        while (pronoteSelect.firstChild) pronoteSelect.removeChild(pronoteSelect.firstChild);
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'Chargement des lots…';
+        pronoteSelect.appendChild(empty);
+        if (!classId) {
+            empty.textContent = 'Choisissez une classe';
+            setPronoteStatus('Choisissez la même classe que celle du contrôle préparé.', 'error');
+            return;
+        }
+        try {
+            const res = await fetch(`${currentServerUrl}/api/controls/pronote/ready?classId=${encodeURIComponent(classId)}`);
+            if (!res.ok) throw new Error(`Serveur ${res.status} : lot non accessible`);
+            pronoteExports = await res.json();
+            while (pronoteSelect.firstChild) pronoteSelect.removeChild(pronoteSelect.firstChild);
+            if (!pronoteExports.length) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Aucun lot préparé pour cette classe';
+                pronoteSelect.appendChild(option);
+                setPronoteStatus(`Aucun lot pour ${className}. Vérifiez la classe et le serveur CondaWeb.`, 'error');
+                return;
+            }
+            pronoteExports.forEach((entry, index) => {
+                const option = document.createElement('option');
+                option.value = String(index);
+                option.textContent = `${entry.export?.title || entry.title} · ${entry.export?.rows?.length || 0} notes`;
+                pronoteSelect.appendChild(option);
+            });
+            setPronoteStatus(`${pronoteExports.length} lot(s) prêt(s) pour ${className}.`, 'ready');
+        } catch (error) {
+            empty.textContent = 'Lots Pronote indisponibles';
+            setPronoteStatus(`${error.message}. Vérifiez que ce serveur contient le lot préparé.`, 'error');
+            console.warn('[CondaWeb Bridge] import Pronote', { server: currentServerUrl, classId, className, message: error.message });
+        }
+    };
 
     // Charge la configuration stockée
     chrome.storage.local.get(['condaServerUrl', 'serverConfiguredByUser', 'activeClassId', 'activeClassName'], async (data) => {
@@ -16,6 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ? DEFAULT_CONDA_SERVER_URL
             : storedServer;
         serverInput.value = currentServer;
+        currentServerUrl = currentServer;
         if (currentServer !== storedServer) chrome.storage.local.set({ condaServerUrl: currentServer });
 
         try {
@@ -39,6 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     dot.className = 'status-dot';
                     statusSpan.appendChild(dot);
                     statusSpan.appendChild(document.createTextNode('Connecté'));
+                    void loadPronoteExports(classSelect.value);
                 } else {
                     const opt = document.createElement('option');
                     opt.value = '';
@@ -71,9 +125,43 @@ document.addEventListener('DOMContentLoaded', async () => {
         const activeClassName = classSelect.options[classSelect.selectedIndex]?.text || '';
 
         chrome.storage.local.set({ condaServerUrl, activeClassId, activeClassName, serverConfiguredByUser: true }, () => {
+            currentServerUrl = condaServerUrl.replace(/\/$/, '');
+            void loadPronoteExports(activeClassId);
             saveBtn.textContent = '✓ Enregistré !';
             setTimeout(() => { saveBtn.textContent = '💾 Enregistrer les réglages'; }, 1500);
         });
+    });
+
+    classSelect.addEventListener('change', () => {
+        const activeClassId = classSelect.value;
+        const activeClassName = classSelect.options[classSelect.selectedIndex]?.text || '';
+        chrome.storage.local.set({ activeClassId, activeClassName });
+        void loadPronoteExports(activeClassId);
+    });
+
+    pronoteImportBtn.addEventListener('click', async () => {
+        const selected = pronoteExports[Number(pronoteSelect.value)];
+        if (!selected?.export) {
+            alert('Préparez d’abord le lot depuis CondaWeb, dans Contrôles et contestations.');
+            return;
+        }
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id || !tab.url || /^chrome:\/\//.test(tab.url) || tab.url.includes('docs.google.com/presentation')) {
+            alert('Ouvrez Pronote sur la grille du devoir, puis relancez cet import.');
+            return;
+        }
+        try {
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['pronote-import.js'] });
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (payload) => window.CondaWebPronoteImport?.open(payload),
+                args: [selected.export]
+            });
+            window.close();
+        } catch (error) {
+            console.error('[CondaWeb Bridge] injection Pronote impossible', error);
+            alert('Impossible d’ouvrir l’aperçu sur cette page Pronote. Ouvrez la grille de saisie des notes et réessayez.');
+        }
     });
 
     // Test d'alerte sur Google Slides
