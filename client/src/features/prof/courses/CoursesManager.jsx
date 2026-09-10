@@ -3241,10 +3241,16 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const openModification = (course, requestedSlideIndex = projectedSlideIndex) => {
-        openGoogleSlidesExternal(course, requestedSlideIndex);
+        const editorWindow = window.open('about:blank', '_blank');
+        openGoogleSlidesExternal(course, requestedSlideIndex, editorWindow);
     };
 
-    const openGoogleSlidesExternal = async (course, requestedSlideIndex = projectedSlideIndex) => {
+    const handleOpenGoogleSlidesExternalClick = (course, requestedSlideIndex = projectedSlideIndex) => {
+        const editorWindow = window.open('about:blank', '_blank');
+        openGoogleSlidesExternal(course, requestedSlideIndex, editorWindow);
+    };
+
+    const openGoogleSlidesExternal = async (course, requestedSlideIndex = projectedSlideIndex, preOpenedWindow = null) => {
         setError('');
         const total = Math.max(1, slideManifest.length || 1);
         const targetSlideIndex = Math.min(
@@ -3252,7 +3258,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             Math.max(0, Number(requestedSlideIndex) || 0)
         );
         const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || projectedSlideObjectId || '').trim();
-        const editorWindow = window.open('about:blank', '_blank');
+        const editorWindow = preOpenedWindow || window.open('about:blank', '_blank');
         try {
             const response = await fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
@@ -3777,7 +3783,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                             <button
                                                 type="button"
                                                 className="active-course-open-slides"
-                                                onClick={() => void openGoogleSlidesExternal(course, 0)}
+                                                onClick={() => void handleOpenGoogleSlidesExternalClick(course, 0)}
                                                 title="Ouvrir Google Slides et connecter l’extension à cette classe"
                                                 aria-label={`Ouvrir ${course.title} dans Google Slides`}
                                             >

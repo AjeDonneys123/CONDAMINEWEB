@@ -38,67 +38,115 @@
   const remove = () => document.getElementById(rootId)?.remove();
 
   window.CondaWebPronoteImport = {
-    open(payload) {
-      remove();
-      const rows = payload.rows || [];
-      
-      const root = document.createElement('div');
-      root.id = rootId;
-      root.innerHTML = `<style>
-        #${rootId}{position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.58);font-family:Arial,sans-serif;color:#0f172a;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
-        #${rootId} *{box-sizing:border-box} #${rootId} .box{width:min(720px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px #0008;padding:24px}
-        #${rootId} h2{margin:0;font-size:22px} #${rootId} p{line-height:1.45;color:#475569}.cw-summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.cw-pill{padding:8px 11px;border-radius:99px;background:#e0f2fe;color:#075985;font-weight:700}.cw-warning{background:#fff7ed;color:#9a3412;padding:12px;border-radius:10px;font-size:13px;margin-bottom:12px}.cw-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.cw-actions button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:pointer}.cw-cancel{background:#e2e8f0}.cw-run{background:#0284c7;color:white}.cw-run:disabled{opacity:.5;cursor:not-allowed}
-      </style><div class="box"><h2>📤 Import Pronote Automatique</h2><p><b>${payload.title || 'Contrôle'}</b> · ${payload.className || ''} · notes sur ${payload.outOf || 20}</p><div class="cw-summary"><span class="cw-pill">${rows.length} élève(s) à traiter</span></div><div class="cw-warning"><b>Attention :</b> Le script fera défiler la page vers le bas de lui-même pour charger tous les élèves. Ne touchez pas à la souris pendant l'import.</div><p>Après l’import, vérifiez l’ensemble de la colonne puis utilisez le bouton d’enregistrement officiel de Pronote.</p><div class="cw-actions"><button class="cw-cancel">Annuler</button><button class="cw-run" ${rows.length ? '' : 'disabled'}>Lancer le balayage</button></div></div>`;
-      
-      root.querySelector('.cw-cancel').addEventListener('click', remove);
-      root.querySelector('.cw-run').addEventListener('click', async () => {
-        const run = root.querySelector('.cw-run');
-        run.disabled = true;
-        run.textContent = 'Import en cours, patientez...';
-        
-        let scroller = null;
-        const firstInput = inputCandidates()[0];
-        if (firstInput) {
-            let node = firstInput.parentElement;
-            while (node && node !== document.body) {
-                const style = window.getComputedStyle(node);
-                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                    scroller = node;
-                    break;
-                }
-                node = node.parentElement;
-            }
-        }
-        if (!scroller) {
-            scroller = document.querySelector('.liste-focus-grid') || document.querySelector('.liste-grid') || document.scrollingElement || document.body;
+    async open(payload) {
+      try {
+        const rows = payload.rows || [];
+        if (rows.length === 0) return;
+
+        // No modal! Run directly to prevent focus loss.
+        console.info('[CondaWeb Pronote] Démarrage direct...');
+
+        const getVisibleInput = () => Array.from(document.querySelectorAll('input:not([type="hidden"]):not([disabled])'))
+            .filter(isVisible)
+            .filter((i) => !/search|recherche|filtre/i.test(`${i.name || ''} ${i.placeholder || ''} ${i.getAttribute('aria-label') || ''}`))[0];
+
+        // 1. Determine active column
+        let activeCol = null;
+        let selectedCell = document.querySelector('.liste_celluleGrid.selected, [aria-selected="true"]');
+        if (selectedCell) {
+            if (!selectedCell.hasAttribute('data-colonne')) selectedCell = selectedCell.closest('[data-colonne]');
+            if (selectedCell) activeCol = selectedCell.getAttribute('data-colonne');
         }
 
-        // Retour tout en haut pour balayer de A à Z
+        let scroller = document.querySelector('.liste-focus-grid') || document.querySelector('.liste-grid') || document.scrollingElement || document.body;
         scroller.scrollTop = 0;
         await new Promise(r => setTimeout(r, 600));
 
         let remainingRows = [...rows];
         let processed = 0;
         let sameScrollCount = 0;
+        let processedIds = new Set();
 
         while (remainingRows.length > 0 && sameScrollCount < 3) {
-            const inputs = inputCandidates();
+            // First, try the old method: write to already visible inputs
+            const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([disabled])'))
+                .filter(isVisible)
+                .filter((i) => !/search|recherche|filtre/i.test(`${i.name || ''}`));
             
+            let wroteSomething = false;
             for (const input of inputs) {
                 const rowText = findRowText(input);
                 const entry = matchRow(rowText, remainingRows);
-                
                 if (entry) {
-                    setNativeValue(input, entry.grade);
+                    const formattedGrade = String(entry.grade).replace('.', ',');
+                    const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                    descriptor?.set?.call(input, formattedGrade);
+                    
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                    input.dispatchEvent(new Event('blur', { bubbles: true }));
+                    
                     processed++;
                     remainingRows = remainingRows.filter(r => r.studentId !== entry.studentId);
-                    await new Promise(r => setTimeout(r, 80));
+                    wroteSomething = true;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            }
+
+            // If no inputs were written to, try the Click-Bot method
+            if (!wroteSomething && activeCol) {
+                const cells = Array.from(document.querySelectorAll(`.liste_celluleGrid[data-colonne="${activeCol}"]`));
+                for (const cell of cells) {
+                    if (processedIds.has(cell.id)) continue;
+
+                    const match = cell.id.match(/^(.*_)(\d+)_(\d+)$/);
+                    if (!match) continue;
+
+                    const baseId = match[1];
+                    const rowIdx = match[3];
+                    let rowText = '';
+                    for (let c = 0; c <= 2; c++) {
+                        const nameCell = document.getElementById(`${baseId}${c}_${rowIdx}`);
+                        if (nameCell) rowText += ' ' + (nameCell.innerText || nameCell.textContent || '');
+                    }
+
+                    const entry = matchRow(rowText, remainingRows);
+                    if (entry) {
+                        cell.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+                        cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                        cell.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+                        cell.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                        cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                        cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                        
+                        await new Promise(r => setTimeout(r, 150));
+
+                        const input = getVisibleInput();
+                        if (input) {
+                            const formattedGrade = String(entry.grade).replace('.', ',');
+                            const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                            const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                            descriptor?.set?.call(input, formattedGrade);
+                            
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                            input.dispatchEvent(new Event('blur', { bubbles: true }));
+                            
+                            processed++;
+                            remainingRows = remainingRows.filter(r => r.studentId !== entry.studentId);
+                            processedIds.add(cell.id);
+                            await new Promise(r => setTimeout(r, 100));
+                        }
+                    }
                 }
             }
 
             const oldScroll = scroller.scrollTop;
             scroller.scrollTop += 250; 
-            await new Promise(r => setTimeout(r, 550)); 
+            await new Promise(r => setTimeout(r, 500)); 
 
             if (Math.abs(scroller.scrollTop - oldScroll) < 5) {
                 sameScrollCount++;
@@ -107,16 +155,15 @@
             }
         }
         
-        run.textContent = `✓ ${processed} note(s) renseignée(s)`;
-        console.info('[CondaWeb Pronote] import local terminé', { processed, unmatched: remainingRows.length, title: payload.title });
-        
         if (remainingRows.length > 0) {
-            alert(`Terminé, mais ${remainingRows.length} élève(s) n'ont pas pu être trouvés dans la grille :\n\n${remainingRows.map(r => r.fullName).join(', ')}\n\nVérifiez s'ils sont bien présents dans ce devoir sur Pronote.`);
+            alert(`✅ ${processed} notes écrites.\n\n❌ ${remainingRows.length} absents ou non trouvés :\n${remainingRows.map(r => r.fullName).join(', ')}`);
+        } else {
+            alert(`✅ SUCCÈS TOTAL !\nLes ${processed} notes ont été remplies.`);
         }
-        
-        setTimeout(remove, 4000);
-      });
-      document.body.appendChild(root);
+
+      } catch (err) {
+          alert("Erreur critique du script : " + err.message);
+      }
     }
   };
 })();

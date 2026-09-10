@@ -44,7 +44,7 @@ async function preparePronoteExport(control, options = {}) {
         const total = Math.max(0.01, pronoteNumber(copy.total, 0));
         const score = pronoteNumber(copy.score, 0);
         return {
-            studentId: String(copy.studentId || student?._id || ''),
+            studentId: String(copy.studentId || student?._id || copy.id || `anon_${Date.now()}`),
             firstName: String(student?.firstName || copy.firstName || '').trim(),
             lastName: String(student?.lastName || copy.lastName || '').trim(),
             fullName: String(copy.studentName || `${student?.firstName || copy.firstName || ''} ${student?.lastName || copy.lastName || ''}`).trim(),

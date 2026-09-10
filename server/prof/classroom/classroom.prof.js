@@ -397,6 +397,10 @@ router.get('/bridge-state/:classId', async (req, res) => {
             scoreAlertReplayId: String(classroom.scoreAlertReplayId || ''),
             activeHourWarnings,
             activePersistentDebts,
+            classNotification: classroom.classNotification ? {
+                text: String(classroom.classNotification.text || ''),
+                createdAt: classroom.classNotification.createdAt || null
+            } : null,
             planStudentCount: projectedPlan.students.length,
             planStudents: projectedPlan.students.map((student) => ({
                 _id: String(student._id),
@@ -422,6 +426,35 @@ router.put('/:classId/bridge-plan', async (req, res) => {
         await classroom.save();
         console.info('[CondaWeb bridge] plan de classe', { classId: String(classroom._id), visible: classroom.classPlanVisible });
         return res.json({ ok: true, classId: String(classroom._id), classPlanVisible: classroom.classPlanVisible });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// Notification de classe (mémo devoirs) — affichée au tableau, effacée par VALIDER
+router.put('/:classId/notification', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
+        const text = String(req.body?.text || '').trim().slice(0, 500);
+        if (!text) return res.status(400).json({ error: 'Texte requis' });
+        classroom.classNotification = { text, createdAt: new Date() };
+        await classroom.save();
+        console.info('[CondaWeb] notification de classe créée', { classId: String(classroom._id), text });
+        return res.json({ ok: true, classNotification: classroom.classNotification });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/:classId/notification', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
+        classroom.classNotification = null;
+        await classroom.save();
+        console.info('[CondaWeb] notification de classe effacée', { classId: String(classroom._id) });
+        return res.json({ ok: true });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }

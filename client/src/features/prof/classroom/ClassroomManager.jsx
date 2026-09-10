@@ -53,6 +53,14 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [classPlanProjected, setClassPlanProjected] = useState(false);
     const [togglingPlan, setTogglingPlan] = useState(false);
 
+    // Notification de classe (mémo devoirs)
+    const [notifModalOpen, setNotifModalOpen] = useState(false);
+    const [notifText, setNotifText] = useState('');
+    const [notifSending, setNotifSending] = useState(false);
+    const [notifListening, setNotifListening] = useState(false);
+    const [activeNotif, setActiveNotif] = useState(null); // { text, createdAt }
+    const notifSpeechRef = useRef(null);
+
     useEffect(() => {
         if (!globalClassId) return;
         let mounted = true;
@@ -62,6 +70,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const data = await res.json().catch(() => ({}));
                 if (mounted && res.ok) {
                     setClassPlanProjected(data?.classPlanVisible === true);
+                    setActiveNotif(data?.classNotification || null);
                 }
             } catch (_) {}
         };
@@ -94,6 +103,62 @@ export default function ClassroomManager({ globalClassId, user }) {
         finally {
             setTogglingPlan(false);
         }
+    };
+
+    const sendNotif = async () => {
+        if (!globalClassId || !notifText.trim() || notifSending) return;
+        setNotifSending(true);
+        try {
+            const res = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/notification`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: notifText.trim() })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                setActiveNotif(data.classNotification || null);
+                setNotifModalOpen(false);
+                setNotifText('');
+            }
+        } catch (_) {}
+        finally { setNotifSending(false); }
+    };
+
+    const deleteNotif = async () => {
+        if (!globalClassId || notifSending) return;
+        setNotifSending(true);
+        try {
+            const res = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/notification`, { method: 'DELETE' });
+            if (res.ok) {
+                setActiveNotif(null);
+                setNotifModalOpen(false);
+                setNotifText('');
+            }
+        } catch (_) {}
+        finally { setNotifSending(false); }
+    };
+
+    const toggleNotifMic = () => {
+        if (!voiceSupported) return;
+        if (notifListening) {
+            notifSpeechRef.current?.stop?.();
+            notifSpeechRef.current = null;
+            setNotifListening(false);
+            return;
+        }
+        setNotifListening(true);
+        notifSpeechRef.current = startSpeechRecognitionWithFallback({
+            lang: 'fr-FR', continuous: false, interimResults: false, fallbackDurationMs: 8000,
+            onResult: (transcript, isFinal) => {
+                if (isFinal) {
+                    setNotifText((prev) => (prev.trim() ? prev.trim() + ' ' + transcript : transcript));
+                    setNotifListening(false);
+                    notifSpeechRef.current = null;
+                }
+            },
+            onEnd: () => { setNotifListening(false); notifSpeechRef.current = null; },
+            onError: () => { setNotifListening(false); notifSpeechRef.current = null; }
+        });
     };
 
     const renderProjectorButton = () => (
@@ -1240,7 +1305,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div className="plan-finder-row">
                         <input
                             className="plan-finder-input"
-                            placeholder={frenchMode ? (frenchErrorMode ? 'Écris la phrase avec les erreurs…' : (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…')) : '🔎 Trouver un élève de la classe...'}
+                            style={{ maxWidth: '44%', minWidth: 0 }}
+                            placeholder={frenchMode ? (frenchErrorMode ? 'Écris la phrase avec les erreurs…' : (frenchSelectedStudents.length ? `Mot ou expression pour ${frenchSelectedStudents.length} élève(s)…` : 'Mot ou expression pour toute la classe…')) : '🔎 Trouver un élève…'}
                             value={frenchMode ? frenchExpression : planFinder}
                             onChange={(e) => frenchMode ? (setFrenchExpression(e.target.value), setFrenchKeywords([]), setFrenchIncorrectWords([])) : setPlanFinder(e.target.value)}
                         />
@@ -1249,10 +1315,15 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 {planFinder.trim() ? planFinderCount : students.length}
                             </span>}
                             <button
+                                className={`notif-btn${activeNotif ? ' has-notif' : ''}`}
+                                onClick={() => { setNotifText(activeNotif?.text || ''); setNotifModalOpen(true); }}
+                                title={activeNotif ? `Notification active : ${activeNotif.text}` : 'Ajouter une notification (mémo devoirs)'}
+                            >🔔{activeNotif ? ' !' : ''}</button>
+                            <button
                                 className={`french-mode-btn ${frenchMode ? 'active' : ''}`}
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
-                            >FR</button>
+                            >FR N</button>
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
@@ -1266,6 +1337,12 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {frenchMode && <button className="french-validate-btn" onClick={saveFrenchExpression} disabled={frenchSaving || !frenchExpression.trim()}>{frenchSaving ? '…' : 'VALIDER'}</button>}
                         </div>
                     </div>
+                    {activeNotif && (
+                        <div className="notif-active-banner">
+                            <span className="notif-active-banner-icon">🔔</span>
+                            <span className="notif-active-banner-text">{activeNotif.text}</span>
+                        </div>
+                    )}
                     {frenchMode && <div className="french-mode-hint">🇫🇷 Clique un élève dans le plan, puis écris ou dicte le mot / l’expression à ajouter à sa liste personnelle.</div>}
                     {renderFrenchAssignmentPanel()}
                     {placementStudent && (
@@ -1369,6 +1446,46 @@ export default function ClassroomManager({ globalClassId, user }) {
                     </>
                 )}
             </div>
+            {/* ===== MODAL NOTIFICATION ===== */}
+            {notifModalOpen && (
+                <div className="notif-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNotifModalOpen(false); }}>
+                    <div className="notif-modal">
+                        <div className="notif-modal-header">
+                            <span className="notif-modal-title">🔔 Notification pour le tableau</span>
+                            <button className="notif-modal-close" onClick={() => setNotifModalOpen(false)}>×</button>
+                        </div>
+                        <textarea
+                            className="notif-modal-textarea"
+                            placeholder="Ex : Coller le cours pages 12–15 pour vendredi…"
+                            value={notifText}
+                            onChange={(e) => setNotifText(e.target.value)}
+                            autoFocus
+                            rows={4}
+                        />
+                        <div className="notif-modal-actions">
+                            <button
+                                className={`notif-modal-mic${notifListening ? ' listening' : ''}`}
+                                onClick={toggleNotifMic}
+                                disabled={!voiceSupported}
+                                title={voiceSupported ? (notifListening ? 'Arrêter la dictée' : 'Dicter la notification') : 'Micro non disponible'}
+                            >{notifListening ? '🎙️' : '🎤'}</button>
+                            {activeNotif && (
+                                <button
+                                    className="notif-modal-delete"
+                                    onClick={deleteNotif}
+                                    disabled={notifSending}
+                                    title="Effacer la notification du tableau"
+                                >🗑️ EFFACER</button>
+                            )}
+                            <button
+                                className="notif-modal-send"
+                                onClick={sendNotif}
+                                disabled={notifSending || !notifText.trim()}
+                            >{notifSending ? '…' : '📡 ENVOYER AU TABLEAU'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -2445,7 +2445,7 @@
 .live-score-alert.negative { border-color: #ef4444; background: rgba(254, 242, 242, .98); color: #991b1b; }
 .live-score-alert strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
 .live-score-alert-delta { align-self: center; font-size: 16px; font-weight: 950; }
-.live-score-alert small { grid-column: 1 / -1; color: #334155; font-size: 12px; font-weight: 900; }
+.live-score-alert small { grid-column: 1 / -1; color: #334155; font-size: 16px; font-weight: 900; }
 .live-score-alert.underneath { opacity: 0.25; pointer-events: none; }
 
 @keyframes scoreAlertIn {
