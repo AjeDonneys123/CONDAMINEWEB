@@ -40,32 +40,83 @@
   window.CondaWebPronoteImport = {
     open(payload) {
       remove();
-      const inputs = inputCandidates();
-      const mappings = inputs.map((input) => ({ input, entry: matchRow(findRowText(input), payload.rows || []) })).filter((row) => row.entry);
-      const matchedIds = new Set(mappings.map((row) => row.entry.studentId));
-      const unmatched = (payload.rows || []).filter((row) => !matchedIds.has(row.studentId));
-
+      const rows = payload.rows || [];
+      
       const root = document.createElement('div');
       root.id = rootId;
       root.innerHTML = `<style>
         #${rootId}{position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.58);font-family:Arial,sans-serif;color:#0f172a;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
         #${rootId} *{box-sizing:border-box} #${rootId} .box{width:min(720px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px #0008;padding:24px}
-        #${rootId} h2{margin:0;font-size:22px} #${rootId} p{line-height:1.45;color:#475569}.cw-summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.cw-pill{padding:8px 11px;border-radius:99px;background:#e0f2fe;color:#075985;font-weight:700}.cw-warning{background:#fff7ed;color:#9a3412;padding:12px;border-radius:10px;font-size:13px}.cw-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.cw-actions button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:pointer}.cw-cancel{background:#e2e8f0}.cw-run{background:#0284c7;color:white}.cw-run:disabled{opacity:.5;cursor:not-allowed}
-      </style><div class="box"><h2>📤 Aperçu de l’import Pronote</h2><p><b>${payload.title || 'Contrôle'}</b> · ${payload.className || ''} · notes sur ${payload.outOf || 20}</p><div class="cw-summary"><span class="cw-pill">${mappings.length} cellule(s) reconnue(s)</span><span class="cw-pill">${unmatched.length} élève(s) non reconnu(s)</span><span class="cw-pill">${inputs.length} champ(s) détecté(s)</span></div>${inputs.length ? '' : '<div class="cw-warning">Aucune cellule de note éditable n’a été détectée. Cliquez d’abord dans une cellule de la grille Pronote pour activer la saisie, puis relancez l’import.</div>'}${unmatched.length ? `<div class="cw-warning">Non importés automatiquement : ${unmatched.map((row) => row.fullName).join(', ')}. Ils restent à vérifier manuellement.</div>` : ''}<p>Après l’import, vérifiez l’ensemble de la colonne puis utilisez le bouton d’enregistrement officiel de Pronote.</p><div class="cw-actions"><button class="cw-cancel">Annuler</button><button class="cw-run" ${mappings.length ? '' : 'disabled'}>Remplir ${mappings.length} note(s)</button></div></div>`;
+        #${rootId} h2{margin:0;font-size:22px} #${rootId} p{line-height:1.45;color:#475569}.cw-summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.cw-pill{padding:8px 11px;border-radius:99px;background:#e0f2fe;color:#075985;font-weight:700}.cw-warning{background:#fff7ed;color:#9a3412;padding:12px;border-radius:10px;font-size:13px;margin-bottom:12px}.cw-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.cw-actions button{border:0;border-radius:10px;padding:11px 14px;font-weight:800;cursor:pointer}.cw-cancel{background:#e2e8f0}.cw-run{background:#0284c7;color:white}.cw-run:disabled{opacity:.5;cursor:not-allowed}
+      </style><div class="box"><h2>📤 Import Pronote Automatique</h2><p><b>${payload.title || 'Contrôle'}</b> · ${payload.className || ''} · notes sur ${payload.outOf || 20}</p><div class="cw-summary"><span class="cw-pill">${rows.length} élève(s) à traiter</span></div><div class="cw-warning"><b>Attention :</b> Le script fera défiler la page vers le bas de lui-même pour charger tous les élèves. Ne touchez pas à la souris pendant l'import.</div><p>Après l’import, vérifiez l’ensemble de la colonne puis utilisez le bouton d’enregistrement officiel de Pronote.</p><div class="cw-actions"><button class="cw-cancel">Annuler</button><button class="cw-run" ${rows.length ? '' : 'disabled'}>Lancer le balayage</button></div></div>`;
+      
       root.querySelector('.cw-cancel').addEventListener('click', remove);
       root.querySelector('.cw-run').addEventListener('click', async () => {
         const run = root.querySelector('.cw-run');
         run.disabled = true;
-        run.textContent = 'Import en cours…';
-        for (const mapping of mappings) {
-          setNativeValue(mapping.input, mapping.entry.grade);
-          await new Promise((resolve) => setTimeout(resolve, 80));
+        run.textContent = 'Import en cours, patientez...';
+        
+        let scroller = null;
+        const firstInput = inputCandidates()[0];
+        if (firstInput) {
+            let node = firstInput.parentElement;
+            while (node && node !== document.body) {
+                const style = window.getComputedStyle(node);
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                    scroller = node;
+                    break;
+                }
+                node = node.parentElement;
+            }
         }
-        run.textContent = `✓ ${mappings.length} note(s) renseignée(s)`;
-        console.info('[CondaWeb Pronote] import local terminé', { matched: mappings.length, unmatched: unmatched.length, title: payload.title });
+        if (!scroller) {
+            scroller = document.querySelector('.liste-focus-grid') || document.querySelector('.liste-grid') || document.scrollingElement || document.body;
+        }
+
+        // Retour tout en haut pour balayer de A à Z
+        scroller.scrollTop = 0;
+        await new Promise(r => setTimeout(r, 600));
+
+        let remainingRows = [...rows];
+        let processed = 0;
+        let sameScrollCount = 0;
+
+        while (remainingRows.length > 0 && sameScrollCount < 3) {
+            const inputs = inputCandidates();
+            
+            for (const input of inputs) {
+                const rowText = findRowText(input);
+                const entry = matchRow(rowText, remainingRows);
+                
+                if (entry) {
+                    setNativeValue(input, entry.grade);
+                    processed++;
+                    remainingRows = remainingRows.filter(r => r.studentId !== entry.studentId);
+                    await new Promise(r => setTimeout(r, 80));
+                }
+            }
+
+            const oldScroll = scroller.scrollTop;
+            scroller.scrollTop += 250; 
+            await new Promise(r => setTimeout(r, 550)); 
+
+            if (Math.abs(scroller.scrollTop - oldScroll) < 5) {
+                sameScrollCount++;
+            } else {
+                sameScrollCount = 0;
+            }
+        }
+        
+        run.textContent = `✓ ${processed} note(s) renseignée(s)`;
+        console.info('[CondaWeb Pronote] import local terminé', { processed, unmatched: remainingRows.length, title: payload.title });
+        
+        if (remainingRows.length > 0) {
+            alert(`Terminé, mais ${remainingRows.length} élève(s) n'ont pas pu être trouvés dans la grille :\n\n${remainingRows.map(r => r.fullName).join(', ')}\n\nVérifiez s'ils sont bien présents dans ce devoir sur Pronote.`);
+        }
+        
+        setTimeout(remove, 4000);
       });
       document.body.appendChild(root);
-      console.info('[CondaWeb Pronote] aperçu prêt', { inputs: inputs.length, matched: mappings.length, unmatched: unmatched.length });
     }
   };
 })();

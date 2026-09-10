@@ -384,6 +384,8 @@ safeLoad('/api/learning', './prof/learning/learning.prof');
 safeLoad('/api/controls', './prof/controls/controls.prof');
 safeLoad('/api/exposes', './prof/exposes/exposes.prof');
 safeLoad('/api/courses', './prof/courses/courses.prof');
+safeLoad('/api/prof/training', './prof/training/training.prof.routes');
+safeLoad('/api/classroom', './prof/classroom/classroom.routes');
 safeLoad('/api/lectures', './prof/lectures/lectures.prof');
 safeLoad('/api/fiches', './prof/fiches/fiches.prof');
 safeLoad('/api/productions', './prof/productions/productions.prof');

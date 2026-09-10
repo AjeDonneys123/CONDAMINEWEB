@@ -714,6 +714,10 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         try {
         if (!hasAutoConnected && Date.now() >= nextAutoConnectAt) {
             const connected = await autoConnectPresentation();
+            if (!connected && presentationAssociationMissing) {
+                showPresentationUnlinkedBadge();
+                return;
+            }
             // Never hammer the API while the server is starting or waking up.
             if (!connected) nextAutoConnectAt = Date.now() + 5000;
         }
@@ -795,7 +799,11 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         const root = ensureOverlayRoot();
         const displayCourse = currentCourseTitle ? (currentCourseTitle.length > 20 ? currentCourseTitle.slice(0, 18) + '…' : currentCourseTitle) : '';
         const badgeText = displayCourse ? `${displayCourse} (${activeClassName || 'Actif'})` : (activeClassName || 'CondaWeb Connecté');
-        renderBadge(isConnected, badgeText);
+  if (presentationAssociationMissing) {
+    showPresentationUnlinkedBadge();
+  } else {
+    renderBadge(isConnected, badgeText);
+  }
         renderAlerts(root);
         renderHourWarnings(root);
         // Les animations et vidéos sont désormais entièrement gérées par
@@ -808,42 +816,51 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
     function renderGoogleControlTools(root) {
         const existingControlCard = root.querySelector('.conda-slide-control-card');
-        // A selected control opens its own two windows immediately. Do not
-        // leave a persistent card over a Google Slide: it can look like an
-        // exam that opened by itself and it intercepts native Slides clicks.
         existingControlCard?.remove();
+
         let dock = root.querySelector('.conda-slide-control-dock');
         if (!dock) {
             dock = document.createElement('div');
             dock.className = 'conda-slide-control-dock';
             root.appendChild(dock);
         }
-        while (dock.firstChild) dock.removeChild(dock.firstChild);
 
-        const planButton = document.createElement('button');
-        planButton.type = 'button';
+        let planButton = dock.querySelector('.conda-slide-plan-toggle');
+        if (!planButton) {
+            planButton = document.createElement('button');
+            planButton.type = 'button';
+            planButton.onclick = () => { void togglePlanFromSlides(); };
+            dock.appendChild(planButton);
+        }
         planButton.className = `conda-slide-plan-toggle ${currentClassroomState?.classPlanVisible === true ? 'active' : ''}`;
         planButton.textContent = currentClassroomState?.classPlanVisible === true ? '📍 PLAN ON' : '📍 PLAN';
-        planButton.onclick = () => { void togglePlanFromSlides(); };
-        dock.appendChild(planButton);
 
-        const addButton = document.createElement('button');
-        addButton.type = 'button';
-        addButton.className = 'conda-slide-control-add';
-        addButton.textContent = '📝 CONTRÔLE';
-        addButton.title = 'Choisir un contrôle à attacher à la diapositive Google courante';
-        addButton.onclick = () => { void openControlsMenu(); };
-        dock.appendChild(addButton);
+        let addButton = dock.querySelector('.conda-slide-control-add');
+        if (!addButton) {
+            addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.className = 'conda-slide-control-add';
+            addButton.textContent = '📝 CONTRÔLE';
+            addButton.title = 'Choisir un contrôle à attacher à la diapositive Google courante';
+            addButton.onclick = () => { void openControlsMenu(); };
+            dock.appendChild(addButton);
+        }
 
-        // Une fois connecté, le badge revient dans le flux normal de la
-        // barre. Pendant l'attente il reste seul, déplaçable, en haut à
-        // gauche afin de ne pas gêner Google Slides.
         const connectionBadge = root.querySelector('#conda-bridge-badge');
-        if (isConnected && connectionBadge) dock.appendChild(connectionBadge);
+        if (isConnected && connectionBadge && connectionBadge.parentElement !== dock) {
+            dock.appendChild(connectionBadge);
+        }
 
+        let menu = dock.querySelector('.conda-slide-control-menu');
         if (controlMenuOpen) {
-            const menu = document.createElement('div');
-            menu.className = 'conda-slide-control-menu';
+            if (!menu) {
+                menu = document.createElement('div');
+                menu.className = 'conda-slide-control-menu';
+                dock.appendChild(menu);
+            }
+            // Update menu contents only if needed, but for simplicity here we can rebuild the menu
+            // since it's only open when the user explicitly clicks the button.
+            while (menu.firstChild) menu.removeChild(menu.firstChild);
             if (!controlMenuRows.length) {
                 const empty = document.createElement('span');
                 empty.textContent = 'Aucun contrôle actif pour cette classe';
@@ -856,9 +873,9 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 choice.onclick = () => { void openSelectedControl(control); };
                 menu.appendChild(choice);
             });
-            dock.appendChild(menu);
+        } else if (menu) {
+            menu.remove();
         }
-
     }
 
     function restoreBadgePosition(badge) {
@@ -1349,7 +1366,11 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         if (!root || !document.contains(root)) {
             console.log('[CondaWeb Bridge] Restauration du calque d\'overlay détaché...');
             ensureOverlayRoot();
-            renderBadge(isConnected, activeClassName || 'CondaWeb Connecté');
+      if (presentationAssociationMissing) {
+        showPresentationUnlinkedBadge();
+      } else {
+        renderBadge(isConnected, activeClassName || 'CondaWeb Connecté');
+      }
         }
     });
 
