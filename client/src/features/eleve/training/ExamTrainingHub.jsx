@@ -4678,6 +4678,33 @@ function DnbIntroductionCalibration({ onBack }) {
 }
 
 const DNB_OFF_TOPIC_DRAFT_KEY = 'condaweb-dnb-off-topic-calibration-v1';
+const RQP_OFF_TOPIC_CONFIG_ROUTE = '/api/training-config/rqp-off-topic';
+
+// Ces exemples sont volontairement embarqués dans le client : l'activité reste
+// immédiatement utilisable même lorsqu'aucun calibrage personnel n'a encore été
+// enregistré dans le navigateur de l'élève.
+const OFF_TOPIC_DEFAULT_PARAGRAPHS = [
+  {
+    subject: "Montrez que les civils sont mobilisés pendant la Première Guerre mondiale.",
+    sourceText: "Pendant la Première Guerre mondiale, les civils participent à l'effort de guerre en travaillant dans les usines d'armement et en remplaçant les hommes mobilisés. Ils subissent aussi les pénuries, le rationnement et les bombardements. \"Les Jeux olympiques modernes sont créés à Athènes en 1896.\" Cette mobilisation montre que la guerre concerne toute la société.",
+    explanation: "La phrase sur les Jeux olympiques ne répond pas à la question sur la mobilisation des civils pendant la guerre."
+  },
+  {
+    subject: "Expliquez pourquoi les métropoles concentrent les fonctions de commandement.",
+    sourceText: "Les grandes métropoles concentrent les sièges sociaux des entreprises, les banques et les institutions de décision. Elles sont reliées au reste du monde par des réseaux de transport et de communication efficaces. \"Dans les espaces ruraux, de nombreux agriculteurs pratiquent l'élevage.\" Elles jouent donc un rôle majeur dans la mondialisation.",
+    explanation: "L'élevage dans les espaces ruraux peut être intéressant, mais il n'explique pas les fonctions de commandement des métropoles."
+  },
+  {
+    subject: "Montrez que le régime de Vichy est autoritaire.",
+    sourceText: "En 1940, le maréchal Pétain reçoit les pleins pouvoirs et met fin à la République. Les libertés sont limitées, les opposants sont réprimés et le régime mène une propagande autour de la Révolution nationale. \"La Déclaration des droits de l'homme et du citoyen est adoptée en 1789.\" Le pouvoir est donc concentré entre les mains du chef de l'État.",
+    explanation: "La Déclaration de 1789 est un repère important, mais elle ne prouve pas le caractère autoritaire du régime de Vichy."
+  },
+  {
+    subject: "Expliquez pourquoi les espaces de faible densité peuvent être attractifs.",
+    sourceText: "Certains espaces de faible densité attirent de nouveaux habitants grâce à un cadre de vie agréable, des logements moins chers et au développement du télétravail. Le tourisme vert et les activités de plein air peuvent aussi créer des emplois. \"Paris est la capitale de la France et compte plusieurs millions d'habitants.\" Ces dynamiques rendent certains territoires ruraux plus attractifs.",
+    explanation: "Paris est une métropole très dense : cette information ne répond pas à la question sur l'attractivité des espaces de faible densité."
+  }
+];
 
 const parseQuotedOffTopic = (source = '') => {
   const text = String(source || '');
@@ -4698,24 +4725,57 @@ const parseQuotedOffTopic = (source = '') => {
   return { text: cleanText, offTopicRanges: ranges };
 };
 
-function DnbOffTopicCalibration({ onBack }) {
-  const [paragraphs, setParagraphs] = useState(() => {
-    let storedParagraphs = [];
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(DNB_OFF_TOPIC_DRAFT_KEY) || 'null');
-      if (Array.isArray(stored?.paragraphs)) storedParagraphs = stored.paragraphs;
-    } catch (_) {}
-    return [0, 1, 2, 3].map((index) => ({
-      id: `paragraph-${index + 1}`,
-      subject: '',
-      sourceText: '',
-      text: '',
-      offTopicRanges: [],
-      explanation: '',
-      ...(storedParagraphs[index] || {})
-    }));
-  });
+const hasOffTopicContent = (paragraph) => Boolean(String(paragraph?.sourceText || paragraph?.text || paragraph?.subject || '').trim());
+
+const normalizeOffTopicParagraphs = (rawParagraphs) => OFF_TOPIC_DEFAULT_PARAGRAPHS.map((fallback, index) => {
+  const candidate = Array.isArray(rawParagraphs) && hasOffTopicContent(rawParagraphs[index]) ? rawParagraphs[index] : fallback;
+  const sourceText = String(candidate.sourceText ?? candidate.text ?? '');
+  return {
+    id: String(candidate.id || `paragraph-${index + 1}`),
+    subject: String(candidate.subject || fallback.subject),
+    sourceText,
+    explanation: String(candidate.explanation || fallback.explanation || ''),
+    ...parseQuotedOffTopic(sourceText)
+  };
+});
+
+const readLegacyOffTopicCalibration = (storageKey) => {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+    return Array.isArray(stored?.paragraphs) ? stored.paragraphs : [];
+  } catch (_) {
+    return [];
+  }
+};
+
+const serializeOffTopicParagraphs = (paragraphs) => paragraphs.map((paragraph, index) => ({
+  id: String(paragraph.id || `paragraph-${index + 1}`),
+  subject: String(paragraph.subject || '').trim(),
+  sourceText: String(paragraph.sourceText ?? paragraph.text ?? ''),
+  explanation: String(paragraph.explanation || '').trim()
+}));
+
+function DnbOffTopicCalibration({ onBack, storageKey = DNB_OFF_TOPIC_DRAFT_KEY, audience = 'DNB' }) {
+  const [paragraphs, setParagraphs] = useState(() => normalizeOffTopicParagraphs(readLegacyOffTopicCalibration(storageKey)));
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    fetch(RQP_OFF_TOPIC_CONFIG_ROUTE)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || 'Chargement impossible');
+        if (active && Array.isArray(data?.model?.paragraphs) && data.model.paragraphs.length) {
+          setParagraphs(normalizeOffTopicParagraphs(data.model.paragraphs));
+        }
+      })
+      .catch(() => {
+        // The legacy local copy stays usable until the teacher republishes it.
+      });
+    return () => { active = false; };
+  }, [storageKey]);
 
   const preview = (paragraph) => {
     if (!paragraph.text) return <span className="text-slate-400">Le texte calibré apparaîtra ici.</span>;
@@ -4730,9 +4790,27 @@ function DnbOffTopicCalibration({ onBack }) {
     return parts;
   };
 
-  const saveCalibration = () => {
-    window.localStorage.setItem(DNB_OFF_TOPIC_DRAFT_KEY, JSON.stringify({ paragraphs }));
-    setSaved(true);
+  const saveCalibration = async () => {
+    const serialized = serializeOffTopicParagraphs(paragraphs);
+    setSaving(true);
+    setSaved(false);
+    setSaveError('');
+    try {
+      const response = await fetch(RQP_OFF_TOPIC_CONFIG_ROUTE, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: { paragraphs: serialized } })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Enregistrement impossible');
+      window.localStorage.setItem(storageKey, JSON.stringify({ paragraphs: serialized }));
+      setParagraphs(normalizeOffTopicParagraphs(data?.model?.paragraphs || serialized));
+      setSaved(true);
+    } catch (error) {
+      setSaveError(error.message || 'Le calibrage n’a pas été partagé avec les élèves.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return <section className="mx-4 rounded-3xl border border-amber-200 bg-white p-5 shadow-sm">
@@ -4740,7 +4818,7 @@ function DnbOffTopicCalibration({ onBack }) {
       <div><div className="text-[11px] font-black uppercase text-amber-600">Méthodo · Calibrage</div><h3 className="m-0 text-2xl font-black text-slate-900">Détecter le hors-sujet</h3></div>
       <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour à la méthodo</button>
     </div>
-    <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900">Saisis quatre paragraphes argumentés et place chaque passage hors sujet entre guillemets. Ils apparaîtront automatiquement en rouge dans l’aperçu. Les retours et sauts de ligne seront conservés.</div>
+    <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900">Les quatre exercices sont prêts. Repère les passages rouges, puis tu peux les modifier. Pour créer ton propre exemple, place le passage hors sujet entre guillemets : il apparaîtra automatiquement en rouge dans l’aperçu.</div>
     <div className="mt-5 space-y-5">{paragraphs.map((paragraph, paragraphIndex) => <article key={paragraph.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
       <div className="text-sm font-black text-slate-900">Paragraphe argumenté {paragraphIndex + 1}</div>
       <label className="mt-3 block">
@@ -4782,7 +4860,7 @@ function DnbOffTopicCalibration({ onBack }) {
         />
       </label>
     </article>)}</div>
-    <div className="mt-5 flex items-center gap-3"><button type="button" onClick={saveCalibration} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">Valider et enregistrer le calibrage</button>{saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage enregistré</span>}</div>
+    <div className="mt-5 flex flex-wrap items-center gap-3"><button type="button" disabled={saving} onClick={saveCalibration} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? 'Publication…' : `Valider et publier le calibrage ${audience}`}</button>{saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage partagé avec les élèves</span>}{saveError && <span className="text-sm font-black text-red-600">{saveError}</span>}</div>
   </section>;
 }
 
@@ -6371,6 +6449,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
   const [selectedDnbChapter, setSelectedDnbChapter] = useState(null);
   const [selectedLocalDnbActivity, setSelectedLocalDnbActivity] = useState('');
   const [secondeMethodSheet, setSecondeMethodSheet] = useState('');
+  const [secondeRqpModule, setSecondeRqpModule] = useState('home');
 
   if (mode === 'cinquieme') {
     return <FifthGradeGeoTraining user={user} canCalibrate={canCalibrate} />;
@@ -6497,6 +6576,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
 
   if (mode === 'seconde') {
     const isRqp = section === 'rqp';
+    const openOffTopic = isRqp && secondeRqpModule === 'hors-sujet';
     return (
       <section className="training-responsive flex flex-col gap-4">
         <TrainingPointsBadge user={user} />
@@ -6523,7 +6603,13 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
             </button>
           </div>
         </div>
-        {isRqp && <section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
+        {openOffTopic ? (
+          <DnbOffTopicCalibration
+            audience="RQP"
+            storageKey="condaweb-rqp-off-topic-calibration-v1"
+            onBack={() => setSecondeRqpModule('home')}
+          />
+        ) : isRqp && <section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
           <div><div className="text-[11px] font-black uppercase text-blue-600">RQP · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Réussir une réponse à une question problématisée</h3></div>
           <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.68fr)_minmax(340px,0.9fr)]">
             <div className="overflow-hidden rounded-2xl border-2 border-blue-200 bg-slate-950 shadow-sm">
@@ -6537,6 +6623,16 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
             <RqpMethodExercises />
           </div>
           <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-800">Regarde la vidéo, puis garde la fiche sous les yeux pour construire ta réponse. Clique sur la fiche pour l’ouvrir en grand.</div>
+          <div className="mt-5 rounded-3xl border-2 border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-black uppercase text-amber-600">Apprentissage complémentaire</div>
+                <div className="text-xl font-black text-slate-900">Détecter et éviter le hors-sujet</div>
+                <p className="mt-1 max-w-2xl text-sm font-bold text-amber-900">Entraîne-toi avec quatre paragraphes RQP : chaque passage hors-sujet est repéré en rouge et expliqué.</p>
+              </div>
+              <button type="button" onClick={() => setSecondeRqpModule('hors-sujet')} className="rounded-2xl bg-amber-500 px-5 py-4 text-sm font-black text-white shadow-sm">S’entraîner au hors-sujet</button>
+            </div>
+          </div>
         </section>}
         {!isRqp && <section className="mx-4 rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
           <div><div className="text-[11px] font-black uppercase text-emerald-600">Question commentaire · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Analyser des documents</h3></div>

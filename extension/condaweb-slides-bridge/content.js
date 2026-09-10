@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-    const BRIDGE_VERSION = '1.0.31';
+  const BRIDGE_VERSION = '1.0.34';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -44,10 +44,17 @@
     let syncInFlight = false;
     let manualConnectInFlight = false;
     let consecutiveSyncFailures = 0;
-    let hasSuccessfulClassSync = false;
-    let lastSuccessfulClassSyncAt = 0;
-    let nextAutoConnectAt = 0;
-    let bridgeStopped = false;
+  let hasSuccessfulClassSync = false;
+  let lastSuccessfulClassSyncAt = 0;
+  let nextAutoConnectAt = 0;
+  // A presentation opened directly in Google Slides is not necessarily linked
+  // to a CondaWeb course.  Keep that state stable: retrying every second made
+  // the badge jump between the dock and the top-left corner.
+  let presentationAssociationMissing = false;
+  let unlinkedPresentationId = '';
+  let presentationAssociationNoticeLogged = false;
+  let presentationAssociationBadgeShown = false;
+  let bridgeStopped = false;
     let syncTimerId = null;
     let domObserver = null;
     let bridgePort = null;
@@ -78,9 +85,25 @@
     };
     window.__CONDA_BRIDGE_SESSION__ = bridgeSession;
 
-    function isExtensionContextError(error) {
-        return /extension context invalidated|extension runtime non disponible|message channel closed|receiving end does not exist|listener indicated an asynchronous response/i.test(String(error?.message || error || ''));
-    }
+function isExtensionContextError(error) {
+  return /extension context invalidated|extension runtime non disponible|message channel closed|receiving end does not exist|listener indicated an asynchronous response/i.test(String(error?.message || error || ''));
+}
+
+function isPresentationAssociationMissingError(error) {
+  const message = String(error?.message || error || '').toLocaleLowerCase('fr-FR');
+  return message.includes('présentation condaweb non associée')
+    || message.includes('presentation condaweb non associee')
+    || message.includes('ouvrez-la depuis la page cours');
+}
+
+function showPresentationUnlinkedBadge() {
+  const text = 'Présentation non liée — ouvre-la depuis Cours';
+  isConnected = false;
+  const currentLabel = document.getElementById('conda-bridge-badge-label')?.textContent;
+  if (presentationAssociationBadgeShown && currentLabel === text) return;
+  presentationAssociationBadgeShown = true;
+  renderBadge(false, text);
+}
 
     function stopForExtensionReload(error) {
         if (bridgeStopped) return;
@@ -360,11 +383,29 @@
     }
 
     // Auto-connexion intelligente : relie automatiquement le diaporama Google au bon cours CondaWeb
-    async function autoConnectPresentation({ replaceClass = false } = {}) {
-        const { presentationId, title, slideObjectId, bridgeCourseId, bridgeClassId } = getSlideInfo();
-        if (!presentationId && !title) return false;
+async function autoConnectPresentation({ replaceClass = false, force = false } = {}) {
+  const { presentationId, title, slideObjectId, bridgeCourseId, bridgeClassId } = getSlideInfo();
+  if (!presentationId && !title) return false;
 
-        try {
+  // A presentation opened directly in Google Slides has no CondaWeb context.
+  // Do not keep calling the API every few seconds in that case: it made the
+  // connector blink and needlessly flooded the server.
+  if (unlinkedPresentationId && unlinkedPresentationId !== presentationId) {
+    presentationAssociationMissing = false;
+    unlinkedPresentationId = '';
+    presentationAssociationNoticeLogged = false;
+    presentationAssociationBadgeShown = false;
+    nextAutoConnectAt = 0;
+  }
+  if (presentationAssociationMissing
+    && unlinkedPresentationId === presentationId
+    && !force
+    && !replaceClass) {
+    showPresentationUnlinkedBadge();
+    return false;
+  }
+
+  try {
             const data = await callCondaApi('/api/courses/presentation-remote/auto-connect', {
                 method: 'POST',
                 body: {
@@ -381,8 +422,12 @@
                     classId: bridgeClassId
                 }
             });
-            if (data?.ok && data.courseId) {
-                currentCourseId = data.courseId;
+    if (data?.ok && data.courseId) {
+      presentationAssociationMissing = false;
+      unlinkedPresentationId = '';
+      presentationAssociationNoticeLogged = false;
+      presentationAssociationBadgeShown = false;
+      currentCourseId = data.courseId;
                 currentCourseTitle = data.title || title;
                 const classChanged = Boolean(data.classId) && String(data.classId) !== activeClassId;
                 if (data.classId) activeClassId = String(data.classId);
@@ -406,8 +451,24 @@
                 });
                 return true;
             }
-        } catch (e) {
-            if (isExtensionContextError(e) || bridgeStopped) return false;
+  } catch (e) {
+    if (isPresentationAssociationMissingError(e)) {
+      presentationAssociationMissing = true;
+      unlinkedPresentationId = presentationId;
+      // Stop periodic reconnection attempts until the page is opened from
+      // CondaWeb (or the user explicitly requests a new connection).
+      nextAutoConnectAt = Number.POSITIVE_INFINITY;
+      if (!presentationAssociationNoticeLogged) {
+        console.info('[CondaWeb Bridge] Présentation non liée à CondaWeb : ouvre-la depuis la page Cours pour connecter le plan, les alertes et les contrôles.', {
+          presentationId,
+          title,
+        });
+      }
+      presentationAssociationNoticeLogged = true;
+      showPresentationUnlinkedBadge();
+      return false;
+    }
+    if (isExtensionContextError(e) || bridgeStopped) return false;
             console.warn('[CondaWeb Bridge] Auto-connect en attente…', e.message);
         }
         return false;
