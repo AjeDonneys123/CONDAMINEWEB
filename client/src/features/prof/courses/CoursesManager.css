@@ -2339,6 +2339,15 @@
 .course-debt-name.punishment { background: #fee2e2; color: #b91c1c; }
 .course-debt-name.incomplete { background: #fef3c7; color: #92400e; }
 .course-debt-name.warning { background: #ffedd5; color: #c2410c; }
+.course-debt-name.notif {
+    background: #fef9c3;
+    color: #854d0e;
+    border: 1.5px solid #eab308;
+}
+.course-debt-name.notif span {
+    white-space: normal;
+    word-break: break-word;
+}
 .course-debt-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .course-debt-name button {
     flex: 0 0 auto;
@@ -2425,15 +2434,16 @@
 }
 
 .live-score-alert {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 2px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 8px 12px;
+    padding: 6px 12px;
     border: 2px solid #22c55e;
-    border-radius: 12px;
+    border-radius: 999px;
     background: rgba(240, 253, 244, .98);
     color: #14532d;
     font-size: 14px;
@@ -2441,11 +2451,18 @@
     line-height: 1.2;
     box-shadow: 0 4px 14px rgba(15, 23, 42, .25);
     animation: scoreAlertIn .2s ease-out;
+    white-space: nowrap;
 }
 .live-score-alert.negative { border-color: #ef4444; background: rgba(254, 242, 242, .98); color: #991b1b; }
-.live-score-alert strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
-.live-score-alert-delta { align-self: center; font-size: 16px; font-weight: 950; }
-.live-score-alert small { grid-column: 1 / -1; color: #334155; font-size: 16px; font-weight: 900; }
+.live-score-alert strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.live-score-alert-score {
+    font-size: 13px;
+    font-weight: 900;
+    background: rgba(0, 0, 0, 0.08);
+    padding: 2px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
 .live-score-alert.underneath { opacity: 0.25; pointer-events: none; }
 
 @keyframes scoreAlertIn {

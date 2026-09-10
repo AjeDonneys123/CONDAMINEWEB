@@ -70,7 +70,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const data = await res.json().catch(() => ({}));
                 if (mounted && res.ok) {
                     setClassPlanProjected(data?.classPlanVisible === true);
-                    setActiveNotif(data?.classNotification || null);
+                    const serverNotif = data?.classNotification || null;
+                    setActiveNotif(serverNotif);
+                    if (!serverNotif && !notifModalOpen) {
+                        setNotifText('');
+                    }
                 }
             } catch (_) {}
         };
@@ -1451,37 +1455,37 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="notif-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNotifModalOpen(false); }}>
                     <div className="notif-modal">
                         <div className="notif-modal-header">
-                            <span className="notif-modal-title">🔔 Notification pour le tableau</span>
+                            <span className="notif-modal-title">🔔 Devoirs pour le prochain cours</span>
                             <button className="notif-modal-close" onClick={() => setNotifModalOpen(false)}>×</button>
                         </div>
                         <textarea
                             className="notif-modal-textarea"
-                            placeholder="Ex : Coller le cours pages 12–15 pour vendredi…"
+                            placeholder="Ex : Exercices 3 et 4 p. 24 pour vendredi…"
                             value={notifText}
                             onChange={(e) => setNotifText(e.target.value)}
                             autoFocus
-                            rows={4}
+                            rows={3}
                         />
                         <div className="notif-modal-actions">
                             <button
                                 className={`notif-modal-mic${notifListening ? ' listening' : ''}`}
                                 onClick={toggleNotifMic}
                                 disabled={!voiceSupported}
-                                title={voiceSupported ? (notifListening ? 'Arrêter la dictée' : 'Dicter la notification') : 'Micro non disponible'}
+                                title={voiceSupported ? (notifListening ? 'Arrêter la dictée' : 'Dicter le devoir') : 'Micro non disponible'}
                             >{notifListening ? '🎙️' : '🎤'}</button>
                             {activeNotif && (
                                 <button
                                     className="notif-modal-delete"
                                     onClick={deleteNotif}
                                     disabled={notifSending}
-                                    title="Effacer la notification du tableau"
+                                    title="Effacer le devoir du tableau"
                                 >🗑️ EFFACER</button>
                             )}
                             <button
                                 className="notif-modal-send"
                                 onClick={sendNotif}
                                 disabled={notifSending || !notifText.trim()}
-                            >{notifSending ? '…' : '📡 ENVOYER AU TABLEAU'}</button>
+                            >{notifSending ? '…' : (activeNotif ? '📡 METTRE À JOUR' : '📡 ENVOYER AU TABLEAU')}</button>
                         </div>
                     </div>
                 </div>

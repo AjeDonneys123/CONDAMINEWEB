@@ -439,6 +439,7 @@ router.put('/:classId/notification', async (req, res) => {
         const text = String(req.body?.text || '').trim().slice(0, 500);
         if (!text) return res.status(400).json({ error: 'Texte requis' });
         classroom.classNotification = { text, createdAt: new Date() };
+        classroom.markModified('classNotification');
         await classroom.save();
         console.info('[CondaWeb] notification de classe créée', { classId: String(classroom._id), text });
         return res.json({ ok: true, classNotification: classroom.classNotification });
@@ -452,6 +453,7 @@ router.delete('/:classId/notification', async (req, res) => {
         const classroom = await Classroom.findById(req.params.classId);
         if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
         classroom.classNotification = null;
+        classroom.markModified('classNotification');
         await classroom.save();
         console.info('[CondaWeb] notification de classe effacée', { classId: String(classroom._id) });
         return res.json({ ok: true });

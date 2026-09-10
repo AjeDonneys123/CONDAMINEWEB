@@ -3980,9 +3980,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                             <span aria-hidden="true">🏆</span><strong>{classPoints}</strong>
                         </div>
 
-                        {(visibleDebtStudents.filter((student) => student.status !== 'warning').length > 0 || visibleHourWarnings.length > 0) && (
+                        {(visibleDebtStudents.filter((student) => student.status !== 'warning').length > 0 || visibleHourWarnings.length > 0 || liveClassroom?.classNotification?.text) && (
                             <div className="course-debt-panel">
                                 <div className="course-debt-title">À régler</div>
+                                {liveClassroom?.classNotification?.text && (
+                                    <div className="course-debt-name notif">
+                                        <span>🔔 Devoirs · {liveClassroom.classNotification.text}</span>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                const cid = activeClassroom?._id || liveClassroom?._id;
+                                                if (!cid) return;
+                                                try {
+                                                    await fetch(`/api/classroom/${encodeURIComponent(cid)}/notification`, { method: 'DELETE' });
+                                                    setLiveClassroom((prev) => prev ? { ...prev, classNotification: null } : prev);
+                                                } catch (_) {}
+                                            }}
+                                            title="Valider et effacer ce devoir"
+                                            aria-label="Valider et effacer ce devoir"
+                                        >×</button>
+                                    </div>
+                                )}
                                 {visibleDebtStudents.filter((student) => student.status !== 'warning').map((student) => (
                                     <div key={student.id} className={`course-debt-name ${student.status || 'incomplete'}`}>
                                         <span>{student.status === 'punishment' ? 'Punition · ' : 'Travail incomplet · '}{student.name}</span>
@@ -4030,17 +4048,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                             left: 0
                                                         }}
                                                     >
-                                                        {Number.isFinite(Number(alert?.pointsDelta)) && Math.abs(Number(alert.pointsDelta)) > 0 ? (
+                                                        {Number.isFinite(Number(alert?.score)) ? (
                                                             <>
                                                                 <strong>{alert?.studentName || 'Élève'}</strong>
-                                                                <span className="live-score-alert-delta">
-                                                                    {Number(alert.pointsDelta) > 0 ? '+' : '−'}
-                                                                    {Math.abs(Number(alert.pointsDelta)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}{' '}
-                                                                    point{Math.abs(Number(alert.pointsDelta)) > 1 ? 's' : ''}
+                                                                <span className="live-score-alert-score">
+                                                                    {Number(alert?.score || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} / 20
                                                                 </span>
-                                                                <small>
-                                                                    Nouvelle note : {Number(alert?.score || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}/20
-                                                                </small>
                                                             </>
                                                         ) : (
                                                             <strong>{alert?.message}</strong>

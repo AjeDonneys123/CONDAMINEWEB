@@ -350,12 +350,12 @@
 /* 2. Pile des alertes et avertissements élèves */
 .conda-alerts-stack {
     position: absolute;
-    top: 72px;
+    top: 64px;
     right: 24px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 12px;
+    align-items: flex-end;
+    gap: 8px;
     pointer-events: auto;
     /* Le plan miroir est une grande fenêtre. Les notes et avertissements
        restent volontairement au-dessus : ce sont les informations urgentes
@@ -364,79 +364,97 @@
 }
 
 .conda-alert-toast {
-    min-width: 420px;
-    max-width: 700px;
-    padding: 24px 32px;
-    border-radius: 20px;
+    min-width: 0;
+    max-width: 85vw;
+    padding: 6px 14px;
+    border-radius: 999px;
     background: rgba(15, 23, 42, 0.96);
     backdrop-filter: blur(16px);
-    border: 2px solid rgba(255, 255, 255, 0.18);
+    border: 2px solid rgba(255, 255, 255, 0.22);
     color: #ffffff;
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(124, 58, 237, 0.3);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 16px rgba(0, 0, 0, 0.25);
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 10px;
     animation: conda-toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    white-space: nowrap;
 }
 
 .conda-alert-toast.warning {
     border-color: #f59e0b;
     background: linear-gradient(135deg, rgba(30, 27, 75, 0.98), rgba(120, 53, 15, 0.98));
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(245, 158, 11, 0.4);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 158, 11, 0.4);
 }
 
 .conda-alert-toast.negative {
     border-color: #ef4444;
     background: linear-gradient(135deg, rgba(153, 27, 27, 0.99), rgba(69, 10, 10, 0.99));
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(239, 68, 68, 0.6);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 20px rgba(239, 68, 68, 0.5);
 }
 
 .conda-alert-toast.positive {
     border-color: #10b981;
     background: linear-gradient(135deg, rgba(5, 150, 105, 0.99), rgba(6, 78, 59, 0.99));
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.5);
 }
 
 .conda-alert-icon {
-    font-size: 48px;
+    font-size: 20px;
     line-height: 1;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
 }
 
 .conda-alert-body {
-    flex: 1;
+    flex: 0 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
 }
 
-.conda-alert-body strong {
-    display: block;
-    font-size: 30px;
+.conda-alert-body strong,
+.conda-alert-name {
+    display: inline;
+    font-size: 19px;
     font-weight: 900;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+    color: #ffffff;
+    margin: 0;
 }
 
-.conda-alert-body span {
-    display: block;
-    font-size: 30px;
-    color: #f8fafc;
-    font-weight: 800;
+.conda-alert-body span,
+.conda-alert-score {
+    display: inline-block;
+    font-size: 19px;
+    font-weight: 900;
+    color: #ffffff;
+    background: rgba(0, 0, 0, 0.28);
+    padding: 2px 9px;
+    border-radius: 7px;
+    letter-spacing: 0.4px;
 }
 
 .conda-alert-close {
     flex: 0 0 auto;
-    width: 36px;
-    height: 36px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     border: 0;
     border-radius: 999px;
     background: rgba(255, 255, 255, .2);
     color: #fff;
     cursor: pointer;
-    font-size: 28px;
+    font-size: 15px;
     font-weight: 900;
-    line-height: 1;
+    line-height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
 }
-.conda-alert-close:hover { background: rgba(255, 255, 255, .34); }
+.conda-alert-close:hover { background: rgba(255, 255, 255, .38); }
 
 /* 3. Panneau des avertis cette heure */
 .conda-hour-warnings-dock {
@@ -487,6 +505,18 @@
 .conda-hour-warnings-dock .conda-persistent-notice.incomplete { background: #fef3c7; color: #92400e; }
 .conda-hour-warnings-dock .conda-persistent-notice.warning { background: #ffedd5; color: #c2410c; }
 .conda-hour-warnings-dock .conda-persistent-notice.punishment { background: #fee2e2; color: #b91c1c; }
+.conda-hour-warnings-dock .conda-persistent-notice.notif {
+    background: #fef9c3;
+    color: #854d0e;
+    border: 2px solid #eab308;
+    box-shadow: 0 4px 14px rgba(234, 179, 8, 0.25);
+}
+.conda-hour-warnings-dock .conda-persistent-notice.notif span {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+    font-size: 17px;
+}
 .conda-persistent-notice span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conda-persistent-notice button {
     flex: 0 0 auto;

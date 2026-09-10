@@ -198,6 +198,7 @@ const Models = {
         // ils expirent à la fin de l'heure.
         activePersistentDebts: { type: Array, default: [] },
         activeHourWarnings: { type: Array, default: [] },
+        classNotification: { type: Object, default: null },
         classPlanVisible: { type: Boolean, default: false }
     }),
 

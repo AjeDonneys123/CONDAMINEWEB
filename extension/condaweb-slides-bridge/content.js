@@ -806,7 +806,6 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
   }
         renderAlerts(root);
         renderHourWarnings(root);
-        renderClassNotification(root);
         // Les animations et vidéos sont désormais entièrement gérées par
         // Google Slides. L'extension ne doit jamais monter un lecteur ou
         // intercepter leur lecture : elle se limite au plan, aux contrôles
@@ -1020,26 +1019,29 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             const body = document.createElement('div');
             body.className = 'conda-alert-body';
 
-            const title = document.createElement('strong');
-            const hasScoreChange = Number.isFinite(Number(alert?.score)) && Number(alert?.pointsDelta || 0) !== 0;
+            const hasScoreChange = Number.isFinite(Number(alert?.score));
             if (hasScoreChange) {
-                const points = Number(alert.pointsDelta);
-                const absolute = Math.abs(points);
-                const formatted = Number.isInteger(absolute) ? String(absolute) : absolute.toFixed(1).replace('.', ',');
-                title.textContent = `${alert.studentName || 'Élève'} ${points > 0 ? '+' : '−'}${formatted} point${absolute > 1 ? 's' : ''}`;
-            } else {
-                title.textContent = alert.type === 'highlight' ? 'ÉLÈVE APPELÉ' : (isNegative ? 'NOTE EN BAISSE' : (isWarning ? 'AVERTISSEMENT' : 'NOTE EN HAUSSE'));
-            }
-            body.appendChild(title);
+                const nameSpan = document.createElement('strong');
+                nameSpan.className = 'conda-alert-name';
+                nameSpan.textContent = alert.studentName || 'Élève';
+                body.appendChild(nameSpan);
 
-            const sub = document.createElement('span');
-            if (hasScoreChange) {
                 const score = Number(alert.score);
-                sub.textContent = `Nouvelle note : ${Number.isInteger(score) ? score : score.toFixed(1).replace('.', ',')} / 20`;
+                const scoreSpan = document.createElement('span');
+                scoreSpan.className = 'conda-alert-score';
+                scoreSpan.textContent = `${Number.isInteger(score) ? score : score.toFixed(1).replace('.', ',')} / 20`;
+                body.appendChild(scoreSpan);
             } else {
+                const title = document.createElement('strong');
+                title.className = 'conda-alert-name';
+                title.textContent = alert.type === 'highlight' ? 'ÉLÈVE APPELÉ' : (isNegative ? 'NOTE EN BAISSE' : (isWarning ? 'AVERTISSEMENT' : 'NOTE EN HAUSSE'));
+                body.appendChild(title);
+
+                const sub = document.createElement('span');
+                sub.className = 'conda-alert-score';
                 sub.textContent = alert.message || alert.studentName || '';
+                if (sub.textContent) body.appendChild(sub);
             }
-            body.appendChild(sub);
 
             toast.appendChild(body);
             const close = document.createElement('button');
@@ -1062,125 +1064,20 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         });
     }
 
-    // 🔔 Notification mémo-devoirs (affichée en haut à gauche, effacée par VALIDER)
-    function renderClassNotification(root) {
-        const notif = currentClassroomState?.classNotification;
-        let banner = root.querySelector('.conda-class-notif-banner');
-
-        if (!notif?.text) {
-            if (banner) banner.remove();
-            return;
-        }
-
-        if (!banner) {
-            banner = document.createElement('div');
-            banner.className = 'conda-class-notif-banner';
-            root.appendChild(banner);
-
-            // Styles inline (Trusted Types safe — pas d'innerHTML)
-            Object.assign(banner.style, {
-                position: 'fixed',
-                top: '18px',
-                left: '18px',
-                zIndex: '2147483640',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-                background: 'linear-gradient(135deg, #fff8e1, #fffbeb)',
-                border: '3px solid #f59e0b',
-                borderRadius: '16px',
-                padding: '14px 18px',
-                boxShadow: '0 8px 32px rgba(245,158,11,.35), 0 2px 8px rgba(0,0,0,.12)',
-                maxWidth: '420px',
-                fontFamily: "'Inter', 'Segoe UI', sans-serif",
-                animation: 'conda-notif-in .35s cubic-bezier(.34,1.56,.64,1)'
-            });
-
-            // Inject keyframe once
-            if (!document.getElementById('conda-notif-style')) {
-                const style = document.createElement('style');
-                style.id = 'conda-notif-style';
-                style.textContent = `
-                    @keyframes conda-notif-in { from { transform: translateY(-20px) scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
-                    @keyframes conda-notif-pulse { 0%,100% { box-shadow: 0 8px 32px rgba(245,158,11,.35); } 50% { box-shadow: 0 8px 42px rgba(245,158,11,.65); } }
-                    .conda-class-notif-banner { animation: conda-notif-in .35s cubic-bezier(.34,1.56,.64,1), conda-notif-pulse 2.5s 0.4s infinite !important; }
-                `;
-                document.head.appendChild(style);
-            }
-
-            const icon = document.createElement('span');
-            icon.textContent = '🔔';
-            Object.assign(icon.style, { fontSize: '1.6rem', lineHeight: '1', flexShrink: '0', marginTop: '2px' });
-            banner.appendChild(icon);
-
-            const body = document.createElement('div');
-            Object.assign(body.style, { flex: '1', display: 'flex', flexDirection: 'column', gap: '8px' });
-
-            const label = document.createElement('div');
-            label.className = 'conda-notif-label';
-            Object.assign(label.style, { fontSize: '0.65rem', fontWeight: '900', color: '#b45309', letterSpacing: '.08em', textTransform: 'uppercase' });
-            label.textContent = '📋 À NE PAS OUBLIER';
-            body.appendChild(label);
-
-            const text = document.createElement('div');
-            text.className = 'conda-notif-text';
-            Object.assign(text.style, { fontSize: '1rem', fontWeight: '800', color: '#0f172a', lineHeight: '1.4' });
-            body.appendChild(text);
-
-            const validateBtn = document.createElement('button');
-            validateBtn.type = 'button';
-            validateBtn.textContent = '✅ VALIDER — message lu';
-            Object.assign(validateBtn.style, {
-                alignSelf: 'flex-start',
-                marginTop: '4px',
-                padding: '7px 14px',
-                borderRadius: '10px',
-                border: 'none',
-                background: 'linear-gradient(135deg, #16a34a, #15803d)',
-                color: '#fff',
-                fontSize: '0.72rem',
-                fontWeight: '950',
-                cursor: 'pointer',
-                letterSpacing: '.04em',
-                boxShadow: '0 3px 10px rgba(22,163,74,.3)',
-                transition: 'all .15s'
-            });
-            validateBtn.addEventListener('mouseover', () => { validateBtn.style.background = 'linear-gradient(135deg, #15803d, #166534)'; });
-            validateBtn.addEventListener('mouseout', () => { validateBtn.style.background = 'linear-gradient(135deg, #16a34a, #15803d)'; });
-            validateBtn.addEventListener('click', async (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (!activeClassId) return;
-                validateBtn.textContent = '…';
-                validateBtn.disabled = true;
-                try {
-                    await callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/notification`, { method: 'DELETE' });
-                    // L'état se mettra à jour au prochain poll
-                    if (banner.parentElement) banner.remove();
-                } catch (_) {
-                    validateBtn.textContent = '✅ VALIDER — message lu';
-                    validateBtn.disabled = false;
-                }
-            });
-            body.appendChild(validateBtn);
-            banner.appendChild(body);
-        }
-
-        // Mise à jour du texte si changé
-        const textEl = banner.querySelector('.conda-notif-text');
-        if (textEl && textEl.textContent !== notif.text) {
-            textEl.textContent = notif.text;
-        }
-    }
-
-    // Dettes persistantes et avertissements de l'heure (sans innerHTML)
+    // Dettes persistantes, avertissements de l'heure et mémo-devoirs (sans innerHTML)
     function renderHourWarnings(root) {
+        // Nettoie un éventuel ancien calque indépendant
+        root.querySelector('.conda-class-notif-banner')?.remove();
+
         const warnings = Array.isArray(currentClassroomState?.activeHourWarnings) ? currentClassroomState.activeHourWarnings : [];
         const debts = Array.isArray(currentClassroomState?.activePersistentDebts) ? currentClassroomState.activePersistentDebts : [];
+        const notif = currentClassroomState?.classNotification;
+
         const notices = [
+            ...(notif?.text ? [{ noticeType: 'notif', text: notif.text }] : []),
             ...debts.map((row) => ({ ...row, noticeType: row.status || 'incomplete' })),
             ...warnings.map((row) => ({ ...row, noticeType: 'warning', expiresAt: row.expiresAt || '' }))
-        ].filter((row) => !dismissedPersistentNoticeIds.has(`${row.noticeType}:${row.studentId || row.name || ''}:${row.expiresAt || ''}`));
+        ].filter((row) => row.noticeType === 'notif' || !dismissedPersistentNoticeIds.has(`${row.noticeType}:${row.studentId || row.name || ''}:${row.expiresAt || ''}`));
         let dock = root.querySelector('.conda-hour-warnings-dock');
 
         if (notices.length === 0) {
@@ -1204,23 +1101,38 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         dock.appendChild(title);
         const ul = document.createElement('ul');
         notices.forEach((row) => {
-            const noticeId = `${row.noticeType}:${row.studentId || row.name || ''}:${row.expiresAt || ''}`;
+            const noticeId = row.noticeType === 'notif' ? 'class-notif' : `${row.noticeType}:${row.studentId || row.name || ''}:${row.expiresAt || ''}`;
             const li = document.createElement('li');
             li.className = `conda-persistent-notice ${row.noticeType}`;
             const label = document.createElement('span');
-            const prefix = row.noticeType === 'punishment' ? 'Punition · ' : (row.noticeType === 'warning' ? 'Avertissement · ' : 'Travail incomplet · ');
-            label.textContent = `${prefix}${row.name || row.studentName || ''}`;
+            if (row.noticeType === 'notif') {
+                label.textContent = `🔔 Devoirs · ${row.text}`;
+            } else {
+                const prefix = row.noticeType === 'punishment' ? 'Punition · ' : (row.noticeType === 'warning' ? 'Avertissement · ' : 'Travail incomplet · ');
+                label.textContent = `${prefix}${row.name || row.studentName || ''}`;
+            }
             li.appendChild(label);
             const close = document.createElement('button');
             close.type = 'button';
             close.textContent = '×';
-            close.title = 'Masquer cette alerte';
-            close.setAttribute('aria-label', 'Masquer cette alerte');
-            close.addEventListener('click', (event) => {
+            close.title = row.noticeType === 'notif' ? 'Valider et effacer ce devoir' : 'Masquer cette alerte';
+            close.setAttribute('aria-label', close.title);
+            close.addEventListener('click', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                dismissedPersistentNoticeIds.add(noticeId);
-                renderHourWarnings(root);
+                if (row.noticeType === 'notif') {
+                    if (currentClassroomState) currentClassroomState.classNotification = null;
+                    li.remove();
+                    if (ul.children.length === 0 && dock) dock.remove();
+                    if (activeClassId) {
+                        try {
+                            await callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/notification`, { method: 'DELETE' });
+                        } catch (_) {}
+                    }
+                } else {
+                    dismissedPersistentNoticeIds.add(noticeId);
+                    renderHourWarnings(root);
+                }
             });
             li.appendChild(close);
             ul.appendChild(li);
