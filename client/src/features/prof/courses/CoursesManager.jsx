@@ -4199,10 +4199,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                             style={{ gridRow: slotIndex + 1 }}
                                         >
                                             {slotAlerts.map((alert, alertIndex) => {
-                                                const isLatest = alertIndex === slotAlerts.length - 1;
+                                                const isAlertNeg = alert?.type === 'negative' || /(?:−|-|–)(?:0[,\.]5|1)/.test(String(alert?.message || ''));
+                                                const isAlertPos = !isAlertNeg && (alert?.type === 'positive' || /\+/.test(String(alert?.message || '')));
                                                 return (
                                                     <div
-                                                        className={`live-score-alert ${alert?.type === 'negative' ? 'negative' : alert?.type === 'positive' ? 'positive' : ''} ${isLatest ? 'latest' : 'underneath'}`}
+                                                        className={`live-score-alert ${isAlertNeg ? 'negative' : isAlertPos ? 'positive' : ''} ${isLatest ? 'latest' : 'underneath'}`}
                                                         key={alert?.id || `${alert?.createdAt}-${alertIndex}`}
                                                         style={{
                                                             zIndex: 10 + alertIndex,

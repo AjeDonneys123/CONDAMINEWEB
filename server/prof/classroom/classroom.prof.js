@@ -1051,6 +1051,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         const alert = {
             id: `${now.getTime()}-class-${Math.random().toString(36).slice(2, 8)}`,
             message: delta < 0 ? 'Toute la classe : −1 par élève' : 'Toute la classe : +1 par élève',
+            type: delta < 0 ? 'negative' : 'positive',
             createdAt: now
         };
         cls.activeStudentBonusAlert = alert.message;

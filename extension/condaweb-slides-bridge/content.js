@@ -870,6 +870,23 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         }
         updateTimerDockButton(timerButton);
 
+        let notesButton = dock.querySelector('.conda-slide-notes-toggle');
+        if (!notesButton) {
+            notesButton = document.createElement('button');
+            notesButton.type = 'button';
+            notesButton.className = 'conda-slide-notes-toggle';
+            notesButton.onclick = () => {
+                scoreAlertsVisible = !scoreAlertsVisible;
+                try {
+                    localStorage.setItem('condaSlideScoreAlertsVisible', scoreAlertsVisible ? 'true' : 'false');
+                } catch (_) {}
+                updateNotesDockButton(notesButton);
+                renderAlerts(root);
+            };
+            dock.appendChild(notesButton);
+        }
+        updateNotesDockButton(notesButton);
+
         const connectionBadge = root.querySelector('#conda-bridge-badge');
         if (isConnected && connectionBadge && connectionBadge.parentElement !== dock) {
             dock.appendChild(connectionBadge);
@@ -910,9 +927,37 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
     let timerIsRunning = false;
     let timerIntervalId = null;
     let timerWidgetOpen = false;
+    let timerWidgetMinimized = false;
+    try {
+        timerWidgetMinimized = localStorage.getItem('condaSlideTimerMinimized') === 'true';
+    } catch (_) {}
+    let scoreAlertsVisible = true;
+    try {
+        const savedAlertsVisible = localStorage.getItem('condaSlideScoreAlertsVisible');
+        if (savedAlertsVisible !== null) {
+            scoreAlertsVisible = savedAlertsVisible === 'true';
+        }
+    } catch (_) {}
     let timerAlarmPlaying = false;
     let timerAlarmIntervalId = null;
     let timerAudioCtx = null;
+
+    function updateNotesDockButton(btn) {
+        if (!btn) {
+            const root = overlayRoot;
+            btn = root?.querySelector?.('.conda-slide-notes-toggle');
+        }
+        if (!btn) return;
+        if (scoreAlertsVisible) {
+            btn.className = 'conda-slide-notes-toggle active';
+            btn.textContent = '🔔 NOTES ON';
+            btn.title = 'Évolutions de notes affichées sur l’écran · Cliquer pour masquer';
+        } else {
+            btn.className = 'conda-slide-notes-toggle off';
+            btn.textContent = '🔕 NOTES OFF';
+            btn.title = 'Évolutions de notes masquées sur l’écran · Cliquer pour afficher';
+        }
+    }
 
     function getTimerAudioContext() {
         try {
@@ -1097,56 +1142,122 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         try {
             const saved = JSON.parse(localStorage.getItem('condaSlideTimerPosition') || sessionStorage.getItem('condaSlideTimerPosition') || 'null');
             if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
-                const maxLeft = Math.max(0, window.innerWidth - (widget.offsetWidth || 310));
-                const maxTop = Math.max(0, window.innerHeight - (widget.offsetHeight || 330));
+                const w = widget.offsetWidth || (timerWidgetMinimized ? 205 : 310);
+                const h = widget.offsetHeight || 120;
+                const maxLeft = Math.max(0, window.innerWidth - w);
+                const maxTop = Math.max(0, window.innerHeight - h);
                 widget.style.left = `${Math.min(maxLeft, Math.max(0, saved.left))}px`;
                 widget.style.top = `${Math.min(maxTop, Math.max(0, saved.top))}px`;
                 widget.style.right = 'auto';
                 return;
             }
         } catch (_) {}
+        const defaultW = widget.offsetWidth || (timerWidgetMinimized ? 205 : 310);
+        const defaultLeft = Math.max(10, window.innerWidth - defaultW - 20);
+        widget.style.left = `${defaultLeft}px`;
         widget.style.top = '18px';
-        widget.style.right = '20px';
-        widget.style.left = 'auto';
+        widget.style.right = 'auto';
     }
 
-    function enableTimerWidgetDrag(widget, handle) {
-        if (widget.dataset.dragReady === '1') return;
-        widget.dataset.dragReady = '1';
-        const grip = handle || widget.querySelector('.conda-timer-header');
-        if (!grip) return;
+    function enableTimerWidgetDrag(widget, header) {
+        if (!header) return;
 
-        grip.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('button') || event.target.closest('input')) return;
+        let dragStart = null;
+        let lastPointerId = null;
+
+        const onPointerMove = (event) => {
+            if (!dragStart) return;
+            event.preventDefault();
+            const w = widget.offsetWidth || (timerWidgetMinimized ? 205 : 310);
+            const h = widget.offsetHeight || 70;
+            const maxLeft = Math.max(0, window.innerWidth - w);
+            const maxTop = Math.max(0, window.innerHeight - h);
+            const newLeft = Math.min(maxLeft, Math.max(0, dragStart.left + (event.clientX - dragStart.x)));
+            const newTop = Math.min(maxTop, Math.max(0, dragStart.top + (event.clientY - dragStart.y)));
+            widget.style.left = `${newLeft}px`;
+            widget.style.top = `${newTop}px`;
+            widget.style.right = 'auto';
+        };
+
+        const onPointerEnd = () => {
+            if (dragStart) {
+                try {
+                    const rect = widget.getBoundingClientRect();
+                    localStorage.setItem('condaSlideTimerPosition', JSON.stringify({
+                        left: Math.round(rect.left),
+                        top: Math.round(rect.top)
+                    }));
+                } catch (_) {}
+            }
+            dragStart = null;
+            try {
+                if (lastPointerId !== null && header.hasPointerCapture && header.hasPointerCapture(lastPointerId)) {
+                    header.releasePointerCapture(lastPointerId);
+                }
+            } catch (_) {}
+            lastPointerId = null;
+            window.removeEventListener('pointermove', onPointerMove, true);
+            window.removeEventListener('pointerup', onPointerEnd, true);
+            window.removeEventListener('pointercancel', onPointerEnd, true);
+            window.removeEventListener('mousemove', onPointerMove, true);
+            window.removeEventListener('mouseup', onPointerEnd, true);
+        };
+
+        header.onpointerdown = (event) => {
+            if (event.target?.closest?.('button') || event.target?.closest?.('input')) return;
             event.preventDefault();
             event.stopPropagation();
 
             const rect = widget.getBoundingClientRect();
-            const offsetX = event.clientX - rect.left;
-            const offsetY = event.clientY - rect.top;
-            grip.setPointerCapture?.(event.pointerId);
+            widget.style.left = `${rect.left}px`;
+            widget.style.top = `${rect.top}px`;
+            widget.style.right = 'auto';
 
-            const move = (moveEvent) => {
-                const maxLeft = Math.max(0, window.innerWidth - rect.width);
-                const maxTop = Math.max(0, window.innerHeight - rect.height);
-                widget.style.left = `${Math.min(maxLeft, Math.max(0, moveEvent.clientX - offsetX))}px`;
-                widget.style.top = `${Math.min(maxTop, Math.max(0, moveEvent.clientY - offsetY))}px`;
-                widget.style.right = 'auto';
+            dragStart = {
+                x: event.clientX,
+                y: event.clientY,
+                left: rect.left,
+                top: rect.top
+            };
+            lastPointerId = event.pointerId;
+
+            try {
+                header.setPointerCapture?.(event.pointerId);
+            } catch (_) {}
+
+            window.addEventListener('pointermove', onPointerMove, true);
+            window.addEventListener('pointerup', onPointerEnd, true);
+            window.addEventListener('pointercancel', onPointerEnd, true);
+            window.addEventListener('mousemove', onPointerMove, true);
+            window.addEventListener('mouseup', onPointerEnd, true);
+        };
+
+        header.onpointermove = onPointerMove;
+        header.onpointerup = onPointerEnd;
+        header.onpointercancel = onPointerEnd;
+
+        // Fallback pour mousedown
+        header.onmousedown = (event) => {
+            if (event.target?.closest?.('button') || event.target?.closest?.('input')) return;
+            if (dragStart) return;
+            event.preventDefault();
+            event.stopPropagation();
+
+            const rect = widget.getBoundingClientRect();
+            widget.style.left = `${rect.left}px`;
+            widget.style.top = `${rect.top}px`;
+            widget.style.right = 'auto';
+
+            dragStart = {
+                x: event.clientX,
+                y: event.clientY,
+                left: rect.left,
+                top: rect.top
             };
 
-            const finish = () => {
-                window.removeEventListener('pointermove', move, true);
-                window.removeEventListener('pointerup', finish, true);
-                const nextRect = widget.getBoundingClientRect();
-                const pos = { left: Math.round(nextRect.left), top: Math.round(nextRect.top) };
-                try {
-                    localStorage.setItem('condaSlideTimerPosition', JSON.stringify(pos));
-                } catch (_) {}
-            };
-
-            window.addEventListener('pointermove', move, true);
-            window.addEventListener('pointerup', finish, true);
-        });
+            window.addEventListener('mousemove', onPointerMove, true);
+            window.addEventListener('mouseup', onPointerEnd, true);
+        };
     }
 
     function renderTimerWidget(root) {
@@ -1165,6 +1276,12 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             restoreTimerWidgetPosition(widget);
         }
 
+        if (timerWidgetMinimized) {
+            widget.classList.add('minimized');
+        } else {
+            widget.classList.remove('minimized');
+        }
+
         while (widget.firstChild) widget.removeChild(widget.firstChild);
 
         // Header (Draggable)
@@ -1180,18 +1297,41 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         dragHint.textContent = '⋮⋮';
         title.appendChild(dragHint);
 
+        const headerBtns = document.createElement('div');
+        headerBtns.className = 'conda-timer-header-btns';
+
+        const minBtn = document.createElement('button');
+        minBtn.type = 'button';
+        minBtn.className = 'conda-timer-min-btn';
+        minBtn.textContent = timerWidgetMinimized ? '□' : '—';
+        minBtn.title = timerWidgetMinimized ? 'Agrandir la fenêtre (mode complet)' : 'Réduire la taille (mode compact)';
+        minBtn.onclick = (e) => {
+            e.stopPropagation();
+            timerWidgetMinimized = !timerWidgetMinimized;
+            try {
+                localStorage.setItem('condaSlideTimerMinimized', timerWidgetMinimized ? 'true' : 'false');
+            } catch (_) {}
+            widget.style.width = '';
+            widget.style.height = '';
+            renderTimerWidget(root);
+        };
+        minBtn.onpointerdown = (e) => e.stopPropagation();
+
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'conda-timer-close-btn';
         closeBtn.textContent = '✕';
         closeBtn.title = 'Fermer le panneau (le minuteur continue)';
-        closeBtn.onclick = () => {
+        closeBtn.onclick = (e) => {
+            e.stopPropagation();
             timerWidgetOpen = false;
             widget.remove();
             updateTimerDockButton();
         };
+        closeBtn.onpointerdown = (e) => e.stopPropagation();
 
-        header.append(title, closeBtn);
+        headerBtns.append(minBtn, closeBtn);
+        header.append(title, headerBtns);
         widget.appendChild(header);
         enableTimerWidgetDrag(widget, header);
 
@@ -1483,6 +1623,12 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             stack.className = 'conda-alerts-stack';
             root.appendChild(stack);
         }
+        if (!scoreAlertsVisible) {
+            stack.style.display = 'none';
+            return;
+        }
+        stack.style.display = '';
+
         const alerts = Array.isArray(currentClassroomState?.activeScoreAlerts)
             ? [...currentClassroomState.activeScoreAlerts]
             : [];
@@ -1500,7 +1646,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             if (displayedAlertIds.has(alertId) || !createdAt || (!isExplicitReplay && Math.abs(now - createdAt) > 30000)) return;
             displayedAlertIds.add(alertId);
             replayableAlertIds.delete(alertId);
-            const isNegative = alert.type === 'negative' || /(?:−|-|–)0[,\.]5/.test(String(alert.message || ''));
+            const isNegative = alert.type === 'negative' || /(?:−|-|–)(?:0[,\.]5|1)/.test(String(alert.message || ''));
             const isWarning = !isNegative && (alert.isPenalty || ['warning', 'highlight'].includes(alert.type) || (alert.message && alert.message.toLowerCase().includes('avertissement')));
             const toast = document.createElement('div');
             toast.className = `conda-alert-toast ${isNegative ? 'negative' : (isWarning ? 'warning' : 'positive')}`;
