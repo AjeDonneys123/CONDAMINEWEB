@@ -1093,6 +1093,62 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         }
     }
 
+    function restoreTimerWidgetPosition(widget) {
+        try {
+            const saved = JSON.parse(localStorage.getItem('condaSlideTimerPosition') || sessionStorage.getItem('condaSlideTimerPosition') || 'null');
+            if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+                const maxLeft = Math.max(0, window.innerWidth - (widget.offsetWidth || 310));
+                const maxTop = Math.max(0, window.innerHeight - (widget.offsetHeight || 330));
+                widget.style.left = `${Math.min(maxLeft, Math.max(0, saved.left))}px`;
+                widget.style.top = `${Math.min(maxTop, Math.max(0, saved.top))}px`;
+                widget.style.right = 'auto';
+                return;
+            }
+        } catch (_) {}
+        widget.style.top = '18px';
+        widget.style.right = '20px';
+        widget.style.left = 'auto';
+    }
+
+    function enableTimerWidgetDrag(widget, handle) {
+        if (widget.dataset.dragReady === '1') return;
+        widget.dataset.dragReady = '1';
+        const grip = handle || widget.querySelector('.conda-timer-header');
+        if (!grip) return;
+
+        grip.addEventListener('pointerdown', (event) => {
+            if (event.target.closest('button') || event.target.closest('input')) return;
+            event.preventDefault();
+            event.stopPropagation();
+
+            const rect = widget.getBoundingClientRect();
+            const offsetX = event.clientX - rect.left;
+            const offsetY = event.clientY - rect.top;
+            grip.setPointerCapture?.(event.pointerId);
+
+            const move = (moveEvent) => {
+                const maxLeft = Math.max(0, window.innerWidth - rect.width);
+                const maxTop = Math.max(0, window.innerHeight - rect.height);
+                widget.style.left = `${Math.min(maxLeft, Math.max(0, moveEvent.clientX - offsetX))}px`;
+                widget.style.top = `${Math.min(maxTop, Math.max(0, moveEvent.clientY - offsetY))}px`;
+                widget.style.right = 'auto';
+            };
+
+            const finish = () => {
+                window.removeEventListener('pointermove', move, true);
+                window.removeEventListener('pointerup', finish, true);
+                const nextRect = widget.getBoundingClientRect();
+                const pos = { left: Math.round(nextRect.left), top: Math.round(nextRect.top) };
+                try {
+                    localStorage.setItem('condaSlideTimerPosition', JSON.stringify(pos));
+                } catch (_) {}
+            };
+
+            window.addEventListener('pointermove', move, true);
+            window.addEventListener('pointerup', finish, true);
+        });
+    }
+
     function renderTimerWidget(root) {
         initTimerLoopIfNeeded();
         let widget = root.querySelector('.conda-slide-timer-widget');
@@ -1101,21 +1157,28 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             return;
         }
 
-        if (!widget) {
+        const isNew = !widget;
+        if (isNew) {
             widget = document.createElement('div');
             widget.className = 'conda-slide-timer-widget';
             root.appendChild(widget);
+            restoreTimerWidgetPosition(widget);
         }
 
         while (widget.firstChild) widget.removeChild(widget.firstChild);
 
-        // Header
+        // Header (Draggable)
         const header = document.createElement('div');
         header.className = 'conda-timer-header';
+        header.title = 'Glisser pour déplacer le minuteur sur l\'écran';
 
         const title = document.createElement('span');
         title.className = 'conda-timer-title';
-        title.textContent = '⏱️ MINUTEUR';
+        title.textContent = '⏱️ MINUTEUR ';
+        const dragHint = document.createElement('small');
+        dragHint.className = 'conda-timer-drag-hint';
+        dragHint.textContent = '⋮⋮';
+        title.appendChild(dragHint);
 
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
@@ -1130,6 +1193,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
         header.append(title, closeBtn);
         widget.appendChild(header);
+        enableTimerWidgetDrag(widget, header);
 
         // Digital Display
         const displayBox = document.createElement('div');
@@ -1145,6 +1209,78 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
         displayBox.append(digits, status);
         widget.appendChild(displayBox);
+
+        // Presets (1m, 2m, 3m, 5m, 7m, 10m, 15m, 20m)
+        const presetsRow = document.createElement('div');
+        presetsRow.className = 'conda-timer-presets-row';
+
+        const presets = [
+            { label: '1m', sec: 60 },
+            { label: '2m', sec: 120 },
+            { label: '3m', sec: 180 },
+            { label: '5m', sec: 300 },
+            { label: '7m', sec: 420 },
+            { label: '10m', sec: 600 },
+            { label: '15m', sec: 900 },
+            { label: '20m', sec: 1200 }
+        ];
+
+        presets.forEach(({ label, sec }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `conda-timer-preset-btn ${timerTotalSeconds === sec ? 'active' : ''}`;
+            btn.textContent = label;
+            btn.onclick = () => {
+                stopTimerAlarm();
+                timerTotalSeconds = sec;
+                timerRemainingSeconds = sec;
+                timerIsRunning = false;
+                renderTimerWidget(root);
+                updateTimerDockButton();
+            };
+            presetsRow.appendChild(btn);
+        });
+        widget.appendChild(presetsRow);
+
+        // Custom time definition row (Entrer des minutes libres)
+        const customRow = document.createElement('div');
+        customRow.className = 'conda-timer-custom-row';
+
+        const customInput = document.createElement('input');
+        customInput.type = 'number';
+        customInput.className = 'conda-timer-custom-input';
+        customInput.min = '1';
+        customInput.max = '180';
+        customInput.placeholder = 'Minutes libres (ex: 8)…';
+        customInput.title = 'Entrer une durée en minutes et valider';
+
+        const customBtn = document.createElement('button');
+        customBtn.type = 'button';
+        customBtn.className = 'conda-timer-custom-btn';
+        customBtn.textContent = 'DÉFINIR';
+
+        const applyCustom = () => {
+            const val = parseInt(customInput.value, 10);
+            if (!Number.isFinite(val) || val <= 0) return;
+            stopTimerAlarm();
+            timerTotalSeconds = val * 60;
+            timerRemainingSeconds = timerTotalSeconds;
+            timerIsRunning = false;
+            customInput.value = '';
+            renderTimerWidget(root);
+            updateTimerDockButton();
+        };
+
+        customBtn.onclick = applyCustom;
+        customInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyCustom();
+            }
+        };
+
+        customRow.append(customInput, customBtn);
+        widget.appendChild(customRow);
 
         // Modulation Buttons (-1m, -30s, +30s, +1m)
         const modRow = document.createElement('div');
@@ -1180,35 +1316,6 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             modRow.appendChild(btn);
         });
         widget.appendChild(modRow);
-
-        // Presets (3m, 5m, 7m, 10m, 15m)
-        const presetsRow = document.createElement('div');
-        presetsRow.className = 'conda-timer-presets-row';
-
-        const presets = [
-            { label: '3m', sec: 180 },
-            { label: '5m', sec: 300 },
-            { label: '7m', sec: 420 },
-            { label: '10m', sec: 600 },
-            { label: '15m', sec: 900 }
-        ];
-
-        presets.forEach(({ label, sec }) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = `conda-timer-preset-btn ${timerTotalSeconds === sec ? 'active' : ''}`;
-            btn.textContent = label;
-            btn.onclick = () => {
-                stopTimerAlarm();
-                timerTotalSeconds = sec;
-                timerRemainingSeconds = sec;
-                timerIsRunning = false;
-                renderTimerWidget(root);
-                updateTimerDockButton();
-            };
-            presetsRow.appendChild(btn);
-        });
-        widget.appendChild(presetsRow);
 
         // Actions Row (Start/Pause, Reset)
         const actionsRow = document.createElement('div');
@@ -1769,6 +1876,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         console.log('[CondaWeb Bridge] ⚡ init() appelé...');
         ensureOverlayRoot();
         renderBadge(false, 'Connexion à CondaWeb…');
+        renderAllOverlays();
         syncWithCondaWeb();
     }
 
@@ -1779,11 +1887,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         if (!root || !document.contains(root)) {
             console.log('[CondaWeb Bridge] Restauration du calque d\'overlay détaché...');
             ensureOverlayRoot();
-      if (presentationAssociationMissing) {
-        showPresentationUnlinkedBadge();
-      } else {
-        renderBadge(isConnected, activeClassName || 'CondaWeb Connecté');
-      }
+            renderAllOverlays();
         }
     });
 

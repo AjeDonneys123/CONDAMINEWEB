@@ -192,10 +192,10 @@
 /* Div fixe en haut à droite pour le Minuteur */
 .conda-slide-timer-widget {
     position: fixed !important;
-    top: 18px !important;
-    right: 20px !important;
+    top: 18px;
+    right: 20px;
     z-index: 2147483647 !important;
-    width: 295px !important;
+    width: 310px !important;
     padding: 16px 18px !important;
     background: rgba(15, 23, 42, 0.96) !important;
     border: 2px solid rgba(139, 92, 246, 0.6) !important;
@@ -231,6 +231,12 @@
     align-items: center;
     border-bottom: 1px solid rgba(148, 163, 184, 0.15);
     padding-bottom: 8px;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+.conda-timer-header:active {
+    cursor: grabbing;
 }
 
 .conda-timer-title {
@@ -239,6 +245,17 @@
     color: #c4b5fd;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.conda-timer-drag-hint {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 600;
+    opacity: 0.8;
 }
 
 .conda-timer-close-btn {
@@ -251,10 +268,11 @@
     padding: 0 4px;
     line-height: 1;
     border-radius: 6px;
-    transition: color .15s;
+    transition: color .15s, background .15s;
 }
 .conda-timer-close-btn:hover {
     color: #f8fafc;
+    background: rgba(239, 68, 68, 0.25);
 }
 
 .conda-timer-display {
@@ -305,7 +323,7 @@
 
 .conda-timer-presets-row {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 5px;
 }
 
@@ -330,6 +348,44 @@
     background: rgba(124, 58, 237, 0.3);
     border-color: #a78bfa;
     color: #e0e7ff;
+}
+
+.conda-timer-custom-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.conda-timer-custom-input {
+    flex: 1;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #f8fafc;
+    font-size: 12px;
+    font-weight: 800;
+    outline: none;
+    box-sizing: border-box;
+    text-align: center;
+}
+.conda-timer-custom-input:focus {
+    border-color: #818cf8;
+    background: rgba(30, 41, 59, 1);
+}
+.conda-timer-custom-btn {
+    background: #6366f1;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 850;
+    cursor: pointer;
+    transition: background .15s;
+    white-space: nowrap;
+}
+.conda-timer-custom-btn:hover {
+    background: #4f46e5;
 }
 
 .conda-timer-actions-row {
@@ -456,7 +512,7 @@
     .conda-slide-control-card { width: min(390px, 80vw); min-width: 0; padding: 18px 12px; }
     .conda-slide-control-card strong { font-size: 16px; }
     .conda-slide-control-card span { font-size: 12px; }
-    .conda-slide-timer-widget { width: min(280px, 90vw) !important; right: 10px !important; top: 10px !important; }
+    .conda-slide-timer-widget { width: min(280px, 90vw); }
 }
 
 /* Fenêtre QR d'un contrôle : elle reste dans Google Slides et peut être
