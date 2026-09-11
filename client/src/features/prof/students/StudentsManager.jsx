@@ -116,6 +116,35 @@ export default function StudentsManager({ globalClassId }) {
     }
   };
 
+  const handleToggleControlActive = async (control) => {
+    if (!control?._id) return;
+    try {
+      const response = await fetch(`/api/controls/${encodeURIComponent(control._id)}/toggle-active`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Modification impossible');
+      setAssessmentControls((current) => current.map((item) =>
+        String(item?._id) === String(control._id) ? { ...item, active: data.active } : item
+      ));
+    } catch (error) {
+      alert(error.message || 'Action impossible');
+    }
+  };
+
+  const handleClearControlAlerts = async (control) => {
+    if (!control?._id) return;
+    if (!window.confirm(`Effacer toutes les alertes de sortie d’écran enregistrées pour « ${control.title || 'ce contrôle'} » ?`)) return;
+    try {
+      const response = await fetch(`/api/controls/${encodeURIComponent(control._id)}/clear-alerts`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Action impossible');
+      setAssessmentControls((current) => current.map((item) =>
+        String(item?._id) === String(control._id) ? { ...item, alerts: [] } : item
+      ));
+    } catch (error) {
+      alert(error.message || 'Action impossible');
+    }
+  };
+
   const openPronotePreparation = (control) => {
     const today = new Date().toISOString().slice(0, 10);
     setPronotePrepared(null);
@@ -1784,12 +1813,34 @@ export default function StudentsManager({ globalClassId }) {
                             open={hasControlContest}
                         >
                             <summary className="font-black cursor-pointer flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleToggleControlActive(control); }}
+                                        className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border transition cursor-pointer ${
+                                            control.active !== false
+                                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                                                : 'bg-slate-200 text-slate-700 border-slate-300 hover:bg-slate-300'
+                                        }`}
+                                        title={control.active !== false ? 'Contrôle ouvert aux élèves. Cliquer pour fermer.' : 'Contrôle fermé. Cliquer pour ouvrir.'}
+                                    >
+                                        {control.active !== false ? '🟢 Ouvert' : '🔒 Fermé'}
+                                    </button>
                                     <span>{control.title} · {submissions.length} copie(s)</span>
                                     {(control.alerts || []).length > 0 && (
-                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-red-600 text-white animate-pulse">
-                                            🚨 {control.alerts.length} sortie(s) d'écran
-                                        </span>
+                                        <div className="flex items-center gap-1">
+                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded text-white ${control.active !== false ? 'bg-red-600 animate-pulse' : 'bg-rose-500'}`}>
+                                                🚨 {control.alerts.length} sortie(s)
+                                            </span>
+                                            <button
+                                                type="button"
+                                                title="Effacer ces alertes enregistrées"
+                                                onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleClearControlAlerts(control); }}
+                                                className="rounded bg-red-100 hover:bg-red-200 text-red-700 px-1.5 py-0.5 text-[10px] font-black transition cursor-pointer"
+                                            >
+                                                🗑️ Effacer
+                                            </button>
+                                        </div>
                                     )}
                                     {hasControlContest && (
                                         <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-500 text-white">
@@ -1880,7 +1931,7 @@ export default function StudentsManager({ globalClassId }) {
                                                             {student ? `${student.firstName} ${student.lastName}` : (copy.studentName || 'Élève')}
                                                         </strong>
                                                         {studentAlerts.length > 0 && (
-                                                            <span className="rounded bg-red-600 px-2 py-0.5 text-[9px] font-black text-white uppercase animate-pulse">
+                                                            <span className={`rounded px-2 py-0.5 text-[9px] font-black text-white uppercase ${control.active !== false ? 'bg-red-600 animate-pulse' : 'bg-rose-500'}`}>
                                                                 🚨 {studentAlerts.length} sortie(s)
                                                             </span>
                                                         )}

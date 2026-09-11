@@ -263,6 +263,11 @@ router.post('/:id/cheat-alert', async (req, res) => {
         const row = await Control.findById(req.params.id);
         if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
 
+        // Si le contrôle est fermé par le professeur, aucune alerte n'est enregistrée
+        if (row.active === false) {
+            return res.status(403).json({ error: 'Ce contrôle est fermé par le professeur.' });
+        }
+
         let bodyData = req.body || {};
         if (typeof bodyData === 'string') {
             try { bodyData = JSON.parse(bodyData); } catch (_) { bodyData = {}; }
@@ -270,7 +275,7 @@ router.post('/:id/cheat-alert', async (req, res) => {
 
         const reqStudentId = String(bodyData?.studentId || '').trim();
         let rawStudentName = String(bodyData?.studentName || '').trim();
-        const reason = String(bodyData?.reason || "Sortie du plein écran / Changement d'application sur mobile").trim();
+        const reason = String(bodyData?.reason || "Sortie de l'écran / Changement d'application sur mobile").trim();
 
         if (!rawStudentName && mongoose.Types.ObjectId.isValid(reqStudentId)) {
             const student = await Student.findById(reqStudentId, 'firstName lastName').lean();
@@ -279,9 +284,14 @@ router.post('/:id/cheat-alert', async (req, res) => {
             }
         }
 
+        // Ne pas enregistrer d'alerte si l'élève n'est pas identifié ou n'a pas commencé le contrôle
+        if (!rawStudentName || rawStudentName === 'Élève (Nom non renseigné)' || rawStudentName === 'Élève') {
+            return res.json({ ok: false, message: 'Élève non identifié ou contrôle non démarré' });
+        }
+
         const alertObj = {
             id: `alert_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            studentName: rawStudentName || 'Élève (Nom non renseigné)',
+            studentName: rawStudentName,
             studentId: mongoose.Types.ObjectId.isValid(reqStudentId) ? reqStudentId : null,
             reason,
             timestamp: new Date(),

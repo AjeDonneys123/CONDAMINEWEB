@@ -43,18 +43,22 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
 
   const triggerCheatAlert = useCallback((reason) => {
     if (!control || submissionResult) return;
+
+    // Ne déclencher d'alerte QUE si l'élève a renseigné son identité ou est connecté
+    const studentFullName = `${firstName.trim()} ${lastName.trim()}`.trim() || (currentUser ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : '');
+    if (!studentFullName) return;
+
     const now = Date.now();
-    if (now - lastAlertTimeRef.current < 2500) return;
+    if (now - lastAlertTimeRef.current < 3000) return;
     lastAlertTimeRef.current = now;
 
     setCheatAlertCount((c) => c + 1);
     setShowCheatWarningModal(true);
 
-    const studentFullName = `${firstName.trim()} ${lastName.trim()}`.trim() || (currentUser ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : 'Élève (Nom non renseigné)');
     const payload = {
       studentName: studentFullName,
       studentId: currentUser?._id || currentUser?.id || '',
-      reason: reason || "Sortie du plein écran / Changement d'application sur mobile",
+      reason: reason || "Sortie de l'écran / Changement d'application sur mobile",
       timestamp: now
     };
 
@@ -76,40 +80,17 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
   useEffect(() => {
     if (!control || submissionResult) return;
 
+    // Seul le masquage effectif de l'application / onglet constitue une vraie sortie d'écran
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         triggerCheatAlert("Changement d'application ou d'onglet détecté (écran masqué)");
       }
     };
 
-    const handleWindowBlur = () => {
-      triggerCheatAlert("Perte de focus de la fenêtre (sortie de l'écran du contrôle)");
-    };
-
-    const handleFullscreenChange = () => {
-      const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
-      setIsFullscreen(isFs);
-      if (!isFs && !submissionResult) {
-        triggerCheatAlert("Sortie du mode plein écran sur le téléphone");
-      }
-    };
-
-    const handlePageHide = () => {
-      triggerCheatAlert("Fermeture ou mise en arrière-plan de la page");
-    };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleWindowBlur);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    window.addEventListener('pagehide', handlePageHide);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleWindowBlur);
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      window.removeEventListener('pagehide', handlePageHide);
     };
   }, [control, submissionResult, triggerCheatAlert]);
 

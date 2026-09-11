@@ -63,27 +63,16 @@ function ControlWorkspace({ control, user, onQuit }) {
   useEffect(() => {
     if (result) return;
 
-    const onVis = () => { if (document.visibilityState === 'hidden') triggerCheat("Changement d'application ou d'onglet détecté (écran masqué)"); };
-    const onBlur = () => triggerCheat("Perte de focus de la fenêtre (sortie de l'écran du contrôle)");
-    const onFs = () => {
-      const fs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
-      setIsFullscreen(fs);
-      if (!fs && !result) triggerCheat("Sortie du mode plein écran sur le téléphone");
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        triggerCheat("Changement d'application ou d'onglet détecté (écran masqué)");
+      }
     };
-    const onHide = () => triggerCheat("Fermeture ou mise en arrière-plan de la page");
 
     document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('blur', onBlur);
-    document.addEventListener('fullscreenchange', onFs);
-    document.addEventListener('webkitfullscreenchange', onFs);
-    window.addEventListener('pagehide', onHide);
 
     return () => {
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('blur', onBlur);
-      document.removeEventListener('fullscreenchange', onFs);
-      document.removeEventListener('webkitfullscreenchange', onFs);
-      window.removeEventListener('pagehide', onHide);
     };
   }, [result, triggerCheat]);
 

@@ -426,21 +426,58 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/live-alerts', async (_req, res) => {
     try {
-        const controls = await AssessmentControl.find({ active: { $ne: false } }, 'title alerts updatedAt').lean();
+        // Seuls les contrôles explicitement ouverts (active: true) sont éligibles aux alertes en direct
+        const controls = await AssessmentControl.find({ active: true }, 'title alerts updatedAt').lean();
         const unackedAlerts = [];
+        const now = Date.now();
+        const maxAgeMs = 3 * 60 * 1000; // Uniquement les alertes survenues il y a moins de 3 minutes
+
         (controls || []).forEach(ctrl => {
             (ctrl.alerts || []).forEach(alert => {
                 if (alert && alert.acknowledged !== true) {
-                    unackedAlerts.push({
-                        ...alert,
-                        controlId: String(ctrl._id),
-                        controlTitle: ctrl.title || 'Contrôle'
-                    });
+                    const alertTime = alert.timestamp ? new Date(alert.timestamp).getTime() : 0;
+                    if (now - alertTime < maxAgeMs) {
+                        unackedAlerts.push({
+                            ...alert,
+                            controlId: String(ctrl._id),
+                            controlTitle: ctrl.title || 'Contrôle'
+                        });
+                    }
                 }
             });
         });
         unackedAlerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         res.json(unackedAlerts);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/toggle-active', async (req, res) => {
+    try {
+        const control = await AssessmentControl.findById(req.params.id);
+        if (!control) return res.status(404).json({ error: 'Contrôle introuvable' });
+        if (req.body?.active !== undefined) {
+            control.active = Boolean(req.body.active);
+        } else {
+            control.active = !control.active;
+        }
+        control.markModified('active');
+        await control.save();
+        res.json({ ok: true, active: control.active, id: control._id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/clear-alerts', async (req, res) => {
+    try {
+        const control = await AssessmentControl.findById(req.params.id);
+        if (!control) return res.status(404).json({ error: 'Contrôle introuvable' });
+        control.alerts = [];
+        control.markModified('alerts');
+        await control.save();
+        res.json({ ok: true, id: control._id });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
