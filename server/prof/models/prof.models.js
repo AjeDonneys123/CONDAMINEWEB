@@ -297,6 +297,26 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    TrainingExercise: getModel('TrainingExercise', {
+        title: { type: String, required: true },
+        section: { type: String, default: 'HISTOIRE' },
+        level: { type: String, default: '' },
+        classrooms: { type: [String], default: [] },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', default: null },
+        images: {
+            type: [{
+                url: { type: String, default: '' },
+                caption: { type: String, default: '' }
+            }],
+            default: []
+        },
+        questionType: { type: String, enum: ['fill', 'targeted', 'qcm'], default: 'fill' },
+        content: { type: mongoose.Schema.Types.Mixed, default: {} },
+        isCustom: { type: Boolean, default: true },
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now }
+    }),
+
     Expose: getModel('Expose', {
         title: { type: String, default: "EXPOSÉ" },
         subject: { type: String, default: "GÉNÉRAL" },

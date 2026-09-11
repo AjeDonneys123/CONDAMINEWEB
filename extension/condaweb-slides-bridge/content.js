@@ -1306,16 +1306,18 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         }
 
         const header = document.createElement('div');
-        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;';
+        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex: 0 0 auto;';
 
         const title = document.createElement('h2');
-        title.style.cssText = 'margin: 0; font-size: 18px; font-weight: 900; color: #38bdf8;';
+        title.style.cssText = 'margin: 0; font-size: clamp(18px, 1.8vw, 26px); font-weight: 900; color: #38bdf8; letter-spacing: .02em;';
         title.textContent = '🗺️ PLAN DE CLASSE — VUE ÉLÈVES (MIROIR)';
         header.appendChild(title);
 
         const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Fermer (✕)';
-        closeBtn.style.cssText = 'background: #1e293b; border: 1px solid #475569; color: #fff; border-radius: 8px; padding: 4px 12px; cursor: pointer; font-weight: 800;';
+        closeBtn.textContent = '✕ FERMER LE PLAN';
+        closeBtn.style.cssText = 'background: #dc2626; border: 2px solid #ef4444; color: #fff; border-radius: 12px; padding: 8px 20px; cursor: pointer; font-size: 15px; font-weight: 900; box-shadow: 0 4px 14px rgba(220,38,38,.4); transition: transform .15s, background .15s;';
+        closeBtn.onmouseover = () => { closeBtn.style.background = '#b91c1c'; closeBtn.style.transform = 'scale(1.03)'; };
+        closeBtn.onmouseout = () => { closeBtn.style.background = '#dc2626'; closeBtn.style.transform = 'none'; };
         closeBtn.onclick = () => {
             modal.remove();
             callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/bridge-plan`, {
@@ -1327,7 +1329,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         modal.appendChild(header);
 
         const boardBar = document.createElement('div');
-        boardBar.style.cssText = 'text-align: center; padding: 12px; background: rgba(0,0,0,0.4); border-radius: 10px; margin-bottom: 20px; font-weight: 800; color: #94a3b8;';
+        boardBar.style.cssText = 'text-align: center; padding: 8px 14px; background: #0284c7; border-radius: 10px; margin-bottom: 12px; font-weight: 900; font-size: clamp(12px, 1.1vw, 16px); letter-spacing: .06em; color: #ffffff; text-transform: uppercase; box-shadow: 0 2px 10px rgba(2, 132, 199, 0.4); flex: 0 0 auto;';
         boardBar.textContent = '⬛ TABLEAU ET BUREAU DU PROFESSEUR (DEVANT) ⬛';
         modal.appendChild(boardBar);
 
@@ -1336,7 +1338,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         const highestSeatRow = planStudents.reduce((max, student) => Math.max(max, Number(student?.seatY) + 1 || 0), 0);
         const rows = Math.max(1, Number(currentClassroomState?.layout?.rows || 5), highestSeatRow);
         const grid = document.createElement('div');
-        grid.style.cssText = `display: grid; grid-template-columns: repeat(${cols}, minmax(0, 1fr)); grid-template-rows: repeat(${rows}, minmax(70px, 1fr)); gap: 10px;`;
+        grid.style.cssText = `flex: 1; height: 100%; min-height: 0; display: grid; grid-template-columns: repeat(${cols}, minmax(0, 1fr)); grid-template-rows: repeat(${rows}, minmax(0, 1fr)); gap: 10px;`;
         modal.appendChild(grid);
 
         if (activeClassId) {
@@ -1349,7 +1351,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 for (let seatX = 0; seatX < cols; seatX += 1) {
                     const emptySeat = document.createElement('div');
                     emptySeat.setAttribute('aria-label', `Place vide colonne ${seatX + 1}, rangée ${seatY + 1}`);
-                    emptySeat.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 10px; background: #fff; border: 2px solid #cbd5e1; border-radius: 10px; min-width: 0; box-sizing: border-box;`;
+                    emptySeat.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; background: rgba(255, 255, 255, 0.08); border: 2px dashed rgba(255, 255, 255, 0.22); border-radius: 14px; min-width: 0; height: 100%; box-sizing: border-box;`;
                     grid.appendChild(emptySeat);
                 }
             }
@@ -1358,15 +1360,15 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 const card = document.createElement('div');
                 const seatX = Math.max(0, Math.min(cols - 1, Number(s.seatX)));
                 const seatY = Math.max(0, Math.min(rows - 1, Number(s.seatY)));
-                card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 10px; background: #fff; border: 2px solid #cbd5e1; border-radius: 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; min-width: 0;`;
+                card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 6px 10px; background: #ffffff; border: 3px solid #94a3b8; border-radius: 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);`;
                             
                 const sName = document.createElement('strong');
-                sName.style.cssText = 'display: block; font-size: clamp(11px, 1.35vw, 20px); line-height: 1.1; color: #0f172a; overflow: hidden; text-overflow: ellipsis;';
+                sName.style.cssText = 'display: block; font-size: clamp(16px, 2.2vw, 32px); font-weight: 950; line-height: 1.15; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;';
                 sName.textContent = String(s.nickname || s.firstName || '').trim();
                 card.appendChild(sName);
 
                 const initial = document.createElement('span');
-                initial.style.cssText = 'font-size: clamp(9px, .8vw, 13px); color: #64748b; font-weight: 800;';
+                initial.style.cssText = 'display: block; font-size: clamp(12px, 1.2vw, 18px); color: #64748b; font-weight: 900; margin-top: 2px;';
                 initial.textContent = `${String(s.lastName || '').slice(0, 1)}.`;
                 card.appendChild(initial);
 

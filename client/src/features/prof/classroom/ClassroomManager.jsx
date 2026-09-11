@@ -72,9 +72,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                     setClassPlanProjected(data?.classPlanVisible === true);
                     const serverNotif = data?.classNotification || null;
                     setActiveNotif(serverNotif);
-                    if (!serverNotif && !notifModalOpen) {
-                        setNotifText('');
-                    }
                 }
             } catch (_) {}
         };

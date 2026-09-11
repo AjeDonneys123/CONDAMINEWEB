@@ -587,23 +587,28 @@
 
 /* 5. Plan de classe en superposition */
 .conda-class-plan-modal {
-    position: absolute;
+    position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(90vw, 1200px);
-    max-height: 85vh;
-    background: rgba(15, 23, 42, 0.96);
-    backdrop-filter: blur(16px);
-    border: 2px solid rgba(56, 189, 248, 0.4);
-    border-radius: 20px;
-    padding: 20px;
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9);
+    width: 86vw;
+    height: 86vh;
+    max-width: none;
+    max-height: none;
+    background: rgba(15, 23, 42, 0.98);
+    backdrop-filter: blur(20px);
+    border: 3px solid rgba(56, 189, 248, 0.55);
+    border-radius: 24px;
+    padding: 16px 22px 20px;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.95), 0 0 50px rgba(56, 189, 248, 0.25);
     pointer-events: auto;
     color: #ffffff;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
     animation: conda-modal-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    z-index: 10;
+    z-index: 1000;
 }
 
 /* Animations */
