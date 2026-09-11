@@ -8,24 +8,42 @@ import { installDevCompletionHorn } from './devCompletionHorn';
 installDevCompletionHorn();
 
 const versionBadge = document.createElement('div');
-const appCommit = import.meta.env.VITE_APP_COMMIT || 'inconnue';
-versionBadge.textContent = `VERSION ${appCommit}`;
-versionBadge.setAttribute('aria-label', `Version déployée ${appCommit}`);
+const initialCommitName = import.meta.env.VITE_APP_COMMIT_NAME || import.meta.env.VITE_APP_COMMIT || 'local';
+versionBadge.textContent = initialCommitName;
+versionBadge.setAttribute('aria-label', `Dernier commit : ${initialCommitName}`);
+versionBadge.setAttribute('title', `Dernier commit : ${initialCommitName}`);
 Object.assign(versionBadge.style, {
   position: 'fixed',
   top: '0',
   left: '50%',
   transform: 'translateX(-50%)',
   zIndex: '2147483647',
-  padding: '3px 9px',
+  padding: '3px 10px',
   borderRadius: '0 0 8px 8px',
   background: '#020617',
   color: '#facc15',
   font: '800 10px/1.2 monospace',
   letterSpacing: '.06em',
-  pointerEvents: 'none'
+  pointerEvents: 'none',
+  maxWidth: '80vw',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)'
 });
 document.body.appendChild(versionBadge);
+
+// Récupération dynamique du nom du dernier commit
+fetch('/api/system/latest-commit')
+  .then((res) => (res.ok ? res.json() : null))
+  .then((data) => {
+    if (data?.commitName) {
+      versionBadge.textContent = data.commitName;
+      versionBadge.setAttribute('aria-label', `Dernier commit : ${data.commitName}`);
+      versionBadge.setAttribute('title', `Dernier commit : ${data.commitName}${data.commitSha ? ` (${data.commitSha})` : ''}`);
+    }
+  })
+  .catch(() => {});
 
 // 🛡️ AIRBAG DE SÉCURITÉ (Error Boundary)
 class SafetyNet extends React.Component {

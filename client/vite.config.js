@@ -7,15 +7,38 @@ import { execSync } from 'node:child_process'
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url))
 const gamesRoot = path.resolve(clientDir, '../../CONDAMINE-GAMES')
-const appCommit = String(process.env.VERCEL_GIT_COMMIT_SHA || (() => {
-  try { return execSync('git rev-parse --short HEAD', { cwd: path.resolve(clientDir, '..') }).toString().trim() }
-  catch { return 'local' }
-})()).slice(0, 8)
+const getCommitInfo = () => {
+  const repoDir = path.resolve(clientDir, '..')
+  let sha = ''
+  let name = ''
+  if (process.env.VERCEL_GIT_COMMIT_SHA) {
+    sha = String(process.env.VERCEL_GIT_COMMIT_SHA).slice(0, 8)
+  }
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE) {
+    name = String(process.env.VERCEL_GIT_COMMIT_MESSAGE).trim().split('\n')[0]
+  }
+  if (!sha) {
+    try { sha = execSync('git rev-parse --short HEAD', { cwd: repoDir }).toString().trim().slice(0, 8) }
+    catch { sha = 'local' }
+  }
+  if (!name) {
+    try { name = execSync('git log -1 --pretty=%s', { cwd: repoDir }).toString().trim() }
+    catch { name = sha || 'local' }
+  }
+  return { sha, name }
+}
+const { sha: appCommit, name: appCommitName } = getCommitInfo()
 const localGameFiles = () => ({
   name: 'condamine-local-games',
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
       const pathname = decodeURIComponent(String(req.url || '').split('?')[0])
+      if (pathname === '/api/system/latest-commit') {
+        res.setHeader('Content-Type', 'application/json')
+        const current = getCommitInfo()
+        res.end(JSON.stringify({ commitName: current.name, commitSha: current.sha }))
+        return
+      }
       let root = ''
       let relative = ''
       if (pathname.startsWith('/monster-tamer')) {
@@ -44,7 +67,8 @@ const localGameFiles = () => ({
 
 export default defineConfig({
   define: {
-    'import.meta.env.VITE_APP_COMMIT': JSON.stringify(appCommit)
+    'import.meta.env.VITE_APP_COMMIT': JSON.stringify(appCommit),
+    'import.meta.env.VITE_APP_COMMIT_NAME': JSON.stringify(appCommitName)
   },
   envDir: '..',
   plugins: [localGameFiles(), react()],

@@ -120,6 +120,40 @@ const snippetKeywords = (snippets = []) =>
         .filter((w) => w.length >= 4))]
         .slice(0, 12);
 
+const extractBlankItem = (raw = '') => {
+    const trimmed = String(raw || '').trim();
+    // Priorité au séparateur underscore '_' : motOuExpressionAttendu_PlaceHolderIndice
+    const lastUnderscore = trimmed.lastIndexOf('_');
+    if (lastUnderscore > 0 && lastUnderscore < trimmed.length - 1) {
+        const answer = trimmed.slice(0, lastUnderscore).trim();
+        const placeholder = trimmed.slice(lastUnderscore + 1).trim();
+        if (answer && placeholder) {
+            return {
+                answer,
+                placeholder
+            };
+        }
+    }
+    // Rétrocompatibilité avec le tiret '-' (hors dates et mots composés)
+    const lastDash = trimmed.lastIndexOf('-');
+    if (lastDash > 0 && lastDash < trimmed.length - 1) {
+        const potentialAnswer = trimmed.slice(0, lastDash).trim();
+        const potentialPlaceholder = trimmed.slice(lastDash + 1).trim();
+        const isDateRange = /^\d+$/.test(potentialAnswer) && /^\d+$/.test(potentialPlaceholder);
+        const isCompound = /^(?:états-unis|nord-pas-de-calais|saint-[a-zà-ÿ]+|garde-à-vous)$/i.test(trimmed);
+        if (!isDateRange && !isCompound && potentialPlaceholder) {
+            return {
+                answer: potentialAnswer,
+                placeholder: potentialPlaceholder
+            };
+        }
+    }
+    return {
+        answer: trimmed,
+        placeholder: ''
+    };
+};
+
 const parseFillBlankText = (value = '') => {
     const source = String(value || '');
     const parts = [];
@@ -132,7 +166,7 @@ const parseFillBlankText = (value = '') => {
             // Compatibilité avec les anciennes fiches déjà sauvegardées : les
             // signes de structure ne font jamais partie de la réponse attendue.
             .replace(/^\s*(?:\d{1,2}\s*[-.)]|[a-z]\)|[-–—•▪◦])\s*/i, '')
-            // A blank asks for words only.  Punctuation stays in the sentence
+            // A blank asks for words only. Punctuation stays in the sentence
             // and must never become an expected student answer.
             .replace(/^[\s,.;:!?…()\[\]{}«»"'’\-–—•▪◦]+|[\s,.;:!?…()\[\]{}«»"'’\-–—•▪◦]+$/g, '')
             .trim();
@@ -159,19 +193,30 @@ const parseFillBlankText = (value = '') => {
         }
         parts.push(source.slice(parts.length === 0 ? 0 : cursor, start));
         if (flexibleItems.length > 1) {
-            blanks.push({ type: 'list_flexible', items: flexibleItems, raw: flexibleItems.join('+') });
+            const parsedItems = flexibleItems.map(item => extractBlankItem(item));
+            const items = parsedItems.map(p => p.answer);
+            const placeholder = parsedItems.map(p => p.placeholder).filter(Boolean).join(' / ');
+            blanks.push({ type: 'list_flexible', items, placeholder, raw: items.join('+') });
             cursor = sequenceEnd;
         } else if (first.content.includes('+')) {
-            const items = first.content.split('+').map((item) => item.trim()).filter(Boolean);
-            blanks.push({ type: 'list_strict', items, raw: first.content });
+            const parsedItems = first.content.split('+').map(item => extractBlankItem(item));
+            const items = parsedItems.map(p => p.answer);
+            const placeholder = parsedItems.map(p => p.placeholder).filter(Boolean).join(' / ');
+            blanks.push({ type: 'list_strict', items, placeholder, raw: items.join('+') });
             cursor = first.end;
         } else {
-            blanks.push({ type: 'exact', items: [first.content], raw: first.content });
+            const { answer, placeholder } = extractBlankItem(first.content);
+            blanks.push({ type: 'exact', items: [answer], placeholder, raw: answer });
             cursor = first.end;
         }
     }
     parts.push(source.slice(cursor));
-    return { parts, blanks, answers: blanks.map((blank) => blank.raw) };
+    return {
+        parts,
+        blanks,
+        answers: blanks.map((blank) => blank.raw),
+        placeholders: blanks.map((blank) => blank.placeholder || '')
+    };
 };
 
 const isGoogleSlidesUrl = (url = '') => /docs\.google\.com\/presentation\/d\//i.test(String(url || '').trim());
@@ -3208,6 +3253,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                         {blankIndex < fillBlank.answers.length && (() => {
                                                                 const blankIsCorrect = blankResults[blankIndex] === true;
                                                                 const showExpectedForBlank = showFillCorrection && !blankIsCorrect;
+                                                                const placeholder = fillBlank.placeholders?.[blankIndex] || fillBlank.blanks?.[blankIndex]?.placeholder || '';
                                                                 return (
                                                                     <span className={`learning-fill-blank-stack ${showExpectedForBlank ? 'has-correction' : ''}`}>
                                                                         <span className="learning-fill-answer-line">
@@ -3215,7 +3261,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                                                                 className={`learning-fill-input ${showExpectedForBlank ? 'is-incorrect-answer' : ''} ${showFillCorrection && blankIsCorrect ? 'is-correct-answer' : ''}`}
                                                                                 value={blankValues[blankIndex] || ''}
                                                                                 disabled={!canEdit}
-                                                                                aria-label={`Trou ${blankIndex + 1}`}
+                                                                                placeholder={placeholder}
+                                                                                aria-label={`Trou ${blankIndex + 1}${placeholder ? ` (${placeholder})` : ''}`}
                                                                                 onChange={(event) => updateBlankAnswer(item.id, blankIndex, event.target.value)}
                                                                             />
                                                                             {canEdit && (

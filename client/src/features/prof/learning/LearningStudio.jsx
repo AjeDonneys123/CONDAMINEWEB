@@ -48,6 +48,40 @@ const renderFillBlankDetectionPreview = (value = '', placeholder = '') => {
     return { nodes, detected };
 };
 
+const extractBlankItem = (raw = '') => {
+    const trimmed = String(raw || '').trim();
+    // Priorité au séparateur underscore '_' : motOuExpressionAttendu_PlaceHolderIndice
+    const lastUnderscore = trimmed.lastIndexOf('_');
+    if (lastUnderscore > 0 && lastUnderscore < trimmed.length - 1) {
+        const answer = trimmed.slice(0, lastUnderscore).trim();
+        const placeholder = trimmed.slice(lastUnderscore + 1).trim();
+        if (answer && placeholder) {
+            return {
+                answer,
+                placeholder
+            };
+        }
+    }
+    // Rétrocompatibilité avec le tiret '-' (hors dates et mots composés)
+    const lastDash = trimmed.lastIndexOf('-');
+    if (lastDash > 0 && lastDash < trimmed.length - 1) {
+        const potentialAnswer = trimmed.slice(0, lastDash).trim();
+        const potentialPlaceholder = trimmed.slice(lastDash + 1).trim();
+        const isDateRange = /^\d+$/.test(potentialAnswer) && /^\d+$/.test(potentialPlaceholder);
+        const isCompound = /^(?:états-unis|nord-pas-de-calais|saint-[a-zà-ÿ]+|garde-à-vous)$/i.test(trimmed);
+        if (!isDateRange && !isCompound && potentialPlaceholder) {
+            return {
+                answer: potentialAnswer,
+                placeholder: potentialPlaceholder
+            };
+        }
+    }
+    return {
+        answer: trimmed,
+        placeholder: ''
+    };
+};
+
 // Aperçu professeur : même syntaxe que le texte à trous élève, sans devoir
 // sauvegarder ou ouvrir l'apprentissage dans un second onglet.
 const parseFillBlankForTest = (value = '') => {
@@ -75,14 +109,21 @@ const parseFillBlankForTest = (value = '') => {
         }
         parts.push(source.slice(cursor, start));
         if (items.length > 1) {
-            blanks.push({ type: 'list_flexible', items, raw: items.join('+') });
+            const parsedItems = items.map((item) => extractBlankItem(item));
+            const cleanItems = parsedItems.map((p) => p.answer);
+            const placeholder = parsedItems.map((p) => p.placeholder).filter(Boolean).join(' / ');
+            blanks.push({ type: 'list_flexible', items: cleanItems, placeholder, raw: cleanItems.join('+') });
             cursor = sequenceEnd;
         } else if (first.content.includes('+')) {
             const strictItems = first.content.split('+').map((item) => item.trim()).filter(Boolean);
-            blanks.push({ type: 'list_strict', items: strictItems, raw: first.content });
+            const parsedItems = strictItems.map((item) => extractBlankItem(item));
+            const cleanItems = parsedItems.map((p) => p.answer);
+            const placeholder = parsedItems.map((p) => p.placeholder).filter(Boolean).join(' / ');
+            blanks.push({ type: 'list_strict', items: cleanItems, placeholder, raw: cleanItems.join('+') });
             cursor = first.end;
         } else {
-            blanks.push({ type: 'exact', items: [first.content], raw: first.content });
+            const { answer, placeholder } = extractBlankItem(first.content);
+            blanks.push({ type: 'exact', items: [answer], placeholder, raw: answer });
             cursor = first.end;
         }
     }
@@ -128,9 +169,10 @@ const FillBlankStudentTester = ({ question = '', onClose }) => {
                     return <React.Fragment key={`test_blank_${index}`}><span>{part}</span>{index < parsed.blanks.length && <input
                         className={`mx-1 inline-block min-w-[120px] max-w-full rounded-md border-2 px-2 py-1 text-center outline-none ${checked ? (right ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-red-500 bg-red-50 text-red-700') : 'border-blue-300 bg-white text-slate-800'}`}
                         value={showExpected ? parsed.blanks[index].raw : (answers[index] || '')}
+                        placeholder={parsed.blanks[index]?.placeholder || ''}
                         disabled={checked}
                         onChange={(event) => setAnswers((previous) => previous.map((answer, answerIndex) => answerIndex === index ? event.target.value : answer))}
-                        aria-label={`Trou ${index + 1}`}
+                        aria-label={`Trou ${index + 1}${parsed.blanks[index]?.placeholder ? ` (${parsed.blanks[index].placeholder})` : ''}`}
                     />}</React.Fragment>;
                 })}
             </div>

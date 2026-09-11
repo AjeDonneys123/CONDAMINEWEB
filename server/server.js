@@ -84,6 +84,25 @@ app.get(['/privacy-gpt', '/privacy'], (_req, res) => {
 </body>
 </html>`);
 });
+app.get('/api/system/latest-commit', (req, res) => {
+    try {
+        const repoDir = path.resolve(__dirname, '..');
+        let sha = process.env.VERCEL_GIT_COMMIT_SHA ? String(process.env.VERCEL_GIT_COMMIT_SHA).slice(0, 8) : '';
+        let name = process.env.VERCEL_GIT_COMMIT_MESSAGE ? String(process.env.VERCEL_GIT_COMMIT_MESSAGE).trim().split('\n')[0] : '';
+        if (!sha) {
+            const { execSync } = require('child_process');
+            sha = execSync('git rev-parse --short HEAD', { cwd: repoDir }).toString().trim().slice(0, 8);
+        }
+        if (!name) {
+            const { execSync } = require('child_process');
+            name = execSync('git log -1 --pretty=%s', { cwd: repoDir }).toString().trim();
+        }
+        res.json({ commitName: name || sha || 'local', commitSha: sha });
+    } catch (_) {
+        res.json({ commitName: '', commitSha: '' });
+    }
+});
+
 app.get('/api/system/apply-status', async (req, res) => {
     try {
         const ai = await getAiGuardStatus({});

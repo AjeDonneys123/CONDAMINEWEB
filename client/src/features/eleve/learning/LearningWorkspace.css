@@ -479,6 +479,14 @@
     text-align: center;
 }
 
+.learning-fill-input::placeholder {
+    color: #94a3b8;
+    font-size: 0.86em;
+    font-style: italic;
+    font-weight: 500;
+    opacity: 0.85;
+}
+
 .learning-fill-input:disabled {
     border-bottom-color: #94a3b8;
     background: rgba(255, 255, 255, 0.72);
