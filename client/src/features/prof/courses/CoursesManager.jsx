@@ -67,6 +67,60 @@ const getEditUrl = (value = '') => {
         : '';
 };
 
+const COURSE_CACHE_KEY_PREFIX = 'conda-courses-cache-v1:';
+const CURRENT_COURSE_ID_KEY_PREFIX = 'conda-current-course-id:';
+
+const readCachedCourses = (classId = '') => {
+    if (!classId) return [];
+    try {
+        const raw = window.localStorage.getItem(`${COURSE_CACHE_KEY_PREFIX}${classId}`);
+        const parsed = JSON.parse(raw || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+};
+
+const writeCachedCourses = (classId = '', list = []) => {
+    if (!classId || !Array.isArray(list)) return;
+    try {
+        window.localStorage.setItem(`${COURSE_CACHE_KEY_PREFIX}${classId}`, JSON.stringify(list));
+    } catch (_) {}
+};
+
+const readLastCourseId = (classId = '') => {
+    if (!classId) return '';
+    try {
+        return window.localStorage.getItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${classId}`) || '';
+    } catch (_) {
+        return '';
+    }
+};
+
+const writeLastCourseId = (classId = '', id = '') => {
+    if (!classId || !id) return;
+    try {
+        window.localStorage.setItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${classId}`, String(id));
+    } catch (_) {}
+};
+
+const getDirectGoogleSlidesUrl = (course, slideObjectId = '', globalClassId = '') => {
+    if (!course?.slidesUrl) return '';
+    const base = getEditUrl(course.slidesUrl);
+    if (!base) return course.slidesUrl;
+    try {
+        const url = new URL(base);
+        if (course._id) url.searchParams.set('condaCourseId', String(course._id));
+        const classId = globalClassId || course.targetClassroomId;
+        if (classId) url.searchParams.set('condaClassId', String(classId));
+        if (slideObjectId) url.hash = `slide=id.${encodeURIComponent(slideObjectId)}`;
+        return url.toString();
+    } catch (_) {
+        return base;
+    }
+};
+
+
 const getYoutubeVideoId = (value = '') => {
     const text = String(value || '').trim();
     try {
@@ -692,9 +746,9 @@ const mergeCourseForCurrentView = (currentCourse, serverCourse) => {
 };
 
 export default function CoursesManager({ globalClass, globalClassId = '', globalLevel = '', user = {} }) {
-    const [courses, setCourses] = useState([]);
+    const [courses, setCourses] = useState(() => readCachedCourses(globalClassId));
     const [courseSections, setCourseSections] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => readCachedCourses(globalClassId).length === 0);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [editorOpen, setEditorOpen] = useState(false);
@@ -841,6 +895,20 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const activeCourses = useMemo(() => courses
         .filter((course) => course.isEnabled !== false && !course.isSourcePresentation)
         .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'fr', { numeric: true, sensitivity: 'base' })), [courses]);
+
+    const currentChapterCourse = useMemo(() => {
+        if (playingCourse && playingCourse.slidesUrl) return playingCourse;
+        const lastId = readLastCourseId(globalClassId);
+        if (lastId) {
+            const match = courses.find((c) => String(c._id) === String(lastId) && c.slidesUrl);
+            if (match) return match;
+        }
+        if (activeCourses.length > 0) {
+            const match = activeCourses.find((c) => c.slidesUrl);
+            if (match) return match;
+        }
+        return courses.find((c) => !c.isSourcePresentation && c.slidesUrl) || null;
+    }, [playingCourse, globalClassId, courses, activeCourses]);
     const visibleDebtStudents = useMemo(() => {
         const now = Date.now();
         return debtStudents.filter((student) => Number(dismissedDebtIds[String(student.id)] || 0) <= now);
@@ -970,19 +1038,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         if (!globalClassId) return;
         const startedAt = performance.now();
         console.info('[CondaWeb chargement cours] début', { classId: globalClassId });
-        setLoading(true);
+        const hasCached = readCachedCourses(globalClassId).length > 0;
+        if (!hasCached) {
+            setLoading(true);
+        }
         setError('');
         try {
             // 1. Charger d'abord le cours actif pour l'afficher immédiatement à l'écran
-            let activeDisplayed = false;
             try {
                 const activeRes = await fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}&activeOnly=1`);
                 if (activeRes.ok) {
                     const activeData = await activeRes.json();
                     if (Array.isArray(activeData) && activeData.length > 0) {
-                        setCourses(activeData);
+                        setCourses((prev) => {
+                            if (!prev || prev.length === 0) return activeData;
+                            return prev;
+                        });
                         setLoading(false); // Le cours actif est immédiatement affiché à l'écran !
-                        activeDisplayed = true;
                     }
                 }
             } catch (errActive) {
@@ -999,6 +1071,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             if (!sectionsResponse.ok) throw new Error(sectionsData?.error || 'Chargement des sections impossible');
             const coursesList = Array.isArray(data) ? data : [];
             setCourses(coursesList);
+            writeCachedCourses(globalClassId, coursesList);
             coursesList.forEach((c) => {
                 if (c?.slidesUrl && Array.isArray(c.nativeSlides) && c.nativeSlides.length > 0) {
                     if (!slideManifestCacheRef.current.has(c.slidesUrl)) {
@@ -1029,6 +1102,14 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setEditorOpen(false);
         setEditingId('');
         setForm(EMPTY_FORM);
+        const cached = readCachedCourses(globalClassId);
+        if (cached.length > 0) {
+            setCourses(cached);
+            setLoading(false);
+        } else {
+            setCourses([]);
+            setLoading(true);
+        }
         loadCourses();
     }, [globalClassId]);
 
@@ -3191,6 +3272,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const openPresentation = (course) => {
+        if (!course) return;
+        if (course?._id) writeLastCourseId(globalClassId, course._id);
         if (Math.max(0, Number(course?.publishedUntilSlide || 0)) === 0) {
             updatePublishedUntilSlide(course, 1);
         }
@@ -3258,16 +3341,15 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     };
 
     const openModification = (course, requestedSlideIndex = projectedSlideIndex) => {
-        const editorWindow = window.open('about:blank', '_blank');
-        openGoogleSlidesExternal(course, requestedSlideIndex, editorWindow);
+        openGoogleSlidesExternal(course, requestedSlideIndex);
     };
 
     const handleOpenGoogleSlidesExternalClick = (course, requestedSlideIndex = projectedSlideIndex) => {
-        const editorWindow = window.open('about:blank', '_blank');
-        openGoogleSlidesExternal(course, requestedSlideIndex, editorWindow);
+        openGoogleSlidesExternal(course, requestedSlideIndex);
     };
 
     const openGoogleSlidesExternal = async (course, requestedSlideIndex = projectedSlideIndex, preOpenedWindow = null) => {
+        if (!course) return;
         setError('');
         const total = Math.max(1, slideManifest.length || 1);
         const targetSlideIndex = Math.min(
@@ -3275,26 +3357,30 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             Math.max(0, Number(requestedSlideIndex) || 0)
         );
         const editSlideObjectId = String(slideManifest[targetSlideIndex]?.objectId || projectedSlideObjectId || '').trim();
-        const editorWindow = preOpenedWindow || window.open('about:blank', '_blank');
+
+        // 1. Calcul immédiat de l'URL Google Slides (0ms de latence, accès direct sans attendre)
+        const directTargetUrl = getDirectGoogleSlidesUrl(course, editSlideObjectId, globalClassId);
+
+        // 2. Ouvrir immédiatement l'onglet ou rediriger preOpenedWindow
+        let editorWindow = preOpenedWindow;
+        if (directTargetUrl) {
+            if (editorWindow) {
+                try { editorWindow.location.replace(directTargetUrl); } catch (_) { editorWindow.location.href = directTargetUrl; }
+            } else {
+                editorWindow = window.open(directTargetUrl, '_blank', 'noopener,noreferrer');
+            }
+        }
+
+        if (course?._id) writeLastCourseId(globalClassId, course._id);
+
+        // 3. Traiter l'autorisation et la synchro en arrière-plan sans bloquer l'ouverture
         try {
-            const response = await fetch(`/api/courses/${course._id}/editor-access`, {
+            fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teacherEmail: user?.email || user?.mail || '' })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data?.error || 'Accès en modification impossible');
-            const editBaseUrl = getEditUrl(data.editUrl || course.slidesUrl);
-            // The bridge reads these two values from the Google Slides URL.
-            // They make the tab unambiguously belong to the course launched
-            // from this exact CondaWeb class (5A is never confused with 5D).
-            const targetUrlObject = new URL(editBaseUrl);
-            targetUrlObject.searchParams.set('condaCourseId', String(course._id));
-            targetUrlObject.searchParams.set('condaClassId', String(globalClassId || course.targetClassroomId || ''));
-            if (editSlideObjectId) targetUrlObject.hash = `slide=id.${encodeURIComponent(editSlideObjectId)}`;
-            const targetUrl = targetUrlObject.toString();
-            if (editorWindow) editorWindow.location.replace(targetUrl);
-            else window.open(targetUrl, '_blank', 'noopener,noreferrer');
+            }).catch(() => {});
+
             if (globalClassId) {
                 fetch(`/api/courses/${course._id}/presentation-remote/sync`, {
                     method: 'POST',
@@ -3309,11 +3395,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             }
             setLastEditSlideNumber(targetSlideIndex + 1);
             setEditSlideNumberDraft('');
-        } catch (accessError) {
-            try { editorWindow?.close(); } catch (_) { }
-            setError(accessError.message);
-            alert(`Impossible d’ouvrir cette présentation dans Google Slides : ${accessError.message}`);
-        }
+        } catch (_) {}
     };
 
     const togglePlayerMode = async () => {
@@ -3774,8 +3856,42 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 </form>
             )}
 
+            {currentChapterCourse && (
+                <section className="course-current-chapter-banner" aria-label="Chapitre courant">
+                    <div className="course-current-chapter-info">
+                        <span className="course-current-chapter-tag">
+                            <span className="course-pulse-dot" /> CHAPITRE COURANT
+                        </span>
+                        <h2 className="course-current-chapter-title">{currentChapterCourse.title}</h2>
+                    </div>
+                    <div className="course-current-chapter-actions">
+                        <a
+                            href={getDirectGoogleSlidesUrl(currentChapterCourse, '', globalClassId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="course-current-chapter-google-link"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                void handleOpenGoogleSlidesExternalClick(currentChapterCourse, 0);
+                            }}
+                            title="Accéder immédiatement aux Google Slides de ce chapitre dans un nouvel onglet"
+                        >
+                            ⚡ OUVRIR GOOGLE SLIDES ↗
+                        </a>
+                        <button
+                            type="button"
+                            className="course-current-chapter-present-btn"
+                            onClick={() => openPresentation(currentChapterCourse)}
+                            title="Lancer la présentation dans CondaWeb"
+                        >
+                            ▶ PRÉSENTER
+                        </button>
+                    </div>
+                </section>
+            )}
+
             <div className="courses-library">
-                {loading ? (
+                {loading && courses.length === 0 ? (
                     <div className="courses-empty">CHARGEMENT...</div>
                 ) : courses.length === 0 ? (
                     <div className="courses-empty">
@@ -3926,6 +4042,22 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
                             {/* Rendu direct de la présentation Google Slides */}
                             <div className="google-slide-stage-container">
+                                {playingCourse?.slidesUrl && (
+                                    <a
+                                        href={getDirectGoogleSlidesUrl(playingCourse, projectedSlideObjectId, globalClassId)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="conda-stage-instant-slides-btn"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            void openGoogleSlidesExternal(playingCourse, projectedSlideIndex);
+                                        }}
+                                        title="Ouvrir immédiatement les Google Slides de ce chapitre dans un nouvel onglet"
+                                    >
+                                        ⚡ GOOGLE SLIDES DIRECT ↗
+                                    </a>
+                                )}
+
                                 {projectedSlidesUrl ? (
                                     <iframe
                                         key={`google-slides-embed-${extractPresentationId(playingCourse?.slidesUrl)}-${presentationReloadNonce}`}
@@ -3939,6 +4071,21 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     <div className="conda-slides-loader-stage">
                                         <div className="conda-slides-spinner" />
                                         <span>Chargement de la présentation Google Slides…</span>
+                                        {playingCourse?.slidesUrl && (
+                                            <a
+                                                href={getDirectGoogleSlidesUrl(playingCourse, projectedSlideObjectId, globalClassId)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="conda-slides-loader-direct-btn"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    void openGoogleSlidesExternal(playingCourse, projectedSlideIndex);
+                                                }}
+                                            >
+                                                ⚡ OUVRIR DIRECTEMENT DANS GOOGLE SLIDES ↗
+                                            </a>
+                                        )}
+                                        <small className="conda-slides-loader-subhint">Accès direct immédiat sans attendre le chargement de l'aperçu</small>
                                     </div>
                                 )}
 

@@ -3356,3 +3356,188 @@
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     background: #1e293b;
 }
+
+/* --- ACCÈS IMMÉDIAT AU CHAPITRE COURANT --- */
+.course-current-chapter-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 18px 0 24px;
+    padding: 16px 22px;
+    border: 2px solid #818cf8;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #eef2ff 0%, #ffffff 100%);
+    box-shadow: 0 10px 28px rgba(99, 102, 241, 0.12);
+}
+
+.course-current-chapter-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.course-current-chapter-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 900;
+    color: #4f46e5;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.course-pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    animation: conda-pulse-green 1.8s infinite;
+}
+
+@keyframes conda-pulse-green {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    }
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
+}
+
+.course-current-chapter-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 900;
+    color: #1e1b4b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 580px;
+}
+
+.course-current-chapter-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.course-current-chapter-google-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border-radius: 12px;
+    background: #4f46e5;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.32);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    border: 0;
+}
+
+.course-current-chapter-google-link:hover {
+    background: #4338ca;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgba(79, 70, 229, 0.42);
+}
+
+.course-current-chapter-present-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 11px 16px;
+    border-radius: 12px;
+    border: 2px solid #c7d2fe;
+    background: #ffffff;
+    color: #4338ca;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.course-current-chapter-present-btn:hover {
+    background: #eef2ff;
+    border-color: #a5b4fc;
+}
+
+/* Bouton instantané sur la scène du player */
+.conda-stage-instant-slides-btn {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    z-index: 50;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.conda-stage-instant-slides-btn:hover {
+    background: #4f46e5;
+    border-color: #818cf8;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.5);
+}
+
+/* Bouton direct dans le loader de présentation */
+.conda-slides-loader-direct-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 12px 24px;
+    border-radius: 12px;
+    background: #4f46e5;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    box-shadow: 0 8px 24px rgba(79, 70, 229, 0.4);
+    transition: all 0.18s ease;
+    cursor: pointer;
+    border: 0;
+}
+
+.conda-slides-loader-direct-btn:hover {
+    background: #4338ca;
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 10px 28px rgba(79, 70, 229, 0.55);
+}
+
+.conda-slides-loader-subhint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 600;
+}
+
