@@ -760,16 +760,20 @@ router.post('/behavior', async (req, res) => {
                 score.boardWarning = !Boolean(score.boardWarning);
             } else {
                 const field = type === 'TOGGLE_SCORE_PUNISHMENT' ? 'punishment' : 'workIncomplete';
+                const penaltyDelta = type === 'TOGGLE_SCORE_INCOMPLETE' ? 6 : 9;
                 const hadPenaltyReason = Boolean(score.punishment || score.workIncomplete);
                 score[field] = !Boolean(score[field]);
                 const hasPenaltyReason = Boolean(score.punishment || score.workIncomplete);
+                const prevValue = Number(score.value || 0);
                 if (!hadPenaltyReason && hasPenaltyReason) {
-                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) - 9));
-                    score.penaltyAmount = 9;
+                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) - penaltyDelta));
+                    score.penaltyAmount = penaltyDelta;
                 } else if (hadPenaltyReason && !hasPenaltyReason) {
-                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) + Math.max(0, Number(score.penaltyAmount || 9))));
+                    const restoreAmount = Math.max(0, Number(score.penaltyAmount || penaltyDelta));
+                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) + restoreAmount));
                     score.penaltyAmount = 0;
                 }
+                appliedClassPointDelta = Number(score.value) - prevValue;
                 r.workIncomplete = scores.some((item) => Boolean(item?.workIncomplete));
                 if (type === 'TOGGLE_SCORE_PUNISHMENT') {
                     const hasAnyPunishment = scores.some((item) => Boolean(item?.punishment));
@@ -915,28 +919,54 @@ router.post('/behavior', async (req, res) => {
         }
         const liveAlertTypes = new Set(['ADJUST_SCORE', 'TOGGLE_SCORE_WARNING', 'TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'ADD_PUNISHMENT', 'ADD_FORCED_SIX']);
         if (scoreClassId && mongoose.Types.ObjectId.isValid(scoreClassId) && liveAlertTypes.has(type)) {
-            const displayName = String(s.nickname || s.firstName || '').trim();
+            const displayName = String(s.nickname || s.firstName || s.fullName || '').trim() || (s.lastName ? `${String(s.lastName).trim()}` : 'Élève');
             let message = '';
             let alertType = 'warning';
+            let alertScore = null;
             if (type === 'ADJUST_SCORE' && appliedClassPointDelta !== 0) {
                 const scores = Array.isArray(r.scores) ? r.scores : [];
                 const selected = scores.find((row) => String(row?.id || '') === String(r.selectedScoreId || '')) || scores[scores.length - 1];
                 const value = Number(selected?.value || 0);
-                const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1).replace('.', ',');
                 const absoluteDelta = Math.abs(appliedClassPointDelta);
                 const formattedDelta = Number.isInteger(absoluteDelta) ? String(absoluteDelta) : absoluteDelta.toFixed(1).replace('.', ',');
-                message = `${displayName} ${appliedClassPointDelta > 0 ? '+' : '−'}${formattedDelta} → ${formatted}`;
+                message = `${displayName} ${appliedClassPointDelta > 0 ? '+' : '−'}${formattedDelta}`;
                 alertType = appliedClassPointDelta > 0 ? 'positive' : 'negative';
+                alertScore = value;
             } else {
                 const scores = Array.isArray(r.scores) ? r.scores : [];
                 const selected = scores.find((row) => String(row?.id || '') === String(r.selectedScoreId || '')) || scores[scores.length - 1] || {};
+                const value = Number(selected?.value || 0);
                 // A status toast is an announcement of an addition only.  On
                 // removal, the persistent panel simply updates silently.
-                if (type === 'TOGGLE_SCORE_WARNING' && selected.boardWarning) message = `Avertissement au tableau : ${displayName}`;
-                else if (type === 'TOGGLE_SCORE_PUNISHMENT' && selected.punishment) message = `Punition : ${displayName}`;
-                else if (type === 'ADD_PUNISHMENT') message = `Punition : ${displayName}`;
-                else if (type === 'TOGGLE_SCORE_INCOMPLETE' && selected.workIncomplete) message = `Travail incomplet : ${displayName}`;
-                else if (type === 'ADD_FORCED_SIX') message = `Note forcée à 6 : ${displayName}`;
+                if (type === 'TOGGLE_SCORE_WARNING' && selected.boardWarning) {
+                    message = `Avertissement au tableau : ${displayName}`;
+                    alertType = 'warning';
+                    alertScore = null;
+                } else if (type === 'TOGGLE_SCORE_PUNISHMENT') {
+                    if (selected.punishment) {
+                        message = `Punition · ${displayName} −9`;
+                        alertType = 'negative';
+                        alertScore = value;
+                    }
+                } else if (type === 'ADD_PUNISHMENT') {
+                    message = `Punition : ${displayName}`;
+                    alertType = 'negative';
+                    alertScore = null;
+                } else if (type === 'TOGGLE_SCORE_INCOMPLETE') {
+                    if (selected.workIncomplete) {
+                        message = `Travail non fait · ${displayName} −6`;
+                        alertType = 'negative';
+                        alertScore = value;
+                    } else {
+                        message = `Travail validé · ${displayName} +6`;
+                        alertType = 'positive';
+                        alertScore = value;
+                    }
+                } else if (type === 'ADD_FORCED_SIX') {
+                    message = `Note forcée à 6 · ${displayName}`;
+                    alertType = 'negative';
+                    alertScore = value;
+                }
             }
             if (message) {
                 const now = new Date();
@@ -947,7 +977,7 @@ router.post('/behavior', async (req, res) => {
                     studentId: String(s._id),
                     studentName: displayName,
                     pointsDelta: appliedClassPointDelta,
-                    score: type === 'ADJUST_SCORE' ? Number((Array.isArray(r.scores) ? r.scores : []).find((row) => String(row?.id || '') === String(r.selectedScoreId || ''))?.value || 0) : null,
+                    score: alertScore !== null && Number.isFinite(alertScore) ? Number(alertScore) : null,
                     createdAt: now
                 };
                 await Classroom.updateOne(

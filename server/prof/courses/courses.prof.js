@@ -180,6 +180,9 @@ router.get('/', async (req, res) => {
             const total = Number(course.sourceSlideCount || 0);
             return { ...mapped, uncoveredSlideCount: total > 0 ? Math.max(0, total - covered.size) : 0 };
         });
+        if (req.query.activeOnly === '1' || req.query.activeOnly === 'true') {
+            return res.json(visible.filter((course) => course.isEnabled !== false && !course.isSourcePresentation));
+        }
         res.json(visible);
     } catch (error) {
         res.status(500).json({ error: error.message });

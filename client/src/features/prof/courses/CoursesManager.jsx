@@ -973,6 +973,23 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setLoading(true);
         setError('');
         try {
+            // 1. Charger d'abord le cours actif pour l'afficher immédiatement à l'écran
+            let activeDisplayed = false;
+            try {
+                const activeRes = await fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}&activeOnly=1`);
+                if (activeRes.ok) {
+                    const activeData = await activeRes.json();
+                    if (Array.isArray(activeData) && activeData.length > 0) {
+                        setCourses(activeData);
+                        setLoading(false); // Le cours actif est immédiatement affiché à l'écran !
+                        activeDisplayed = true;
+                    }
+                }
+            } catch (errActive) {
+                console.warn('[CondaWeb] pré-chargement cours actif:', errActive);
+            }
+
+            // 2. Pendant que le cours actif est à l'écran, charger le reste des cours et sections
             const [response, sectionsResponse] = await Promise.all([
                 fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}`),
                 fetch(`/api/courses/sections/list?classId=${encodeURIComponent(globalClassId)}`)
@@ -4048,9 +4065,9 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                                             left: 0
                                                         }}
                                                     >
-                                                        {Number.isFinite(Number(alert?.score)) ? (
+                                                        {alert?.score !== null && alert?.score !== undefined && Number.isFinite(Number(alert?.score)) ? (
                                                             <>
-                                                                <strong>{alert?.studentName || 'Élève'}</strong>
+                                                                <strong>{alert?.message || (alert?.studentName || 'Élève')}</strong>
                                                                 <span className="live-score-alert-score">
                                                                     {Number(alert?.score || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} / 20
                                                                 </span>

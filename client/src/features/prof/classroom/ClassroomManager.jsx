@@ -935,14 +935,16 @@ export default function ClassroomManager({ globalClassId, user }) {
                     if (String(grade.id) !== String(selected.id)) return grade;
                     if (type === 'TOGGLE_SCORE_WARNING') return { ...grade, boardWarning: !Boolean(grade.boardWarning) };
                     const field = type === 'TOGGLE_SCORE_PUNISHMENT' ? 'punishment' : 'workIncomplete';
+                    const penaltyDelta = type === 'TOGGLE_SCORE_INCOMPLETE' ? 6 : 9;
                     const hadPenaltyReason = Boolean(grade.punishment || grade.workIncomplete);
                     const next = { ...grade, [field]: !Boolean(grade[field]) };
                     const hasPenaltyReason = Boolean(next.punishment || next.workIncomplete);
                     if (!hadPenaltyReason && hasPenaltyReason) {
-                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) - 9));
-                        next.penaltyAmount = 9;
+                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) - penaltyDelta));
+                        next.penaltyAmount = penaltyDelta;
                     } else if (hadPenaltyReason && !hasPenaltyReason) {
-                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) + Number(next.penaltyAmount || 9)));
+                        const restoreAmount = Number(next.penaltyAmount || penaltyDelta);
+                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) + restoreAmount));
                         next.penaltyAmount = 0;
                     }
                     return next;
@@ -1492,7 +1494,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {[-0.5,0.5].map(delta => <button key={delta} className={`act-btn ${delta < 0 ? 'btn-cross' : 'btn-bonus'}`} {...scoreHoldProps(selectedStudent, delta)}>{delta > 0 ? '+' : ''}{delta}</button>)}
                             <div className="student-alert-actions">
                                 <button className={`act-btn grade-toggle ${selectedGradeHas(selectedStudent, 'workIncomplete') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_INCOMPLETE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
-                                    {selectedGradeHas(selectedStudent, 'workIncomplete') ? '✓ TRAVAIL TERMINÉ · +9' : '🟨 TRAVAIL INCOMPLET · −9'}
+                                    {selectedGradeHas(selectedStudent, 'workIncomplete') ? '✓ TRAVAIL TERMINÉ · +6' : '🟨 TRAVAIL INCOMPLET · −6'}
                                 </button>
                                 <button className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
                                     {selectedGradeHas(selectedStudent, 'punishment') ? '✓ PUNITION FAITE · +9' : '🟥 PUNITION · −9'}

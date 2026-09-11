@@ -74,6 +74,14 @@
             bridgeStopped = true;
             if (syncTimerId) window.clearInterval(syncTimerId);
             syncTimerId = null;
+            if (timerIntervalId) clearInterval(timerIntervalId);
+            timerIntervalId = null;
+            if (timerAlarmIntervalId) clearInterval(timerAlarmIntervalId);
+            timerAlarmIntervalId = null;
+            if (timerAudioCtx) {
+                try { timerAudioCtx.close(); } catch (_) {}
+                timerAudioCtx = null;
+            }
             closeBridgePort(new Error('Bridge remplacé'));
             try { domObserver?.disconnect(); } catch (_) {}
             document.removeEventListener('click', onBadgeCapture, true);
@@ -812,6 +820,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         // choisis explicitement et aux notifications de notes.
         renderClassPlanModal(root);
         renderGoogleControlTools(root);
+        renderTimerWidget(root);
     }
 
     function renderGoogleControlTools(root) {
@@ -846,6 +855,21 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             dock.appendChild(addButton);
         }
 
+        let timerButton = dock.querySelector('.conda-slide-timer-toggle');
+        if (!timerButton) {
+            timerButton = document.createElement('button');
+            timerButton.type = 'button';
+            timerButton.className = 'conda-slide-timer-toggle';
+            timerButton.title = 'Minuteur 7 minutes modulable';
+            timerButton.onclick = () => {
+                timerWidgetOpen = !timerWidgetOpen;
+                renderTimerWidget(root);
+                updateTimerDockButton(timerButton);
+            };
+            dock.appendChild(timerButton);
+        }
+        updateTimerDockButton(timerButton);
+
         const connectionBadge = root.querySelector('#conda-bridge-badge');
         if (isConnected && connectionBadge && connectionBadge.parentElement !== dock) {
             dock.appendChild(connectionBadge);
@@ -876,6 +900,370 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         } else if (menu) {
             menu.remove();
         }
+    }
+
+    // ==========================================
+    // MINUTEUR / TIMER D'EXTENSION (7 MIN DEFAUT)
+    // ==========================================
+    let timerTotalSeconds = 420; // 7 minutes par défaut
+    let timerRemainingSeconds = 420;
+    let timerIsRunning = false;
+    let timerIntervalId = null;
+    let timerWidgetOpen = false;
+    let timerAlarmPlaying = false;
+    let timerAlarmIntervalId = null;
+    let timerAudioCtx = null;
+
+    function getTimerAudioContext() {
+        try {
+            if (!timerAudioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    timerAudioCtx = new AudioContextClass();
+                }
+            }
+            if (timerAudioCtx && timerAudioCtx.state === 'suspended') {
+                timerAudioCtx.resume().catch(() => {});
+            }
+        } catch (_) {}
+        return timerAudioCtx;
+    }
+
+    function playTimerChime() {
+        try {
+            const ctx = getTimerAudioContext();
+            if (!ctx) return;
+            const now = ctx.currentTime;
+            // Carillon harmonieux et distinct (3 notes A5, D6, F6)
+            const notes = [
+                { freq: 880, start: 0, dur: 0.22 },
+                { freq: 1174.66, start: 0.14, dur: 0.28 },
+                { freq: 1396.91, start: 0.30, dur: 0.45 }
+            ];
+            notes.forEach(({ freq, start, dur }) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + start);
+                gain.gain.setValueAtTime(0.28, now + start);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + start);
+                osc.stop(now + start + dur);
+            });
+        } catch (e) {
+            console.warn('[CondaWeb Bridge Timer] alarme audio:', e);
+        }
+    }
+
+    function triggerTimerAlarm() {
+        timerAlarmPlaying = true;
+        let playCount = 0;
+        playTimerChime();
+        if (timerAlarmIntervalId) clearInterval(timerAlarmIntervalId);
+        timerAlarmIntervalId = setInterval(() => {
+            playCount += 1;
+            if (playCount >= 5) {
+                clearInterval(timerAlarmIntervalId);
+                timerAlarmIntervalId = null;
+            } else {
+                playTimerChime();
+            }
+        }, 1200);
+    }
+
+    function stopTimerAlarm() {
+        timerAlarmPlaying = false;
+        if (timerAlarmIntervalId) {
+            clearInterval(timerAlarmIntervalId);
+            timerAlarmIntervalId = null;
+        }
+    }
+
+    function formatTimerTime(sec) {
+        const s = Math.max(0, Math.floor(sec));
+        const mins = Math.floor(s / 60);
+        const secs = s % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function initTimerLoopIfNeeded() {
+        if (timerIntervalId) return;
+        timerIntervalId = setInterval(() => {
+            if (timerIsRunning) {
+                if (timerRemainingSeconds > 0) {
+                    timerRemainingSeconds -= 1;
+                    if (timerRemainingSeconds === 0) {
+                        timerIsRunning = false;
+                        timerWidgetOpen = true; // S'assurer que le widget est visible quand le temps expire
+                        triggerTimerAlarm();
+                    }
+                } else {
+                    timerIsRunning = false;
+                }
+            }
+            updateTimerDisplay();
+            updateTimerDockButton();
+        }, 1000);
+    }
+
+    function updateTimerDockButton(targetButton) {
+        const root = overlayRoot;
+        const btn = targetButton || root?.querySelector('.conda-slide-timer-toggle');
+        if (!btn) return;
+        if (timerAlarmPlaying) {
+            btn.textContent = '🔔 00:00 !';
+            btn.className = 'conda-slide-timer-toggle alarm-ringing';
+        } else if (timerIsRunning) {
+            btn.textContent = `⏱️ ${formatTimerTime(timerRemainingSeconds)}`;
+            btn.className = 'conda-slide-timer-toggle active';
+        } else if (timerWidgetOpen) {
+            btn.textContent = `⏱️ ${formatTimerTime(timerRemainingSeconds)}`;
+            btn.className = 'conda-slide-timer-toggle active';
+        } else {
+            const minLabel = Math.round(timerTotalSeconds / 60);
+            btn.textContent = `⏱️ TIMER (${minLabel}m)`;
+            btn.className = 'conda-slide-timer-toggle';
+        }
+    }
+
+    function updateTimerDisplay() {
+        const root = overlayRoot;
+        if (!root) return;
+        const widget = root.querySelector('.conda-slide-timer-widget');
+        if (!widget) {
+            if (timerWidgetOpen) renderTimerWidget(root);
+            return;
+        }
+        if (!timerWidgetOpen) {
+            widget.remove();
+            return;
+        }
+
+        const digitsEl = widget.querySelector('.conda-timer-digits');
+        if (digitsEl) {
+            digitsEl.textContent = formatTimerTime(timerRemainingSeconds);
+            if (timerAlarmPlaying) {
+                digitsEl.style.color = '#ef4444';
+            } else if (timerIsRunning) {
+                digitsEl.style.color = '#38bdf8';
+            } else {
+                digitsEl.style.color = '#f8fafc';
+            }
+        }
+
+        const statusEl = widget.querySelector('.conda-timer-status');
+        if (statusEl) {
+            if (timerAlarmPlaying) {
+                statusEl.textContent = '🔔 TEMPS ÉCOULÉ !';
+                statusEl.style.color = '#f87171';
+            } else if (timerIsRunning) {
+                statusEl.textContent = 'Décompte en cours…';
+                statusEl.style.color = '#38bdf8';
+            } else if (timerRemainingSeconds === 0) {
+                statusEl.textContent = 'Terminé';
+                statusEl.style.color = '#94a3b8';
+            } else {
+                statusEl.textContent = 'Prêt';
+                statusEl.style.color = '#94a3b8';
+            }
+        }
+
+        const startBtn = widget.querySelector('.conda-timer-start-btn');
+        if (startBtn) {
+            if (timerIsRunning) {
+                startBtn.textContent = '⏸ PAUSE';
+                startBtn.style.background = '#d97706';
+            } else {
+                startBtn.textContent = '▶ DÉMARRER';
+                startBtn.style.background = '#16a34a';
+            }
+        }
+
+        const stopAlarmBtn = widget.querySelector('.conda-timer-stop-alarm-btn');
+        if (stopAlarmBtn) {
+            stopAlarmBtn.style.display = timerAlarmPlaying ? 'block' : 'none';
+        }
+
+        if (timerAlarmPlaying) {
+            widget.classList.add('alarm-ringing');
+        } else {
+            widget.classList.remove('alarm-ringing');
+        }
+    }
+
+    function renderTimerWidget(root) {
+        initTimerLoopIfNeeded();
+        let widget = root.querySelector('.conda-slide-timer-widget');
+        if (!timerWidgetOpen) {
+            if (widget) widget.remove();
+            return;
+        }
+
+        if (!widget) {
+            widget = document.createElement('div');
+            widget.className = 'conda-slide-timer-widget';
+            root.appendChild(widget);
+        }
+
+        while (widget.firstChild) widget.removeChild(widget.firstChild);
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'conda-timer-header';
+
+        const title = document.createElement('span');
+        title.className = 'conda-timer-title';
+        title.textContent = '⏱️ MINUTEUR';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'conda-timer-close-btn';
+        closeBtn.textContent = '✕';
+        closeBtn.title = 'Fermer le panneau (le minuteur continue)';
+        closeBtn.onclick = () => {
+            timerWidgetOpen = false;
+            widget.remove();
+            updateTimerDockButton();
+        };
+
+        header.append(title, closeBtn);
+        widget.appendChild(header);
+
+        // Digital Display
+        const displayBox = document.createElement('div');
+        displayBox.className = 'conda-timer-display';
+
+        const digits = document.createElement('div');
+        digits.className = 'conda-timer-digits';
+        digits.textContent = formatTimerTime(timerRemainingSeconds);
+
+        const status = document.createElement('div');
+        status.className = 'conda-timer-status';
+        status.textContent = timerAlarmPlaying ? '🔔 TEMPS ÉCOULÉ !' : (timerIsRunning ? 'Décompte en cours…' : 'Prêt');
+
+        displayBox.append(digits, status);
+        widget.appendChild(displayBox);
+
+        // Modulation Buttons (-1m, -30s, +30s, +1m)
+        const modRow = document.createElement('div');
+        modRow.className = 'conda-timer-mod-row';
+
+        const modButtons = [
+            { label: '- 1m', delta: -60 },
+            { label: '- 30s', delta: -30 },
+            { label: '+ 30s', delta: +30 },
+            { label: '+ 1m', delta: +60 }
+        ];
+
+        modButtons.forEach(({ label, delta }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'conda-timer-mod-btn';
+            btn.textContent = label;
+            btn.onclick = () => {
+                stopTimerAlarm();
+                if (timerIsRunning) {
+                    timerRemainingSeconds = Math.max(0, timerRemainingSeconds + delta);
+                    if (timerRemainingSeconds === 0) {
+                        timerIsRunning = false;
+                        triggerTimerAlarm();
+                    }
+                } else {
+                    timerTotalSeconds = Math.max(10, timerTotalSeconds + delta);
+                    timerRemainingSeconds = timerTotalSeconds;
+                }
+                updateTimerDisplay();
+                updateTimerDockButton();
+            };
+            modRow.appendChild(btn);
+        });
+        widget.appendChild(modRow);
+
+        // Presets (3m, 5m, 7m, 10m, 15m)
+        const presetsRow = document.createElement('div');
+        presetsRow.className = 'conda-timer-presets-row';
+
+        const presets = [
+            { label: '3m', sec: 180 },
+            { label: '5m', sec: 300 },
+            { label: '7m', sec: 420 },
+            { label: '10m', sec: 600 },
+            { label: '15m', sec: 900 }
+        ];
+
+        presets.forEach(({ label, sec }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `conda-timer-preset-btn ${timerTotalSeconds === sec ? 'active' : ''}`;
+            btn.textContent = label;
+            btn.onclick = () => {
+                stopTimerAlarm();
+                timerTotalSeconds = sec;
+                timerRemainingSeconds = sec;
+                timerIsRunning = false;
+                renderTimerWidget(root);
+                updateTimerDockButton();
+            };
+            presetsRow.appendChild(btn);
+        });
+        widget.appendChild(presetsRow);
+
+        // Actions Row (Start/Pause, Reset)
+        const actionsRow = document.createElement('div');
+        actionsRow.className = 'conda-timer-actions-row';
+
+        const startBtn = document.createElement('button');
+        startBtn.type = 'button';
+        startBtn.className = 'conda-timer-start-btn';
+        startBtn.textContent = timerIsRunning ? '⏸ PAUSE' : '▶ DÉMARRER';
+        startBtn.style.background = timerIsRunning ? '#d97706' : '#16a34a';
+        startBtn.onclick = () => {
+            getTimerAudioContext();
+            stopTimerAlarm();
+            if (timerIsRunning) {
+                timerIsRunning = false;
+            } else {
+                if (timerRemainingSeconds <= 0) {
+                    timerRemainingSeconds = timerTotalSeconds || 420;
+                }
+                timerIsRunning = true;
+            }
+            updateTimerDisplay();
+            updateTimerDockButton();
+        };
+
+        const resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'conda-timer-reset-btn';
+        resetBtn.textContent = '↺ RÉINIT';
+        resetBtn.title = 'Réinitialiser le minuteur';
+        resetBtn.onclick = () => {
+            stopTimerAlarm();
+            timerIsRunning = false;
+            timerRemainingSeconds = timerTotalSeconds || 420;
+            updateTimerDisplay();
+            updateTimerDockButton();
+        };
+
+        actionsRow.append(startBtn, resetBtn);
+        widget.appendChild(actionsRow);
+
+        // Stop Alarm Button (only shown when alarm is ringing)
+        const stopAlarmBtn = document.createElement('button');
+        stopAlarmBtn.type = 'button';
+        stopAlarmBtn.className = 'conda-timer-stop-alarm-btn';
+        stopAlarmBtn.textContent = '🔕 ARRÊTER L\'ALARME';
+        stopAlarmBtn.style.display = timerAlarmPlaying ? 'block' : 'none';
+        stopAlarmBtn.onclick = () => {
+            stopTimerAlarm();
+            updateTimerDisplay();
+            updateTimerDockButton();
+        };
+        widget.appendChild(stopAlarmBtn);
+
+        updateTimerDisplay();
     }
 
     function restoreBadgePosition(badge) {
@@ -1019,11 +1407,11 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             const body = document.createElement('div');
             body.className = 'conda-alert-body';
 
-            const hasScoreChange = Number.isFinite(Number(alert?.score));
+            const hasScoreChange = alert?.score !== null && alert?.score !== undefined && Number.isFinite(Number(alert?.score));
             if (hasScoreChange) {
                 const nameSpan = document.createElement('strong');
                 nameSpan.className = 'conda-alert-name';
-                nameSpan.textContent = alert.studentName || 'Élève';
+                nameSpan.textContent = alert.message || alert.studentName || 'Élève';
                 body.appendChild(nameSpan);
 
                 const score = Number(alert.score);
