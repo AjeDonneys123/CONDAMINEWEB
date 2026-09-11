@@ -312,11 +312,24 @@ export default function ClassroomManager({ globalClassId, user }) {
             });
         } catch(e) {}
     };
-    const handleDragStart = (e, sId) => { setDraggingId(sId); e.dataTransfer.setData("text/plain", sId); e.dataTransfer.effectAllowed = "move"; };
+    const handleDragStart = (e, sId) => {
+        setDraggingId(sId);
+        e.dataTransfer.setData("text/plain", String(sId));
+        e.dataTransfer.effectAllowed = "move";
+    };
+    const handleDragOver = (e, x, y) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOverCell(`${x}-${y}`);
+    };
+    const handleDragEnd = () => {
+        setDraggingId(null);
+        setDragOverCell(null);
+    };
     const handleDrop = async (e, x, y) => {
         e.preventDefault();
         setDragOverCell(null);
-        const sId = draggingId;
+        const sId = draggingId || e.dataTransfer.getData("text/plain");
         if (!sId) return;
         const movedStudent = students.find(s => String(s._id) === String(sId));
         if (!movedStudent) return;
@@ -1098,7 +1111,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
@@ -1299,6 +1312,22 @@ export default function ClassroomManager({ globalClassId, user }) {
                         {Array.from({ length: gridSize.cols * effectivePlanRows }).map((_, index) => {
                             const x = index % gridSize.cols;
                             const y = Math.floor(index / gridSize.cols);
+                            const student = students.find((s) => s.seatX === x && s.seatY === y);
+                            if (student) {
+                                return (
+                                    <div
+                                        key={student._id || `${x}-${y}`}
+                                        className="cm-local-plan-seat"
+                                        style={{
+                                            gridColumn: gridSize.cols - x,
+                                            gridRow: effectivePlanRows - y
+                                        }}
+                                    >
+                                        <strong>{getDisplayName(student)}</strong>
+                                        <small>{student.lastName ? `${String(student.lastName).trim().charAt(0)}.` : ''}</small>
+                                    </div>
+                                );
+                            }
                             return (
                                 <div
                                     key={`empty-seat-${x}-${y}`}
@@ -1311,19 +1340,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 />
                             );
                         })}
-                        {students.filter((student) => Number.isInteger(student.seatX) && Number.isInteger(student.seatY)).map((student) => (
-                            <div
-                                key={student._id}
-                                className="cm-local-plan-seat"
-                                style={{
-                                    gridColumn: gridSize.cols - student.seatX,
-                                    gridRow: effectivePlanRows - student.seatY
-                                }}
-                            >
-                                <strong>{getDisplayName(student)}</strong>
-                                <small>{student.lastName ? `${String(student.lastName).trim().charAt(0)}.` : ''}</small>
-                            </div>
-                        ))}
                     </div>
                     <div className="cm-local-back">FOND DE LA CLASSE (DERRIÈRE)</div>
                 </div>

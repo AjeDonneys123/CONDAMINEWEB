@@ -748,30 +748,45 @@
     min-width: 0;
     min-height: 0;
     box-sizing: border-box;
-    border: 2px solid #cbd5e1;
-    border-radius: 12px;
-    background: #ffffff;
-    opacity: .98;
+    border: 2px dashed #94a3b8;
+    border-radius: 14px;
+    background: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 .cm-local-plan-seat {
     min-width: 0;
     min-height: 0;
-    display: grid;
-    place-content: center;
-    padding: 4px;
-    border: 2px solid #cbd5e1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(4px, 0.6vh, 10px);
+    border: 3px solid #cbd5e1;
     border-radius: 14px;
-    background: #fff;
-    color: #0f172a;
+    background: #ffffff !important;
+    color: #0f172a !important;
     text-align: center;
     overflow: hidden;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 .cm-local-plan-seat strong {
-    font-size: clamp(.68rem, 1.5vw, 1.5rem);
-    line-height: 1.05;
-    overflow-wrap: anywhere;
+    display: block;
+    color: #0f172a !important;
+    font-size: clamp(14px, 2.2vw, 32px);
+    font-weight: 950;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
-.cm-local-plan-seat small { color: #64748b; font-size: clamp(.55rem, .9vw, .95rem); font-weight: 800; }
+.cm-local-plan-seat small {
+    display: block;
+    color: #475569 !important;
+    font-size: clamp(12px, 1.3vw, 18px);
+    font-weight: 900;
+    margin-top: 2px;
+}
 .cm-local-back { background: rgba(51, 65, 85, .8); color: #94a3b8; }
 
 @media (max-width: 768px) {
