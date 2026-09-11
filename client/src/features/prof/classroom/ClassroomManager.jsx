@@ -313,8 +313,53 @@ export default function ClassroomManager({ globalClassId, user }) {
         } catch(e) {}
     };
     const handleDragStart = (e, sId) => { setDraggingId(sId); e.dataTransfer.setData("text/plain", sId); e.dataTransfer.effectAllowed = "move"; };
-    const handleDragOver = (e, x, y) => { e.preventDefault(); setDragOverCell(`${x}-${y}`); };
-    const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
+    const handleDrop = async (e, x, y) => {
+        e.preventDefault();
+        setDragOverCell(null);
+        const sId = draggingId;
+        if (!sId) return;
+        const movedStudent = students.find(s => String(s._id) === String(sId));
+        if (!movedStudent) return;
+        if (movedStudent.seatX === x && movedStudent.seatY === y) {
+            setDraggingId(null);
+            return;
+        }
+        const oldX = movedStudent.seatX;
+        const oldY = movedStudent.seatY;
+        const targetStudent = students.find(s => s.seatX === x && s.seatY === y && String(s._id) !== String(sId));
+
+        if (targetStudent) {
+            setStudents(prev => prev.map(s => {
+                if (String(s._id) === String(sId)) return { ...s, seatX: x, seatY: y };
+                if (String(s._id) === String(targetStudent._id)) return { ...s, seatX: oldX, seatY: oldY };
+                return s;
+            }));
+            try {
+                await fetch('/api/classroom/move', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        studentId: sId,
+                        x,
+                        y,
+                        swapStudentId: targetStudent._id,
+                        swapX: oldX,
+                        swapY: oldY
+                    })
+                });
+            } catch(err) { loadData(); }
+        } else {
+            setStudents(prev => prev.map(s => String(s._id) === String(sId) ? { ...s, seatX: x, seatY: y } : s));
+            try {
+                await fetch('/api/classroom/move', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ studentId: sId, x, y })
+                });
+            } catch(err) { loadData(); }
+        }
+        setDraggingId(null);
+    };
     const handleFileSelect = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -582,7 +627,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const selectedPlanStudents = students.filter(isPlanFinderMatch);
     const listFinderCount = students.filter(isListFinderMatch).length;
     const frenchSelectedStudents = students.filter((student) => frenchStudentIds.includes(String(student._id)));
-    const effectivePlanRows = Math.max(gridSize.rows, Math.ceil(students.length / Math.max(1, gridSize.cols)));
+    const maxStudentRow = students.reduce((max, s) => Number.isInteger(s?.seatY) ? Math.max(max, s.seatY + 1) : max, 0);
+    const effectivePlanRows = Math.max(gridSize.rows, maxStudentRow, Math.ceil(students.length / Math.max(1, gridSize.cols)));
 
     const handleOpenStudent = (stu) => {
         if (frenchMode) {
@@ -975,15 +1021,38 @@ export default function ClassroomManager({ globalClassId, user }) {
         } catch(e) { console.error("Erreur API", e); loadData(); }
     };
 
-    const moveStudentTo = async (sid, x, y) => { try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sid, x, y }) }); await loadData(); } catch(e){} };
+    const moveStudentTo = async (sid, x, y, swapSid = null, swapX = null, swapY = null) => {
+        try {
+            const body = { studentId: sid, x, y };
+            if (swapSid && Number.isInteger(swapX) && Number.isInteger(swapY)) {
+                body.swapStudentId = swapSid;
+                body.swapX = swapX;
+                body.swapY = swapY;
+            }
+            await fetch('/api/classroom/move', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            await loadData();
+        } catch(e){}
+    };
     const handlePlaceStudentToCell = async (x, y) => {
         if (!placementStudent?._id) return;
-        const targetStudent = students.find((s) => s.seatX === x && s.seatY === y);
-        if (targetStudent && String(targetStudent._id) !== String(placementStudent._id)) {
-            alert("Cette place est déjà occupée.");
-            return;
+        const targetStudent = students.find((s) => s.seatX === x && s.seatY === y && String(s._id) !== String(placementStudent._id));
+        if (targetStudent) {
+            const oldX = placementStudent.seatX;
+            const oldY = placementStudent.seatY;
+            setStudents(prev => prev.map(s => {
+                if (String(s._id) === String(placementStudent._id)) return { ...s, seatX: x, seatY: y };
+                if (String(s._id) === String(targetStudent._id)) return { ...s, seatX: oldX, seatY: oldY };
+                return s;
+            }));
+            await moveStudentTo(placementStudent._id, x, y, targetStudent._id, oldX, oldY);
+        } else {
+            setStudents(prev => prev.map(s => String(s._id) === String(placementStudent._id) ? { ...s, seatX: x, seatY: y } : s));
+            await moveStudentTo(placementStudent._id, x, y);
         }
-        await moveStudentTo(placementStudent._id, x, y);
         setPlacementStudent(null);
         setPlanFinder('');
     };
@@ -991,42 +1060,10 @@ export default function ClassroomManager({ globalClassId, user }) {
     if (!globalClassId) return <div className="p-10 text-center text-slate-400 font-black">SÉLECTIONNEZ UNE CLASSE</div>;
 
     const renderGrid = () => {
-        const validSeats = students.filter((student) => Number.isInteger(student.seatX) && Number.isInteger(student.seatY)
-            && student.seatX >= 0 && student.seatX < gridSize.cols && student.seatY >= 0 && student.seatY < effectivePlanRows);
-        const uniqueSeats = new Set(validSeats.map((student) => `${student.seatX}-${student.seatY}`));
-        const hasMeaningfulPlan = uniqueSeats.size > 1 || students.length <= 1;
-        const occupied = new Set();
-        const placedIds = new Set();
-        const displayedStudents = [];
-        if (hasMeaningfulPlan) {
-            validSeats.forEach((student) => {
-                const seatKey = `${student.seatX}-${student.seatY}`;
-                if (occupied.has(seatKey)) return;
-                occupied.add(seatKey);
-                placedIds.add(String(student._id));
-                displayedStudents.push(student);
-            });
-        }
-        const unplacedStudents = students.filter((student) => !placedIds.has(String(student._id)))
-            .sort((a, b) => {
-                const first = String(a.firstName || '').localeCompare(String(b.firstName || ''), 'fr', { sensitivity: 'base' });
-                return first || String(a.lastName || '').localeCompare(String(b.lastName || ''), 'fr', { sensitivity: 'base' });
-            });
-        let nextCell = 0;
-        unplacedStudents.forEach((student) => {
-            while (occupied.has(`${nextCell % gridSize.cols}-${Math.floor(nextCell / gridSize.cols)}`)) nextCell += 1;
-            const seatX = nextCell % gridSize.cols;
-            const seatY = Math.floor(nextCell / gridSize.cols);
-            if (seatY < effectivePlanRows) {
-                occupied.add(`${seatX}-${seatY}`);
-                displayedStudents.push({ ...student, seatX, seatY });
-            }
-            nextCell += 1;
-        });
         const cells = [];
         for (let y = 0; y < effectivePlanRows; y++) {
             for (let x = 0; x < gridSize.cols; x++) {
-                const student = displayedStudents.find(s => s.seatX === x && s.seatY === y);
+                const student = students.find(s => s.seatX === x && s.seatY === y);
                 const isOver = dragOverCell === `${x}-${y}`;
                 const hasSep = separators.includes(x);
                 cells.push(
@@ -1041,8 +1078,20 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 handlePlaceStudentToCell(x, y);
                                 return;
                             }
-                            if (swapSource && !student) {
-                                moveStudentTo(swapSource._id, x, y);
+                            if (swapSource) {
+                                if (student && String(student._id) !== String(swapSource._id)) {
+                                    const oldX = swapSource.seatX;
+                                    const oldY = swapSource.seatY;
+                                    setStudents(prev => prev.map(s => {
+                                        if (String(s._id) === String(swapSource._id)) return { ...s, seatX: x, seatY: y };
+                                        if (String(s._id) === String(student._id)) return { ...s, seatX: oldX, seatY: oldY };
+                                        return s;
+                                    }));
+                                    moveStudentTo(swapSource._id, x, y, student._id, oldX, oldY);
+                                } else if (!student) {
+                                    setStudents(prev => prev.map(s => String(s._id) === String(swapSource._id) ? { ...s, seatX: x, seatY: y } : s));
+                                    moveStudentTo(swapSource._id, x, y);
+                                }
                                 setSwapSource(null);
                                 setIsSwapMode(false);
                             }

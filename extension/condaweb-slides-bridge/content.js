@@ -1350,8 +1350,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             for (let seatY = 0; seatY < rows; seatY += 1) {
                 for (let seatX = 0; seatX < cols; seatX += 1) {
                     const emptySeat = document.createElement('div');
-                    emptySeat.setAttribute('aria-label', `Place vide colonne ${seatX + 1}, rangée ${seatY + 1}`);
-                    emptySeat.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; background: rgba(255, 255, 255, 0.08); border: 2px dashed rgba(255, 255, 255, 0.22); border-radius: 14px; min-width: 0; height: 100%; box-sizing: border-box;`;
+                    emptySeat.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; background: #ffffff; border: 2px dashed #94a3b8; border-radius: 14px; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); opacity: 0.95;`;
                     grid.appendChild(emptySeat);
                 }
             }

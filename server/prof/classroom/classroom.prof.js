@@ -93,46 +93,18 @@ async function getBridgeStudents(classroom) {
 // are displayed.
 function buildBridgePlanStudents(classroom, students = []) {
     const cols = Math.max(1, Number(classroom?.layout?.cols || 6));
-    const rows = Math.max(1, Number(classroom?.layout?.rows || 5), Math.ceil(students.length / cols));
+    const highestSeatRow = students.reduce((max, s) => Number.isInteger(s?.seatY) ? Math.max(max, s.seatY + 1) : max, 0);
+    const rows = Math.max(1, Number(classroom?.layout?.rows || 5), highestSeatRow);
     const isValidSeat = (student) => Number.isInteger(student?.seatX)
         && Number.isInteger(student?.seatY)
         && student.seatX >= 0 && student.seatX < cols
         && student.seatY >= 0 && student.seatY < rows;
 
-    const validStudents = students.filter(isValidSeat);
-    const uniqueSeats = new Set(validStudents.map((student) => `${student.seatX}-${student.seatY}`));
-    const hasMeaningfulPlan = uniqueSeats.size > 1 || students.length <= 1;
-    const occupied = new Set();
-    const placedIds = new Set();
-    const projected = [];
-
-    if (hasMeaningfulPlan) {
-        validStudents.forEach((student) => {
-            const seatKey = `${student.seatX}-${student.seatY}`;
-            if (occupied.has(seatKey)) return;
-            occupied.add(seatKey);
-            placedIds.add(String(student._id));
-            projected.push({ ...student, seatX: student.seatX, seatY: student.seatY });
-        });
-    }
-
-    const unplaced = students
-        .filter((student) => !placedIds.has(String(student?._id)))
-        .sort((a, b) => {
-            const first = String(a?.firstName || '').localeCompare(String(b?.firstName || ''), 'fr', { sensitivity: 'base' });
-            return first || String(a?.lastName || '').localeCompare(String(b?.lastName || ''), 'fr', { sensitivity: 'base' });
-        });
-
-    let nextCell = 0;
-    unplaced.forEach((student) => {
-        while (nextCell < cols * rows && occupied.has(`${nextCell % cols}-${Math.floor(nextCell / cols)}`)) nextCell += 1;
-        if (nextCell >= cols * rows) return;
-        const seatX = nextCell % cols;
-        const seatY = Math.floor(nextCell / cols);
-        occupied.add(`${seatX}-${seatY}`);
-        projected.push({ ...student, seatX, seatY });
-        nextCell += 1;
-    });
+    const projected = students.filter(isValidSeat).map(s => ({
+        ...s,
+        seatX: s.seatX,
+        seatY: s.seatY
+    }));
 
     return { cols, rows, students: projected };
 }
@@ -515,6 +487,29 @@ router.get('/plan/:classId', async (req, res) => {
         if (!clsObj) return res.status(404).json({ error: "Classe/Groupe introuvable" });
         const className = clsObj?.name;
 
+        const cols = Math.max(2, Number(clsObj?.layout?.cols || 6));
+        const validSeats = students.filter(s => Number.isInteger(s.seatX) && Number.isInteger(s.seatY) && s.seatX >= 0 && s.seatY >= 0);
+        const uniqueSeats = new Set(validSeats.map(s => `${s.seatX}-${s.seatY}`));
+
+        if (students.length > 1 && uniqueSeats.size <= 1) {
+            const initOps = [];
+            students.forEach((s, idx) => {
+                const seatX = idx % cols;
+                const seatY = Math.floor(idx / cols);
+                s.seatX = seatX;
+                s.seatY = seatY;
+                initOps.push({
+                    updateOne: {
+                        filter: { _id: s._id },
+                        update: { $set: { seatX, seatY } }
+                    }
+                });
+            });
+            if (initOps.length > 0) {
+                await Student.bulkWrite(initOps, { ordered: false });
+            }
+        }
+
         for (const student of students) {
             let needsSave = false;
             if (applyCrossDecay(student.behaviorRecords || [])) {
@@ -645,7 +640,11 @@ router.get('/plan/:classId', async (req, res) => {
 // 4. ACTIONS UNITAIRES
 router.post('/move', async (req, res) => {
     try {
-        await Student.findByIdAndUpdate(req.body.studentId, { seatX: req.body.x, seatY: req.body.y });
+        const { studentId, x, y, swapStudentId, swapX, swapY } = req.body;
+        await Student.findByIdAndUpdate(studentId, { seatX: x, seatY: y });
+        if (swapStudentId && Number.isInteger(swapX) && Number.isInteger(swapY)) {
+            await Student.findByIdAndUpdate(swapStudentId, { seatX: swapX, seatY: swapY });
+        }
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
