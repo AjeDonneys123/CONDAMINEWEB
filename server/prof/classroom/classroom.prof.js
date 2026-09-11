@@ -94,7 +94,7 @@ async function getBridgeStudents(classroom) {
 function buildBridgePlanStudents(classroom, students = []) {
     const cols = Math.max(1, Number(classroom?.layout?.cols || 6));
     const highestSeatRow = students.reduce((max, s) => Number.isInteger(s?.seatY) ? Math.max(max, s.seatY + 1) : max, 0);
-    const rows = Math.max(1, Number(classroom?.layout?.rows || 5), highestSeatRow);
+    const rows = Math.max(1, Number(classroom?.layout?.rows || 5), highestSeatRow, Math.ceil(students.length / cols));
     const isValidSeat = (student) => Number.isInteger(student?.seatX)
         && Number.isInteger(student?.seatY)
         && student.seatX >= 0 && student.seatX < cols
@@ -488,25 +488,75 @@ router.get('/plan/:classId', async (req, res) => {
         const className = clsObj?.name;
 
         const cols = Math.max(2, Number(clsObj?.layout?.cols || 6));
-        const validSeats = students.filter(s => Number.isInteger(s.seatX) && Number.isInteger(s.seatY) && s.seatX >= 0 && s.seatY >= 0);
-        const uniqueSeats = new Set(validSeats.map(s => `${s.seatX}-${s.seatY}`));
+        const defaultRows = Math.max(2, Number(clsObj?.layout?.rows || 5));
 
-        if (students.length > 1 && uniqueSeats.size <= 1) {
-            const initOps = [];
-            students.forEach((s, idx) => {
-                const seatX = idx % cols;
-                const seatY = Math.floor(idx / cols);
-                s.seatX = seatX;
-                s.seatY = seatY;
-                initOps.push({
+        // 1. Identifier les élèves déjà assis à une place valide et unique
+        const occupiedSeats = new Set();
+        const seatedStudents = [];
+        const unseatedStudents = [];
+
+        students.forEach((s) => {
+            const hasValidCoords = Number.isInteger(s.seatX) && Number.isInteger(s.seatY)
+                && s.seatX >= 0 && s.seatX < cols && s.seatY >= 0;
+            const seatKey = hasValidCoords ? `${s.seatX}-${s.seatY}` : null;
+
+            if (hasValidCoords && !occupiedSeats.has(seatKey)) {
+                occupiedSeats.add(seatKey);
+                seatedStudents.push(s);
+            } else {
+                unseatedStudents.push(s);
+            }
+        });
+
+        // 2. Si des élèves n'ont pas de place attribuée, les placer au hasard sur les places vides
+        if (unseatedStudents.length > 0) {
+            const maxSeatedRow = seatedStudents.reduce((max, s) => Math.max(max, s.seatY + 1), 0);
+            const neededRows = Math.max(defaultRows, maxSeatedRow, Math.ceil(students.length / cols));
+
+            const availableSeats = [];
+            for (let y = 0; y < neededRows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const key = `${x}-${y}`;
+                    if (!occupiedSeats.has(key)) {
+                        availableSeats.push({ x, y });
+                    }
+                }
+            }
+
+            let extraRow = neededRows;
+            while (availableSeats.length < unseatedStudents.length) {
+                for (let x = 0; x < cols; x++) {
+                    availableSeats.push({ x, y: extraRow });
+                }
+                extraRow++;
+            }
+
+            // Mélange aléatoire (Fisher-Yates) des places disponibles
+            for (let i = availableSeats.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [availableSeats[i], availableSeats[j]] = [availableSeats[j], availableSeats[i]];
+            }
+
+            const bulkOps = [];
+            unseatedStudents.forEach((student, idx) => {
+                const seat = availableSeats[idx];
+                student.seatX = seat.x;
+                student.seatY = seat.y;
+                occupiedSeats.add(`${seat.x}-${seat.y}`);
+                bulkOps.push({
                     updateOne: {
-                        filter: { _id: s._id },
-                        update: { $set: { seatX, seatY } }
+                        filter: { _id: student._id },
+                        update: { $set: { seatX: seat.x, seatY: seat.y } }
                     }
                 });
             });
-            if (initOps.length > 0) {
-                await Student.bulkWrite(initOps, { ordered: false });
+
+            if (bulkOps.length > 0) {
+                await Student.bulkWrite(bulkOps, { ordered: false });
+            }
+
+            if (neededRows > defaultRows) {
+                await Classroom.updateOne({ _id: clsObj._id }, { $set: { 'layout.rows': neededRows } });
             }
         }
 
