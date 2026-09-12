@@ -777,7 +777,14 @@ router.post('/behavior', async (req, res) => {
                     score.penaltyAmount = 0;
                 }
                 appliedClassPointDelta = Number(score.value) - prevValue;
+                if (field === 'workIncomplete' && !score.workIncomplete) {
+                    score.workIncompleteText = '';
+                }
+                if (field === 'punishment' && !score.punishment) {
+                    score.punishmentText = '';
+                }
                 r.workIncomplete = scores.some((item) => Boolean(item?.workIncomplete));
+                if (!r.workIncomplete) r.workIncompleteText = '';
                 if (type === 'TOGGLE_SCORE_PUNISHMENT') {
                     const hasAnyPunishment = scores.some((item) => Boolean(item?.punishment));
                     if (hasAnyPunishment) {
@@ -790,6 +797,7 @@ router.post('/behavior', async (req, res) => {
                     } else {
                         s.punishmentStatus = 'NONE';
                         s.punishmentDueDate = null;
+                        r.punishmentText = '';
                         resetLateMailState(s);
                     }
                 }
@@ -804,59 +812,43 @@ router.post('/behavior', async (req, res) => {
             if (!r.forcedSix) {
                 const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
                 const score = scores.find(x => String(x.id || x._id) === scoreId) || scores[scores.length - 1];
-                currentTargetScore = score;
                 score.value = Math.max(0, Math.min(20, Number(score.value || 0) - 9));
-                r.selectedScoreId = String(score.id || score._id);
                 r.forcedSixScoreId = String(score.id || score._id);
                 r.forcedSixDebtAmount = 9;
-                r.forcedSixCount = 1;
-                r.forcedSix = true;
+                appliedClassPointDelta = -9;
             }
+            r.forcedSix = true;
+            r.forcedSixCount = Math.max(1, Number(r.forcedSixCount || 0) + 1);
         }
-        if (type === 'REMOVE_FORCED_SIX') {
+        if (type === 'RESOLVE_FORCED_SIX') {
             const scores = ensureScores();
-            if (r.forcedSix) {
-                const scoreId = String(r.forcedSixScoreId || r.selectedScoreId || scores[scores.length - 1].id);
-                const score = scores.find(x => String(x.id || x._id) === scoreId) || scores[scores.length - 1];
-                currentTargetScore = score;
-                score.value = Math.max(0, Math.min(20, Number(score.value || 0) + Math.max(0, Number(r.forcedSixDebtAmount || 9))));
-                r.selectedScoreId = String(score.id || score._id);
-            }
-            r.forcedSixCount = 0;
+            const targetScoreId = String(r.forcedSixScoreId || extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
+            const score = scores.find(x => String(x.id || x._id) === targetScoreId) || scores[scores.length - 1];
+            const restoreAmount = Math.max(0, Number(r.forcedSixDebtAmount || 9));
+            score.value = Math.max(0, Math.min(20, Number(score.value || 0) + restoreAmount));
+            appliedClassPointDelta = restoreAmount;
             r.forcedSix = false;
+            r.forcedSixCount = 0;
             r.forcedSixScoreId = '';
             r.forcedSixDebtAmount = 0;
         }
-        if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !Boolean(r.workIncomplete);
-        if (type === 'CROSS') {
-            const hadNoCross = Number(r.crosses || 0) <= 0;
-            r.crosses = Number(r.crosses || 0) + 1;
-            if (hadNoCross || !r.nextCrossRemovalAt) r.nextCrossRemovalAt = new Date(Date.now() + CROSS_DECAY_MS);
-            if (Number(r.crosses || 0) >= 3) {
-                await assignPunishmentTemplate(s, teacherId);
-            }
-        }
-        if (type === 'BONUS') {
-            r.bonuses++;
-            try {
-                const suppressLiveAlert = Boolean(extraData && typeof extraData === 'object' && extraData.suppressLiveAlert);
-                const clsId = s.classId || s.assignedGroups?.[0];
-                if (clsId && !suppressLiveAlert) {
-                    const displayName = String(s.nickname || '').trim() || String(s.firstName || '');
-                    await Classroom.findByIdAndUpdate(clsId, {
-                        $set: {
-                            activeStudentBonusAlert: `Félicitations à ${displayName} !`,
-                            activeStudentBonusAlertTime: new Date()
-                        }
-                    });
+        if (type === 'ADD_CROSS') {
+            r.crosses = (r.crosses || 0) + 1;
+            r.lastCrossDate = new Date();
+            r.nextCrossRemovalAt = new Date(Date.now() + CROSS_DECAY_MS);
+            if (r.crosses >= 3) {
+                const assigned = await assignPunishmentTemplate(s, teacherId);
+                if (!assigned) {
+                    s.punishmentStatus = 'PENDING';
+                    s.punishmentDueDate = new Date(Date.now() + PUNISHMENT_DUE_MS);
+                    resetLateMailState(s);
                 }
-            } catch (err) {
-                console.error("[LIVE BONUS ALERT ERROR] failed to set live bonus:", err.message);
             }
         }
+        if (type === 'ADD_BONUS') r.bonuses = (r.bonuses || 0) + 1;
         if (type === 'REMOVE_CROSS') {
-            r.crosses = Math.max(0, Number(r.crosses || 0) - 1);
-            if (r.crosses <= 0) r.nextCrossRemovalAt = null;
+            r.crosses = Math.max(0, (r.crosses || 0) - 1);
+            if (r.crosses === 0) r.nextCrossRemovalAt = null;
             else if (!r.nextCrossRemovalAt) r.nextCrossRemovalAt = new Date(Date.now() + CROSS_DECAY_MS);
         }
         if (type === 'REMOVE_BONUS') r.bonuses = Math.max(0, r.bonuses - 1);
@@ -871,11 +863,15 @@ router.post('/behavior', async (req, res) => {
             const workText = String(extraData?.workIncompleteText ?? '').trim();
             const punishText = String(extraData?.punishmentText ?? '').trim();
             if (score) {
-                score.workIncompleteText = workText;
-                score.punishmentText = punishText;
+                if (score.workIncomplete) score.workIncompleteText = workText;
+                else score.workIncompleteText = '';
+                if (score.punishment) score.punishmentText = punishText;
+                else score.punishmentText = '';
             }
-            r.workIncompleteText = workText;
-            r.punishmentText = punishText;
+            if (r.workIncomplete) r.workIncompleteText = workText;
+            else r.workIncompleteText = '';
+            if (scores.some(x => Boolean(x.punishment))) r.punishmentText = punishText;
+            else r.punishmentText = '';
         }
         if (type === 'SAVE_NICKNAME') {
             s.nickname = String(extraData || '').trim().slice(0, 40);

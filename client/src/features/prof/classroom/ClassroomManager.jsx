@@ -45,6 +45,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [incompletePunishmentText, setIncompletePunishmentText] = useState("");
     const [incompleteSavedFeedback, setIncompleteSavedFeedback] = useState(false);
     const incompleteDebounceTimerRef = useRef(null);
+    const isTogglingDebtRef = useRef(false);
     const incompletePanelRef = useRef(null);
     const [swapSource, setSwapSource] = useState(null);
     const [isSwapMode, setIsSwapMode] = useState(false);
@@ -928,7 +929,11 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const saveIncompleteDetails = (workVal, punishVal) => {
-        if (!selectedStudent?._id) return;
+        if (!selectedStudent?._id || isTogglingDebtRef.current) return;
+        if (incompleteDebounceTimerRef.current) {
+            clearTimeout(incompleteDebounceTimerRef.current);
+            incompleteDebounceTimerRef.current = null;
+        }
         const scoreId = getSelectedGrade(selectedStudent)?.id;
         addBehavior(selectedStudent._id, 'SAVE_INCOMPLETE_WORK_DETAILS', {
             scoreId,
@@ -940,6 +945,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const debouncedSaveIncomplete = (workVal, punishVal) => {
+        if (isTogglingDebtRef.current) return;
         if (incompleteDebounceTimerRef.current) clearTimeout(incompleteDebounceTimerRef.current);
         incompleteDebounceTimerRef.current = setTimeout(() => {
             saveIncompleteDetails(workVal, punishVal);
@@ -1042,12 +1048,20 @@ export default function ClassroomManager({ globalClassId, user }) {
                         next.value = Math.max(0, Math.min(20, Number(next.value || 0) + restoreAmount));
                         next.penaltyAmount = 0;
                     }
+                    if (field === 'workIncomplete' && !next.workIncomplete) {
+                        next.workIncompleteText = '';
+                    }
+                    if (field === 'punishment' && !next.punishment) {
+                        next.punishmentText = '';
+                    }
                     return next;
                 });
                 r.selectedScoreId = selected.id;
                 r.workIncomplete = scores.some((grade) => Boolean(grade.workIncomplete));
+                if (!r.workIncomplete) r.workIncompleteText = '';
                 if (type === 'TOGGLE_SCORE_PUNISHMENT') {
                     newS.punishmentStatus = scores.some((grade) => Boolean(grade.punishment)) ? 'PENDING' : 'NONE';
+                    if (newS.punishmentStatus === 'NONE') r.punishmentText = '';
                 }
             }
             if (type === 'TOGGLE_FORCED_SIX') {
@@ -1117,6 +1131,12 @@ export default function ClassroomManager({ globalClassId, user }) {
         setSelectedStudent(prev => updateStudentLocally(prev));
         if (selectedStudent && String(selectedStudent._id) === String(sid)) {
             if (type === 'ADJUST_SCORE') setActionFlash(Number(extra?.delta || 0) < 0 ? 'cross' : 'bonus');
+            if (type === 'TOGGLE_SCORE_INCOMPLETE' && selectedGradeHas(selectedStudent, 'workIncomplete')) {
+                setIncompleteWorkText('');
+            }
+            if (type === 'TOGGLE_SCORE_PUNISHMENT' && selectedGradeHas(selectedStudent, 'punishment')) {
+                setIncompletePunishmentText('');
+            }
         }
 
         try {
@@ -1603,7 +1623,19 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {[-0.5,0.5].map(delta => <button key={delta} className={`act-btn ${delta < 0 ? 'btn-cross' : 'btn-bonus'}`} {...scoreHoldProps(selectedStudent, delta)}>{delta > 0 ? '+' : ''}{delta}</button>)}
                             <div className="student-alert-actions">
                                 <div className="student-alert-col">
-                                    <button className={`act-btn grade-toggle ${selectedGradeHas(selectedStudent, 'workIncomplete') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_INCOMPLETE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                    <button
+                                        className={`act-btn grade-toggle ${selectedGradeHas(selectedStudent, 'workIncomplete') ? 'active' : ''}`}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                            if (incompleteDebounceTimerRef.current) {
+                                                clearTimeout(incompleteDebounceTimerRef.current);
+                                                incompleteDebounceTimerRef.current = null;
+                                            }
+                                            isTogglingDebtRef.current = true;
+                                            setTimeout(() => { isTogglingDebtRef.current = false; }, 800);
+                                            addBehavior(selectedStudent._id, 'TOGGLE_SCORE_INCOMPLETE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true});
+                                        }}
+                                    >
                                         {selectedGradeHas(selectedStudent, 'workIncomplete') ? '✓ TRAVAIL TERMINÉ · +6' : '🟨 TRAVAIL INCOMPLET · −6'}
                                     </button>
                                     {selectedGradeHas(selectedStudent, 'workIncomplete') && (
@@ -1617,7 +1649,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                                                     setIncompleteWorkText(val);
                                                     debouncedSaveIncomplete(val, incompletePunishmentText);
                                                 }}
-                                                onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                                onBlur={() => {
+                                                    if (!isTogglingDebtRef.current) {
+                                                        saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
+                                                    }
+                                                }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
@@ -1631,7 +1667,19 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     )}
                                 </div>
                                 <div className="student-alert-col">
-                                    <button className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                    <button
+                                        className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                            if (incompleteDebounceTimerRef.current) {
+                                                clearTimeout(incompleteDebounceTimerRef.current);
+                                                incompleteDebounceTimerRef.current = null;
+                                            }
+                                            isTogglingDebtRef.current = true;
+                                            setTimeout(() => { isTogglingDebtRef.current = false; }, 800);
+                                            addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true});
+                                        }}
+                                    >
                                         {selectedGradeHas(selectedStudent, 'punishment') ? '✓ PUNITION FAITE · +9' : '🟥 PUNITION · −9'}
                                     </button>
                                     {selectedGradeHas(selectedStudent, 'punishment') && (
@@ -1645,7 +1693,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                                                     setIncompletePunishmentText(val);
                                                     debouncedSaveIncomplete(incompleteWorkText, val);
                                                 }}
-                                                onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                                onBlur={() => {
+                                                    if (!isTogglingDebtRef.current) {
+                                                        saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
+                                                    }
+                                                }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
