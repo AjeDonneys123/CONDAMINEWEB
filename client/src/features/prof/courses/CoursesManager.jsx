@@ -69,11 +69,21 @@ const getEditUrl = (value = '') => {
 
 const COURSE_CACHE_KEY_PREFIX = 'conda-courses-cache-v1:';
 const CURRENT_COURSE_ID_KEY_PREFIX = 'conda-current-course-id:';
+const CURRENT_CHAPTER_CACHE_KEY_PREFIX = 'conda-current-chapter-cache-v1:';
+
+const getFallbackProfClassId = () => {
+    try {
+        return window.localStorage.getItem('conda-last-prof-class-id') || '';
+    } catch (_) {
+        return '';
+    }
+};
 
 const readCachedCourses = (classId = '') => {
-    if (!classId) return [];
+    const targetClassId = classId || getFallbackProfClassId();
+    if (!targetClassId) return [];
     try {
-        const raw = window.localStorage.getItem(`${COURSE_CACHE_KEY_PREFIX}${classId}`);
+        const raw = window.localStorage.getItem(`${COURSE_CACHE_KEY_PREFIX}${targetClassId}`);
         const parsed = JSON.parse(raw || '[]');
         return Array.isArray(parsed) ? parsed : [];
     } catch (_) {
@@ -82,25 +92,69 @@ const readCachedCourses = (classId = '') => {
 };
 
 const writeCachedCourses = (classId = '', list = []) => {
-    if (!classId || !Array.isArray(list)) return;
+    const targetClassId = classId || getFallbackProfClassId();
+    if (!targetClassId || !Array.isArray(list)) return;
     try {
-        window.localStorage.setItem(`${COURSE_CACHE_KEY_PREFIX}${classId}`, JSON.stringify(list));
+        window.localStorage.setItem(`${COURSE_CACHE_KEY_PREFIX}${targetClassId}`, JSON.stringify(list));
     } catch (_) {}
 };
 
 const readLastCourseId = (classId = '') => {
-    if (!classId) return '';
+    const targetClassId = classId || getFallbackProfClassId();
+    if (!targetClassId) return '';
     try {
-        return window.localStorage.getItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${classId}`) || '';
+        return window.localStorage.getItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${targetClassId}`) || '';
     } catch (_) {
         return '';
     }
 };
 
 const writeLastCourseId = (classId = '', id = '') => {
-    if (!classId || !id) return;
+    const targetClassId = classId || getFallbackProfClassId();
+    if (!targetClassId || !id) return;
     try {
-        window.localStorage.setItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${classId}`, String(id));
+        window.localStorage.setItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${targetClassId}`, String(id));
+    } catch (_) {}
+};
+
+const readCachedCurrentChapter = (classId = '') => {
+    const targetClassId = classId || getFallbackProfClassId();
+    try {
+        if (targetClassId) {
+            const specific = window.localStorage.getItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}${targetClassId}`);
+            if (specific) {
+                const parsed = JSON.parse(specific);
+                if (parsed && parsed.title && parsed.slidesUrl) return parsed;
+            }
+        }
+        const fallback = window.localStorage.getItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}last`);
+        if (fallback) {
+            const parsed = JSON.parse(fallback);
+            if (parsed && parsed.title && parsed.slidesUrl) return parsed;
+        }
+        return null;
+    } catch (_) {
+        return null;
+    }
+};
+
+const writeCachedCurrentChapter = (classId = '', chapterObj = null) => {
+    if (!chapterObj || !chapterObj.title || !chapterObj.slidesUrl) return;
+    const targetClassId = classId || getFallbackProfClassId();
+    try {
+        const payload = JSON.stringify({
+            _id: String(chapterObj._id || ''),
+            title: chapterObj.title,
+            slidesUrl: chapterObj.slidesUrl,
+            presentationId: chapterObj.presentationId || '',
+            embedUrl: chapterObj.embedUrl || '',
+            targetClassroomId: chapterObj.targetClassroomId || targetClassId,
+            isEnabled: chapterObj.isEnabled
+        });
+        if (targetClassId) {
+            window.localStorage.setItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}${targetClassId}`, payload);
+        }
+        window.localStorage.setItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}last`, payload);
     } catch (_) {}
 };
 
@@ -907,8 +961,19 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             const match = activeCourses.find((c) => c.slidesUrl);
             if (match) return match;
         }
-        return courses.find((c) => !c.isSourcePresentation && c.slidesUrl) || null;
+        const fromList = courses.find((c) => !c.isSourcePresentation && c.slidesUrl);
+        if (fromList) return fromList;
+        // Fast fallback instantané depuis le cache local (0 ms de latence)
+        const cachedChapter = readCachedCurrentChapter(globalClassId);
+        if (cachedChapter && cachedChapter.slidesUrl) return cachedChapter;
+        return null;
     }, [playingCourse, globalClassId, courses, activeCourses]);
+
+    useEffect(() => {
+        if (currentChapterCourse?._id && currentChapterCourse?.slidesUrl) {
+            writeCachedCurrentChapter(globalClassId, currentChapterCourse);
+        }
+    }, [globalClassId, currentChapterCourse]);
     const visibleDebtStudents = useMemo(() => {
         const now = Date.now();
         return debtStudents.filter((student) => Number(dismissedDebtIds[String(student.id)] || 0) <= now);
@@ -1035,43 +1100,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     const classPoints = liveClassroom?.classPoints ?? 0;
 
     const loadCourses = async () => {
-        if (!globalClassId) return;
+        const targetClassId = globalClassId || getFallbackProfClassId();
+        if (!targetClassId) return;
         const startedAt = performance.now();
-        console.info('[CondaWeb chargement cours] début', { classId: globalClassId });
-        const hasCached = readCachedCourses(globalClassId).length > 0;
+        console.info('[CondaWeb chargement cours] début', { classId: targetClassId });
+        const hasCached = readCachedCourses(targetClassId).length > 0;
         if (!hasCached) {
             setLoading(true);
         }
         setError('');
         try {
-            // 1. Charger d'abord le cours actif pour l'afficher immédiatement à l'écran
-            try {
-                const activeRes = await fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}&activeOnly=1`);
-                if (activeRes.ok) {
-                    const activeData = await activeRes.json();
-                    if (Array.isArray(activeData) && activeData.length > 0) {
-                        setCourses((prev) => {
-                            if (!prev || prev.length === 0) return activeData;
-                            return prev;
-                        });
-                        setLoading(false); // Le cours actif est immédiatement affiché à l'écran !
-                    }
-                }
-            } catch (errActive) {
-                console.warn('[CondaWeb] pré-chargement cours actif:', errActive);
-            }
-
-            // 2. Pendant que le cours actif est à l'écran, charger le reste des cours et sections
+            // Chargement direct en parallèle sans blocage (le chapitre courant est déjà affiché à l'écran depuis le cache à 0ms)
             const [response, sectionsResponse] = await Promise.all([
-                fetch(`/api/courses?classId=${encodeURIComponent(globalClassId)}`),
-                fetch(`/api/courses/sections/list?classId=${encodeURIComponent(globalClassId)}`)
+                fetch(`/api/courses?classId=${encodeURIComponent(targetClassId)}`),
+                fetch(`/api/courses/sections/list?classId=${encodeURIComponent(targetClassId)}`)
             ]);
             const [data, sectionsData] = await Promise.all([response.json(), sectionsResponse.json()]);
             if (!response.ok) throw new Error(data?.error || 'Chargement impossible');
             if (!sectionsResponse.ok) throw new Error(sectionsData?.error || 'Chargement des sections impossible');
             const coursesList = Array.isArray(data) ? data : [];
             setCourses(coursesList);
-            writeCachedCourses(globalClassId, coursesList);
+            writeCachedCourses(targetClassId, coursesList);
             coursesList.forEach((c) => {
                 if (c?.slidesUrl && Array.isArray(c.nativeSlides) && c.nativeSlides.length > 0) {
                     if (!slideManifestCacheRef.current.has(c.slidesUrl)) {
@@ -1086,12 +1135,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             });
             setCourseSections(Array.isArray(sectionsData) ? sectionsData : []);
             console.info('[CondaWeb chargement cours] terminé', {
-                classId: globalClassId,
+                classId: targetClassId,
                 courses: Array.isArray(data) ? data.length : 0,
                 durationMs: Math.round(performance.now() - startedAt)
             });
         } catch (loadError) {
-            console.error('[CondaWeb chargement cours] erreur', { classId: globalClassId, message: loadError.message, durationMs: Math.round(performance.now() - startedAt) });
+            console.error('[CondaWeb chargement cours] erreur', { classId: targetClassId, message: loadError.message, durationMs: Math.round(performance.now() - startedAt) });
             setError(loadError.message);
         } finally {
             setLoading(false);
@@ -1102,7 +1151,8 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         setEditorOpen(false);
         setEditingId('');
         setForm(EMPTY_FORM);
-        const cached = readCachedCourses(globalClassId);
+        const targetClassId = globalClassId || getFallbackProfClassId();
+        const cached = readCachedCourses(targetClassId);
         if (cached.length > 0) {
             setCourses(cached);
             setLoading(false);

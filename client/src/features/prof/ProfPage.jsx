@@ -32,10 +32,24 @@ export default function ProfPage({ user, onLogout }) {
   const [liveUser, setLiveUser] = useState(getInitialUser());
   const [tab, setTab] = useState(() => isPhone ? 'exposes' : 'activities');
   const [classes, setClasses] = useState([]);
-  const [selectedClassId, setSelectedClassId] = useState("");
+  const [selectedClassId, setSelectedClassId] = useState(() => {
+    try {
+      return window.localStorage.getItem('conda-last-prof-class-id') || "";
+    } catch (_) {
+      return "";
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      try {
+        window.localStorage.setItem('conda-last-prof-class-id', selectedClassId);
+      } catch (_) {}
+    }
+  }, [selectedClassId]);
 
   const loadProfileAndClasses = async () => {
     setLoading(true);

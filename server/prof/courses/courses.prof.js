@@ -119,26 +119,27 @@ const normalizeCourse = (body = {}) => {
     };
 };
 
+const COURSE_SHELF_EXCLUDE_FIELDS = '-nativeSlides -presentationVideoSlides -presentationVideoScenes -presentationVideoSequences -presentationAnimations';
+
 router.get('/', async (req, res) => {
     try {
         const classId = String(req.query.classId || '').trim();
         if (!classId) {
-            return res.json(await Course.find({}).sort({ date: -1, createdAt: -1 }).lean());
+            return res.json(await Course.find({}).select(COURSE_SHELF_EXCLUDE_FIELDS).sort({ date: -1, createdAt: -1 }).lean());
         }
         const Classroom = require('mongoose').model('Classroom');
         const selectedClass = await Classroom.findById(classId, 'name level').lean();
         if (!selectedClass) return res.status(404).json({ error: 'Classe introuvable' });
         const selectedLevel = academicLevel(selectedClass.level || selectedClass.name);
-        // The course shelf must be light: nativeSlides contains every detected
-        // element of every Google slide and is only useful once a course is
-        // actually opened. Loading it for all courses made the initial page
-        // request take tens of seconds.
+        // The course shelf must be light: nativeSlides and heavy video scenes/slides
+        // contain hundreds of KB/MB of payload only needed when editing or presenting.
+        // Excluding them drops initial shelf load time from ~25s to ~500ms.
         const [rows, sections] = await Promise.all([
             // Keep the broad lookup for legacy LEVEL courses: many of them
             // point to a historical source-class id while their targetLevel is
             // the authoritative visibility rule below.
             Course.find({})
-                .select('-nativeSlides')
+                .select(COURSE_SHELF_EXCLUDE_FIELDS)
                 .sort({ date: -1, createdAt: -1 }).lean(),
             CourseSection.find({}).lean()
         ]);
