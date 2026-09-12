@@ -864,6 +864,19 @@ router.post('/behavior', async (req, res) => {
             let n = s.teacherNotes.find(x => String(x.teacherId) === String(teacherId));
             if (!n) s.teacherNotes.push({ teacherId, text: extraData }); else n.text = extraData;
         }
+        if (type === 'SAVE_INCOMPLETE_WORK_DETAILS') {
+            const scores = ensureScores();
+            const scoreId = String(extraData?.scoreId || r.selectedScoreId || scores[scores.length - 1].id);
+            const score = scores.find(x => String(x.id || x._id) === scoreId) || scores[scores.length - 1];
+            const workText = String(extraData?.workIncompleteText ?? '').trim();
+            const punishText = String(extraData?.punishmentText ?? '').trim();
+            if (score) {
+                score.workIncompleteText = workText;
+                score.punishmentText = punishText;
+            }
+            r.workIncompleteText = workText;
+            r.punishmentText = punishText;
+        }
         if (type === 'SAVE_NICKNAME') {
             s.nickname = String(extraData || '').trim().slice(0, 40);
         }

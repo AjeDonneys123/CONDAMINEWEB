@@ -877,8 +877,107 @@
 .btn-x { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
 .btn-v { background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
 .btn-c { background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; font-size: 0.8rem; }
-.action-drawer { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 20px; border-radius: 30px 30px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.15); z-index: 100; transform: translateY(100%); transition: transform 0.3s; }
+.action-drawer { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 20px; border-radius: 30px 30px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.15); z-index: 100; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.25s ease; max-height: 94vh; overflow-y: auto; }
 .action-drawer.open { transform: translateY(0); }
+.action-drawer.work-incomplete-open {
+    padding-top: 24px;
+    padding-bottom: 36px;
+    border-top: 3px solid #eab308;
+    box-shadow: 0 -15px 50px rgba(234, 179, 8, 0.22), 0 -10px 40px rgba(0, 0, 0, 0.18);
+}
+.incomplete-work-panel {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, #fefce8 0%, #fffbeb 100%);
+    border: 2px solid #fde047;
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 4px 14px rgba(234, 179, 8, 0.15);
+    animation: fadeIn 0.25s ease-out;
+}
+.incomplete-work-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.iwp-badge {
+    font-size: 0.72rem;
+    font-weight: 950;
+    color: #854d0e;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.iwp-saved-badge {
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #15803d;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    padding: 2px 8px;
+    border-radius: 999px;
+    animation: fadeIn 0.2s;
+}
+.incomplete-work-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.iwp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.iwp-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 900;
+    color: #713f12;
+    user-select: none;
+}
+.iwp-icon {
+    font-size: 0.85rem;
+}
+.iwp-input {
+    width: 100%;
+    padding: 9px 12px;
+    background: #ffffff;
+    border: 1.5px solid #facc15;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #1e293b;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-sizing: border-box;
+}
+.iwp-input:focus {
+    border-color: #ca8a04;
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.25);
+}
+.iwp-save-btn {
+    align-self: flex-end;
+    padding: 7px 14px;
+    background: #eab308;
+    color: #713f12;
+    font-size: 0.72rem;
+    font-weight: 950;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(234, 179, 8, 0.35);
+    transition: transform 0.1s, background 0.15s;
+}
+.iwp-save-btn:hover {
+    background: #ca8a04;
+    color: #ffffff;
+}
+.iwp-save-btn:active {
+    transform: scale(0.96);
+}
 .action-drawer.flash-cross { animation: drawerFlashCross 1s ease; }
 .action-drawer.flash-bonus { animation: drawerFlashBonus 1s ease; }
 .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -979,6 +1078,8 @@
 
 @media (max-width: 768px) {
     .action-drawer { max-height: 94dvh; overflow-y: auto; padding: 14px; border-radius: 22px 22px 0 0; }
+    .action-drawer.work-incomplete-open { padding-bottom: 24px; }
+    .incomplete-work-panel { padding: 10px 12px; }
     .drawer-grid-complex { gap: 8px; }
     .act-btn { min-height: 44px; padding: 9px 6px; }
     .alpha-counter { padding: 2px 6px; font-size: 0.6rem; }

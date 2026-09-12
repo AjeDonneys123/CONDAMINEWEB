@@ -41,6 +41,11 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [isEditingNickname, setIsEditingNickname] = useState(false);
     const [currentNote, setCurrentNote] = useState("");
     const [currentNickname, setCurrentNickname] = useState("");
+    const [incompleteWorkText, setIncompleteWorkText] = useState("");
+    const [incompletePunishmentText, setIncompletePunishmentText] = useState("");
+    const [incompleteSavedFeedback, setIncompleteSavedFeedback] = useState(false);
+    const incompleteDebounceTimerRef = useRef(null);
+    const incompletePanelRef = useRef(null);
     const [swapSource, setSwapSource] = useState(null);
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
@@ -409,18 +414,23 @@ export default function ClassroomManager({ globalClassId, user }) {
         } catch (error) { alert(error.message || 'Import Google Sheets impossible.'); }
         setIaLoading(false);
     };
-    const getMyStats = (stu) => { if (!stu.behaviorRecords) return { scores: [] }; return stu.behaviorRecords.find(r => String(r.teacherId) === String(myId)) || { scores: [] }; };
+    const getMyStats = (stu) => {
+        if (!stu || !Array.isArray(stu.behaviorRecords)) return { scores: [] };
+        return stu.behaviorRecords.find(r => String(r?.teacherId) === String(myId)) || { scores: [] };
+    };
     const getStudentGrades = (stu) => {
+        if (!stu) return [{ id: 'legacy', value: 15 }];
         const stats = getMyStats(stu);
         if (Array.isArray(stats.scores) && stats.scores.length) return stats.scores;
         return [{ id: 'legacy', value: Number(stats.baseScore ?? 15) + (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0) }];
     };
     const getSelectedGrade = (stu) => {
+        if (!stu) return null;
         const grades = getStudentGrades(stu);
         const selected = grades.find(g => String(g.id) === String(getMyStats(stu).selectedScoreId || ''));
         return selected || grades[grades.length - 1];
     };
-    const selectedGradeHas = (stu, field) => Boolean(getSelectedGrade(stu)?.[field]);
+    const selectedGradeHas = (stu, field) => Boolean(stu && getSelectedGrade(stu)?.[field]);
     const getGradeStateClass = (grade) => grade?.punishment
         ? 'punishment-debt'
         : (grade?.workIncomplete ? 'incomplete-debt' : (grade?.boardWarning ? 'board-warning' : ''));
@@ -712,6 +722,11 @@ export default function ClassroomManager({ globalClassId, user }) {
         if (frenchMode) return;
         setCurrentNote(stu.myNote || "");
         setCurrentNickname(stu.nickname || "");
+        const activeScore = getSelectedGrade(stu);
+        const activeRecord = getMyStats(stu);
+        setIncompleteWorkText(activeScore?.workIncompleteText || activeRecord?.workIncompleteText || "");
+        setIncompletePunishmentText(activeScore?.punishmentText || activeRecord?.punishmentText || "");
+        setIncompleteSavedFeedback(false);
         setShowNoteInput(false);
         setIsEditingNickname(false);
     };
@@ -912,6 +927,47 @@ export default function ClassroomManager({ globalClassId, user }) {
         setIsEditingNickname(false);
     };
 
+    const saveIncompleteDetails = (workVal, punishVal) => {
+        if (!selectedStudent?._id) return;
+        const scoreId = getSelectedGrade(selectedStudent)?.id;
+        addBehavior(selectedStudent._id, 'SAVE_INCOMPLETE_WORK_DETAILS', {
+            scoreId,
+            workIncompleteText: workVal,
+            punishmentText: punishVal
+        }, { keepDrawerOpen: true, silentReload: true, skipFlash: true });
+        setIncompleteSavedFeedback(true);
+        setTimeout(() => setIncompleteSavedFeedback(false), 2000);
+    };
+
+    const debouncedSaveIncomplete = (workVal, punishVal) => {
+        if (incompleteDebounceTimerRef.current) clearTimeout(incompleteDebounceTimerRef.current);
+        incompleteDebounceTimerRef.current = setTimeout(() => {
+            saveIncompleteDetails(workVal, punishVal);
+        }, 600);
+    };
+
+    useEffect(() => {
+        if (!selectedStudent) {
+            setIncompleteWorkText('');
+            setIncompletePunishmentText('');
+            setIncompleteSavedFeedback(false);
+            return;
+        }
+        const activeScore = getSelectedGrade(selectedStudent);
+        const activeRecord = getMyStats(selectedStudent);
+        setIncompleteWorkText(activeScore?.workIncompleteText || activeRecord?.workIncompleteText || '');
+        setIncompletePunishmentText(activeScore?.punishmentText || activeRecord?.punishmentText || '');
+    }, [selectedStudent?._id, getSelectedGrade(selectedStudent)?.id]);
+
+    useEffect(() => {
+        if (selectedStudent && selectedGradeHas(selectedStudent, 'workIncomplete')) {
+            const timer = setTimeout(() => {
+                incompletePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 120);
+            return () => clearTimeout(timer);
+        }
+    }, [Boolean(selectedStudent && selectedGradeHas(selectedStudent, 'workIncomplete'))]);
+
     useEffect(() => {
         if (!actionFlash) return undefined;
         const t = setTimeout(() => setActionFlash(''), 1000);
@@ -1027,6 +1083,19 @@ export default function ClassroomManager({ globalClassId, user }) {
                 r.forcedSix = false;
                 r.forcedSixScoreId = '';
                 r.forcedSixDebtAmount = 0;
+            }
+            if (type === 'SAVE_INCOMPLETE_WORK_DETAILS') {
+                const requestedId = extra?.scoreId || r.selectedScoreId || scores[scores.length - 1].id;
+                scores = scores.map(grade => {
+                    if (String(grade.id) !== String(requestedId)) return grade;
+                    return {
+                        ...grade,
+                        workIncompleteText: String(extra?.workIncompleteText || ''),
+                        punishmentText: String(extra?.punishmentText || '')
+                    };
+                });
+                r.workIncompleteText = String(extra?.workIncompleteText || '');
+                r.punishmentText = String(extra?.punishmentText || '');
             }
             if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !r.workIncomplete;
             r.scores = scores;
@@ -1490,7 +1559,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 </>
             ) : renderList()}
             
-            <div className={`action-drawer ${selectedStudent && !frenchMode ? 'open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
+            <div className={`action-drawer ${selectedStudent && !frenchMode ? 'open' : ''} ${selectedStudent && selectedGradeHas(selectedStudent, 'workIncomplete') ? 'work-incomplete-open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
                 {selectedStudent && !frenchMode && (
                     <>
                         <div className="drawer-header">
@@ -1539,6 +1608,72 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <button className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
                                     {selectedGradeHas(selectedStudent, 'punishment') ? '✓ PUNITION FAITE · +9' : '🟥 PUNITION · −9'}
                                 </button>
+                                {selectedGradeHas(selectedStudent, 'workIncomplete') && (
+                                    <div className="incomplete-work-panel" ref={incompletePanelRef}>
+                                        <div className="incomplete-work-header">
+                                            <span className="iwp-badge">⚠️ TRAVAIL INCOMPLET &amp; PUNITION</span>
+                                            {incompleteSavedFeedback && <span className="iwp-saved-badge">✓ Enregistré</span>}
+                                        </div>
+                                        <div className="incomplete-work-inputs">
+                                            <div className="iwp-field">
+                                                <label className="iwp-label">
+                                                    <span className="iwp-icon">📝</span>
+                                                    <span>Quel travail est incomplet ?</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    className="iwp-input"
+                                                    value={incompleteWorkText}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setIncompleteWorkText(val);
+                                                        debouncedSaveIncomplete(val, incompletePunishmentText);
+                                                    }}
+                                                    onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
+                                                        }
+                                                    }}
+                                                    placeholder="Ex: Exercice 3 page 45, DM non rendu..."
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <div className="iwp-field">
+                                                <label className="iwp-label">
+                                                    <span className="iwp-icon">⚖️</span>
+                                                    <span>Quelle est la punition à faire ?</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    className="iwp-input"
+                                                    value={incompletePunishmentText}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setIncompletePunishmentText(val);
+                                                        debouncedSaveIncomplete(incompleteWorkText, val);
+                                                    }}
+                                                    onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
+                                                        }
+                                                    }}
+                                                    placeholder="Ex: Recopier la leçon x2 pour mardi..."
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="iwp-save-btn"
+                                            onClick={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                        >
+                                            💾 ENREGISTRER
+                                        </button>
+                                    </div>
+                                )}
                                 <button className={`act-btn board-warning-toggle ${selectedGradeHas(selectedStudent, 'boardWarning') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_WARNING', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
                                     {selectedGradeHas(selectedStudent, 'boardWarning') ? 'DÉSAVERTIR AU TABLEAU' : '⚠️ AVERTIR AU TABLEAU'}
                                 </button>

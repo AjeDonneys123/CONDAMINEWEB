@@ -10,13 +10,25 @@ const BehaviorRecordSchema = new mongoose.Schema({
     lastCrossDate: { type: Date, default: null },
     weeksToRedemption: { type: Number, default: 3 },
     nextCrossRemovalAt: { type: Date, default: null },
-    scores: { type: [{ id: String, value: { type: Number, default: 15 }, createdAt: { type: Date, default: Date.now } }], default: [] },
+    scores: { type: [{
+        id: String,
+        value: { type: Number, default: 15 },
+        createdAt: { type: Date, default: Date.now },
+        workIncomplete: { type: Boolean, default: false },
+        punishment: { type: Boolean, default: false },
+        boardWarning: { type: Boolean, default: false },
+        penaltyAmount: { type: Number, default: 0 },
+        workIncompleteText: { type: String, default: '' },
+        punishmentText: { type: String, default: '' }
+    }], default: [] },
     selectedScoreId: { type: String, default: '' },
     forcedSix: { type: Boolean, default: false },
     forcedSixCount: { type: Number, default: 0, min: 0 },
     forcedSixScoreId: { type: String, default: '' },
     forcedSixDebtAmount: { type: Number, default: 0, min: 0 },
-    workIncomplete: { type: Boolean, default: false }
+    workIncomplete: { type: Boolean, default: false },
+    workIncompleteText: { type: String, default: '' },
+    punishmentText: { type: String, default: '' }
 }, { _id: false });
 
 // Schéma pour les notes prof
