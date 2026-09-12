@@ -87,7 +87,7 @@ const StudentSchema = new mongoose.Schema({
     isTestAccount: { type: Boolean, default: false },
     isDil: { type: Boolean, default: false },
     lastLogin: { type: Date, default: Date.now }
-}, { collection: 'students' });
+}, { collection: 'students', versionKey: false, optimisticConcurrency: false });
 
 function normalizeStudentUpdate(update) {
     if (!update || typeof update !== 'object') return update;

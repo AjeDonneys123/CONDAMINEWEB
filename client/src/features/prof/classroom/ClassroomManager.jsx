@@ -1559,7 +1559,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 </>
             ) : renderList()}
             
-            <div className={`action-drawer ${selectedStudent && !frenchMode ? 'open' : ''} ${selectedStudent && selectedGradeHas(selectedStudent, 'workIncomplete') ? 'work-incomplete-open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
+            <div className={`action-drawer ${selectedStudent && !frenchMode ? 'open' : ''} ${selectedStudent && (selectedGradeHas(selectedStudent, 'workIncomplete') || selectedGradeHas(selectedStudent, 'punishment')) ? 'work-incomplete-open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
                 {selectedStudent && !frenchMode && (
                     <>
                         <div className="drawer-header">
@@ -1602,78 +1602,62 @@ export default function ClassroomManager({ globalClassId, user }) {
                             >SUPPRIMER NOTE</button>
                             {[-0.5,0.5].map(delta => <button key={delta} className={`act-btn ${delta < 0 ? 'btn-cross' : 'btn-bonus'}`} {...scoreHoldProps(selectedStudent, delta)}>{delta > 0 ? '+' : ''}{delta}</button>)}
                             <div className="student-alert-actions">
-                                <button className={`act-btn grade-toggle ${selectedGradeHas(selectedStudent, 'workIncomplete') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_INCOMPLETE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
-                                    {selectedGradeHas(selectedStudent, 'workIncomplete') ? '✓ TRAVAIL TERMINÉ · +6' : '🟨 TRAVAIL INCOMPLET · −6'}
-                                </button>
-                                <button className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
-                                    {selectedGradeHas(selectedStudent, 'punishment') ? '✓ PUNITION FAITE · +9' : '🟥 PUNITION · −9'}
-                                </button>
-                                {selectedGradeHas(selectedStudent, 'workIncomplete') && (
-                                    <div className="incomplete-work-panel" ref={incompletePanelRef}>
-                                        <div className="incomplete-work-header">
-                                            <span className="iwp-badge">⚠️ TRAVAIL INCOMPLET &amp; PUNITION</span>
-                                            {incompleteSavedFeedback && <span className="iwp-saved-badge">✓ Enregistré</span>}
+                                <div className="student-alert-col">
+                                    <button className={`act-btn grade-toggle ${selectedGradeHas(selectedStudent, 'workIncomplete') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_INCOMPLETE', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                        {selectedGradeHas(selectedStudent, 'workIncomplete') ? '✓ TRAVAIL TERMINÉ · +6' : '🟨 TRAVAIL INCOMPLET · −6'}
+                                    </button>
+                                    {selectedGradeHas(selectedStudent, 'workIncomplete') && (
+                                        <div className="mini-alert-field mini-field-incomplete" ref={incompletePanelRef}>
+                                            <input
+                                                type="text"
+                                                className="mini-alert-input mini-input-incomplete"
+                                                value={incompleteWorkText}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setIncompleteWorkText(val);
+                                                    debouncedSaveIncomplete(val, incompletePunishmentText);
+                                                }}
+                                                onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
+                                                    }
+                                                }}
+                                                placeholder="Travail non fait..."
+                                                autoFocus
+                                            />
                                         </div>
-                                        <div className="incomplete-work-inputs">
-                                            <div className="iwp-field">
-                                                <label className="iwp-label">
-                                                    <span className="iwp-icon">📝</span>
-                                                    <span>Quel travail est incomplet ?</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    className="iwp-input"
-                                                    value={incompleteWorkText}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        setIncompleteWorkText(val);
-                                                        debouncedSaveIncomplete(val, incompletePunishmentText);
-                                                    }}
-                                                    onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
-                                                        }
-                                                    }}
-                                                    placeholder="Ex: Exercice 3 page 45, DM non rendu..."
-                                                    autoFocus
-                                                />
-                                            </div>
-                                            <div className="iwp-field">
-                                                <label className="iwp-label">
-                                                    <span className="iwp-icon">⚖️</span>
-                                                    <span>Quelle est la punition à faire ?</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    className="iwp-input"
-                                                    value={incompletePunishmentText}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        setIncompletePunishmentText(val);
-                                                        debouncedSaveIncomplete(incompleteWorkText, val);
-                                                    }}
-                                                    onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
-                                                        }
-                                                    }}
-                                                    placeholder="Ex: Recopier la leçon x2 pour mardi..."
-                                                />
-                                            </div>
+                                    )}
+                                </div>
+                                <div className="student-alert-col">
+                                    <button className={`act-btn punishment-toggle ${selectedGradeHas(selectedStudent, 'punishment') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_PUNISHMENT', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
+                                        {selectedGradeHas(selectedStudent, 'punishment') ? '✓ PUNITION FAITE · +9' : '🟥 PUNITION · −9'}
+                                    </button>
+                                    {selectedGradeHas(selectedStudent, 'punishment') && (
+                                        <div className="mini-alert-field mini-field-punishment">
+                                            <input
+                                                type="text"
+                                                className="mini-alert-input mini-input-punishment"
+                                                value={incompletePunishmentText}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setIncompletePunishmentText(val);
+                                                    debouncedSaveIncomplete(incompleteWorkText, val);
+                                                }}
+                                                onBlur={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        saveIncompleteDetails(incompleteWorkText, incompletePunishmentText);
+                                                    }
+                                                }}
+                                                placeholder="Punition à faire..."
+                                                autoFocus={!selectedGradeHas(selectedStudent, 'workIncomplete')}
+                                            />
                                         </div>
-                                        <button
-                                            type="button"
-                                            className="iwp-save-btn"
-                                            onClick={() => saveIncompleteDetails(incompleteWorkText, incompletePunishmentText)}
-                                        >
-                                            💾 ENREGISTRER
-                                        </button>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                                 <button className={`act-btn board-warning-toggle ${selectedGradeHas(selectedStudent, 'boardWarning') ? 'active' : ''}`} onClick={() => addBehavior(selectedStudent._id, 'TOGGLE_SCORE_WARNING', {scoreId:getSelectedGrade(selectedStudent)?.id}, {keepDrawerOpen:true})}>
                                     {selectedGradeHas(selectedStudent, 'boardWarning') ? 'DÉSAVERTIR AU TABLEAU' : '⚠️ AVERTIR AU TABLEAU'}
                                 </button>

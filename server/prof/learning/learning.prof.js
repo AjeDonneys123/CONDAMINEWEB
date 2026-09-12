@@ -1255,7 +1255,7 @@ router.post('/slides/manifest', async (req, res) => {
         const presentationUrl = String(req.body?.presentationUrl || req.body?.presentationId || '').trim();
         const slideSelection = String(req.body?.slideSelection || '').trim();
         const filterCondition = String(req.body?.filterCondition || '').trim();
-        const includeThumbnails = req.body?.includeThumbnails !== false;
+        const includeThumbnails = req.body?.includeThumbnails === true;
         const outlineOnly = req.body?.outlineOnly === true;
         const forceRefresh = req.body?.force === true;
         if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });

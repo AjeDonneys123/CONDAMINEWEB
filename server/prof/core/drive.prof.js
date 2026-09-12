@@ -635,25 +635,26 @@ const ProfDrive = {
             } else if (cond && !text.toLowerCase().includes(cond)) {
                 continue;
             }
-            let thumbnailUrl = '';
-            if (includeThumbnails) {
-                try {
-                    const thumb = await slidesApi.presentations.pages.getThumbnail({
-                        presentationId,
-                        pageObjectId: String(slide?.objectId || ''),
-                        thumbnailProperties_mimeType: 'PNG',
-                        thumbnailProperties_thumbnailSize: 'LARGE'
-                    });
-                    thumbnailUrl = String(thumb?.data?.contentUrl || '').trim();
-                } catch (_) {}
-            }
             rows.push({
                 slideNumber,
                 objectId: String(slide?.objectId || ''),
                 text,
                 colors: Array.from(colors),
-                thumbnailUrl
+                thumbnailUrl: ''
             });
+        }
+        if (includeThumbnails && rows.length > 0) {
+            await Promise.all(rows.map(async (row) => {
+                try {
+                    const thumb = await slidesApi.presentations.pages.getThumbnail({
+                        presentationId,
+                        pageObjectId: row.objectId,
+                        thumbnailProperties_mimeType: 'PNG',
+                        thumbnailProperties_thumbnailSize: 'LARGE'
+                    });
+                    row.thumbnailUrl = String(thumb?.data?.contentUrl || '').trim();
+                } catch (_) {}
+            }));
         }
         return {
             presentationId,

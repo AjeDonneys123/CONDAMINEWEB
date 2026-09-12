@@ -6,15 +6,26 @@ function isLegacyLocalServer(url) {
     return /^(?:http:\/\/)?(?:localhost|127\.0\.0\.1):(?:3000|5173)$/i.test(String(url || '').replace(/\/$/, ''));
 }
 
-function resolveCondaServerUrl(data = {}) {
+async function resolveCondaServerUrl(data = {}) {
     const stored = String(data.condaServerUrl || '').replace(/\/$/, '');
-    // A saved local address is honoured only when the teacher deliberately
-    // configured it in the popup. This also repairs old installations without
-    // requiring the user to uninstall/reinstall the extension.
-    if (!stored || (!data.serverConfiguredByUser && isLegacyLocalServer(stored))) {
-        return DEFAULT_CONDA_SERVER_URL;
+    if (stored && data.serverConfiguredByUser) {
+        return stored;
     }
-    return stored;
+    // Fast probe to detect if local CondaWeb instance is active
+    try {
+        const localCheck = await fetch('http://localhost:3000/api/check-deploy', {
+            signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(350) : undefined
+        });
+        if (localCheck.ok) return 'http://localhost:3000';
+    } catch (_) {}
+    try {
+        const local5173Check = await fetch('http://localhost:5173/api/check-deploy', {
+            signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(350) : undefined
+        });
+        if (local5173Check.ok) return 'http://localhost:5173';
+    } catch (_) {}
+    if (stored) return stored;
+    return DEFAULT_CONDA_SERVER_URL;
 }
 
 async function injectIntoSlidesTabs() {
@@ -102,7 +113,7 @@ async function proxyCondaRequest(request) {
     let serverUrl = '';
     try {
         const data = await readExtensionStorage(['condaServerUrl', 'serverConfiguredByUser']);
-        serverUrl = resolveCondaServerUrl(data);
+        serverUrl = await resolveCondaServerUrl(data);
         // Persist the automatic repair, so all subsequent calls use the same
         // production endpoint even after the service worker is restarted.
         if (serverUrl !== String(data.condaServerUrl || '').replace(/\/$/, '')) {
