@@ -92,7 +92,9 @@ const StudentSchema = new mongoose.Schema({
             punishment: { type: Boolean, default: false },
             workIncomplete: { type: Boolean, default: false },
             boardWarning: { type: Boolean, default: false },
-            penaltyAmount: { type: Number, default: 0, min: 0 }
+            penaltyAmount: { type: Number, default: 0, min: 0 },
+            workIncompleteText: { type: String, default: '' },
+            punishmentText: { type: String, default: '' }
         }], default: [] }
         ,selectedScoreId: { type: String, default: '' }
         ,forcedSix: { type: Boolean, default: false }
@@ -100,6 +102,8 @@ const StudentSchema = new mongoose.Schema({
         ,forcedSixScoreId: { type: String, default: '' }
         ,forcedSixDebtAmount: { type: Number, default: 0, min: 0 }
         ,workIncomplete: { type: Boolean, default: false }
+        ,workIncompleteText: { type: String, default: '' }
+        ,punishmentText: { type: String, default: '' }
     }],
     teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
     punishmentStatus: { type: String, default: 'NONE' },
@@ -107,6 +111,8 @@ const StudentSchema = new mongoose.Schema({
     punishmentLateMailSentAt: { type: Date, default: null },
     punishmentLateMailTo: { type: String, default: "" },
     punishmentLateMailError: { type: String, default: "" },
+    workIncomplete: { type: Boolean, default: false },
+    workIncompleteText: { type: String, default: '' },
     indicators: Array,
     spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }],
     manualScanGrades: [{

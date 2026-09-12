@@ -2026,6 +2026,22 @@ export default function StudentsManager({ globalClassId }) {
                                     {s.firstName} {s.lastName}
                                     {s.punishmentStatus !== 'NONE' && <span className="ml-2 text-[8px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-black">PUNI</span>}
                                     {(() => {
+                                        const records = Array.isArray(s.behaviorRecords) ? s.behaviorRecords : [];
+                                        const hasIncomplete = records.some(r => Boolean(r.workIncomplete) || (Array.isArray(r.scores) && r.scores.some(sc => Boolean(sc.workIncomplete)))) || Boolean(s.workIncomplete);
+                                        if (!hasIncomplete) return null;
+                                        const incText = records.find(r => r.workIncompleteText)?.workIncompleteText 
+                                            || records.flatMap(r => r.scores || []).find(sc => sc.workIncompleteText)?.workIncompleteText 
+                                            || s.workIncompleteText || '';
+                                        return (
+                                            <span 
+                                                className="ml-2 text-[8px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-black"
+                                                title={incText ? `Travail non fait : ${incText}` : 'Travail non fait'}
+                                            >
+                                                ⚠️ NON FAIT{incText ? ` : ${incText}` : ''}
+                                            </span>
+                                        );
+                                    })()}
+                                    {(() => {
                                         const progress = dnbMethodProgress[extractId(s._id)] || {};
                                         const items = [['presentation', 'DOC'], ['image', 'IMAGE']].filter(([key]) => progress[key]);
                                         if (!items.length) return null;

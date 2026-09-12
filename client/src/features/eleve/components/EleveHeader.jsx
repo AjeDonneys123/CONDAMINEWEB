@@ -27,6 +27,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   const primaryRecord = [...behaviorRecords].reverse().find((r) => Array.isArray(r?.scores) && r.scores.length)
     || behaviorRecords[behaviorRecords.length - 1]
     || {};
+  const hasIncomplete = Boolean(primaryRecord.workIncomplete || user.workIncomplete || (Array.isArray(primaryRecord.scores) && primaryRecord.scores.some(s => s.workIncomplete)));
+  const incompleteText = primaryRecord.workIncompleteText 
+    || (Array.isArray(primaryRecord.scores) && primaryRecord.scores.find(s => s.workIncomplete && s.workIncompleteText)?.workIncompleteText)
+    || user.workIncompleteText 
+    || '';
   const grades = Array.isArray(primaryRecord.scores) && primaryRecord.scores.length
     ? primaryRecord.scores
     : [{ id: 'legacy', value: Number(primaryRecord.baseScore ?? 15) + Number(primaryRecord.bonuses || 0) * 0.5 - Number(primaryRecord.crosses || 0) }];
@@ -113,6 +118,17 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
       </div>
       
       {punishmentAlert}
+      {hasIncomplete && (
+        <div className="punishment-alert incomplete-alert" style={{ background: '#fffbeb', borderColor: '#f59e0b', color: '#92400e' }}>
+          <span className="text-2xl">⚠️</span>
+          <div className="flex flex-col">
+            <span className="font-black">TRAVAIL NON RENDU / INCOMPLET</span>
+            <span className="text-[11px] font-bold text-amber-900">
+              {incompleteText ? `Notification : ${incompleteText}` : "Tu as du travail non fait ou à rattraper."}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 1. TOP BAR (Identité) */}
       <div className="top-bar">
@@ -163,7 +179,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
                 <span className="ms-label">NOTES :</span>
                 <span className="student-grade-list">{visibleGrades.map((grade) => <span key={grade.id} className={`student-grade-chip ${grade.forced ? 'forced' : ''}`}>{Number(grade.value).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}</span>)}</span>
             </div>
-            {primaryRecord.workIncomplete && <div className="student-incomplete">TRAVAIL INCOMPLET</div>}
+            {hasIncomplete && (
+              <div className="student-incomplete" title={incompleteText ? `Travail non fait : ${incompleteText}` : 'Travail incomplet'}>
+                TRAVAIL INCOMPLET{incompleteText ? ` : ${incompleteText}` : ''}
+              </div>
+            )}
         </div>
       </div>
     </div>

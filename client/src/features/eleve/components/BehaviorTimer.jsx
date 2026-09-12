@@ -16,6 +16,12 @@ export default function BehaviorTimer({ studentData }) {
         forced: Boolean(activeRecord.forcedSix) && String(grade.id) === debtScoreId
     }));
 
+    const incText = activeRecord.workIncompleteText 
+        || (Array.isArray(activeRecord.scores) && activeRecord.scores.find(s => s.workIncomplete && s.workIncompleteText)?.workIncompleteText)
+        || studentData?.workIncompleteText 
+        || '';
+    const hasIncomplete = Boolean(activeRecord.workIncomplete || studentData?.workIncomplete || (Array.isArray(activeRecord.scores) && activeRecord.scores.some(s => s.workIncomplete)));
+
     return (
         <div className="behavior-timer-wrapper">
             <div className="bt-section bonus">
@@ -27,7 +33,11 @@ export default function BehaviorTimer({ studentData }) {
                         </div>
                     ))}
                 </div>
-                {activeRecord.workIncomplete && <div className="student-incomplete">TRAVAIL INCOMPLET</div>}
+                {hasIncomplete && (
+                    <div className="student-incomplete" title={incText ? `Travail non fait : ${incText}` : 'Travail incomplet'}>
+                        TRAVAIL INCOMPLET{incText ? ` : ${incText}` : ''}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -116,10 +116,14 @@ function buildBridgePersistentDebts(students = []) {
         const hasPunishment = scores.some((score) => Boolean(score?.punishment)) || String(student?.punishmentStatus || '') === 'PENDING' || String(student?.punishmentStatus || '') === 'LATE';
         const hasIncomplete = scores.some((score) => Boolean(score?.workIncomplete)) || records.some((record) => Boolean(record?.workIncomplete));
         if (!hasPunishment && !hasIncomplete) return null;
+        const incScore = scores.find((s) => s.workIncomplete && s.workIncompleteText);
+        const incRecord = records.find((r) => r.workIncomplete && r.workIncompleteText);
+        const text = String(incScore?.workIncompleteText || incRecord?.workIncompleteText || student?.workIncompleteText || '').trim();
         return {
             studentId: String(student._id),
             name: `${String(student.nickname || student.firstName || '').trim()} ${String(student.lastName || '').trim().slice(0, 1)}.`.trim(),
-            status: hasPunishment ? 'punishment' : 'incomplete'
+            status: hasPunishment ? 'punishment' : 'incomplete',
+            text: text
         };
     }).filter(Boolean).sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr', { sensitivity: 'base' }));
 }
@@ -785,6 +789,8 @@ router.post('/behavior', async (req, res) => {
                 }
                 r.workIncomplete = scores.some((item) => Boolean(item?.workIncomplete));
                 if (!r.workIncomplete) r.workIncompleteText = '';
+                s.workIncomplete = Boolean(r.workIncomplete);
+                if (!s.workIncomplete) s.workIncompleteText = '';
                 if (type === 'TOGGLE_SCORE_PUNISHMENT') {
                     const hasAnyPunishment = scores.some((item) => Boolean(item?.punishment));
                     if (hasAnyPunishment) {
@@ -872,6 +878,8 @@ router.post('/behavior', async (req, res) => {
             else r.workIncompleteText = '';
             if (scores.some(x => Boolean(x.punishment))) r.punishmentText = punishText;
             else r.punishmentText = '';
+            s.workIncomplete = Boolean(r.workIncomplete);
+            s.workIncompleteText = r.workIncompleteText;
         }
         if (type === 'SAVE_NICKNAME') {
             s.nickname = String(extraData || '').trim().slice(0, 40);

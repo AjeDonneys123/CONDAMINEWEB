@@ -1750,7 +1750,8 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 label.textContent = `🔔 Devoirs · ${row.text}`;
             } else {
                 const prefix = row.noticeType === 'punishment' ? 'Punition · ' : (row.noticeType === 'warning' ? 'Avertissement · ' : 'Travail incomplet · ');
-                label.textContent = `${prefix}${row.name || row.studentName || ''}`;
+                const detail = row.text ? ` (${row.text})` : '';
+                label.textContent = `${prefix}${row.name || row.studentName || ''}${detail}`;
             }
             li.appendChild(label);
             const close = document.createElement('button');
