@@ -377,6 +377,10 @@
 .student-card-drag.work-incomplete { background: #fef9c3; border-color: #eab308; }
 .student-card-drag.has-note { background: #ffedd5; border-color: #f97316; }
 .student-card-drag.punished { border-color: #dc2626; background: #fee2e2; }
+.student-card-drag.lowest-score-priority {
+    border: 3px solid #8b5cf6 !important;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.35), 0 4px 10px rgba(139, 92, 246, 0.2) !important;
+}
 .sc-training-stars {
     position: absolute;
     top: 4px;
@@ -660,6 +664,10 @@
         border: 2px solid #dc2626 !important;
         box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.35);
         background: #ffe4e6;
+    }
+    .student-card-drag.lowest-score-priority {
+        border: 2.5px solid #8b5cf6 !important;
+        box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.4) !important;
     }
     .sc-avatar { font-size: 0.7rem; margin: 0; opacity: 0.6; line-height: 1; }
     .sc-name { font-size: 0.6rem; font-weight: 950; margin: 0; max-width: 100%; line-height: 1; white-space: normal; color: #0f172a; overflow: visible; }

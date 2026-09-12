@@ -1,5 +1,5 @@
 // @signatures: ClassroomManager, addBehavior, changeGrid, getMyStats, handleDragOver, handleDragStart, handleDrop, handleFileSelect, handleOpenStudent, loadData, moveStudentTo, renderGrid, renderHeaders, renderList, toggleSeparator
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './ClassroomManager.css';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
@@ -643,6 +643,45 @@ export default function ClassroomManager({ globalClassId, user }) {
     const maxStudentRow = students.reduce((max, s) => Number.isInteger(s?.seatY) ? Math.max(max, s.seatY + 1) : max, 0);
     const effectivePlanRows = Math.max(gridSize.rows, maxStudentRow, Math.ceil(students.length / Math.max(1, gridSize.cols)));
 
+    const getStudentEffectiveScore = (stu) => {
+        if (!stu) return 15;
+        if (hasScoreDebt(stu)) return 6;
+        return getStudentScore(stu);
+    };
+
+    const lowestScoreStudentIds = useMemo(() => {
+        if (!Array.isArray(students) || students.length === 0) return new Set();
+
+        const validStudents = students.filter(s => s && s._id);
+        if (validStudents.length === 0) return new Set();
+
+        // Trier par note effective croissante (les plus faibles en premier)
+        const sorted = [...validStudents].sort((a, b) => {
+            const scoreA = getStudentEffectiveScore(a);
+            const scoreB = getStudentEffectiveScore(b);
+            if (scoreA !== scoreB) return scoreA - scoreB;
+
+            // Priorité en cas d'égalité : travail incomplet ou punition
+            const penaltyA = (getMyStats(a).workIncomplete || (a.punishmentStatus && a.punishmentStatus !== 'NONE')) ? 1 : 0;
+            const penaltyB = (getMyStats(b).workIncomplete || (b.punishmentStatus && b.punishmentStatus !== 'NONE')) ? 1 : 0;
+            if (penaltyA !== penaltyB) return penaltyB - penaltyA;
+
+            // Moins d'étoiles en premier
+            const starsA = getStudentStars(a);
+            const starsB = getStudentStars(b);
+            if (starsA !== starsB) return starsA - starsB;
+
+            // Ordre alphabétique pour stabilité
+            const lastCmp = String(a.lastName || '').localeCompare(String(b.lastName || ''), 'fr', { sensitivity: 'base' });
+            if (lastCmp !== 0) return lastCmp;
+            return String(a.firstName || '').localeCompare(String(b.firstName || ''), 'fr', { sensitivity: 'base' });
+        });
+
+        return new Set(sorted.slice(0, 5).map(s => String(s._id)));
+    }, [students, myId]);
+
+    const isLowestScorePriority = (stu) => Boolean(stu?._id && lowestScoreStudentIds.has(String(stu._id)));
+
     const handleOpenStudent = (stu) => {
         if (frenchMode) {
             const id = String(stu?._id || '');
@@ -1113,7 +1152,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
@@ -1211,12 +1250,13 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     style={{ gridColumn: col + 1, gridRow: row + 1 }}
                                 >
                                     <div
-                                        className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''}`}
+                                        className={`student-card-drag alpha-grid-card ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isListFinderMatch(student) && searchTerm.trim() ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`}
                                         onPointerDown={(event) => startStudentLongPress(student, event)}
                                         onPointerUp={stopStudentLongPress}
                                         onPointerCancel={stopStudentLongPress}
                                         onPointerLeave={stopStudentLongPress}
                                         onClick={(event) => handleStudentCardClick(event, student)}
+                                        title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}
                                     >
                                         {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                         <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
