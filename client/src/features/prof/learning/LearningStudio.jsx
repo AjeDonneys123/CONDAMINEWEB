@@ -5753,9 +5753,9 @@ ${isFifthOrSixthGrade ? `RÈGLE SPÉCIALE 5e/6e — PRÉSENTATION TRÈS LÉGÈRE
 
 Exemple de présentation attendue :
 I. Titre de la grande partie
-1- Idée essentielle avec un ou deux mots-clés en gras.
-- Précision ou exemple utile.
-2- Idée essentielle suivante.
+1- En **1789_Date**, le peuple prend la Bastille.
+- La **monarchie absolue_Régime politique** est alors contestée.
+2- **Napoléon Bonaparte_Personnage** prend ensuite le pouvoir.
 II. Titre de la grande partie suivante
 
 RÈGLES STRICTES
@@ -5767,9 +5767,9 @@ Les nombres suivis de - correspondent aux idées principales.
 Ne multiplie pas les niveaux de plan : une fiche de 5e ou 6e doit être courte, lisible et facile à apprendre.` : `Hiérarchie de référence :
 
 I. Titre de la grande partie
-1- Idée principale
-• Précision utile ou exemple bref
-2- Idée principale suivante
+1- En **1789_Date**, la prise de la Bastille marque le début de la Révolution.
+• Le roi **Louis XVI_Monarque** perd son pouvoir absolu.
+2- La **démocratie_Notion politique** se développe progressivement.
 II. Titre de la grande partie suivante
 RÈGLES STRICTES
 Après chaque élément, insère immédiatement un retour à la ligne.
@@ -5781,13 +5781,25 @@ Une idée principale doit être une phrase complète (sujet + verbe + complémen
 Ajoute des puces simples sous une idée principale seulement lorsqu'elles facilitent nettement la compréhension ou la mémorisation.
 En 3e, n'utilise a), b), c)... qu'exceptionnellement, lorsqu'un découpage supplémentaire est indispensable à la compréhension. Dans tous les autres cas, préfère une idée principale courte suivie de puces simples.
 Ne multiplie pas les niveaux de plan : une fiche doit pouvoir être relue et apprise facilement.`}
-Mettre en gras uniquement les dates, personnages, lieux, notions, mots-clés et expressions que l'élève devra restituer dans un texte à trous.
-Tous les éléments en gras doivent pouvoir être supprimés pour créer automatiquement un texte à trous.
-Vérifie avant de répondre que chaque date, personnage, lieu, notion ou expression mis en gras apparaît exactement une fois en gras dans la fiche : CondaWeb transformera automatiquement chacun de ces fragments en trou.
-Ne jamais mettre en gras un détail secondaire ou anecdotique.
-Supprimer les informations inutiles au niveau collège.
-Le contenu doit être exact, clair, synthétique et adapté à des élèves de collège.
-N'ajouter aucune source, citation, commentaire ou remarque méthodologique.
+
+RÈGLES STRICTES POUR LE TEXTE À TROUS ET LES INDICES PLACEHOLDERS :
+- Mettre en gras uniquement les dates, personnages, lieux, notions, mots-clés et expressions que l'élève devra restituer dans un texte à trous.
+- CHAQUE ÉLÉMENT EN GRAS DOIT OBLIGATOIREMENT COMPORTER UN INDICE PLACEHOLDER avec un tiret du bas « _ », sous la forme exacte **RéponseAttendue_Indice**.
+  CondaWeb convertit automatiquement chaque élément en gras en champ à trous pour l'élève :
+  • La partie avant le « _ » est la réponse exacte attendue de l'élève (la date, le mot-clé, le lieu, le personnage).
+  • La partie après le « _ » est un indice court qui s'affiche en grisé (placeholder) dans le champ vide pour orienter l'élève sans lui donner la réponse.
+- L'indice doit être court (1 à 3 mots maximum), clair et indiquer la nature ou la catégorie attendue :
+  • Pour une date ou une période : **1789_Date**, **14 juillet 1789_Date précise**, **1914-1918_Années du conflit**, **Ve siècle av. J.-C._Siècle**
+  • Pour un personnage ou un groupe : **Périclès_Dirigeant**, **Louis XVI_Roi**, **Napoléon Bonaparte_Empereur**, **sans-culottes_Groupe révolutionnaire**
+  • Pour un lieu géographique ou repère : **Athènes_Cité grecque**, **Versailles_Lieu du château**, **Rome_Capitale**, **Sedan_Bataille décisive**
+  • Pour une notion, un concept ou un système : **démocratie_Régime politique**, **monarchie absolue_Système politique**, **tranchées_Lieu de combat**
+  • Pour un texte, un traité ou une alliance : **Déclaration des droits de l'homme_Texte fondateur**, **Traité de Versailles_Accord de paix**
+- Ne jamais mettre d'espace autour du tiret du bas « _ ».
+- Vérifie avant de répondre que chaque date, personnage, lieu, notion ou expression mis en gras apparaît exactement une fois en gras dans la fiche.
+- Ne jamais mettre en gras un détail secondaire ou anecdotique.
+- Supprimer les informations inutiles au niveau collège.
+- Le contenu doit être exact, clair, synthétique et adapté à des élèves de collège.
+- N'ajouter aucune source, citation, commentaire ou remarque méthodologique.
 FORMAT IMPÉRATIF — PARTIE 2 : QCM DE RÉVISION
 Après la fiche, écrire exactement :
 QCM DE RÉVISION
@@ -5811,7 +5823,7 @@ b)
 c)
 d)
 Une seule réponse est correcte.
-Mettre en gras uniquement la bonne réponse, et toute la bonne réponse.
+Mettre en gras uniquement la bonne réponse, et toute la bonne réponse (dans le QCM, la réponse en gras ne doit PAS comporter d'indice placeholder, uniquement la proposition brute).
 Les mauvaises réponses doivent être plausibles mais sans ambiguïté.
 Les questions doivent porter sur les éléments en gras de la fiche (dates, personnages, lieux, notions, mots-clés...).
 Chaque proposition (a, b, c, d) doit être écrite sur sa propre ligne.
@@ -5823,6 +5835,8 @@ VÉRIFICATION AVANT DE RÉPONDRE
 - Le titre et tout le contenu portent bien sur « ${chapterTitle} ».
 - Chaque slide « Leçon n » de la trace écrite correspond à une et une seule grande partie, dans le même ordre.
 - Les autres slides ont seulement servi à illustrer ou préciser la leçon concernée, sans modifier le plan.
+- Chaque mot ou expression en gras dans la fiche de cours comporte obligatoirement son indice placeholder sous la forme **Réponse_Indice** (ex: **1789_Date**, **Athènes_Cité**).
+- Dans le QCM de révision, les 4 propositions sont rédigées proprement et seule la bonne réponse est en gras brut, sans indice placeholder.
 - Chaque grande partie possède son bloc LEÇON correspondant dans le QCM.
 - Le bloc FICHE CONDAWEB est directement copiable dans CondaWeb, sans introduction de Gemini, sans sources et sans conclusion ajoutée.
 - La fiche et le QCM sont adaptés au niveau ${targetLevel || 'indiqué'} de l'élève.`;
