@@ -69,7 +69,6 @@ const getEditUrl = (value = '') => {
 
 const COURSE_CACHE_KEY_PREFIX = 'conda-courses-cache-v1:';
 const CURRENT_COURSE_ID_KEY_PREFIX = 'conda-current-course-id:';
-const CURRENT_CHAPTER_CACHE_KEY_PREFIX = 'conda-current-chapter-cache-v1:';
 
 const getFallbackProfClassId = () => {
     try {
@@ -114,47 +113,6 @@ const writeLastCourseId = (classId = '', id = '') => {
     if (!targetClassId || !id) return;
     try {
         window.localStorage.setItem(`${CURRENT_COURSE_ID_KEY_PREFIX}${targetClassId}`, String(id));
-    } catch (_) {}
-};
-
-const readCachedCurrentChapter = (classId = '') => {
-    const targetClassId = classId || getFallbackProfClassId();
-    try {
-        if (targetClassId) {
-            const specific = window.localStorage.getItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}${targetClassId}`);
-            if (specific) {
-                const parsed = JSON.parse(specific);
-                if (parsed && parsed.title && parsed.slidesUrl) return parsed;
-            }
-        }
-        const fallback = window.localStorage.getItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}last`);
-        if (fallback) {
-            const parsed = JSON.parse(fallback);
-            if (parsed && parsed.title && parsed.slidesUrl) return parsed;
-        }
-        return null;
-    } catch (_) {
-        return null;
-    }
-};
-
-const writeCachedCurrentChapter = (classId = '', chapterObj = null) => {
-    if (!chapterObj || !chapterObj.title || !chapterObj.slidesUrl) return;
-    const targetClassId = classId || getFallbackProfClassId();
-    try {
-        const payload = JSON.stringify({
-            _id: String(chapterObj._id || ''),
-            title: chapterObj.title,
-            slidesUrl: chapterObj.slidesUrl,
-            presentationId: chapterObj.presentationId || '',
-            embedUrl: chapterObj.embedUrl || '',
-            targetClassroomId: chapterObj.targetClassroomId || targetClassId,
-            isEnabled: chapterObj.isEnabled
-        });
-        if (targetClassId) {
-            window.localStorage.setItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}${targetClassId}`, payload);
-        }
-        window.localStorage.setItem(`${CURRENT_CHAPTER_CACHE_KEY_PREFIX}last`, payload);
     } catch (_) {}
 };
 
@@ -950,30 +908,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         .filter((course) => course.isEnabled !== false && !course.isSourcePresentation)
         .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'fr', { numeric: true, sensitivity: 'base' })), [courses]);
 
-    const currentChapterCourse = useMemo(() => {
-        if (playingCourse && playingCourse.slidesUrl) return playingCourse;
-        const lastId = readLastCourseId(globalClassId);
-        if (lastId) {
-            const match = courses.find((c) => String(c._id) === String(lastId) && c.slidesUrl);
-            if (match) return match;
-        }
-        if (activeCourses.length > 0) {
-            const match = activeCourses.find((c) => c.slidesUrl);
-            if (match) return match;
-        }
-        const fromList = courses.find((c) => !c.isSourcePresentation && c.slidesUrl);
-        if (fromList) return fromList;
-        // Fast fallback instantané depuis le cache local (0 ms de latence)
-        const cachedChapter = readCachedCurrentChapter(globalClassId);
-        if (cachedChapter && cachedChapter.slidesUrl) return cachedChapter;
-        return null;
-    }, [playingCourse, globalClassId, courses, activeCourses]);
-
-    useEffect(() => {
-        if (currentChapterCourse?._id && currentChapterCourse?.slidesUrl) {
-            writeCachedCurrentChapter(globalClassId, currentChapterCourse);
-        }
-    }, [globalClassId, currentChapterCourse]);
     const visibleDebtStudents = useMemo(() => {
         const now = Date.now();
         return debtStudents.filter((student) => Number(dismissedDebtIds[String(student.id)] || 0) <= now);
@@ -3904,40 +3838,6 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         )}
                     </div>
                 </form>
-            )}
-
-            {currentChapterCourse && (
-                <section className="course-current-chapter-banner" aria-label="Chapitre courant">
-                    <div className="course-current-chapter-info">
-                        <span className="course-current-chapter-tag">
-                            <span className="course-pulse-dot" /> CHAPITRE COURANT
-                        </span>
-                        <h2 className="course-current-chapter-title">{currentChapterCourse.title}</h2>
-                    </div>
-                    <div className="course-current-chapter-actions">
-                        <a
-                            href={getDirectGoogleSlidesUrl(currentChapterCourse, '', globalClassId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="course-current-chapter-google-link"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                void handleOpenGoogleSlidesExternalClick(currentChapterCourse, 0);
-                            }}
-                            title="Accéder immédiatement aux Google Slides de ce chapitre dans un nouvel onglet"
-                        >
-                            ⚡ OUVRIR GOOGLE SLIDES ↗
-                        </a>
-                        <button
-                            type="button"
-                            className="course-current-chapter-present-btn"
-                            onClick={() => openPresentation(currentChapterCourse)}
-                            title="Lancer la présentation dans CondaWeb"
-                        >
-                            ▶ PRÉSENTER
-                        </button>
-                    </div>
-                </section>
             )}
 
             <div className="courses-library">
