@@ -287,18 +287,28 @@ export default function CollaborativeSuperfiche({
                                 key={p.paragraphId || pIndex}
                                 className="bg-white rounded-3xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                             >
-                                {/* En-tête de section */}
-                                <div className="px-5 py-3 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3">
+                                {/* En-tête de section avec badge discret pour ne pas dupliquer le titre du prof affiché dans le corps */}
+                                <div className="px-5 py-2.5 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2.5">
-                                        <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-800 text-xs font-black flex items-center justify-center">
-                                            {pIndex + 1}
-                                        </span>
-                                        <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                                            {p.title || `Partie ${pIndex + 1}`}
-                                        </span>
+                                        {(() => {
+                                            const rawTitle = String(p.title || '').trim();
+                                            const romanMatch = rawTitle.match(/^([IVX]+)\./i);
+                                            const badgeLabel = romanMatch
+                                                ? `Partie ${romanMatch[1].toUpperCase()}`
+                                                : /QCM/i.test(rawTitle)
+                                                    ? 'QCM de révision'
+                                                    : /LEÇON\s*(\d+)/i.test(rawTitle)
+                                                        ? `Leçon ${rawTitle.match(/LEÇON\s*(\d+)/i)[1]}`
+                                                        : `Partie ${pIndex + 1}`;
+                                            return (
+                                                <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-900 text-xs font-black tracking-wide uppercase">
+                                                    {badgeLabel}
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                     <span className="text-[11px] font-bold text-slate-400">
-                                        {contributions.length > 0 ? `${contributions.length} contribution${contributions.length > 1 ? 's' : ''}` : 'Socle officiel'}
+                                        {contributions.length > 0 ? `${contributions.length} ajout${contributions.length > 1 ? 's' : ''}` : 'Socle officiel'}
                                     </span>
                                 </div>
 
@@ -618,7 +628,8 @@ export default function CollaborativeSuperfiche({
             </div>
 
             <style>{`
-                .teacher-rich-content div { min-height: 1.5em; }
+                .teacher-rich-content { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 1.05rem; }
+                .teacher-rich-content div { min-height: 1.5em; line-height: 1.7; }
                 .teacher-rich-content strong, .teacher-rich-content b { font-weight: 700; }
                 .student-rich-content strong, .student-rich-content b { font-weight: 700; }
             `}</style>

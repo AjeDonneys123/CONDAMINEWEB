@@ -19,10 +19,11 @@ describe('Silo Prof: Intégrité des Modèles', () => {
     });
 
     it('stocke durablement une correction GPT unifiée et ses pages', () => {
-        ['studentCode', 'sujet', 'devoirComplet', 'openaiFileIdRefs', 'images', 'note', 'forme', 'introduction', 'arguments', 'exemples', 'conclusion', 'message', 'conseils']
+        ['studentCode', 'sujet', 'devoirComplet', 'openaiFileIdRefs', 'images', 'evaluationType', 'note', 'forme', 'introduction', 'arguments', 'exemples', 'developpement', 'conclusion', 'expression', 'message', 'conseils']
             .forEach((field) => expect(GptInboxMessage.schema.paths[field]).toBeDefined());
         expect(GptInboxMessage.schema.paths.note.options.min).toBe(0);
-        expect(GptInboxMessage.schema.paths.note.options.max).toBe(10);
-        expect(GptInboxMessage.schema.paths.conclusion.options.max).toBe(1);
+        expect(GptInboxMessage.schema.paths.note.options.max).toBe(20);
+        expect(GptInboxMessage.schema.paths.developpement.options.max).toBe(10);
+        expect(GptInboxMessage.schema.paths.expression.options.max).toBe(3);
     });
 });

@@ -1766,7 +1766,7 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
                 updatedAt: new Date()
             });
             sheet = created.toObject();
-        } else if (step.sheetTextHtml && (sheet.paragraphs?.length < 3 || sheet.paragraphs.some(p => !p.baseHtml) || sheet.baseSheetHtml !== step.sheetTextHtml)) {
+        } else if (step.sheetTextHtml && (sheet.paragraphs?.length < 3 || sheet.paragraphs.length > 5 || sheet.paragraphs.some(p => !p.baseHtml || (p.title?.startsWith('CH') && p.baseHtml.length < 60)) || sheet.baseSheetHtml !== step.sheetTextHtml)) {
             const freshSections = splitHtmlIntoSections(step.sheetTextHtml, step.sheetText);
             const existingContribsByPId = new Map();
             (sheet.paragraphs || []).forEach(p => {

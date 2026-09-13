@@ -221,7 +221,8 @@ const downloadOpenAiCopyImages = async (refs) => {
         const sourceUrl = ref.downloadUrl || `https://api.openai.com/v1/files/${encodeURIComponent(ref.id)}/content`;
         const response = await fetch(sourceUrl, ref.downloadUrl ? {} : { headers: { Authorization: `Bearer ${apiKey}` } });
         if (!response.ok) throw Object.assign(new Error(`Fichier OpenAI ${ref.id || index + 1} inaccessible (HTTP ${response.status})`), { status: 502 });
-        const mimeType = String(response.headers.get('content-type') || ref.mimeType || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+        const responseMime = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        const mimeType = responseMime.startsWith('image/') ? responseMime : (ref.mimeType || responseMime || 'application/octet-stream');
         if (!mimeType.startsWith('image/')) throw Object.assign(new Error(`Le fichier OpenAI ${ref.id || index + 1} n’est pas une image`), { status: 400 });
         const buffer = await response.buffer();
         if (!buffer.length || buffer.length > 4 * 1024 * 1024) throw Object.assign(new Error(`Image ${index + 1} vide ou supérieure à 4 Mo`), { status: 400 });
@@ -1772,7 +1773,10 @@ router.post('/gpt-inbox', async (req, res) => {
         if (isUnifiedCorrection && (!studentCode || !correctionMessage)) {
             return res.status(400).json({ ok: false, error: 'studentCode, type et message sont requis' });
         }
-        const ranges = { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
+        const isRqpSeconde = body.developpement !== undefined || body.expression !== undefined || String(body.evaluationType || '').toUpperCase() === 'RQP_SECONDE';
+        const ranges = isRqpSeconde
+            ? { note: [0, 20], introduction: [0, 5], developpement: [0, 10], conclusion: [0, 2], expression: [0, 3] }
+            : { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
         for (const [field, [min, max]] of Object.entries(ranges)) {
             if (body[field] === undefined || body[field] === null || body[field] === '') continue;
             const value = Number(body[field]);
@@ -1823,12 +1827,15 @@ router.post('/gpt-inbox', async (req, res) => {
             sujet: String(body.sujet || '').trim().slice(0, 1000),
             devoirComplet: String(body.devoirComplet || '').trim().slice(0, 50000),
             openaiFileIdRefs: openaiFileIdRefs.map((ref) => ref.id).filter(Boolean),
+            evaluationType: isRqpSeconde ? 'RQP_SECONDE' : 'DNB',
             note: score,
             forme: Number.isFinite(Number(body.forme)) ? Number(body.forme) : null,
             introduction: Number.isFinite(Number(body.introduction)) ? Number(body.introduction) : null,
             arguments: Number.isFinite(Number(body.arguments)) ? Number(body.arguments) : null,
             exemples: Number.isFinite(Number(body.exemples)) ? Number(body.exemples) : null,
+            developpement: Number.isFinite(Number(body.developpement)) ? Number(body.developpement) : null,
             conclusion: Number.isFinite(Number(body.conclusion)) ? Number(body.conclusion) : null,
+            expression: Number.isFinite(Number(body.expression)) ? Number(body.expression) : null,
             conseils: String(body.conseils || '').trim().slice(0, 5000),
             images: durableImages.length ? durableImages : sanitizeGptInboxImages(body.images || body.imageUrls || []),
             source: String(body.source || 'chatgpt').trim().slice(0, 80),
@@ -2249,37 +2256,75 @@ router.post('/sync-all-scenes', async (_req, res) => {
 // ==========================================
 
 const splitTextIntoInitialParagraphsProf = (text = '', html = '') => {
+    const rawHtml = String(html || '').trim();
+    if (rawHtml) {
+        const blockRegex = /<(div|p)[^>]*>([\s\S]*?)<\/\1>/gi;
+        const blocks = [];
+        let match;
+        while ((match = blockRegex.exec(rawHtml)) !== null) {
+            blocks.push(match[0]);
+        }
+        if (blocks.length > 0) {
+            const sections = [];
+            let currentHtml = [];
+            let currentTitle = '';
+
+            blocks.forEach((block) => {
+                const textOnly = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                const isRomanHeading = /^[IVX]+\.\s*/i.test(textOnly);
+                const isQcmHeader = /^QCM\s+DE\s+RÉVISION/i.test(textOnly);
+                const isLecon = /^LEÇON\s+\d+/i.test(textOnly);
+                const isChapter = /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(textOnly);
+
+                const shouldStartNewSection = (isRomanHeading || isQcmHeader || (isLecon && !currentHtml.some(b => /QCM/i.test(b))))
+                    && currentHtml.length > 0
+                    && !currentHtml.every(b => /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(b.replace(/<[^>]+>/g, ' ').trim()));
+
+                if (shouldStartNewSection) {
+                    sections.push({
+                        paragraphId: `p_${sections.length}`,
+                        title: currentTitle || `Section ${sections.length + 1}`,
+                        baseHtml: currentHtml.join(''),
+                        baseText: currentHtml.map(b => b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n'),
+                        order: sections.length,
+                        authorRole: 'teacher',
+                        baseComments: [],
+                        contributions: []
+                    });
+                    currentHtml = [block];
+                    currentTitle = textOnly;
+                } else {
+                    if (!currentTitle && textOnly && !isChapter) currentTitle = textOnly;
+                    if (isRomanHeading || isQcmHeader) currentTitle = textOnly;
+                    currentHtml.push(block);
+                }
+            });
+
+            if (currentHtml.length > 0) {
+                sections.push({
+                    paragraphId: `p_${sections.length}`,
+                    title: currentTitle || `Section ${sections.length + 1}`,
+                    baseHtml: currentHtml.join(''),
+                    baseText: currentHtml.map(b => b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n'),
+                    order: sections.length,
+                    authorRole: 'teacher',
+                    baseComments: [],
+                    contributions: []
+                });
+            }
+
+            if (sections.length > 0) return sections;
+        }
+    }
+
     const raw = String(text || '').replace(/\r/g, '').trim();
     if (!raw) return [];
     const chunks = raw.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean);
-    if (chunks.length <= 1) {
-        const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-        const aggregated = [];
-        let current = [];
-        lines.forEach((line) => {
-            const isHeadingOrNumbered = /^(?:[IVX]+\.|\d+\s*[-.)])\s+/i.test(line);
-            if (isHeadingOrNumbered && current.length > 0) {
-                aggregated.push(current.join('\n'));
-                current = [line];
-            } else {
-                current.push(line);
-            }
-        });
-        if (current.length > 0) aggregated.push(current.join('\n'));
-        if (aggregated.length > 1) {
-            return aggregated.map((chunk, idx) => ({
-                paragraphId: `p_${idx}`,
-                baseText: chunk,
-                order: idx,
-                authorRole: 'teacher',
-                baseComments: [],
-                contributions: []
-            }));
-        }
-    }
     return chunks.map((chunk, idx) => ({
         paragraphId: `p_${idx}`,
+        title: chunk.split('\n')[0]?.slice(0, 60) || `Section ${idx + 1}`,
         baseText: chunk,
+        baseHtml: '',
         order: idx,
         authorRole: 'teacher',
         baseComments: [],
@@ -2296,9 +2341,15 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
         if (!module) return res.status(404).json({ error: 'Module introuvable' });
 
         const steps = module.steps || [];
-        const step = steps.find((s) => String(s?.id) === String(stepId))
-            || steps.find((s) => s?.isGeneralSheetMaster === true)
-            || steps.find((s) => s?.type === 'sheet');
+        const masterStep = steps.find((s) => s?.isGeneralSheetMaster === true);
+        const requestedStep = steps.find((s) => String(s?.id) === String(stepId));
+
+        let step = requestedStep;
+        if (!step || step.informationalOnly || stepId === 'superfiche' || /plan\s+du\s+cours/i.test(step.title || '')) {
+            step = masterStep || step || steps.find((s) => s?.type === 'sheet');
+        } else if (masterStep && (!step.sheetTextHtml || step.sheetTextHtml.length < 150) && (masterStep.sheetTextHtml?.length || 0) > 250) {
+            step = masterStep;
+        }
         if (!step) return res.status(404).json({ error: 'Étape de fiche introuvable' });
 
         const targetStepId = String(step.id || stepId);
@@ -2310,13 +2361,38 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
                 moduleId,
                 stepId: targetStepId,
                 classroom,
+                baseSheetHtml: String(step.sheetTextHtml || ''),
+                baseSheetText: String(step.sheetText || ''),
                 paragraphs: initialParagraphs,
                 updatedAt: new Date()
             });
             sheet = created.toObject();
+        } else if (step.sheetTextHtml && (sheet.paragraphs?.length < 3 || sheet.paragraphs.some(p => !p.baseHtml) || sheet.baseSheetHtml !== step.sheetTextHtml)) {
+            const freshSections = splitTextIntoInitialParagraphsProf(step.sheetText, step.sheetTextHtml);
+            const existingContribsByPId = new Map();
+            (sheet.paragraphs || []).forEach(p => {
+                if (p.contributions?.length) existingContribsByPId.set(String(p.paragraphId), p.contributions);
+            });
+            freshSections.forEach(s => {
+                if (existingContribsByPId.has(String(s.paragraphId))) {
+                    s.contributions = existingContribsByPId.get(String(s.paragraphId));
+                }
+            });
+            await CollaborativeSheet.updateOne(
+                { _id: sheet._id },
+                {
+                    $set: {
+                        paragraphs: freshSections,
+                        baseSheetHtml: String(step.sheetTextHtml || ''),
+                        baseSheetText: String(step.sheetText || ''),
+                        updatedAt: new Date()
+                    }
+                }
+            );
+            sheet = await CollaborativeSheet.findById(sheet._id).lean();
         }
 
-        return res.json({ ok: true, sheet });
+        return res.json({ ok: true, sheet, stepTitle: step.title || module.title });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }

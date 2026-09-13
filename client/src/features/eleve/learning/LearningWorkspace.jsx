@@ -26,6 +26,8 @@ const formatVideoTime = (seconds = 0) => {
 const isCoursePlanLearningStep = (step = {}) => {
     const title = String(step?.title || '').trim();
     return step?.autoLinkedSheetMode === 'plan'
+        || step?.informationalOnly === true
+        || /plan\s+du\s+cours/i.test(title)
         || /plan\s+des\s+grandes\s+parties/i.test(title)
         || /restituer\s+le\s+plan/i.test(title);
 };
@@ -2811,8 +2813,16 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                         {collaborativeViewMode !== false ? (
                             <CollaborativeSuperfiche
                                 moduleId={module?._id}
-                                stepId={currentStep.id || 'superfiche'}
-                                initialStep={currentStep}
+                                stepId={
+                                    (isSeconde || (module?.steps || []).some((s) => s?.isGeneralSheetMaster === true))
+                                        ? ((module?.steps || []).find((s) => s?.isGeneralSheetMaster === true)?.id || currentStep?.id || 'superfiche')
+                                        : (currentStep?.id || 'superfiche')
+                                }
+                                initialStep={
+                                    (isSeconde || (module?.steps || []).some((s) => s?.isGeneralSheetMaster === true))
+                                        ? ((module?.steps || []).find((s) => s?.isGeneralSheetMaster === true) || currentStep)
+                                        : currentStep
+                                }
                                 user={user}
                                 classroom={studentClassForGpt}
                             />

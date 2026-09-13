@@ -1709,11 +1709,11 @@ export default function StudentsManager({ globalClassId }) {
                                     {entry.mastered ? <span className="students-gpt-chip is-valid">Validé</span> : null}
                                 </div>
                                 {entry.message && <h3>{entry.message}</h3>}
-                                {(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.note ?? entry.score}/10</div>}
+                                {(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.note ?? entry.score}/{entry.evaluationType === 'RQP_SECONDE' ? 20 : 10}</div>}
                                 {entry.sujet && <div className="students-gpt-subblock"><strong>Sujet :</strong> {entry.sujet}</div>}
                                 {[entry.forme, entry.introduction, entry.arguments, entry.exemples, entry.conclusion].some((value) => value !== null && value !== undefined) && (
                                     <div className="students-gpt-subblock">
-                                        <strong>Barème :</strong> Forme {entry.forme ?? '—'}/2 · Introduction {entry.introduction ?? '—'}/3 · Arguments {entry.arguments ?? '—'}/2 · Exemples {entry.exemples ?? '—'}/2 · Conclusion {entry.conclusion ?? '—'}/1
+                                        <strong>Barème :</strong> {entry.evaluationType === 'RQP_SECONDE' ? `Introduction ${entry.introduction ?? '—'}/5 · Développement ${entry.developpement ?? '—'}/10 · Conclusion ${entry.conclusion ?? '—'}/2 · Expression ${entry.expression ?? '—'}/3` : `Forme ${entry.forme ?? '—'}/2 · Introduction ${entry.introduction ?? '—'}/3 · Arguments ${entry.arguments ?? '—'}/2 · Exemples ${entry.exemples ?? '—'}/2 · Conclusion ${entry.conclusion ?? '—'}/1`}
                                     </div>
                                 )}
                                 {entry.feedback && <p>{entry.feedback}</p>}
@@ -2097,7 +2097,7 @@ export default function StudentsManager({ globalClassId }) {
                                                 ))}
                                                 {gptCorrections.map((entry, index) => (
                                                     <button key={`gpt-${entry._id || index}`} type="button" onClick={() => openGptFeedback(s, null)} title="Voir la correction reçue du GPT" className="rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-[9px] font-black text-indigo-700 hover:bg-indigo-200">
-                                                        🤖 {entry.sujet || 'Correction GPT'}{(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined ? ` · ${entry.note ?? entry.score}/10` : ''}
+                                                        🤖 {entry.sujet || 'Correction GPT'}{(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined ? ` · ${entry.note ?? entry.score}/${entry.evaluationType === 'RQP_SECONDE' ? 20 : 10}` : ''}
                                                     </button>
                                                 ))}
                                             </div>
