@@ -10,6 +10,7 @@ const multer = require('multer');
 const AIEngine = require('../../core/ai.engine');
 const ProfDrive = require('../../prof/core/drive.prof');
 const { synchronizeLinkedSheetQuestions } = require('../../prof/learning/linked-sheet-questions');
+const CollaborativeSheet = require('../../models/CollaborativeSheet');
 
 const learningAudioUpload = multer({
     dest: path.join(process.cwd(), 'public', 'uploads', 'temp'),
@@ -1623,6 +1624,235 @@ router.post('/validate-synonym', async (req, res) => {
             accept: Boolean(decision.accept),
             reason: String(decision.reason || '')
         });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ==========================================
+// SUPERFICHE COLLABORATIVE (2NDE / SECONDE)
+// ==========================================
+
+const splitTextIntoInitialParagraphs = (text = '', html = '') => {
+    const raw = String(text || '').replace(/\r/g, '').trim();
+    if (!raw) return [];
+    const chunks = raw.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean);
+    if (chunks.length <= 1) {
+        const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+        const aggregated = [];
+        let current = [];
+        lines.forEach((line) => {
+            const isHeadingOrNumbered = /^(?:[IVX]+\.|\d+\s*[-.)])\s+/i.test(line);
+            if (isHeadingOrNumbered && current.length > 0) {
+                aggregated.push(current.join('\n'));
+                current = [line];
+            } else {
+                current.push(line);
+            }
+        });
+        if (current.length > 0) aggregated.push(current.join('\n'));
+        if (aggregated.length > 1) {
+            return aggregated.map((chunk, idx) => ({
+                paragraphId: `p_${idx}`,
+                baseText: chunk,
+                order: idx,
+                authorRole: 'teacher',
+                baseComments: [],
+                contributions: []
+            }));
+        }
+    }
+    return chunks.map((chunk, idx) => ({
+        paragraphId: `p_${idx}`,
+        baseText: chunk,
+        order: idx,
+        authorRole: 'teacher',
+        baseComments: [],
+        contributions: []
+    }));
+};
+
+router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
+    try {
+        const LearningModule = mongoose.model('LearningModule');
+        const Student = mongoose.model('Student');
+        const { moduleId, stepId } = req.params;
+        const studentId = String(req.query.studentId || '').trim();
+        const student = studentId ? await Student.findById(studentId).lean() : null;
+        const classroom = String(req.query.classroom || student?.currentClass || '').trim();
+
+        const module = await LearningModule.findById(moduleId).lean();
+        if (!module) return res.status(404).json({ error: 'Module introuvable' });
+
+        const steps = module.steps || [];
+        const step = steps.find((s) => String(s?.id) === String(stepId))
+            || steps.find((s) => s?.isGeneralSheetMaster === true)
+            || steps.find((s) => s?.type === 'sheet');
+        if (!step) return res.status(404).json({ error: 'Étape de fiche introuvable' });
+
+        const targetStepId = String(step.id || stepId);
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId: targetStepId, classroom }).lean();
+
+        if (!sheet) {
+            const initialParagraphs = splitTextIntoInitialParagraphs(step.sheetText, step.sheetTextHtml);
+            const created = await CollaborativeSheet.create({
+                moduleId,
+                stepId: targetStepId,
+                classroom,
+                paragraphs: initialParagraphs,
+                updatedAt: new Date()
+            });
+            sheet = created.toObject();
+        }
+
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:moduleId/collaborative-sheet/:stepId/contribution', async (req, res) => {
+    try {
+        const { moduleId, stepId } = req.params;
+        const { paragraphId, text, studentId, studentName, studentFirstName, classroom = '' } = req.body || {};
+        if (!paragraphId || !text || !studentId) {
+            return res.status(400).json({ error: 'paragraphId, text et studentId requis' });
+        }
+
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        if (!sheet) {
+            sheet = await CollaborativeSheet.create({
+                moduleId,
+                stepId,
+                classroom,
+                paragraphs: [],
+                updatedAt: new Date()
+            });
+        }
+
+        const paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));
+        if (!paragraph) {
+            return res.status(404).json({ error: 'Paragraphe introuvable' });
+        }
+
+        const cleanText = String(text || '').trim();
+        const existingContrib = (paragraph.contributions || []).find(
+            (c) => String(c.studentId) === String(studentId)
+        );
+
+        if (existingContrib) {
+            existingContrib.text = cleanText;
+            existingContrib.studentName = studentName || existingContrib.studentName;
+            existingContrib.studentFirstName = studentFirstName || existingContrib.studentFirstName;
+            existingContrib.updatedAt = new Date();
+        } else {
+            paragraph.contributions.push({
+                studentId,
+                studentName: studentName || 'Élève',
+                studentFirstName: studentFirstName || (studentName ? studentName.split(' ')[0] : 'Élève'),
+                text: cleanText,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                comments: []
+            });
+        }
+
+        sheet.updatedAt = new Date();
+        await sheet.save();
+
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:moduleId/collaborative-sheet/:stepId/new-paragraph', async (req, res) => {
+    try {
+        const { moduleId, stepId } = req.params;
+        const { text, studentId, studentName, studentFirstName, classroom = '' } = req.body || {};
+        if (!text || !studentId) {
+            return res.status(400).json({ error: 'text et studentId requis' });
+        }
+
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        if (!sheet) {
+            sheet = await CollaborativeSheet.create({
+                moduleId,
+                stepId,
+                classroom,
+                paragraphs: [],
+                updatedAt: new Date()
+            });
+        }
+
+        const cleanText = String(text || '').trim();
+        const newParagraphId = `p_student_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        const order = (sheet.paragraphs || []).length;
+
+        sheet.paragraphs.push({
+            paragraphId: newParagraphId,
+            baseText: cleanText,
+            order,
+            authorRole: 'student',
+            createdById: studentId,
+            createdByName: studentName || 'Élève',
+            baseComments: [],
+            contributions: [{
+                studentId,
+                studentName: studentName || 'Élève',
+                studentFirstName: studentFirstName || (studentName ? studentName.split(' ')[0] : 'Élève'),
+                text: cleanText,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                comments: []
+            }]
+        });
+
+        sheet.updatedAt = new Date();
+        await sheet.save();
+
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:moduleId/collaborative-sheet/:stepId/comment', async (req, res) => {
+    try {
+        const { moduleId, stepId } = req.params;
+        const { paragraphId, targetVersionKey, text, authorId, authorName, authorRole = 'student', classroom = '' } = req.body || {};
+        if (!paragraphId || !targetVersionKey || !text || !authorName) {
+            return res.status(400).json({ error: 'paragraphId, targetVersionKey, text et authorName requis' });
+        }
+
+        const sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        if (!sheet) return res.status(404).json({ error: 'Fiche collaborative introuvable' });
+
+        const paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));
+        if (!paragraph) return res.status(404).json({ error: 'Paragraphe introuvable' });
+
+        const commentItem = {
+            authorId: authorId || null,
+            authorName: String(authorName || 'Utilisateur').trim(),
+            authorRole: authorRole === 'teacher' ? 'teacher' : 'student',
+            text: String(text || '').trim(),
+            createdAt: new Date()
+        };
+
+        if (targetVersionKey === 'base') {
+            paragraph.baseComments = paragraph.baseComments || [];
+            paragraph.baseComments.push(commentItem);
+        } else {
+            const contrib = (paragraph.contributions || []).find((c) => String(c.studentId) === String(targetVersionKey));
+            if (!contrib) return res.status(404).json({ error: 'Version élève introuvable' });
+            contrib.comments = contrib.comments || [];
+            contrib.comments.push(commentItem);
+        }
+
+        sheet.updatedAt = new Date();
+        await sheet.save();
+
+        return res.json({ ok: true, sheet });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }

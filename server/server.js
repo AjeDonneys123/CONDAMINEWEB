@@ -446,6 +446,12 @@ const connectMongoWithRetry = async (delayMs = 10000) => {
     try {
         await mongoose.connect(process.env.MONGODB_URI);
         console.log("📂 MongoDB Connecté.");
+        try {
+            const { ensureTestStudents } = require('./services/testStudents.service');
+            ensureTestStudents().catch((e) => console.error('[TestStudents] Startup error:', e));
+        } catch (e) {
+            console.error('[TestStudents] Init error:', e);
+        }
     } catch (err) {
         console.error("❌ Erreur Connexion MongoDB:", err);
         console.log(`⏳ Nouvelle tentative MongoDB dans ${Math.floor(delayMs / 1000)}s...`);

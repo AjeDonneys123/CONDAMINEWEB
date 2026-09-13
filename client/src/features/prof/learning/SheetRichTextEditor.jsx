@@ -147,7 +147,7 @@ const reformatImportedSheetStructure = (html = '', fallbackText = '') => {
       const isQcmTitle = /^QCM\s+DE\s+R[ÉE]VISION/i.test(marker);
       const isLetterMarker = /^[a-d]\)/i.test(marker.trim());
       if (hasVisibleContent) fragment.append(document.createElement('br'));
-      if (isLetterMarker && !qcmReached) marker = marker.replace(/^\s*[a-d]\)\s*/i, '- ');
+      if (isLetterMarker && !qcmReached) marker = marker.replace(/^\s*[a-d]\)\s*/i, '• ');
       fragment.append(document.createTextNode(marker));
       hasVisibleContent = true;
       if (isQcmTitle) qcmReached = true;
@@ -342,7 +342,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
           titleHandled = true;
           node.nodeValue = source;
         } else if (/^\s*[-–—•▪◦➤⇒→]\s*/.test(source)) {
-          node.nodeValue = source.replace(/^\s*[-–—•▪◦➤⇒→]\s*/, '- ');
+          node.nodeValue = source.replace(/^\s*[-–—•▪◦➤⇒→]\s*/, '• ');
         } else {
           pointNumber += 1;
           node.nodeValue = source.replace(/^\s*(?:\d+\s*[-.)]\s*)?/, `${pointNumber}- `);
@@ -392,7 +392,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     if (!editorRef.current.contains(range.startContainer)) return;
 
     // Sur les fiches 5e/6e, Entrée après une idée numérotée crée
-    // systématiquement une précision sur une nouvelle ligne avec un tiret.
+    // systématiquement une précision sur une nouvelle ligne avec une puce.
     // Cela évite les comportements variables des contenteditables mobiles.
     if (event.key === 'Enter' && numberedIdeasPlain) {
       const beforeCaret = range.cloneRange();
@@ -403,7 +403,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
       const currentLine = String(serializePlainText(holder) || '').split(/\r?\n/).pop() || '';
       event.preventDefault();
       event.stopPropagation();
-      document.execCommand('insertHTML', false, /^\s*\d+\s*[-.)]\s*/.test(currentLine) ? '<br>-&nbsp;' : '<br>');
+      document.execCommand('insertHTML', false, /^\s*\d+\s*[-.)]\s*/.test(currentLine) ? '<br>•&nbsp;' : '<br>');
       emitChange();
       return;
     }
@@ -423,7 +423,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
       event.preventDefault();
       event.stopPropagation();
       const oldPrefixLength = prefixMatch[0].length;
-      const replacement = `${prefixMatch[1]}- `;
+      const replacement = `${prefixMatch[1]}• `;
       firstText.nodeValue = `${replacement}${String(firstText.nodeValue || '').slice(oldPrefixLength)}`;
       if (range.startContainer === firstText) {
         const nextOffset = Math.max(replacement.length, range.startOffset - oldPrefixLength + replacement.length);
@@ -446,7 +446,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     if (!/^\s*\d+\s*[-.)]\s*/.test(currentLine)) return;
     event.preventDefault();
     event.stopPropagation();
-    document.execCommand('insertHTML', false, '<br>-&nbsp;');
+    document.execCommand('insertHTML', false, '<br>•&nbsp;');
     emitChange();
   };
 
@@ -454,9 +454,37 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
     event.preventDefault();
     editorRef.current?.focus();
     const selection = window.getSelection?.();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+    if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0);
     if (!editorRef.current?.contains(range.commonAncestorContainer)) return;
+
+    if (selection.isCollapsed) {
+      const startNode = range.startContainer;
+      if (startNode && startNode.nodeType === Node.TEXT_NODE) {
+        const val = String(startNode.nodeValue || '');
+        const before = val.slice(0, range.startOffset);
+        const lastBr = before.lastIndexOf('\n');
+        const lineStartOffset = lastBr === -1 ? 0 : lastBr + 1;
+        const currentLine = val.slice(lineStartOffset);
+        const prefixMatch = currentLine.match(/^(\s*)(?:(?:\d+)\s*[-.)]\s*|[-–—•▪◦➤⇒→]\s*)/);
+        if (prefixMatch) {
+          const matchLength = prefixMatch[0].length;
+          const newVal = val.slice(0, lineStartOffset) + '• ' + val.slice(lineStartOffset + matchLength);
+          startNode.nodeValue = newVal;
+          const newOffset = Math.max(0, range.startOffset - matchLength + 2);
+          const nextRange = document.createRange();
+          nextRange.setStart(startNode, Math.min(newOffset, newVal.length));
+          nextRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(nextRange);
+          emitChange();
+          return;
+        }
+      }
+      document.execCommand('insertText', false, '• ');
+      emitChange();
+      return;
+    }
 
     const fragment = range.extractContents();
     const holder = document.createElement('div');
@@ -467,7 +495,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
       if (node.nodeType === Node.TEXT_NODE) {
         const value = String(node.nodeValue || '');
         if (atLineStart && value.trim()) {
-          node.nodeValue = value.replace(/^\s*(?:(?:\d+)\s*[-.)]\s*|-\s*)?/, '- ');
+          node.nodeValue = value.replace(/^\s*(?:(?:\d+)\s*[-.)]\s*|[-–—•▪◦➤⇒→]\s*)?/, '• ');
           atLineStart = false;
         }
         return;
@@ -521,10 +549,11 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
         >U</button>
         <button
           type="button"
-          className="grid h-10 min-w-10 place-items-center rounded-lg border-2 border-slate-300 bg-white px-3 text-lg font-black text-slate-900 shadow-sm hover:bg-slate-100"
+          className="grid h-10 min-w-10 place-items-center rounded-lg border-2 border-slate-300 bg-white px-3 text-xl font-black text-slate-900 shadow-sm hover:bg-slate-100"
           onMouseDown={turnSelectionIntoSubpoints}
-          title="Transformer les lignes sélectionnées en sous-parties"
-        >−</button>
+          title="Transformer en puce • (sous-partie)"
+          aria-label="Puce"
+        >•</button>
         <button
           type="button"
           className="h-10 rounded-lg border-2 border-slate-300 bg-white px-3 text-sm font-black text-slate-900 shadow-sm hover:bg-slate-100"

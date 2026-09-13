@@ -95,17 +95,21 @@ function normalizeStudentUpdate(update) {
     const setFlag = update.$set?.isTestAccount;
     const isTestAccount = setFlag !== undefined ? setFlag : directFlag;
     if (isTestAccount !== true) return update;
+    const currentClass = update.currentClass || update.$set?.currentClass || '';
+    const clsClean = String(currentClass).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const defaultEmail = clsClean ? `test.${clsClean}@condamine.edu.ec` : TEST_ACCOUNT_EMAIL;
     if (update.$set && typeof update.$set === 'object') {
-        update.$set.email = TEST_ACCOUNT_EMAIL;
+        if (!update.$set.email) update.$set.email = defaultEmail;
     } else {
-        update.email = TEST_ACCOUNT_EMAIL;
+        if (!update.email) update.email = defaultEmail;
     }
     return update;
 }
 
 StudentSchema.pre('save', function forceSharedEmailForTestAccount(next) {
-    if (this.isTestAccount === true) {
-        this.email = TEST_ACCOUNT_EMAIL;
+    if (this.isTestAccount === true && !this.email) {
+        const clsClean = String(this.currentClass || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        this.email = clsClean ? `test.${clsClean}@condamine.edu.ec` : TEST_ACCOUNT_EMAIL;
     }
     next();
 });

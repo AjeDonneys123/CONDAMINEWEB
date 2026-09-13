@@ -49,9 +49,12 @@ export default function AdminDashboard({ user, onRefresh }) {
         setLoading(true);
         try {
             if (isDeveloperBugMode) {
-                const r = await fetch(`/api/admin/bug-reports?userId=${encodeURIComponent(user?.id || user?._id || '')}`);
-                const data = r.ok ? await r.json() : [];
-                setItems(Array.isArray(data) ? data : []);
+                const [rBugs, rC] = await Promise.all([
+                    fetch(`/api/admin/bug-reports?userId=${encodeURIComponent(user?.id || user?._id || '')}`).then(r => r.ok ? r.json() : []),
+                    fetch('/api/admin/classrooms').then(r => r.ok ? r.json() : [])
+                ]);
+                setItems(Array.isArray(rBugs) ? rBugs : []);
+                setAllClasses(Array.isArray(rC) ? rC.sort((a,b) => (a.name||"").localeCompare(b.name||"")) : []);
                 setLoading(false);
                 return;
             }
@@ -105,7 +108,17 @@ export default function AdminDashboard({ user, onRefresh }) {
             const matchFirst = clean(p.firstName || '').includes(sFirst);
             return matchClass && matchLast && matchFirst;
         });
-        setFinderSuggestions(matches.slice(0, 12));
+
+        // 🌟 Les comptes tests sont prioritaires en haut de la liste de suggestions
+        matches.sort((a, b) => {
+            const aIsTest = a.isTestAccount || clean(a.lastName || '') === 'test';
+            const bIsTest = b.isTestAccount || clean(b.lastName || '') === 'test';
+            if (aIsTest && !bIsTest) return -1;
+            if (!aIsTest && bIsTest) return 1;
+            return (a.lastName || '').localeCompare(b.lastName || '');
+        });
+
+        setFinderSuggestions(matches.slice(0, 35));
     }, [isDeveloperBugMode, finderClass, finderLast, finderFirst, finderPool, selectedConnectAs]);
 
     const handleSelectConnectAs = (profile) => {
@@ -123,12 +136,27 @@ export default function AdminDashboard({ user, onRefresh }) {
             const typedLast = clean(finderLast);
             const typedFirst = clean(finderFirst);
             const typedClass = clean(finderClass);
-            const exact = finderPool.find(p => {
+
+            // 1. Recherche exacte
+            let exact = finderPool.find(p => {
                 if (clean(p.lastName || '') !== typedLast) return false;
                 if (clean(p.firstName || '') !== typedFirst) return false;
                 if (p.type === 'student' && typedClass) return clean(p.className || '') === typedClass;
                 return true;
             });
+
+            // 2. Recherche tolérante si l'utilisateur a tapé la classe et/ou le nom
+            if (!exact) {
+                exact = finderPool.find(p => {
+                    const matchClass = p.type === 'student'
+                        ? (!typedClass || clean(p.className || '') === typedClass || clean(p.className || '').includes(typedClass))
+                        : true;
+                    const matchLast = !typedLast || clean(p.lastName || '') === typedLast || clean(p.lastName || '').includes(typedLast);
+                    const matchFirst = !typedFirst || clean(p.firstName || '') === typedFirst || clean(p.firstName || '').includes(typedFirst);
+                    return matchClass && matchLast && matchFirst;
+                });
+            }
+
             if (exact) target = exact;
         }
         if (!target?.id) return alert('Choisis un profil valide.');
@@ -458,11 +486,55 @@ export default function AdminDashboard({ user, onRefresh }) {
                                             onClick={() => handleSelectConnectAs(p)}
                                         >
                                             <span>{p.firstName} {p.lastName}</span>
-                                            <span className="connect-as-badge">{p.type === 'teacher' ? 'PROF' : (p.className || 'ELEVE')}</span>
+                                            <span className={`connect-as-badge ${p.isTestAccount ? 'test' : ''}`}>
+                                                {p.isTestAccount ? `🧪 TEST · ${p.className}` : p.type === 'teacher' ? 'PROF' : (p.className || 'ELEVE')}
+                                            </span>
                                         </button>
                                     ))}
                                 </div>
                             )}
+                            <div className="connect-as-test-row">
+                                <span className="connect-as-test-label">🧪 ÉLÈVES TESTS :</span>
+                                {(() => {
+                                    const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                                    // 1. Classes depuis allClasses
+                                    const fromClasses = allClasses.filter(c => c.type === 'CLASS').map(c => c.name);
+                                    // 2. Classes depuis finderPool
+                                    const fromPool = finderPool
+                                        .filter(p => p.type === 'student' && (p.isTestAccount || clean(p.lastName || '') === 'test') && p.className)
+                                        .map(p => p.className);
+                                    // 3. Fallback classes collège/lycée
+                                    const defaultList = ['2A', '2B', '3e AB DNL', '5A', '5D'];
+                                    const classList = Array.from(new Set([...fromClasses, ...fromPool, ...defaultList]))
+                                        .filter(Boolean)
+                                        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+                                    return classList.map(cName => {
+                                        const testStudent = finderPool.find(p => p.type === 'student' && (p.isTestAccount || clean(p.lastName || '') === 'test') && clean(p.className || '') === clean(cName || ''));
+                                        const isSelected = selectedConnectAs?.id && testStudent?.id && String(selectedConnectAs.id) === String(testStudent.id);
+                                        return (
+                                            <button
+                                                key={cName}
+                                                type="button"
+                                                className={`connect-as-test-chip ${isSelected ? 'active' : ''}`}
+                                                onClick={() => {
+                                                    if (testStudent) {
+                                                        handleSelectConnectAs(testStudent);
+                                                    } else {
+                                                        setFinderClass(cName);
+                                                        setFinderLast('TEST');
+                                                        setFinderFirst('');
+                                                        setSelectedConnectAs(null);
+                                                    }
+                                                }}
+                                                title={`Connecter en tant qu'élève test ${cName}`}
+                                            >
+                                                {cName}
+                                            </button>
+                                        );
+                                    });
+                                })()}
+                            </div>
                         </div>
                     )}
                     {isDeveloperBugMode && (

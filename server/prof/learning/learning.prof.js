@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
-const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Chapter, Course } = require('../models/prof.models');
+const { LearningModule, Student, VideoSegment, VideoSource, GptInboxMessage, Chapter, Course, CollaborativeSheet } = require('../models/prof.models');
 const fetch = require('node-fetch');
 const multer = require('multer');
 const fs = require('fs');
@@ -2172,6 +2172,149 @@ router.post('/sync-all-scenes', async (_req, res) => {
         res.json({ ok: true, count: results.length, results });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// ==========================================
+// SUPERFICHE COLLABORATIVE (PROFESSEUR)
+// ==========================================
+
+const splitTextIntoInitialParagraphsProf = (text = '', html = '') => {
+    const raw = String(text || '').replace(/\r/g, '').trim();
+    if (!raw) return [];
+    const chunks = raw.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean);
+    if (chunks.length <= 1) {
+        const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+        const aggregated = [];
+        let current = [];
+        lines.forEach((line) => {
+            const isHeadingOrNumbered = /^(?:[IVX]+\.|\d+\s*[-.)])\s+/i.test(line);
+            if (isHeadingOrNumbered && current.length > 0) {
+                aggregated.push(current.join('\n'));
+                current = [line];
+            } else {
+                current.push(line);
+            }
+        });
+        if (current.length > 0) aggregated.push(current.join('\n'));
+        if (aggregated.length > 1) {
+            return aggregated.map((chunk, idx) => ({
+                paragraphId: `p_${idx}`,
+                baseText: chunk,
+                order: idx,
+                authorRole: 'teacher',
+                baseComments: [],
+                contributions: []
+            }));
+        }
+    }
+    return chunks.map((chunk, idx) => ({
+        paragraphId: `p_${idx}`,
+        baseText: chunk,
+        order: idx,
+        authorRole: 'teacher',
+        baseComments: [],
+        contributions: []
+    }));
+};
+
+router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
+    try {
+        const { moduleId, stepId } = req.params;
+        const classroom = String(req.query.classroom || '').trim();
+
+        const module = await LearningModule.findById(moduleId).lean();
+        if (!module) return res.status(404).json({ error: 'Module introuvable' });
+
+        const steps = module.steps || [];
+        const step = steps.find((s) => String(s?.id) === String(stepId))
+            || steps.find((s) => s?.isGeneralSheetMaster === true)
+            || steps.find((s) => s?.type === 'sheet');
+        if (!step) return res.status(404).json({ error: 'Étape de fiche introuvable' });
+
+        const targetStepId = String(step.id || stepId);
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId: targetStepId, classroom }).lean();
+
+        if (!sheet) {
+            const initialParagraphs = splitTextIntoInitialParagraphsProf(step.sheetText, step.sheetTextHtml);
+            const created = await CollaborativeSheet.create({
+                moduleId,
+                stepId: targetStepId,
+                classroom,
+                paragraphs: initialParagraphs,
+                updatedAt: new Date()
+            });
+            sheet = created.toObject();
+        }
+
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/:moduleId/collaborative-sheet/:stepId/base', async (req, res) => {
+    try {
+        const { moduleId, stepId } = req.params;
+        const { paragraphId, baseText, classroom = '' } = req.body || {};
+        if (!paragraphId || typeof baseText !== 'string') {
+            return res.status(400).json({ error: 'paragraphId et baseText requis' });
+        }
+
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        if (!sheet) return res.status(404).json({ error: 'Fiche collaborative introuvable' });
+
+        const paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));
+        if (!paragraph) return res.status(404).json({ error: 'Paragraphe introuvable' });
+
+        paragraph.baseText = String(baseText || '').trim();
+        sheet.updatedAt = new Date();
+        await sheet.save();
+
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:moduleId/collaborative-sheet/:stepId/comment', async (req, res) => {
+    try {
+        const { moduleId, stepId } = req.params;
+        const { paragraphId, targetVersionKey, text, authorId, authorName = 'Professeur', classroom = '' } = req.body || {};
+        if (!paragraphId || !targetVersionKey || !text) {
+            return res.status(400).json({ error: 'paragraphId, targetVersionKey et text requis' });
+        }
+
+        const sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        if (!sheet) return res.status(404).json({ error: 'Fiche collaborative introuvable' });
+
+        const paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));
+        if (!paragraph) return res.status(404).json({ error: 'Paragraphe introuvable' });
+
+        const commentItem = {
+            authorId: authorId || null,
+            authorName: String(authorName || 'Professeur').trim(),
+            authorRole: 'teacher',
+            text: String(text || '').trim(),
+            createdAt: new Date()
+        };
+
+        if (targetVersionKey === 'base') {
+            paragraph.baseComments = paragraph.baseComments || [];
+            paragraph.baseComments.push(commentItem);
+        } else {
+            const contrib = (paragraph.contributions || []).find((c) => String(c.studentId) === String(targetVersionKey));
+            if (!contrib) return res.status(404).json({ error: 'Version élève introuvable' });
+            contrib.comments = contrib.comments || [];
+            contrib.comments.push(commentItem);
+        }
+
+        sheet.updatedAt = new Date();
+        await sheet.save();
+
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
     }
 });
 

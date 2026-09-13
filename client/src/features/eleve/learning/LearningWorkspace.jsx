@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './LearningWorkspace.css';
+import CollaborativeSuperfiche from './CollaborativeSuperfiche';
 import { resolveBackendAssetUrl, resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
 import { awardStudentStars } from '../utils/studentStars';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
@@ -724,6 +725,14 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
         if (/^(T|TERM|TERMINALE)/.test(raw)) return true;
         return Boolean(module?.isLycee);
     }, [user?.currentClass, module?.chapterLevel, module?.isLycee]);
+
+    const isSeconde = useMemo(() => {
+        const raw = String(user?.currentClass || user?.classroom || user?.classe || module?.chapterLevel || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        if (/^(2|2DE|2NDE|SECONDE)/.test(raw)) return true;
+        return Boolean(module?.isSeconde);
+    }, [user?.currentClass, user?.classroom, user?.classe, module?.chapterLevel, module?.isSeconde]);
+
+    const [collaborativeViewMode, setCollaborativeViewMode] = useState(null);
 
     const initialTraceEcriteValid = Boolean(
         !isLyceeStudent
@@ -2959,12 +2968,34 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
                 {currentStep.type === 'sheet' && (
                     <>
-                        <div className="learning-hint">
-                            {isInformationalOnly
-                                ? 'Consulte simplement le plan du cours. Il n’est pas à apprendre.'
-                                : 'Lis la fiche, puis scrolle jusqu’en bas.'}
-                        </div>
-                        <div className="learning-sheet" ref={sheetRef}>
+                        {(isSeconde || currentStep.isGeneralSheetMaster === true || /superfiche/i.test(String(currentStep.title || ''))) && (
+                            <div className="flex items-center justify-end mb-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setCollaborativeViewMode((prev) => (prev === true || (prev === null && isSeconde) ? false : true))}
+                                    className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                >
+                                    <span>{(collaborativeViewMode === true || (collaborativeViewMode === null && isSeconde)) ? '📄 Basculer en vue classique' : '🤝 Basculer en fiche collaborative (Seconde)'}</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {(isSeconde || currentStep.isGeneralSheetMaster === true || /superfiche/i.test(String(currentStep.title || ''))) && (collaborativeViewMode === true || (collaborativeViewMode === null && isSeconde)) ? (
+                            <CollaborativeSuperfiche
+                                moduleId={module?._id}
+                                stepId={currentStep.id || 'superfiche'}
+                                initialStep={currentStep}
+                                user={user}
+                                classroom={studentClassForGpt}
+                            />
+                        ) : (
+                            <>
+                                <div className="learning-hint">
+                                    {isInformationalOnly
+                                        ? 'Consulte simplement le plan du cours. Il n’est pas à apprendre.'
+                                        : 'Lis la fiche, puis scrolle jusqu’en bas.'}
+                                </div>
+                                <div className="learning-sheet" ref={sheetRef}>
                             {sheetText
                                 ? (
                                     <div className="learning-sheet-text">
@@ -3059,6 +3090,8 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                     🎵 Jouer la chanson
                                 </button>
                             </div>
+                        )}
+                            </>
                         )}
                     </>
                 )}

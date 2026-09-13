@@ -23,9 +23,14 @@ async function getStudentsForClassOrGroup(classId) {
     const clsObj = await Classroom.findById(classId).lean();
     if (!clsObj) return { clsObj: null, students: [] };
 
+    const testExclude = {
+        isTestAccount: { $ne: true },
+        lastName: { $not: /^test$/i }
+    };
+
     if (clsObj.type === 'GROUP') {
-        const students = await Student.find({ assignedGroups: clsObj._id }).lean();
-        return { clsObj, students };
+        const students = await Student.find({ assignedGroups: clsObj._id, ...testExclude }).lean();
+        return { clsObj, students: students.filter((s) => s?.isTestAccount !== true && !/^test$/i.test(s?.lastName || '')) };
     }
 
     const classNameRaw = String(clsObj?.name || '').trim();
@@ -36,6 +41,7 @@ async function getStudentsForClassOrGroup(classId) {
 
     const directQuery = classNameRegex
         ? {
+            ...testExclude,
             $or: [
                 { classId: clsObj._id },
                 { currentClass: classNameRaw },
@@ -43,7 +49,7 @@ async function getStudentsForClassOrGroup(classId) {
                 { currentClass: classNameClean }
             ]
         }
-        : { classId: clsObj._id };
+        : { classId: clsObj._id, ...testExclude };
 
     const directStudents = await Student.find(directQuery).lean();
 
@@ -54,12 +60,13 @@ async function getStudentsForClassOrGroup(classId) {
         .filter((id) => mongoose.Types.ObjectId.isValid(id))
         .map((id) => new mongoose.Types.ObjectId(id));
     const enrollmentStudents = enrollmentIds.length > 0
-        ? await Student.find({ _id: { $in: enrollmentIds } }).lean()
+        ? await Student.find({ _id: { $in: enrollmentIds }, ...testExclude }).lean()
         : [];
 
     const byId = new Map();
     [...directStudents, ...enrollmentStudents].forEach((s) => {
         if (!s?._id) return;
+        if (s.isTestAccount === true || /^test$/i.test(s.lastName || '')) return;
         byId.set(String(s._id), s);
     });
 

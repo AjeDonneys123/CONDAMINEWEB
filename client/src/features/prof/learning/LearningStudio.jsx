@@ -3,6 +3,7 @@ import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 import { resolveBackendAssetUrl, resolveDriveAssetUrl } from '../../../utils/driveUrl';
 import SheetRichTextEditor from './SheetRichTextEditor';
+import CollaborativeSuperfiche from '../../eleve/learning/CollaborativeSuperfiche';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 
 const uid = () => `st_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -542,7 +543,7 @@ const structureRevisionLines = (value = '') => {
             return trimmed;
         }
         if (/^[-–—•▪◦➤⇒→]\s*/.test(trimmed)) {
-            return `- ${trimmed.replace(/^[-–—•▪◦➤⇒→]\s*/, '')}`;
+            return `• ${trimmed.replace(/^[-–—•▪◦➤⇒→]\s*/, '')}`;
         }
         pointNumber += 1;
         return `${pointNumber}- ${trimmed.replace(/^\d+\s*[-.)]\s*/, '')}`;
@@ -568,7 +569,7 @@ const structureRevisionHtml = (value = '') => {
                     titleHandled = true;
                     node.nodeValue = source;
                 } else if (/^\s*[-–—•▪◦➤⇒→]\s*/.test(source)) {
-                    node.nodeValue = source.replace(/^\s*[-–—•▪◦➤⇒→]\s*/, '- ');
+                    node.nodeValue = source.replace(/^\s*[-–—•▪◦➤⇒→]\s*/, '• ');
                 } else {
                     pointNumber += 1;
                     node.nodeValue = source.replace(/^\s*(?:\d+\s*[-.)]\s*)?/, `${pointNumber}- `);
@@ -814,13 +815,13 @@ const normalizeGeneralSheetLessonBlocks = (sourceBlocks = []) => {
                 return block;
             }
             if (explicitSubIdea) {
-                return replaceGeneralSheetLinePrefix(block, /^\s*[a-z]\)\s*/i, '- ');
+                return replaceGeneralSheetLinePrefix(block, /^\s*[a-z]\)\s*/i, '• ');
             }
             if (alreadyDashed) {
-                return replaceGeneralSheetLinePrefix(block, /^\s*[-–—•▪◦]\s*/, '- ');
+                return replaceGeneralSheetLinePrefix(block, /^\s*[-–—•▪◦]\s*/, '• ');
             }
             if (automaticSubIdeas) {
-                return replaceGeneralSheetLinePrefix(block, /^\s*/, '- ');
+                return replaceGeneralSheetLinePrefix(block, /^\s*/, '• ');
             }
             return block;
         });
@@ -1232,6 +1233,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
     const [sourcePickerVideoName, setSourcePickerVideoName] = useState('');
     const [showGeneralSheetBuilder, setShowGeneralSheetBuilder] = useState(false);
+    const [showCollaborativeModal, setShowCollaborativeModal] = useState(false);
     const [generalSheetMedia, setGeneralSheetMedia] = useState(null);
     const [generalSheetCourses, setGeneralSheetCourses] = useState([]);
     const [generalSheetCoursesLoading, setGeneralSheetCoursesLoading] = useState(false);
@@ -7020,17 +7022,28 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                                 <div className="text-lg font-black uppercase text-slate-800">Grand éditeur de texte</div>
                                                 <div className="text-xs font-bold text-slate-400">Colle puis modifie librement le contenu de la fiche.</div>
                                             </div>
-                                            <button
-                                                type="button"
-                                                className="rounded-xl border-2 border-red-300 bg-red-50 px-5 py-3 text-sm font-black uppercase text-red-700 shadow-sm transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                                                onClick={confirmClearSheetStep}
-                                                disabled={step.isGeneralSheetMaster === true
-                                                    || (!String(step.sheetUrl || '').trim() && !String(step.sheetText || '').trim())}
-                                            >
-                                                {step.isGeneralSheetMaster === true
-                                                    ? '🔒 Fiche générale conservée'
-                                                    : '🗑️ Supprimer la fiche'}
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                {(step.isGeneralSheetMaster === true || formData?.isSeconde || /^(2|2DE|2NDE|SECONDE)/i.test(String(formData?.chapterLevel || '')) || (formData?.targetClassrooms || []).some(c => /^(2|2DE|2NDE)/i.test(String(c)))) && (
+                                                    <button
+                                                        type="button"
+                                                        className="rounded-xl border-2 border-indigo-400 bg-indigo-50 px-4 py-3 text-sm font-black uppercase text-indigo-700 shadow-sm transition hover:bg-indigo-600 hover:text-white flex items-center gap-1.5 cursor-pointer"
+                                                        onClick={() => setShowCollaborativeModal(true)}
+                                                    >
+                                                        <span>🤝 Fiche Collaborative 2nde</span>
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="rounded-xl border-2 border-red-300 bg-red-50 px-5 py-3 text-sm font-black uppercase text-red-700 shadow-sm transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                                    onClick={confirmClearSheetStep}
+                                                    disabled={step.isGeneralSheetMaster === true
+                                                        || (!String(step.sheetUrl || '').trim() && !String(step.sheetText || '').trim())}
+                                                >
+                                                    {step.isGeneralSheetMaster === true
+                                                        ? '🔒 Fiche générale conservée'
+                                                        : '🗑️ Supprimer la fiche'}
+                                                </button>
+                                            </div>
                                         </div>
                                         <SheetRichTextEditor
                                             key={`${step.id}:${step.generalSheetSyncVersion || 0}`}
@@ -8660,6 +8673,41 @@ VÉRIFICATION AVANT DE RÉPONDRE
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+            {showCollaborativeModal && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-slate-100 w-full max-w-5xl max-h-[90vh] rounded-3xl p-6 shadow-2xl overflow-y-auto space-y-4 animate-in fade-in zoom-in-95">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl">🤝</span>
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900">
+                                        Superfiche Collaborative (Classe de Seconde)
+                                    </h3>
+                                    <p className="text-xs text-slate-500">
+                                        Consultez les versions de la classe, modifiez la base et commentez directement les apports des élèves.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowCollaborativeModal(false)}
+                                className="text-slate-400 hover:text-slate-700 text-xl font-bold px-2 py-1 cursor-pointer"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <CollaborativeSuperfiche
+                            moduleId={formData?._id || initialData?._id}
+                            stepId={step?.id || 'superfiche'}
+                            initialStep={step}
+                            user={user}
+                            isTeacher={true}
+                            classroom={formData?.targetClassrooms?.[0] || ''}
+                        />
                     </div>
                 </div>
             )}

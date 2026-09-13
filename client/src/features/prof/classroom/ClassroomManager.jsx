@@ -223,7 +223,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             
             if (res.ok) {
                 const data = await res.json();
-                const nextStudents = Array.isArray(data) ? data : [];
+                const nextStudents = (Array.isArray(data) ? data : []).filter(s => s?.isTestAccount !== true && !/^test$/i.test(s?.lastName || ''));
                 setStudents(nextStudents);
                 setSelectedStudent((current) => {
                     if (!current?._id) return current;
