@@ -16,6 +16,42 @@ import { STUDENT_STARS_EVENT } from './utils/studentStars';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
+function GptCorrections({ user }) {
+  const [entries, setEntries] = useState([]);
+  const [openId, setOpenId] = useState('');
+
+  useEffect(() => {
+    if (user?.isVisitorPreview) return;
+    const studentId = String(user?._id || user?.id || '').trim();
+    if (!studentId) return;
+    fetch(`/api/eleve/chat/gpt-feedback?studentId=${encodeURIComponent(studentId)}`)
+      .then((response) => response.ok ? response.json() : { entries: [] })
+      .then((data) => setEntries((data.entries || []).filter((entry) => String(entry.type || '').toLowerCase() === 'correction')))
+      .catch(() => setEntries([]));
+  }, [user?._id, user?.id, user?.isVisitorPreview]);
+
+  if (!entries.length) return null;
+  return <section className="mx-4 mb-4 rounded-3xl border-2 border-indigo-200 bg-indigo-50 p-4">
+    <h2 className="m-0 text-xl font-black text-indigo-900">🤖 Mes corrections GPT</h2>
+    <div className="mt-3 space-y-3">{entries.map((entry) => {
+      const isOpen = openId === entry.id;
+      return <article key={entry.id} className="overflow-hidden rounded-2xl border border-indigo-200 bg-white">
+        <button type="button" onClick={() => setOpenId(isOpen ? '' : entry.id)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
+          <span><strong className="block text-sm text-slate-900">{entry.sujet || 'Correction de ta copie'}</strong><span className="text-xs font-bold text-slate-500">{entry.receivedAt ? new Date(entry.receivedAt).toLocaleDateString('fr-FR') : ''}</span></span>
+          <span className="rounded-full bg-indigo-600 px-3 py-1 text-sm font-black text-white">{entry.note ?? entry.score ?? '—'}/10</span>
+        </button>
+        {isOpen && <div className="space-y-5 border-t border-indigo-100 p-4">
+          <section><h3 className="text-sm font-black uppercase text-slate-500">Copie originale</h3><div className="mt-2 grid gap-3 md:grid-cols-2">{(entry.images || []).map((image, index) => <a key={`${entry.id}-page-${index}`} href={image.url} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"><img src={image.url} alt={`Page ${index + 1} de la copie`} className="block w-full object-contain" /><span className="block p-2 text-center text-xs font-black text-slate-500">Page {index + 1}</span></a>)}</div>{!(entry.images || []).length && <p className="mt-2 text-sm font-bold text-slate-400">Aucune image enregistrée.</p>}</section>
+          <section><h3 className="text-sm font-black uppercase text-slate-500">Ta copie telle que l’IA l’a comprise</h3><div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm font-semibold leading-relaxed text-slate-800">{entry.devoirComplet || 'Transcription non fournie.'}</div></section>
+          <section><div className="text-2xl font-black text-indigo-700">{entry.note ?? entry.score ?? '—'}/10</div><div className="mt-2 grid grid-cols-2 gap-2 text-xs font-black sm:grid-cols-5"><span>Forme {entry.forme ?? '—'}/2</span><span>Introduction {entry.introduction ?? '—'}/3</span><span>Arguments {entry.arguments ?? '—'}/2</span><span>Exemples {entry.exemples ?? '—'}/2</span><span>Conclusion {entry.conclusion ?? '—'}/1</span></div></section>
+          <section><h3 className="text-sm font-black uppercase text-slate-500">Correction</h3><div className="mt-2 whitespace-pre-wrap rounded-xl bg-amber-50 p-4 text-sm font-semibold leading-relaxed text-slate-800">{entry.message || '—'}</div></section>
+          <section><h3 className="text-sm font-black uppercase text-slate-500">Conseils</h3><div className="mt-2 whitespace-pre-wrap rounded-xl bg-emerald-50 p-4 text-sm font-semibold leading-relaxed text-emerald-900">{entry.conseils || 'Aucun conseil supplémentaire.'}</div></section>
+        </div>}
+      </article>;
+    })}</div>
+  </section>;
+}
+
 export default function ElevePage({ user, onLogout, onBackToProf }) {
   // Les élèves DIL arrivent directement sur leur espace de traduction.
   // Les autres profils conservent l'ouverture habituelle sur le statut.
@@ -154,7 +190,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             hidePunishmentAlert={showPunishmentSplash}
           />
           <div className="eleve-main-content">
-            {tab === 'status' && <StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} />}
+            {tab === 'status' && <><GptCorrections user={freshUser} /><StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} /></>}
             {tab === 'courses' && <EleveCoursesList user={freshUser} />}
             {tab === 'exams' && <ControlList user={freshUser} openItemId={new URLSearchParams(window.location.search).get('control') || ''} />}
             {tab === 'controles' && (

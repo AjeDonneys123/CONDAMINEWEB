@@ -1636,7 +1636,9 @@ router.post('/validate-synonym', async (req, res) => {
 const splitHtmlIntoSections = (html = '', fallbackText = '') => {
     const rawHtml = String(html || '').trim();
     if (!rawHtml) {
-        const lines = String(fallbackText || '').replace(/\r/g, '').split(/\n\s*\n/).map(l => l.trim()).filter(Boolean);
+        const raw = String(fallbackText || '').replace(/\r/g, '').trim();
+        if (!raw) return [];
+        const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
         if (lines.length === 0) return [];
         return lines.map((chunk, idx) => ({
             paragraphId: `p_${idx}`,
@@ -1675,8 +1677,18 @@ const splitHtmlIntoSections = (html = '', fallbackText = '') => {
 
     blocks.forEach((block) => {
         const textOnly = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        const isMainHeading = /^(?:[IVX]+\.|\bQCM\b|\bLEÇON\b|\bCH\d+:)/i.test(textOnly);
-        if (isMainHeading && currentHtml.length > 0) {
+        const isRomanHeading = /^[IVX]+\.\s*/i.test(textOnly);
+        const isQcmHeader = /^QCM\s+DE\s+RÉVISION/i.test(textOnly);
+        const isLecon = /^LEÇON\s+\d+/i.test(textOnly);
+        const isChapter = /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(textOnly);
+
+        // A new section begins on a Roman numeral (I., II., III.),
+        // on QCM DE RÉVISION, or on a LEÇON (unless already in a QCM group)
+        const shouldStartNewSection = (isRomanHeading || isQcmHeader || (isLecon && !currentHtml.some(b => /QCM/i.test(b))))
+            && currentHtml.length > 0
+            && !currentHtml.every(b => /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(b.replace(/<[^>]+>/g, ' ').trim()));
+
+        if (shouldStartNewSection) {
             sections.push({
                 paragraphId: `p_${sections.length}`,
                 title: currentTitle || `Section ${sections.length + 1}`,
@@ -1690,7 +1702,8 @@ const splitHtmlIntoSections = (html = '', fallbackText = '') => {
             currentHtml = [block];
             currentTitle = textOnly;
         } else {
-            if (!currentTitle && textOnly) currentTitle = textOnly;
+            if (!currentTitle && textOnly && !isChapter) currentTitle = textOnly;
+            if (isRomanHeading || isQcmHeader) currentTitle = textOnly;
             currentHtml.push(block);
         }
     });
@@ -1727,9 +1740,15 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
         if (!module) return res.status(404).json({ error: 'Module introuvable' });
 
         const steps = module.steps || [];
-        const step = steps.find((s) => String(s?.id) === String(stepId))
-            || steps.find((s) => s?.isGeneralSheetMaster === true)
-            || steps.find((s) => s?.type === 'sheet');
+        const masterStep = steps.find((s) => s?.isGeneralSheetMaster === true);
+        const requestedStep = steps.find((s) => String(s?.id) === String(stepId));
+
+        let step = requestedStep;
+        if (!step || step.informationalOnly || stepId === 'superfiche' || /plan\s+du\s+cours/i.test(step.title || '')) {
+            step = masterStep || step || steps.find((s) => s?.type === 'sheet');
+        } else if (masterStep && (!step.sheetTextHtml || step.sheetTextHtml.length < 150) && (masterStep.sheetTextHtml?.length || 0) > 250) {
+            step = masterStep;
+        }
         if (!step) return res.status(404).json({ error: 'Étape de fiche introuvable' });
 
         const targetStepId = String(step.id || stepId);
@@ -1747,7 +1766,7 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
                 updatedAt: new Date()
             });
             sheet = created.toObject();
-        } else if (step.sheetTextHtml && (!sheet.paragraphs?.length || sheet.paragraphs.some(p => !p.baseHtml))) {
+        } else if (step.sheetTextHtml && (sheet.paragraphs?.length < 3 || sheet.paragraphs.some(p => !p.baseHtml) || sheet.baseSheetHtml !== step.sheetTextHtml)) {
             const freshSections = splitHtmlIntoSections(step.sheetTextHtml, step.sheetText);
             const existingContribsByPId = new Map();
             (sheet.paragraphs || []).forEach(p => {

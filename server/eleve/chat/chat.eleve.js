@@ -590,6 +590,16 @@ router.get('/gpt-context', async (req, res) => {
                 errors: entry.errors || [],
                 mastered: !!entry.mastered,
                 score: entry.score,
+                sujet: entry.sujet || '',
+                devoirComplet: entry.devoirComplet || '',
+                note: entry.note,
+                forme: entry.forme,
+                introduction: entry.introduction,
+                arguments: entry.arguments,
+                exemples: entry.exemples,
+                conclusion: entry.conclusion,
+                conseils: entry.conseils || '',
+                images: entry.images || [],
                 receivedAt: entry.receivedAt
             })),
             postBack: {

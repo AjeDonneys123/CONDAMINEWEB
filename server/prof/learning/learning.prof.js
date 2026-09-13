@@ -195,6 +195,43 @@ const checkGptInboxToken = (req) => {
     return auth === expected || bodyToken === expected;
 };
 
+const normalizeOpenAiFileRefs = (value) => {
+    const rows = Array.isArray(value) ? value : (value ? [value] : []);
+    const refs = rows.map((item, index) => {
+        if (item && typeof item === 'object') {
+            return {
+                id: String(item.id || item.fileId || item.file_id || '').trim(),
+                downloadUrl: String(item.download_link || item.downloadUrl || item.url || '').trim(),
+                name: String(item.name || item.filename || `copie-${index + 1}`).trim().slice(0, 120),
+                mimeType: String(item.mime_type || item.mimeType || '').trim().toLowerCase()
+            };
+        }
+        return { id: String(item || '').trim(), downloadUrl: '', name: `copie-${index + 1}`, mimeType: '' };
+    }).filter((ref) => ref.id || ref.downloadUrl);
+    return refs.filter((ref, index) => refs.findIndex((candidate) => (candidate.id || candidate.downloadUrl) === (ref.id || ref.downloadUrl)) === index).slice(0, 8);
+};
+
+const downloadOpenAiCopyImages = async (refs) => {
+    if (!refs.length) return [];
+    const apiKey = String(process.env.OPENAI_API_KEY || '').trim();
+    if (!apiKey && refs.some((ref) => !ref.downloadUrl)) throw Object.assign(new Error('OPENAI_API_KEY manquante pour récupérer les copies'), { status: 503 });
+    let totalBytes = 0;
+    const images = [];
+    for (const [index, ref] of refs.entries()) {
+        const sourceUrl = ref.downloadUrl || `https://api.openai.com/v1/files/${encodeURIComponent(ref.id)}/content`;
+        const response = await fetch(sourceUrl, ref.downloadUrl ? {} : { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!response.ok) throw Object.assign(new Error(`Fichier OpenAI ${ref.id || index + 1} inaccessible (HTTP ${response.status})`), { status: 502 });
+        const mimeType = String(response.headers.get('content-type') || ref.mimeType || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+        if (!mimeType.startsWith('image/')) throw Object.assign(new Error(`Le fichier OpenAI ${ref.id || index + 1} n’est pas une image`), { status: 400 });
+        const buffer = await response.buffer();
+        if (!buffer.length || buffer.length > 4 * 1024 * 1024) throw Object.assign(new Error(`Image ${index + 1} vide ou supérieure à 4 Mo`), { status: 400 });
+        totalBytes += buffer.length;
+        if (totalBytes > 10 * 1024 * 1024) throw Object.assign(new Error('La copie complète dépasse la limite de 10 Mo'), { status: 400 });
+        images.push({ name: ref.name || `copie-${index + 1}`, mimeType, openaiFileId: ref.id, url: `data:${mimeType};base64,${buffer.toString('base64')}` });
+    }
+    return images;
+};
+
 const normalizeVideoUrl = (url = '') => {
     const raw = String(url || '').trim();
     if (!raw) return '';
@@ -1731,11 +1768,9 @@ router.post('/gpt-inbox', async (req, res) => {
         const studentCode = String(body.studentCode || '').trim();
         const type = String(body.type || '').trim();
         const correctionMessage = String(body.message || '').trim();
-        if (!studentCode || !type || !correctionMessage) {
+        const isUnifiedCorrection = type === 'correction';
+        if (isUnifiedCorrection && (!studentCode || !correctionMessage)) {
             return res.status(400).json({ ok: false, error: 'studentCode, type et message sont requis' });
-        }
-        if (type !== 'correction') {
-            return res.status(400).json({ ok: false, error: 'type doit être égal à correction' });
         }
         const ranges = { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
         for (const [field, [min, max]] of Object.entries(ranges)) {
@@ -1755,9 +1790,11 @@ router.post('/gpt-inbox', async (req, res) => {
         const scoreRaw = body.note ?? body.score;
         const score = Number.isFinite(Number(scoreRaw)) ? Number(scoreRaw) : null;
         const student = await findGptInboxStudent(body);
-        if (body.type === 'correction' && !student) {
+        if (isUnifiedCorrection && !student) {
             return res.status(400).json({ ok: false, error: 'studentCode inconnu ou ambigu' });
         }
+        const openaiFileIdRefs = normalizeOpenAiFileRefs(body.openaiFileIdRefs);
+        const durableImages = isUnifiedCorrection ? await downloadOpenAiCopyImages(openaiFileIdRefs) : [];
         if (!message && !feedback && !summary && !sanitizeGptInboxImages(body.images).length) {
             return res.status(400).json({ ok: false, error: 'message, feedback, summary ou images requis' });
         }
@@ -1774,7 +1811,7 @@ router.post('/gpt-inbox', async (req, res) => {
                 : String(body.studentName || body.eleve || '').trim().slice(0, 160),
             studentClass: String(student?.currentClass || body.studentClass || body.classe || '').trim().slice(0, 80),
             studentCode,
-            type,
+            type: type || 'feedback',
             questionNumber,
             message,
             feedback,
@@ -1784,6 +1821,8 @@ router.post('/gpt-inbox', async (req, res) => {
             mastered,
             score,
             sujet: String(body.sujet || '').trim().slice(0, 1000),
+            devoirComplet: String(body.devoirComplet || '').trim().slice(0, 50000),
+            openaiFileIdRefs: openaiFileIdRefs.map((ref) => ref.id).filter(Boolean),
             note: score,
             forme: Number.isFinite(Number(body.forme)) ? Number(body.forme) : null,
             introduction: Number.isFinite(Number(body.introduction)) ? Number(body.introduction) : null,
@@ -1791,7 +1830,7 @@ router.post('/gpt-inbox', async (req, res) => {
             exemples: Number.isFinite(Number(body.exemples)) ? Number(body.exemples) : null,
             conclusion: Number.isFinite(Number(body.conclusion)) ? Number(body.conclusion) : null,
             conseils: String(body.conseils || '').trim().slice(0, 5000),
-            images: sanitizeGptInboxImages(body.images || body.imageUrls || []),
+            images: durableImages.length ? durableImages : sanitizeGptInboxImages(body.images || body.imageUrls || []),
             source: String(body.source || 'chatgpt').trim().slice(0, 80),
             raw: body.raw ? (typeof body.raw === 'string' ? body.raw : JSON.stringify(body.raw)).slice(0, 5000) : ''
         };
@@ -1801,7 +1840,7 @@ router.post('/gpt-inbox', async (req, res) => {
             : false;
         return res.status(200).json({ ok: true, message: 'Correction enregistrée avec succès', entry, learningMarked });
     } catch (e) {
-        return res.status(500).json({ ok: false, error: e.message });
+        return res.status(e.status || 500).json({ ok: false, error: e.message });
     }
 });
 
