@@ -955,7 +955,7 @@ router.get('/list/:studentId', async (req, res) => {
                 const chapter = chapterById.get(String(m.chapterId));
                 const completion = (m.completions || []).find(c => String(c.studentId) === String(student._id));
                 const traceEcrite = completion?.traceEcrite || null;
-                const isTraceEcriteValidated = !isLycee || Boolean(traceEcrite?.validated);
+                const isTraceEcriteValidated = true;
                 return {
                     ...m,
                     chapterId: String(chapter?._id || m.chapterId || ''),
@@ -1634,7 +1634,19 @@ router.post('/validate-synonym', async (req, res) => {
 // ==========================================
 
 const splitTextIntoInitialParagraphs = (text = '', html = '') => {
-    const raw = String(text || '').replace(/\r/g, '').trim();
+    let raw = String(text || '').replace(/\r/g, '').trim();
+    if (!raw && html) {
+        raw = String(html)
+            .replace(/<br\s*[\/]?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n\n')
+            .replace(/<\/div>/gi, '\n\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .trim();
+    }
     if (!raw) return [];
     const chunks = raw.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean);
     if (chunks.length <= 1) {
@@ -1679,7 +1691,9 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
         const { moduleId, stepId } = req.params;
         const studentId = String(req.query.studentId || '').trim();
         const student = studentId ? await Student.findById(studentId).lean() : null;
-        const classroom = String(req.query.classroom || student?.currentClass || '').trim();
+        const rawClass = String(req.query.classroom || student?.currentClass || '').trim();
+        const classroom = rawClass ? rawClass.toUpperCase() : '';
+        const classFilter = classroom ? { $regex: new RegExp(`^${classroom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } : { $in: ['', null] };
 
         const module = await LearningModule.findById(moduleId).lean();
         if (!module) return res.status(404).json({ error: 'Module introuvable' });
@@ -1691,7 +1705,7 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
         if (!step) return res.status(404).json({ error: 'Étape de fiche introuvable' });
 
         const targetStepId = String(step.id || stepId);
-        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId: targetStepId, classroom }).lean();
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId: targetStepId, classroom: classFilter }).lean();
 
         if (!sheet) {
             const initialParagraphs = splitTextIntoInitialParagraphs(step.sheetText, step.sheetTextHtml);
@@ -1719,12 +1733,16 @@ router.post('/:moduleId/collaborative-sheet/:stepId/contribution', async (req, r
             return res.status(400).json({ error: 'paragraphId, text et studentId requis' });
         }
 
-        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        const rawClass = String(classroom || '').trim();
+        const cleanClass = rawClass ? rawClass.toUpperCase() : '';
+        const classFilter = cleanClass ? { $regex: new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } : { $in: ['', null] };
+
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom: classFilter });
         if (!sheet) {
             sheet = await CollaborativeSheet.create({
                 moduleId,
                 stepId,
-                classroom,
+                classroom: cleanClass,
                 paragraphs: [],
                 updatedAt: new Date()
             });
@@ -1774,12 +1792,16 @@ router.post('/:moduleId/collaborative-sheet/:stepId/new-paragraph', async (req, 
             return res.status(400).json({ error: 'text et studentId requis' });
         }
 
-        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        const rawClass = String(classroom || '').trim();
+        const cleanClass = rawClass ? rawClass.toUpperCase() : '';
+        const classFilter = cleanClass ? { $regex: new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } : { $in: ['', null] };
+
+        let sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom: classFilter });
         if (!sheet) {
             sheet = await CollaborativeSheet.create({
                 moduleId,
                 stepId,
-                classroom,
+                classroom: cleanClass,
                 paragraphs: [],
                 updatedAt: new Date()
             });
@@ -1825,7 +1847,11 @@ router.post('/:moduleId/collaborative-sheet/:stepId/comment', async (req, res) =
             return res.status(400).json({ error: 'paragraphId, targetVersionKey, text et authorName requis' });
         }
 
-        const sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom });
+        const rawClass = String(classroom || '').trim();
+        const cleanClass = rawClass ? rawClass.toUpperCase() : '';
+        const classFilter = cleanClass ? { $regex: new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } : { $in: ['', null] };
+
+        const sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom: classFilter });
         if (!sheet) return res.status(404).json({ error: 'Fiche collaborative introuvable' });
 
         const paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));

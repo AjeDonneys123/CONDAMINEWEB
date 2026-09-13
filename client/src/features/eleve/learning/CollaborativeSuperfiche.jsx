@@ -257,9 +257,9 @@ export default function CollaborativeSuperfiche({
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="space-y-1">
                         <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold tracking-wide uppercase text-indigo-200">
-                            <span>🤝 Fiche Collaborative</span>
+                            <span>🤝 Fiche Participative & Collaborative</span>
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>Classe de Seconde</span>
+                            <span>{effectiveClassroom ? `Classe ${effectiveClassroom}` : 'Partage de classe'}</span>
                         </div>
                         <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
                             Superfiche enrichie par la classe

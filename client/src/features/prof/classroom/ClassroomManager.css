@@ -1035,6 +1035,7 @@
 }
 
 .student-alert-actions .board-warning-toggle { grid-column: 1 / -1; }
+.grade-toggle { background: #fef9c3; color: #854d0e; border: 2px solid #fcd34d; }
 .grade-toggle.remove { background: #f1f5f9; color: #475569; }
 .punishment-toggle { background: #fee2e2; color: #b91c1c; border: 2px solid #fca5a5; }
 .punishment-toggle.active { background: #dc2626; color: #fff; border-color: #b91c1c; }
@@ -1361,4 +1362,3 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-
