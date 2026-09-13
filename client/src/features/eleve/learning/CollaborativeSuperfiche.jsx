@@ -1,4 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import SheetRichTextEditor from '../../prof/learning/SheetRichTextEditor';
+
+const COLOR_PRESETS = [
+    { id: 'amber', label: 'Ambre', bg: '#fef3c7', border: '#fde68a', text: '#92400e', badgeBg: '#fde68a' },
+    { id: 'emerald', label: 'Vert', bg: '#dcfce7', border: '#bbf7d0', text: '#166534', badgeBg: '#bbf7d0' },
+    { id: 'sky', label: 'Bleu', bg: '#e0f2fe', border: '#bae6fd', text: '#075985', badgeBg: '#bae6fd' },
+    { id: 'purple', label: 'Violet', bg: '#f3e8ff', border: '#e9d5ff', text: '#6b21a8', badgeBg: '#e9d5ff' },
+    { id: 'pink', label: 'Rose', bg: '#fce7f3', border: '#fbcfe8', text: '#9d174d', badgeBg: '#fbcfe8' }
+];
 
 export default function CollaborativeSuperfiche({
     moduleId,
@@ -9,19 +18,24 @@ export default function CollaborativeSuperfiche({
     classroom = ''
 }) {
     const [sheet, setSheet] = useState(null);
+    const [stepTitle, setStepTitle] = useState(initialStep?.title || 'Fiche de cours');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [selectedVersions, setSelectedVersions] = useState({}); // { [paragraphId]: 'base' | studentId }
-    const [openComments, setOpenComments] = useState({}); // { [`${pId}_${versionKey}`]: boolean }
-    const [editingParagraphId, setEditingParagraphId] = useState(null);
-    const [editDraftText, setEditDraftText] = useState('');
+
+    // Éditeur en cours d'injection
+    const [injectingParagraphId, setInjectingParagraphId] = useState(null); // paragraphId où l'élève ajoute
+    const [editingContribId, setEditingContribId] = useState(null); // contributionId si modification
+    const [draftHtml, setDraftHtml] = useState('');
+    const [draftText, setDraftText] = useState('');
+    const [draftColor, setDraftColor] = useState(COLOR_PRESETS[0].bg);
     const [savingContrib, setSavingContrib] = useState(false);
-    const [commentDrafts, setCommentDrafts] = useState({}); // { [`${pId}_${versionKey}`]: string }
+
+    // Commentaires
+    const [openComments, setOpenComments] = useState({}); // { [contribId]: boolean }
+    const [commentingContribId, setCommentingContribId] = useState(null); // contribId avec input ouvert
+    const [commentDraft, setCommentDraft] = useState('');
     const [sendingComment, setSendingComment] = useState(false);
-    const [showNewParagraphModal, setShowNewParagraphModal] = useState(false);
-    const [newParagraphText, setNewParagraphText] = useState('');
-    const [editingBaseParagraphId, setEditingBaseParagraphId] = useState(null);
-    const [baseEditDraft, setBaseEditDraft] = useState('');
+    const [deletingContribId, setDeletingContribId] = useState(null);
 
     const studentId = String(user?._id || user?.id || '').trim();
     const studentName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || (isTeacher ? 'Professeur' : 'Élève');
@@ -44,6 +58,7 @@ export default function CollaborativeSuperfiche({
             const data = await res.json();
             if (data?.ok && data?.sheet) {
                 setSheet(data.sheet);
+                if (data.stepTitle) setStepTitle(data.stepTitle);
                 setError('');
             }
         } catch (e) {
@@ -57,42 +72,49 @@ export default function CollaborativeSuperfiche({
         fetchSheet();
         const timer = setInterval(() => {
             fetchSheet(true);
-        }, 8000); // synchronisation discrète toutes les 8s
+        }, 8000);
         return () => clearInterval(timer);
     }, [fetchSheet]);
 
-    // Version sélectionnée pour un paragraphe (par défaut 'base')
-    const getActiveVersionKey = (paragraphId) => {
-        return selectedVersions[paragraphId] || 'base';
+    // Ouvrir l'éditeur pour injecter une nouvelle contribution dans une section
+    const handleStartInjection = (paragraphId) => {
+        setInjectingParagraphId(paragraphId);
+        setEditingContribId(null);
+        setDraftHtml('');
+        setDraftText('');
+        setDraftColor(COLOR_PRESETS[0].bg);
     };
 
-    const handleSelectVersion = (paragraphId, versionKey) => {
-        setSelectedVersions((prev) => ({
-            ...prev,
-            [paragraphId]: versionKey
-        }));
+    // Ouvrir l'éditeur pour modifier sa propre contribution existante
+    const handleStartEdit = (paragraphId, contrib) => {
+        setInjectingParagraphId(paragraphId);
+        setEditingContribId(contrib.contributionId || contrib._id);
+        setDraftHtml(contrib.html || contrib.text || '');
+        setDraftText(contrib.text || '');
+        setDraftColor(contrib.color || COLOR_PRESETS[0].bg);
     };
 
-    // Ouvrir l'éditeur de contribution pour l'élève connecté
-    const handleOpenEditContribution = (paragraph) => {
-        const myContrib = (paragraph?.contributions || []).find(
-            (c) => String(c.studentId) === String(studentId)
-        );
-        setEditDraftText(myContrib ? myContrib.text : paragraph.baseText);
-        setEditingParagraphId(paragraph.paragraphId);
+    const handleCancelEditor = () => {
+        setInjectingParagraphId(null);
+        setEditingContribId(null);
+        setDraftHtml('');
+        setDraftText('');
     };
 
-    // Enregistrer la version élève
+    // Enregistrer la contribution élève
     const handleSaveContribution = async () => {
-        if (!editingParagraphId || !editDraftText.trim() || savingContrib) return;
+        if (!injectingParagraphId || (!draftHtml.trim() && !draftText.trim()) || savingContrib) return;
         setSavingContrib(true);
         try {
             const res = await fetch(`${apiPrefix}/${moduleId}/collaborative-sheet/${stepId}/contribution`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    paragraphId: editingParagraphId,
-                    text: editDraftText.trim(),
+                    paragraphId: injectingParagraphId,
+                    contributionId: editingContribId,
+                    html: draftHtml.trim(),
+                    text: draftText.trim(),
+                    color: draftColor,
                     studentId,
                     studentName,
                     studentFirstName,
@@ -102,15 +124,9 @@ export default function CollaborativeSuperfiche({
             const data = await res.json();
             if (data?.ok && data?.sheet) {
                 setSheet(data.sheet);
-                // Sélectionner automatiquement sa propre version
-                setSelectedVersions((prev) => ({
-                    ...prev,
-                    [editingParagraphId]: studentId
-                }));
-                setEditingParagraphId(null);
-                setEditDraftText('');
+                handleCancelEditor();
             } else {
-                alert(data?.error || 'Erreur lors de l’enregistrement de votre contribution.');
+                alert(data?.error || 'Erreur lors de l’enregistrement.');
             }
         } catch (e) {
             alert('Erreur de connexion : ' + e.message);
@@ -119,72 +135,53 @@ export default function CollaborativeSuperfiche({
         }
     };
 
-    // Ajouter un nouveau paragraphe/complément par un élève
-    const handleCreateNewParagraph = async () => {
-        if (!newParagraphText.trim() || savingContrib) return;
-        setSavingContrib(true);
+    // Supprimer une contribution
+    const handleDeleteContribution = async (contribId) => {
+        if (!contribId || deletingContribId) return;
+        if (!window.confirm('Voulez-vous vraiment supprimer cette contribution ?')) return;
+        setDeletingContribId(contribId);
         try {
-            const res = await fetch(`${apiPrefix}/${moduleId}/collaborative-sheet/${stepId}/new-paragraph`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    text: newParagraphText.trim(),
-                    studentId,
-                    studentName,
-                    studentFirstName,
-                    classroom: effectiveClassroom
-                })
-            });
-            const data = await res.json();
-            if (data?.ok && data?.sheet) {
-                setSheet(data.sheet);
-                setShowNewParagraphModal(false);
-                setNewParagraphText('');
-            } else {
-                alert(data?.error || 'Erreur lors de l’ajout du paragraphe.');
-            }
-        } catch (e) {
-            alert('Erreur de connexion : ' + e.message);
-        } finally {
-            setSavingContrib(false);
-        }
-    };
+            const query = new URLSearchParams();
+            if (studentId) query.set('studentId', studentId);
+            if (effectiveClassroom) query.set('classroom', effectiveClassroom);
 
-    // Professeur : éditer la base du paragraphe
-    const handleSaveBaseText = async () => {
-        if (!editingBaseParagraphId || savingContrib) return;
-        setSavingContrib(true);
-        try {
-            const res = await fetch(`/api/prof/learning/${moduleId}/collaborative-sheet/${stepId}/base`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    paragraphId: editingBaseParagraphId,
-                    baseText: baseEditDraft.trim(),
-                    classroom: effectiveClassroom
-                })
+            const res = await fetch(`${apiPrefix}/${moduleId}/collaborative-sheet/${stepId}/contribution/${contribId}?${query.toString()}`, {
+                method: 'DELETE'
             });
             const data = await res.json();
             if (data?.ok && data?.sheet) {
                 setSheet(data.sheet);
-                setEditingBaseParagraphId(null);
-                setBaseEditDraft('');
             } else {
-                alert(data?.error || 'Erreur lors de la mise à jour de la base.');
+                alert(data?.error || 'Impossible de supprimer la contribution.');
             }
         } catch (e) {
             alert('Erreur : ' + e.message);
         } finally {
-            setSavingContrib(false);
+            setDeletingContribId(null);
         }
     };
 
-    // Envoyer un commentaire sur une version
-    const handleSendComment = async (paragraphId, versionKey) => {
-        const commentIdKey = `${paragraphId}_${versionKey}`;
-        const text = (commentDrafts[commentIdKey] || '').trim();
-        if (!text || sendingComment) return;
+    // Basculer l'affichage des commentaires pour une contribution
+    const toggleShowComments = (contribKey) => {
+        setOpenComments((prev) => ({
+            ...prev,
+            [contribKey]: !prev[contribKey]
+        }));
+    };
 
+    // Ouvrir la zone d'ajout d'un commentaire
+    const toggleOpenCommentBox = (contribKey) => {
+        setOpenComments((prev) => ({
+            ...prev,
+            [contribKey]: true
+        }));
+        setCommentingContribId((prev) => (prev === contribKey ? null : contribKey));
+        setCommentDraft('');
+    };
+
+    // Envoyer un commentaire sur une contribution
+    const handleSendComment = async (paragraphId, contribId) => {
+        if (!commentDraft.trim() || sendingComment) return;
         setSendingComment(true);
         try {
             const res = await fetch(`${apiPrefix}/${moduleId}/collaborative-sheet/${stepId}/comment`, {
@@ -192,8 +189,8 @@ export default function CollaborativeSuperfiche({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     paragraphId,
-                    targetVersionKey: versionKey,
-                    text,
+                    contributionId: contribId,
+                    text: commentDraft.trim(),
                     authorId: studentId,
                     authorName: studentName,
                     authorRole: isTeacher ? 'teacher' : 'student',
@@ -203,7 +200,9 @@ export default function CollaborativeSuperfiche({
             const data = await res.json();
             if (data?.ok && data?.sheet) {
                 setSheet(data.sheet);
-                setCommentDrafts((prev) => ({ ...prev, [commentIdKey]: '' }));
+                setCommentDraft('');
+                setCommentingContribId(null);
+                setOpenComments((prev) => ({ ...prev, [contribId]: true }));
             } else {
                 alert(data?.error || 'Erreur lors de l’envoi du commentaire.');
             }
@@ -214,19 +213,11 @@ export default function CollaborativeSuperfiche({
         }
     };
 
-    const toggleComments = (paragraphId, versionKey) => {
-        const commentIdKey = `${paragraphId}_${versionKey}`;
-        setOpenComments((prev) => ({
-            ...prev,
-            [commentIdKey]: !prev[commentIdKey]
-        }));
-    };
-
     if (loading && !sheet) {
         return (
             <div className="flex flex-col items-center justify-center py-16 text-slate-500">
                 <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="font-semibold text-sm">Chargement de la superfiche collaborative...</p>
+                <p className="font-semibold text-sm">Chargement de la fiche participative...</p>
             </div>
         );
     }
@@ -239,7 +230,7 @@ export default function CollaborativeSuperfiche({
                 <button
                     type="button"
                     onClick={() => fetchSheet()}
-                    className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                    className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-sm transition cursor-pointer"
                 >
                     Réessayer
                 </button>
@@ -251,7 +242,7 @@ export default function CollaborativeSuperfiche({
 
     return (
         <div className="w-full max-w-4xl mx-auto py-4 px-2 sm:px-4 space-y-6">
-            {/* Bannière d'en-tête collaborative */}
+            {/* Bannière d'en-tête de la fiche collaborative */}
             <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl relative overflow-hidden">
                 <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-40 h-40 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -262,440 +253,375 @@ export default function CollaborativeSuperfiche({
                             <span>{effectiveClassroom ? `Classe ${effectiveClassroom}` : 'Partage de classe'}</span>
                         </div>
                         <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                            Superfiche enrichie par la classe
+                            {stepTitle}
                         </h2>
                         <p className="text-xs sm:text-sm text-indigo-200/90 max-w-xl">
-                            La base du professeur est le socle officiel du cours. Proposez vos enrichissements, explorez les versions de vos camarades et débattez dans le fil de commentaires !
+                            Le cours officiel du professeur est affiché ci-dessous. Tu peux sélectionner n’importe quelle partie pour y injecter tes modifications, compléments ou exemples, et échanger avec tes camarades !
                         </p>
                     </div>
 
                     <button
                         type="button"
-                        onClick={() => setShowNewParagraphModal(true)}
+                        onClick={() => handleStartInjection('new')}
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-lg shadow-emerald-950/20 transition cursor-pointer"
                     >
                         <span>➕</span>
-                        <span>Proposer un paragraphe</span>
+                        <span>Proposer une section libre</span>
                     </button>
                 </div>
             </div>
 
-            {/* Liste des Paragraphes */}
-            <div className="space-y-6">
+            {/* Structure du cours avec injection collaborative par zone */}
+            <div className="space-y-8">
                 {paragraphs.length === 0 ? (
                     <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center text-slate-500">
-                        <p className="font-semibold text-sm">Aucun paragraphe disponible pour le moment.</p>
+                        <p className="font-semibold text-sm">Aucune partie configurée sur cette fiche.</p>
                     </div>
                 ) : (
                     paragraphs.map((p, pIndex) => {
-                        const activeKey = getActiveVersionKey(p.paragraphId);
-                        const isBaseActive = activeKey === 'base';
-                        const activeContrib = !isBaseActive
-                            ? (p.contributions || []).find((c) => String(c.studentId) === String(activeKey))
-                            : null;
-
-                        const displayText = activeContrib ? activeContrib.text : p.baseText;
-                        const myContrib = (p.contributions || []).find(
-                            (c) => String(c.studentId) === String(studentId)
-                        );
-                        const hasMyContrib = Boolean(myContrib);
-
-                        const activeComments = activeContrib
-                            ? (activeContrib.comments || [])
-                            : (p.baseComments || []);
-
-                        const commentIdKey = `${p.paragraphId}_${activeKey}`;
-                        const isCommentsOpen = Boolean(openComments[commentIdKey]);
+                        const contributions = p.contributions || [];
+                        const isInjectingHere = injectingParagraphId === p.paragraphId;
 
                         return (
                             <div
                                 key={p.paragraphId || pIndex}
-                                className={`bg-white rounded-3xl border transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md ${
-                                    p.authorRole === 'student'
-                                        ? 'border-emerald-200 ring-2 ring-emerald-500/10'
-                                        : 'border-slate-200'
-                                }`}
+                                className="bg-white rounded-3xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                             >
-                                {/* Header du paragraphe */}
-                                <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-black flex items-center justify-center">
+                                {/* En-tête de section */}
+                                <div className="px-5 py-3 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-800 text-xs font-black flex items-center justify-center">
                                             {pIndex + 1}
                                         </span>
-                                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">
-                                            {p.authorRole === 'student' ? (
-                                                <span className="text-emerald-700">🌱 Complément ajouté par {p.createdByName}</span>
-                                            ) : (
-                                                <span>Section {pIndex + 1}</span>
-                                            )}
+                                        <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                                            {p.title || `Partie ${pIndex + 1}`}
                                         </span>
                                     </div>
-
-                                    <div className="flex items-center gap-2">
-                                        {/* Professeur : bouton pour modifier la base */}
-                                        {isTeacher && isBaseActive && (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setBaseEditDraft(p.baseText);
-                                                    setEditingBaseParagraphId(p.paragraphId);
-                                                }}
-                                                className="px-2.5 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                                            >
-                                                ✏️ Modifier la base prof
-                                            </button>
-                                        )}
-
-                                        {/* Élève : bouton pour créer/modifier sa version */}
-                                        {!isTeacher && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleOpenEditContribution(p)}
-                                                className={`px-3 py-1 text-xs font-bold rounded-xl transition cursor-pointer ${
-                                                    hasMyContrib
-                                                        ? 'bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200'
-                                                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                                                }`}
-                                            >
-                                                {hasMyContrib ? '✏️ Modifier ma version' : '✨ Proposer ma version'}
-                                            </button>
-                                        )}
-                                    </div>
+                                    <span className="text-[11px] font-bold text-slate-400">
+                                        {contributions.length > 0 ? `${contributions.length} contribution${contributions.length > 1 ? 's' : ''}` : 'Socle officiel'}
+                                    </span>
                                 </div>
 
-                                {/* Contenu du paragraphe (Texte affiché selon la version active) */}
-                                <div className="p-5 sm:p-6">
-                                    {/* Alerte discrète si c'est une version élève */}
-                                    {!isBaseActive && activeContrib && (
-                                        <div className="mb-3 px-3 py-1.5 bg-violet-50/80 border border-violet-100 rounded-xl inline-flex items-center gap-2 text-xs text-violet-700 font-semibold">
-                                            <span>👤</span>
-                                            <span>Version proposée par <strong>{activeContrib.studentName}</strong></span>
-                                            {String(activeContrib.studentId) === String(studentId) && (
-                                                <span className="px-1.5 py-0.5 bg-violet-200/80 text-violet-800 text-[10px] rounded-full font-bold">Vous</span>
-                                            )}
+                                {/* Contenu officiel du cours (HTML riche intégral préservant couleurs rouge/vert, gras, sous-titres, QCM) */}
+                                <div className="p-5 sm:p-6 bg-white">
+                                    {p.baseHtml ? (
+                                        <div
+                                            className="teacher-rich-content font-medium text-slate-900 leading-relaxed text-base sm:text-lg space-y-1"
+                                            dangerouslySetInnerHTML={{ __html: p.baseHtml }}
+                                        />
+                                    ) : (
+                                        <div className="teacher-rich-content whitespace-pre-wrap font-medium text-slate-900 leading-relaxed text-base sm:text-lg">
+                                            {p.baseText}
                                         </div>
                                     )}
-
-                                    <div className="text-slate-800 leading-relaxed text-sm sm:text-base font-medium whitespace-pre-line select-text">
-                                        {displayText}
-                                    </div>
                                 </div>
 
-                                {/* BARRE DE TABS / SÉLECTEUR DE VERSION */}
-                                <div className="px-5 py-3 bg-slate-50/80 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mr-1">
-                                            Versions :
-                                        </span>
+                                {/* Liste des contributions / modifications injectées par les élèves dans cette zone */}
+                                {contributions.length > 0 && (
+                                    <div className="px-4 sm:px-6 pb-4 space-y-4">
+                                        <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 pt-2 flex items-center gap-2">
+                                            <span>✨ Contributions et ajouts des camarades</span>
+                                            <div className="h-px flex-1 bg-slate-200" />
+                                        </div>
 
-                                        {/* Onglet Base Prof */}
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectVersion(p.paragraphId, 'base')}
-                                            className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                                                isBaseActive
-                                                    ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600/30'
-                                                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                                            }`}
-                                        >
-                                            <span>👨‍🏫</span>
-                                            <span>Base Prof</span>
-                                        </button>
-
-                                        {/* Onglets des contributions élèves */}
-                                        {(p.contributions || []).map((contrib) => {
-                                            const isSelected = activeKey === String(contrib.studentId);
-                                            const isMe = String(contrib.studentId) === String(studentId);
-                                            const name = contrib.studentFirstName || contrib.studentName.split(' ')[0];
+                                        {contributions.map((contrib, cIdx) => {
+                                            const contribId = contrib.contributionId || contrib._id || `c_${cIdx}`;
+                                            const isMyContrib = String(contrib.studentId) === String(studentId) || isTeacher;
+                                            const isCommentsVisible = Boolean(openComments[contribId]);
+                                            const isCommentInputOpen = commentingContribId === contribId;
+                                            const comments = contrib.comments || [];
+                                            const cardColor = contrib.color || COLOR_PRESETS[0].bg;
 
                                             return (
-                                                <button
-                                                    key={String(contrib.studentId)}
-                                                    type="button"
-                                                    onClick={() => handleSelectVersion(p.paragraphId, String(contrib.studentId))}
-                                                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                                                        isSelected
-                                                            ? 'bg-violet-600 text-white shadow-sm ring-2 ring-violet-600/30'
-                                                            : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                                                    }`}
+                                                <div
+                                                    key={contribId}
+                                                    style={{ backgroundColor: cardColor }}
+                                                    className="rounded-2xl p-4 sm:p-5 border border-black/10 shadow-sm transition-all"
                                                 >
-                                                    <span>👤</span>
-                                                    <span>{name} {isMe ? '(Moi)' : ''}</span>
-                                                </button>
+                                                    {/* Contenu formaté de l'élève */}
+                                                    <div
+                                                        className="student-rich-content text-slate-900 font-medium leading-relaxed text-base whitespace-pre-wrap"
+                                                        dangerouslySetInnerHTML={{ __html: contrib.html || contrib.text }}
+                                                    />
+
+                                                    {/* Pied de la zone ajoutée avec nom en bas à droite et boutons */}
+                                                    <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-black/10">
+                                                        {/* Actions auteur (modifier / supprimer) */}
+                                                        <div className="flex items-center gap-3 text-xs">
+                                                            {isMyContrib && (
+                                                                <>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleStartEdit(p.paragraphId, contrib)}
+                                                                        className="text-slate-700 hover:text-indigo-700 font-bold transition flex items-center gap-1 cursor-pointer"
+                                                                    >
+                                                                        <span>✏️</span>
+                                                                        <span>Modifier</span>
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={deletingContribId === contribId}
+                                                                        onClick={() => handleDeleteContribution(contribId)}
+                                                                        className="text-slate-700 hover:text-red-700 font-bold transition flex items-center gap-1 cursor-pointer"
+                                                                    >
+                                                                        <span>🗑️</span>
+                                                                        <span>Supprimer</span>
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Nom de l'élève en bas à droite + boutons commentaires */}
+                                                        <div className="flex items-center gap-2 text-xs ml-auto">
+                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 backdrop-blur-sm font-bold text-slate-900 border border-black/10 shadow-2xs">
+                                                                <span>👤</span>
+                                                                <span>{contrib.studentName}</span>
+                                                            </span>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleOpenCommentBox(contribId)}
+                                                                className="px-3 py-1 rounded-xl bg-white/90 hover:bg-white text-indigo-700 font-bold border border-indigo-200 shadow-2xs transition flex items-center gap-1 cursor-pointer active:scale-95"
+                                                                title="Ajouter un commentaire sur cet ajout"
+                                                            >
+                                                                <span>💬</span>
+                                                                <span>Commenter</span>
+                                                            </button>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleShowComments(contribId)}
+                                                                className="px-3 py-1 rounded-xl bg-white/90 hover:bg-white text-slate-700 font-bold border border-slate-300/80 shadow-2xs transition flex items-center gap-1 cursor-pointer active:scale-95"
+                                                                title="Afficher ou cacher les commentaires"
+                                                            >
+                                                                <span>{isCommentsVisible ? '🙈' : '👁'}</span>
+                                                                <span>{isCommentsVisible ? 'Cacher' : `Commentaires (${comments.length})`}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Fil de commentaires déroulable */}
+                                                    {(isCommentsVisible || isCommentInputOpen) && (
+                                                        <div className="mt-4 pt-4 border-t border-black/10 space-y-3 bg-white/60 p-4 rounded-2xl">
+                                                            <div className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                                                <span>💬</span>
+                                                                <span>Fil de discussion ({comments.length})</span>
+                                                            </div>
+
+                                                            {comments.length === 0 ? (
+                                                                <p className="text-xs text-slate-500 italic">Aucun commentaire pour l’instant. Sois le premier à réagir !</p>
+                                                            ) : (
+                                                                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                                                    {comments.map((cmt, cIdx2) => (
+                                                                        <div
+                                                                            key={cIdx2}
+                                                                            className={`p-3 rounded-xl text-xs space-y-1 ${
+                                                                                cmt.authorRole === 'teacher'
+                                                                                    ? 'bg-indigo-50 border border-indigo-200 text-indigo-950'
+                                                                                    : 'bg-white border border-slate-200 text-slate-800'
+                                                                            }`}
+                                                                        >
+                                                                            <div className="flex items-center justify-between font-bold">
+                                                                                <span>{cmt.authorRole === 'teacher' ? '👨‍🏫 ' : '👤 '}{cmt.authorName}</span>
+                                                                                <span className="text-[10px] text-slate-400 font-normal">
+                                                                                    {cmt.createdAt ? new Date(cmt.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p className="leading-relaxed">{cmt.text}</p>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Input d'ajout de commentaire */}
+                                                            <div className="flex items-center gap-2 pt-2">
+                                                                <input
+                                                                    type="text"
+                                                                    value={commentingContribId === contribId ? commentDraft : ''}
+                                                                    onChange={(e) => {
+                                                                        setCommentingContribId(contribId);
+                                                                        setCommentDraft(e.target.value);
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                                                            e.preventDefault();
+                                                                            handleSendComment(p.paragraphId, contribId);
+                                                                        }
+                                                                    }}
+                                                                    placeholder="Écris un commentaire ou une question..."
+                                                                    className="flex-1 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-xs font-medium text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={sendingComment || !commentDraft.trim() || commentingContribId !== contribId}
+                                                                    onClick={() => handleSendComment(p.paragraphId, contribId)}
+                                                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl shadow transition cursor-pointer"
+                                                                >
+                                                                    {sendingComment ? '...' : 'Envoyer'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             );
                                         })}
                                     </div>
-
-                                    {/* Bouton d'accès au fil de commentaires de la version active */}
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleComments(p.paragraphId, activeKey)}
-                                        className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                                            isCommentsOpen
-                                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                                        }`}
-                                    >
-                                        <span>💬</span>
-                                        <span>{activeComments.length > 0 ? `Débat (${activeComments.length})` : 'Commenter'}</span>
-                                    </button>
-                                </div>
-
-                                {/* FIL DE COMMENTAIRES DÉPLIABLE SOUS LA VERSION ACTIVE */}
-                                {isCommentsOpen && (
-                                    <div className="bg-amber-50/40 border-t border-amber-100 p-4 sm:p-5 space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
-                                                <span>💬 Discussion sur la version :</span>
-                                                <span className="px-2 py-0.5 bg-amber-200/80 rounded-full text-[11px]">
-                                                    {isBaseActive ? '👨‍🏫 Base Professeur' : `👤 ${activeContrib?.studentName}`}
-                                                </span>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleComments(p.paragraphId, activeKey)}
-                                                className="text-slate-600 hover:text-slate-600 text-xs font-bold"
-                                            >
-                                                Fermer
-                                            </button>
-                                        </div>
-
-                                        {/* Liste des commentaires */}
-                                        <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                                            {activeComments.length === 0 ? (
-                                                <p className="text-xs text-slate-500 italic py-2">
-                                                    Aucun commentaire sur cette version. Soyez le premier à donner votre avis ou poser une question !
-                                                </p>
-                                            ) : (
-                                                activeComments.map((comment, cIdx) => (
-                                                    <div
-                                                        key={comment._id || cIdx}
-                                                        className={`p-3 rounded-2xl text-xs leading-relaxed ${
-                                                            comment.authorRole === 'teacher'
-                                                                ? 'bg-indigo-50 border border-indigo-100 text-indigo-950'
-                                                                : 'bg-white border border-slate-200 text-slate-800 shadow-2xs'
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                                            <div className="flex items-center gap-1.5 font-bold">
-                                                                <span>{comment.authorRole === 'teacher' ? '👨‍🏫' : '👤'}</span>
-                                                                <span>{comment.authorName}</span>
-                                                                {comment.authorRole === 'teacher' && (
-                                                                    <span className="px-1.5 py-0.2 bg-indigo-200 text-indigo-800 text-[10px] rounded font-extrabold uppercase">
-                                                                        Prof
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <span className="text-[10px] text-slate-600">
-                                                                {comment.createdAt ? new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                            </span>
-                                                        </div>
-                                                        <div className="whitespace-pre-line pl-5">
-                                                            {comment.text}
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-
-                                        {/* Formulaire d'envoi de commentaire */}
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={commentDrafts[commentIdKey] || ''}
-                                                onChange={(e) => setCommentDrafts({
-                                                    ...commentDrafts,
-                                                    [commentIdKey]: e.target.value
-                                                })}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        handleSendComment(p.paragraphId, activeKey);
-                                                    }
-                                                }}
-                                                placeholder={`Réagir à la version de ${isBaseActive ? 'Base Prof' : activeContrib?.studentName}...`}
-                                                className="flex-1 px-4 py-2 bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-200 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-600 outline-none transition"
-                                            />
-                                            <button
-                                                type="button"
-                                                disabled={sendingComment || !(commentDrafts[commentIdKey] || '').trim()}
-                                                onClick={() => handleSendComment(p.paragraphId, activeKey)}
-                                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs rounded-2xl shadow-sm transition cursor-pointer"
-                                            >
-                                                Envoyer
-                                            </button>
-                                        </div>
-                                    </div>
                                 )}
+
+                                {/* Zone d'injection / Éditeur recyclé pour cette partie */}
+                                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200/80">
+                                    {isInjectingHere ? (
+                                        <div className="space-y-4 bg-white p-4 sm:p-5 rounded-2xl border-2 border-indigo-300 shadow-md">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                                                <div className="text-xs font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
+                                                    <span>✍️</span>
+                                                    <span>{editingContribId ? 'Modifier ma contribution' : 'Injecter une précision ou modification'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                                                    <span>Fond de couleur :</span>
+                                                    <div className="flex items-center gap-1">
+                                                        {COLOR_PRESETS.map((col) => (
+                                                            <button
+                                                                key={col.id}
+                                                                type="button"
+                                                                onClick={() => setDraftColor(col.bg)}
+                                                                style={{ backgroundColor: col.bg, borderColor: col.border }}
+                                                                className={`w-6 h-6 rounded-full border-2 transition transform hover:scale-110 cursor-pointer ${
+                                                                    draftColor === col.bg ? 'ring-2 ring-indigo-600 scale-110 shadow-sm' : ''
+                                                                }`}
+                                                                title={col.label}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Recyclage du composant SheetRichTextEditor */}
+                                            <SheetRichTextEditor
+                                                html={draftHtml}
+                                                plainText={draftText}
+                                                minHeight="min-h-[200px]"
+                                                maxHeight="max-h-[380px]"
+                                                placeholder="Rédige ici ton complément, ta reformulation ou tes précisions avec les outils de mise en forme (Gras, Puces, Numérotation, Couleurs)..."
+                                                autoFocus
+                                                onChange={({ html, text }) => {
+                                                    setDraftHtml(html);
+                                                    setDraftText(text);
+                                                }}
+                                            />
+
+                                            {/* Boutons d'enregistrement et d'annulation */}
+                                            <div className="flex items-center justify-end gap-3 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCancelEditor}
+                                                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                                                >
+                                                    Annuler
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={savingContrib || (!draftHtml.trim() && !draftText.trim())}
+                                                    onClick={handleSaveContribution}
+                                                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                                                >
+                                                    <span>{savingContrib ? '⏳ Enregistrement...' : '💾 Enregistrer mon ajout'}</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleStartInjection(p.paragraphId)}
+                                            className="w-full py-2.5 px-4 rounded-xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-white/70 hover:bg-indigo-50/50 text-indigo-700 hover:text-indigo-900 text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs group"
+                                        >
+                                            <span className="w-5 h-5 rounded-full bg-indigo-100 group-hover:bg-indigo-200 text-indigo-700 flex items-center justify-center text-xs">➕</span>
+                                            <span>Injecter une modification ou un complément sur cette partie</span>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         );
                     })
                 )}
-            </div>
 
-            {/* MODAL / TIROIR DE MODIFICATION D'UNE CONTRIBUTION ÉLÈVE */}
-            {editingParagraphId && (
-                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">✨</span>
-                                <h3 className="text-base font-bold text-slate-900">
-                                    Votre contribution sur ce paragraphe
-                                </h3>
+                {/* Ajout d'une nouvelle section libre tout en bas */}
+                {injectingParagraphId === 'new' ? (
+                    <div className="space-y-4 bg-white p-5 rounded-3xl border-2 border-emerald-400 shadow-lg">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                            <div className="text-xs font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                                <span>➕</span>
+                                <span>Ajouter une nouvelle section libre au cours</span>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setEditingParagraphId(null)}
-                                className="text-slate-600 hover:text-slate-600 text-lg font-bold"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <p className="text-xs text-slate-500">
-                            Enrichissez ce passage avec des définitions, exemples, précisions ou une reformulation claire. Vos ajouts apparaîtront sous votre prénom pour toute la classe.
-                        </p>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                Votre texte enrichi :
-                            </label>
-                            <textarea
-                                value={editDraftText}
-                                onChange={(e) => setEditDraftText(e.target.value)}
-                                rows={7}
-                                className="w-full p-4 text-sm bg-slate-50 border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 rounded-2xl text-slate-800 outline-none leading-relaxed resize-y"
-                                placeholder="Rédigez votre version..."
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                            <button
-                                type="button"
-                                onClick={() => setEditingParagraphId(null)}
-                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
-                            >
-                                Annuler
-                            </button>
-                            <button
-                                type="button"
-                                disabled={savingContrib || !editDraftText.trim()}
-                                onClick={handleSaveContribution}
-                                className="px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md shadow-violet-950/20 transition cursor-pointer"
-                            >
-                                {savingContrib ? 'Enregistrement...' : 'Publier ma version'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* MODAL D'AJOUT D'UN NOUVEAU PARAGRAPHE ÉLÈVE */}
-            {showNewParagraphModal && (
-                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">➕</span>
-                                <h3 className="text-base font-bold text-slate-900">
-                                    Proposer un nouveau paragraphe ou complément
-                                </h3>
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                                <span>Fond :</span>
+                                <div className="flex items-center gap-1">
+                                    {COLOR_PRESETS.map((col) => (
+                                        <button
+                                            key={col.id}
+                                            type="button"
+                                            onClick={() => setDraftColor(col.bg)}
+                                            style={{ backgroundColor: col.bg, borderColor: col.border }}
+                                            className={`w-6 h-6 rounded-full border-2 transition transform hover:scale-110 cursor-pointer ${
+                                                draftColor === col.bg ? 'ring-2 ring-emerald-600 scale-110' : ''
+                                            }`}
+                                            title={col.label}
+                                        />
+                                    ))}
+                                </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowNewParagraphModal(false)}
-                                className="text-slate-600 hover:text-slate-600 text-lg font-bold"
-                            >
-                                ✕
-                            </button>
                         </div>
 
-                        <p className="text-xs text-slate-500">
-                            Vous souhaitez apporter une notion essentielle, une citation d'auteur, un contexte historique ou un point de méthode ? Rédigez-le ici : il sera ajouté à la fiche collaborative avec votre nom !
-                        </p>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                Contenu du paragraphe :
-                            </label>
-                            <textarea
-                                value={newParagraphText}
-                                onChange={(e) => setNewParagraphText(e.target.value)}
-                                rows={6}
-                                className="w-full p-4 text-sm bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 rounded-2xl text-slate-800 outline-none leading-relaxed resize-y"
-                                placeholder="Tapez ici le paragraphe ou le complément que vous souhaitez apporter au cours..."
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                            <button
-                                type="button"
-                                onClick={() => setShowNewParagraphModal(false)}
-                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
-                            >
-                                Annuler
-                            </button>
-                            <button
-                                type="button"
-                                disabled={savingContrib || !newParagraphText.trim()}
-                                onClick={handleCreateNewParagraph}
-                                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-950/20 transition cursor-pointer"
-                            >
-                                {savingContrib ? 'Ajout...' : 'Ajouter à la superfiche'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* MODAL ÉDITION BASE PROF */}
-            {isTeacher && editingBaseParagraphId && (
-                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">👨‍🏫</span>
-                                <h3 className="text-base font-bold text-slate-900">
-                                    Modifier la base officielle du professeur
-                                </h3>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setEditingBaseParagraphId(null)}
-                                className="text-slate-600 hover:text-slate-600 text-lg font-bold"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <textarea
-                            value={baseEditDraft}
-                            onChange={(e) => setBaseEditDraft(e.target.value)}
-                            rows={7}
-                            className="w-full p-4 text-sm bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-2xl text-slate-800 outline-none leading-relaxed"
+                        <SheetRichTextEditor
+                            html={draftHtml}
+                            plainText={draftText}
+                            minHeight="min-h-[220px]"
+                            maxHeight="max-h-[420px]"
+                            placeholder="Rédige ici un nouveau paragraphe, un exemple complet ou une fiche de synthèse..."
+                            autoFocus
+                            onChange={({ html, text }) => {
+                                setDraftHtml(html);
+                                setDraftText(text);
+                            }}
                         />
 
-                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-end gap-3 pt-2">
                             <button
                                 type="button"
-                                onClick={() => setEditingBaseParagraphId(null)}
-                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                                onClick={handleCancelEditor}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
                             >
                                 Annuler
                             </button>
                             <button
                                 type="button"
-                                disabled={savingContrib || !baseEditDraft.trim()}
-                                onClick={handleSaveBaseText}
-                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-950/20 transition cursor-pointer"
+                                disabled={savingContrib || (!draftHtml.trim() && !draftText.trim())}
+                                onClick={handleSaveContribution}
+                                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
                             >
-                                {savingContrib ? 'Enregistrement...' : 'Mettre à jour la base'}
+                                <span>{savingContrib ? '⏳ Enregistrement...' : '💾 Publier cette section'}</span>
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                ) : (
+                    <div className="flex justify-center pt-2">
+                        <button
+                            type="button"
+                            onClick={() => handleStartInjection('new')}
+                            className="px-6 py-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-black transition shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
+                        >
+                            <span>➕</span>
+                            <span>Ajouter un complément libre en fin de fiche</span>
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <style>{`
+                .teacher-rich-content div { min-height: 1.5em; }
+                .teacher-rich-content strong, .teacher-rich-content b { font-weight: 700; }
+                .student-rich-content strong, .student-rich-content b { font-weight: 700; }
+            `}</style>
         </div>
     );
 }

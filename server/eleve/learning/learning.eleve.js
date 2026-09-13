@@ -1633,55 +1633,82 @@ router.post('/validate-synonym', async (req, res) => {
 // SUPERFICHE COLLABORATIVE (2NDE / SECONDE)
 // ==========================================
 
-const splitTextIntoInitialParagraphs = (text = '', html = '') => {
-    let raw = String(text || '').replace(/\r/g, '').trim();
-    if (!raw && html) {
-        raw = String(html)
-            .replace(/<br\s*[\/]?>/gi, '\n')
-            .replace(/<\/p>/gi, '\n\n')
-            .replace(/<\/div>/gi, '\n\n')
-            .replace(/<[^>]+>/g, '')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .trim();
+const splitHtmlIntoSections = (html = '', fallbackText = '') => {
+    const rawHtml = String(html || '').trim();
+    if (!rawHtml) {
+        const lines = String(fallbackText || '').replace(/\r/g, '').split(/\n\s*\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length === 0) return [];
+        return lines.map((chunk, idx) => ({
+            paragraphId: `p_${idx}`,
+            title: chunk.split('\n')[0]?.slice(0, 60) || `Section ${idx + 1}`,
+            baseText: chunk,
+            baseHtml: '',
+            order: idx,
+            authorRole: 'teacher',
+            baseComments: [],
+            contributions: []
+        }));
     }
-    if (!raw) return [];
-    const chunks = raw.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean);
-    if (chunks.length <= 1) {
-        const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-        const aggregated = [];
-        let current = [];
-        lines.forEach((line) => {
-            const isHeadingOrNumbered = /^(?:[IVX]+\.|\d+\s*[-.)])\s+/i.test(line);
-            if (isHeadingOrNumbered && current.length > 0) {
-                aggregated.push(current.join('\n'));
-                current = [line];
-            } else {
-                current.push(line);
-            }
-        });
-        if (current.length > 0) aggregated.push(current.join('\n'));
-        if (aggregated.length > 1) {
-            return aggregated.map((chunk, idx) => ({
-                paragraphId: `p_${idx}`,
-                baseText: chunk,
-                order: idx,
+
+    const blockRegex = /<(div|p)[^>]*>([\s\S]*?)<\/\1>/gi;
+    const blocks = [];
+    let match;
+    while ((match = blockRegex.exec(rawHtml)) !== null) {
+        blocks.push(match[0]);
+    }
+    if (blocks.length === 0) {
+        return [{
+            paragraphId: 'p_0',
+            title: 'Fiche de cours',
+            baseText: fallbackText || rawHtml.replace(/<[^>]+>/g, ' ').trim(),
+            baseHtml: rawHtml,
+            order: 0,
+            authorRole: 'teacher',
+            baseComments: [],
+            contributions: []
+        }];
+    }
+
+    const sections = [];
+    let currentHtml = [];
+    let currentTitle = '';
+
+    blocks.forEach((block) => {
+        const textOnly = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        const isMainHeading = /^(?:[IVX]+\.|\bQCM\b|\bLEÇON\b|\bCH\d+:)/i.test(textOnly);
+        if (isMainHeading && currentHtml.length > 0) {
+            sections.push({
+                paragraphId: `p_${sections.length}`,
+                title: currentTitle || `Section ${sections.length + 1}`,
+                baseHtml: currentHtml.join(''),
+                baseText: currentHtml.map(b => b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n'),
+                order: sections.length,
                 authorRole: 'teacher',
                 baseComments: [],
                 contributions: []
-            }));
+            });
+            currentHtml = [block];
+            currentTitle = textOnly;
+        } else {
+            if (!currentTitle && textOnly) currentTitle = textOnly;
+            currentHtml.push(block);
         }
+    });
+
+    if (currentHtml.length > 0) {
+        sections.push({
+            paragraphId: `p_${sections.length}`,
+            title: currentTitle || `Section ${sections.length + 1}`,
+            baseHtml: currentHtml.join(''),
+            baseText: currentHtml.map(b => b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n'),
+            order: sections.length,
+            authorRole: 'teacher',
+            baseComments: [],
+            contributions: []
+        });
     }
-    return chunks.map((chunk, idx) => ({
-        paragraphId: `p_${idx}`,
-        baseText: chunk,
-        order: idx,
-        authorRole: 'teacher',
-        baseComments: [],
-        contributions: []
-    }));
+
+    return sections;
 };
 
 router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
@@ -1689,8 +1716,9 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
         const LearningModule = mongoose.model('LearningModule');
         const Student = mongoose.model('Student');
         const { moduleId, stepId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(moduleId)) return res.status(404).json({ error: 'Module ID invalide' });
         const studentId = String(req.query.studentId || '').trim();
-        const student = studentId ? await Student.findById(studentId).lean() : null;
+        const student = studentId && mongoose.Types.ObjectId.isValid(studentId) ? await Student.findById(studentId).lean() : null;
         const rawClass = String(req.query.classroom || student?.currentClass || '').trim();
         const classroom = rawClass ? rawClass.toUpperCase() : '';
         const classFilter = classroom ? { $regex: new RegExp(`^${classroom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } : { $in: ['', null] };
@@ -1708,18 +1736,43 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
         let sheet = await CollaborativeSheet.findOne({ moduleId, stepId: targetStepId, classroom: classFilter }).lean();
 
         if (!sheet) {
-            const initialParagraphs = splitTextIntoInitialParagraphs(step.sheetText, step.sheetTextHtml);
+            const initialParagraphs = splitHtmlIntoSections(step.sheetTextHtml, step.sheetText);
             const created = await CollaborativeSheet.create({
                 moduleId,
                 stepId: targetStepId,
                 classroom,
+                baseSheetHtml: String(step.sheetTextHtml || ''),
+                baseSheetText: String(step.sheetText || ''),
                 paragraphs: initialParagraphs,
                 updatedAt: new Date()
             });
             sheet = created.toObject();
+        } else if (step.sheetTextHtml && (!sheet.paragraphs?.length || sheet.paragraphs.some(p => !p.baseHtml))) {
+            const freshSections = splitHtmlIntoSections(step.sheetTextHtml, step.sheetText);
+            const existingContribsByPId = new Map();
+            (sheet.paragraphs || []).forEach(p => {
+                if (p.contributions?.length) existingContribsByPId.set(String(p.paragraphId), p.contributions);
+            });
+            freshSections.forEach(s => {
+                if (existingContribsByPId.has(String(s.paragraphId))) {
+                    s.contributions = existingContribsByPId.get(String(s.paragraphId));
+                }
+            });
+            await CollaborativeSheet.updateOne(
+                { _id: sheet._id },
+                {
+                    $set: {
+                        paragraphs: freshSections,
+                        baseSheetHtml: String(step.sheetTextHtml || ''),
+                        baseSheetText: String(step.sheetText || ''),
+                        updatedAt: new Date()
+                    }
+                }
+            );
+            sheet = await CollaborativeSheet.findById(sheet._id).lean();
         }
 
-        return res.json({ ok: true, sheet });
+        return res.json({ ok: true, sheet, stepTitle: step.title || module.title });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }
@@ -1728,9 +1781,20 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
 router.post('/:moduleId/collaborative-sheet/:stepId/contribution', async (req, res) => {
     try {
         const { moduleId, stepId } = req.params;
-        const { paragraphId, text, studentId, studentName, studentFirstName, classroom = '' } = req.body || {};
-        if (!paragraphId || !text || !studentId) {
-            return res.status(400).json({ error: 'paragraphId, text et studentId requis' });
+        const {
+            paragraphId,
+            contributionId,
+            text,
+            html,
+            color = '#fef3c7',
+            studentId,
+            studentName,
+            studentFirstName,
+            classroom = ''
+        } = req.body || {};
+
+        if (!paragraphId || (!text && !html) || !studentId) {
+            return res.status(400).json({ error: 'paragraphId, contenu (text ou html) et studentId requis' });
         }
 
         const rawClass = String(classroom || '').trim();
@@ -1748,27 +1812,55 @@ router.post('/:moduleId/collaborative-sheet/:stepId/contribution', async (req, r
             });
         }
 
-        const paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));
+        const cleanText = String(text || '').trim();
+        const cleanHtml = String(html || cleanText).trim();
+
+        let paragraph = (sheet.paragraphs || []).find((p) => String(p.paragraphId) === String(paragraphId));
         if (!paragraph) {
-            return res.status(404).json({ error: 'Paragraphe introuvable' });
+            // Créer la section si elle n'existe pas encore
+            paragraph = {
+                paragraphId: String(paragraphId),
+                title: 'Section complémentaire',
+                baseText: '',
+                baseHtml: '',
+                order: (sheet.paragraphs || []).length,
+                authorRole: 'student',
+                createdById: studentId,
+                createdByName: studentName || 'Élève',
+                baseComments: [],
+                contributions: []
+            };
+            sheet.paragraphs.push(paragraph);
         }
 
-        const cleanText = String(text || '').trim();
-        const existingContrib = (paragraph.contributions || []).find(
-            (c) => String(c.studentId) === String(studentId)
-        );
+        let existingContrib = null;
+        if (contributionId) {
+            existingContrib = (paragraph.contributions || []).find(
+                (c) => String(c.contributionId) === String(contributionId) || String(c._id) === String(contributionId)
+            );
+        } else {
+            existingContrib = (paragraph.contributions || []).find(
+                (c) => String(c.studentId) === String(studentId)
+            );
+        }
 
         if (existingContrib) {
             existingContrib.text = cleanText;
+            existingContrib.html = cleanHtml;
+            existingContrib.color = color || existingContrib.color || '#fef3c7';
             existingContrib.studentName = studentName || existingContrib.studentName;
             existingContrib.studentFirstName = studentFirstName || existingContrib.studentFirstName;
             existingContrib.updatedAt = new Date();
         } else {
             paragraph.contributions.push({
+                contributionId: `c_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+                anchorId: String(paragraphId),
                 studentId,
                 studentName: studentName || 'Élève',
                 studentFirstName: studentFirstName || (studentName ? studentName.split(' ')[0] : 'Élève'),
                 text: cleanText,
+                html: cleanHtml,
+                color: color || '#fef3c7',
                 createdAt: new Date(),
                 updatedAt: new Date(),
                 comments: []
@@ -1784,12 +1876,47 @@ router.post('/:moduleId/collaborative-sheet/:stepId/contribution', async (req, r
     }
 });
 
+router.delete('/:moduleId/collaborative-sheet/:stepId/contribution/:contribId', async (req, res) => {
+    try {
+        const { moduleId, stepId, contribId } = req.params;
+        const studentId = String(req.query.studentId || '').trim();
+        const classroom = String(req.query.classroom || '').trim();
+        const cleanClass = classroom ? classroom.toUpperCase() : '';
+        const classFilter = cleanClass ? { $regex: new RegExp(`^${cleanClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } : { $in: ['', null] };
+
+        const sheet = await CollaborativeSheet.findOne({ moduleId, stepId, classroom: classFilter });
+        if (!sheet) return res.status(404).json({ error: 'Fiche introuvable' });
+
+        let found = false;
+        (sheet.paragraphs || []).forEach((p) => {
+            const idx = (p.contributions || []).findIndex(
+                (c) => String(c.contributionId) === String(contribId) || String(c._id) === String(contribId)
+            );
+            if (idx !== -1) {
+                p.contributions.splice(idx, 1);
+                found = true;
+            }
+        });
+
+        if (!found) return res.status(404).json({ error: 'Contribution introuvable' });
+
+        sheet.updatedAt = new Date();
+        await sheet.save();
+        return res.json({ ok: true, sheet });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/:moduleId/collaborative-sheet/:stepId/new-paragraph', async (req, res) => {
     try {
         const { moduleId, stepId } = req.params;
-        const { text, studentId, studentName, studentFirstName, classroom = '' } = req.body || {};
-        if (!text || !studentId) {
-            return res.status(400).json({ error: 'text et studentId requis' });
+        const { text, html, studentId, studentName, studentFirstName, classroom = '' } = req.body || {};
+        if (!text && !html) {
+            return res.status(400).json({ error: 'text ou html requis' });
+        }
+        if (!studentId) {
+            return res.status(400).json({ error: 'studentId requis' });
         }
 
         const rawClass = String(classroom || '').trim();
@@ -1808,22 +1935,29 @@ router.post('/:moduleId/collaborative-sheet/:stepId/new-paragraph', async (req, 
         }
 
         const cleanText = String(text || '').trim();
+        const cleanHtml = String(html || cleanText).trim();
         const newParagraphId = `p_student_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         const order = (sheet.paragraphs || []).length;
 
         sheet.paragraphs.push({
             paragraphId: newParagraphId,
-            baseText: cleanText,
+            title: cleanText.split('\n')[0]?.slice(0, 50) || 'Section complémentaire',
+            baseText: '',
+            baseHtml: '',
             order,
             authorRole: 'student',
             createdById: studentId,
             createdByName: studentName || 'Élève',
             baseComments: [],
             contributions: [{
+                contributionId: `c_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+                anchorId: newParagraphId,
                 studentId,
                 studentName: studentName || 'Élève',
                 studentFirstName: studentFirstName || (studentName ? studentName.split(' ')[0] : 'Élève'),
                 text: cleanText,
+                html: cleanHtml,
+                color: '#fef3c7',
                 createdAt: new Date(),
                 updatedAt: new Date(),
                 comments: []
@@ -1842,9 +1976,9 @@ router.post('/:moduleId/collaborative-sheet/:stepId/new-paragraph', async (req, 
 router.post('/:moduleId/collaborative-sheet/:stepId/comment', async (req, res) => {
     try {
         const { moduleId, stepId } = req.params;
-        const { paragraphId, targetVersionKey, text, authorId, authorName, authorRole = 'student', classroom = '' } = req.body || {};
-        if (!paragraphId || !targetVersionKey || !text || !authorName) {
-            return res.status(400).json({ error: 'paragraphId, targetVersionKey, text et authorName requis' });
+        const { paragraphId, contributionId, targetVersionKey, text, authorId, authorName, authorRole = 'student', classroom = '' } = req.body || {};
+        if (!paragraphId || (!contributionId && !targetVersionKey) || !text || !authorName) {
+            return res.status(400).json({ error: 'paragraphId, contributionId, text et authorName requis' });
         }
 
         const rawClass = String(classroom || '').trim();
@@ -1865,12 +1999,15 @@ router.post('/:moduleId/collaborative-sheet/:stepId/comment', async (req, res) =
             createdAt: new Date()
         };
 
-        if (targetVersionKey === 'base') {
+        const cId = contributionId || targetVersionKey;
+        if (cId === 'base') {
             paragraph.baseComments = paragraph.baseComments || [];
             paragraph.baseComments.push(commentItem);
         } else {
-            const contrib = (paragraph.contributions || []).find((c) => String(c.studentId) === String(targetVersionKey));
-            if (!contrib) return res.status(404).json({ error: 'Version élève introuvable' });
+            const contrib = (paragraph.contributions || []).find(
+                (c) => String(c.contributionId) === String(cId) || String(c._id) === String(cId) || String(c.studentId) === String(cId)
+            );
+            if (!contrib) return res.status(404).json({ error: 'Contribution introuvable' });
             contrib.comments = contrib.comments || [];
             contrib.comments.push(commentItem);
         }

@@ -1081,6 +1081,9 @@ export default function StudentsManager({ globalClassId }) {
                         <button onClick={() => setViewingStudent(null)} className="text-white text-2xl font-black">✕</button>
                     </div>
                     <div className="corr-body flex-col bg-slate-50 p-6 overflow-y-auto gap-4 custom-scrollbar">
+                        <button type="button" onClick={() => openGptFeedback(viewingStudent, null)} className="mb-4 w-full rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm font-black text-indigo-700 hover:bg-indigo-100">
+                            🤖 Voir les corrections reçues du GPT
+                        </button>
                         {viewingStudent.isDil === true && (
                             <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 p-4">
                                 <h4 className="text-xs font-black text-violet-700 uppercase mb-2">🌍 DIL · Vocabulaire espagnol</h4>
@@ -1686,7 +1689,15 @@ export default function StudentsManager({ globalClassId }) {
                                     {entry.mastered ? <span className="students-gpt-chip is-valid">Validé</span> : null}
                                 </div>
                                 {entry.message && <h3>{entry.message}</h3>}
+                                {entry.score !== null && entry.score !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.score}/10</div>}
+                                {entry.sujet && <div className="students-gpt-subblock"><strong>Sujet :</strong> {entry.sujet}</div>}
+                                {entry.grading && Object.values(entry.grading).some((value) => value !== null && value !== undefined) && (
+                                    <div className="students-gpt-subblock">
+                                        <strong>Barème :</strong> Forme {entry.grading.forme ?? '—'}/2 · Introduction {entry.grading.introduction ?? '—'}/3 · Arguments {entry.grading.arguments ?? '—'}/2 · Exemples {entry.grading.exemples ?? '—'}/2 · Conclusion {entry.grading.conclusion ?? '—'}/1
+                                    </div>
+                                )}
                                 {entry.feedback && <p>{entry.feedback}</p>}
+                                {entry.conseils && <div className="students-gpt-subblock"><strong>Conseils :</strong> {entry.conseils}</div>}
                                 {entry.summary && <p>{entry.summary}</p>}
                                 {Array.isArray(entry.weakPoints) && entry.weakPoints.length > 0 && (
                                     <div className="students-gpt-subblock">

@@ -281,12 +281,28 @@ const applySheetHeadingColors = (root, numberedIdeasPlain = false) => {
   return changed;
 };
 
-export default function SheetRichTextEditor({ html = '', plainText = '', onChange, numberedIdeasPlain = false }) {
+export default function SheetRichTextEditor({
+  html = '',
+  plainText = '',
+  onChange,
+  numberedIdeasPlain = false,
+  minHeight = 'min-h-[540px]',
+  maxHeight = 'max-h-[600px]',
+  placeholder = 'Colle ici tout le texte de la fiche, puis sélectionne les passages à mettre en gras ou en couleur.',
+  className = '',
+  autoFocus = false,
+}) {
   const editorRef = useRef(null);
   const displayedHtml = useMemo(
     () => normalizeExpectedHtml(String(html || '').trim() ? String(html) : escapeHtml(plainText)),
     [html, plainText],
   );
+
+  useEffect(() => {
+    if (autoFocus && editorRef.current) {
+      editorRef.current.focus();
+    }
+  }, [autoFocus]);
 
   useEffect(() => {
     if (!editorRef.current || editorRef.current.innerHTML === displayedHtml) return;
@@ -527,7 +543,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
   };
 
   return (
-    <div className="flex max-h-[600px] min-h-[540px] flex-col overflow-hidden rounded-2xl border-4 border-slate-300 bg-white shadow-inner focus-within:border-purple-500">
+    <div className={`flex flex-col overflow-hidden rounded-2xl border-4 border-slate-300 bg-white shadow-inner focus-within:border-purple-500 ${minHeight} ${maxHeight} ${className}`}>
       <div className="z-10 shrink-0 flex flex-wrap items-center gap-2 border-b-2 border-slate-200 bg-slate-50 p-3">
         <button
           type="button"
@@ -598,7 +614,7 @@ export default function SheetRichTextEditor({ html = '', plainText = '', onChang
         onKeyDown={handleStructuredTab}
         onBlur={normalizeBeforeLeaving}
         spellCheck
-        data-placeholder="Colle ici tout le texte de la fiche, puis sélectionne les passages à mettre en gras ou en couleur."
+        data-placeholder={placeholder}
       />
       <style>{`
         .sheet-rich-editor:empty::before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; }

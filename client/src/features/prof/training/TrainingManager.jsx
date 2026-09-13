@@ -1,6 +1,26 @@
 // @signatures: TrainingManager, ExerciseViewModal, ExerciseEditorModal, ExerciseRow
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ExamTrainingHub from '../../eleve/training/ExamTrainingHub';
 import './TrainingManager.css';
+
+export default function TrainingManager({ globalClassId, globalClass, user }) {
+    if (!globalClassId) {
+        return (
+            <div className="tm-empty">
+                <span className="tm-empty-icon">🏋️</span>
+                <span className="tm-empty-label">Sélectionnez une classe pour voir son entraînement</span>
+            </div>
+        );
+    }
+
+    const studentPreviewUser = {
+        ...user,
+        currentClass: globalClass || '',
+        className: globalClass || '',
+    };
+
+    return <ExamTrainingHub user={studentPreviewUser} canCalibrate={false} />;
+}
 
 // ─── Helpers de niveau et section ───────────────────────────────────────────
 function extractLevel(raw) {
@@ -74,9 +94,8 @@ function extractBlanksFromText(text = '') {
 }
 
 // ─── COMPOSANT PRINCIPAL ─────────────────────────────────────────────────────
-export default function TrainingManager({ globalClassId, globalClass, user }) {
+function LegacyTrainingManager({ globalClassId, globalClass, user }) {
     const [exercises, setExercises]               = useState([]);
-    const [chapters, setChapters]                 = useState([]);
     const [detectedLevel, setDetectedLevel]       = useState('');
     const [loading, setLoading]                   = useState(false);
     const [saving, setSaving]                     = useState(false);
@@ -123,25 +142,6 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
         }
     }, [globalClassId, globalClass, teacherId]);
 
-    // ── Charger les chapitres filtrés pour la classe active ──────────────────
-    const loadChapters = useCallback(async () => {
-        if (!globalClassId) return;
-        try {
-            const params = new URLSearchParams({
-                classId: globalClassId,
-                className: globalClass || ''
-            });
-            if (teacherId) params.set('teacherId', teacherId);
-
-            const res = await fetch(`/api/prof/training/chapters?${params}`);
-            if (!res.ok) throw new Error('Erreur chargement chapitres');
-            const data = await res.json();
-            setChapters(Array.isArray(data) ? data : []);
-        } catch (e) {
-            console.error('Erreur loadChapters:', e);
-        }
-    }, [globalClassId, globalClass, teacherId]);
-
     // ── Charger l'entraînement actif pour la classe ─────────────────────────
     const loadAssignment = useCallback(async () => {
         if (!globalClassId) return;
@@ -149,8 +149,9 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
             const res = await fetch(`/api/prof/training/class/${encodeURIComponent(globalClassId)}/assignment`);
             const data = await res.json();
             if (data?.assignment) {
-                setCurrentAssignment(data.assignment);
-                setSelected(new Set((data.assignment.items || []).map(i => i.id)));
+                const trainingItems = (data.assignment.items || []).filter(i => i.type !== 'chapter' && i.questionType !== 'chapter');
+                setCurrentAssignment({ ...data.assignment, items: trainingItems });
+                setSelected(new Set(trainingItems.map(i => i.id)));
             } else {
                 setCurrentAssignment(null);
                 setSelected(new Set());
@@ -160,9 +161,8 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
 
     useEffect(() => {
         loadExercises();
-        loadChapters();
         loadAssignment();
-    }, [loadExercises, loadChapters, loadAssignment]);
+    }, [loadExercises, loadAssignment]);
 
     // ── Toggle sélection d'un item ──────────────────────────────────────────
     const toggle = (id) => {
@@ -200,15 +200,6 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
 
         // Récupérer les items complets sélectionnés
         const allAvailableItems = [
-            ...chapters.map(c => ({
-                id: String(c._id),
-                type: 'chapter',
-                title: c.title,
-                section: String(c.section || '').toUpperCase(),
-                subject: getSectionSubject(c.section),
-                questionType: 'chapter',
-                level: detectedLevel || extractLevel(globalClass),
-            })),
             ...exercises.map(ex => ({
                 id: String(ex.id || ex._id),
                 type: ex.type || (ex.isCustom ? 'custom' : 'local'),
@@ -298,16 +289,7 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
                (item.section || '').toLowerCase().includes(query);
     };
 
-    const filteredChapters = chapters.filter(matchesSearch);
     const filteredExercises = exercises.filter(matchesSearch);
-
-    // Grouper les chapitres par section
-    const chaptersBySection = filteredChapters.reduce((acc, c) => {
-        const key = String(c.section || 'GÉNÉRAL').toUpperCase();
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(c);
-        return acc;
-    }, {});
 
     // Grouper les exercices par section
     const exercisesBySection = filteredExercises.reduce((acc, ex) => {
@@ -319,7 +301,6 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
 
     // Toutes les sections
     const rawSections = [...new Set([
-        ...Object.keys(chaptersBySection),
         ...Object.keys(exercisesBySection),
     ])].sort();
 
@@ -469,21 +450,13 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
             ) : (
                 <div className="tm-sections">
                     {sections.map(sectionKey => {
-                        const sectionChapters = (chaptersBySection[sectionKey] || []).map(c => ({
-                            id: String(c._id),
-                            type: 'chapter',
-                            title: c.title,
-                            section: sectionKey,
-                            subject: getSectionSubject(sectionKey),
-                            questionType: 'chapter',
-                        }));
                         const sectionExercises = exercisesBySection[sectionKey] || [];
-                        const totalSectionItems = sectionChapters.length + sectionExercises.length;
+                        const totalSectionItems = sectionExercises.length;
                         if (totalSectionItems === 0) return null;
 
                         const colors = getSectionColor(sectionKey);
                         const isExpanded = expandedSection === sectionKey || expandedSection === null;
-                        const allSectionIds = [...sectionChapters.map(i => i.id), ...sectionExercises.map(i => String(i.id || i._id))];
+                        const allSectionIds = sectionExercises.map(i => String(i.id || i._id));
                         const sectionSelectedCount = allSectionIds.filter(id => selected.has(id)).length;
                         const allChecked = totalSectionItems > 0 && sectionSelectedCount === totalSectionItems;
 
@@ -520,10 +493,7 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
                                             className="tm-quick-btn"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                const itemsToToggle = [
-                                                    ...sectionChapters,
-                                                    ...sectionExercises.map(ex => ({ id: String(ex.id || ex._id) }))
-                                                ];
+                                                const itemsToToggle = sectionExercises.map(ex => ({ id: String(ex.id || ex._id) }));
                                                 allChecked ? deselectAll(itemsToToggle) : selectAll(itemsToToggle);
                                             }}
                                         >
@@ -551,22 +521,6 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
 
                                 {isExpanded && (
                                     <div className="tm-items">
-                                        {/* 1. Chapitres de cours de cette classe */}
-                                        {sectionChapters.length > 0 && (
-                                            <div className="tm-subsection-label">📂 Chapitres de cours du niveau {activeLevelLabel}</div>
-                                        )}
-                                        {sectionChapters.map(item => (
-                                            <ExerciseRow
-                                                key={item.id}
-                                                item={item}
-                                                checked={selected.has(item.id)}
-                                                onToggle={() => toggle(item.id)}
-                                                onView={() => setViewItem(item)}
-                                                colors={colors}
-                                            />
-                                        ))}
-
-                                        {/* 2. Activités d'entraînement */}
                                         {sectionExercises.length > 0 && (
                                             <div className="tm-subsection-label">✏️ Activités d'entraînement de la classe</div>
                                         )}

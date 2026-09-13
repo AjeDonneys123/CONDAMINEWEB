@@ -4264,6 +4264,26 @@ function DnbDocumentsMethodology({ onBack, user }) {
   </section>;
 }
 
+const DEFAULT_DNB_IMAGE_METHOD_MODEL = {
+  videoUrl: 'https://youtu.be/M6zEj3XiYxs',
+  exercises: []
+};
+
+const getDefaultDocumentMethodModel = (type) => type === 'image'
+  ? { ...DEFAULT_DNB_IMAGE_METHOD_MODEL, exercises: DEFAULT_DNB_IMAGE_METHOD_MODEL.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected } })) }
+  : { videoUrl: '', exercises: [] };
+
+const withDefaultDocumentMethodContent = (type, stored) => {
+  const fallback = getDefaultDocumentMethodModel(type);
+  if (!stored || typeof stored !== 'object') return fallback;
+  return {
+    ...fallback,
+    ...stored,
+    videoUrl: stored.videoUrl || fallback.videoUrl,
+    exercises: Array.isArray(stored.exercises) && stored.exercises.length ? stored.exercises : fallback.exercises
+  };
+};
+
 const documentMethodFields = {
   presentation: [
     ['date', 'Date + mots-clés'], ['author', 'Auteur + mots-clés'], ['nature', 'Nature + mots-clés'], ['subject', 'Sujet + mots-clés'], ['context', 'Contexte + mots-clés']
@@ -4329,10 +4349,10 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
       const stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
       if (stored && Array.isArray(stored.exercises)) {
         if (type === 'presentation') stored.exercises = stored.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected, subject: exercise.expected?.subject || exercise.expected?.source || '' } }));
-        return stored;
+        return withDefaultDocumentMethodContent(type, stored);
       }
     } catch (_) {}
-    return { videoUrl: '', exercises: [] };
+    return getDefaultDocumentMethodModel(type);
   });
   const [page, setPage] = useState(0);
   const [showLesson, setShowLesson] = useState(true);
@@ -4387,7 +4407,7 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
   const methodSheetModal = showSheet ? <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setShowSheet(false)}>
     <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border-2 border-blue-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
       <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3"><div><div className="text-[10px] font-black uppercase text-blue-600">Fiche de méthodologie</div><div className="text-lg font-black text-slate-900">{isImageDescription ? 'Décrire une image' : 'Présenter un document'}</div></div><button type="button" onClick={() => setShowSheet(false)} aria-label="Fermer la fiche" className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xl font-black text-slate-700 hover:bg-red-100 hover:text-red-600">×</button></div>
-      <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3">{effectiveSheetPreview ? (sheetPreview && model.sheetMime === 'application/pdf' ? <iframe src={effectiveSheetPreview} title="Fiche de méthodologie" className="h-[78vh] w-full rounded-xl bg-white" /> : <img src={effectiveSheetPreview} alt="Fiche de méthodologie" className="mx-auto block max-w-full rounded-xl bg-white object-contain" />) : <div className="flex min-h-[45vh] items-center justify-center rounded-2xl bg-white p-8 text-center font-bold text-slate-500">La fiche de méthodologie n’a pas encore été ajoutée aux fichiers de l’application.</div>}</div>
+      <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3">{effectiveSheetPreview ? (sheetPreview && model.sheetMime === 'application/pdf' ? <iframe src={effectiveSheetPreview} title="Fiche de méthodologie" className="h-[78vh] w-full rounded-xl bg-white" /> : <img src={effectiveSheetPreview} alt="Fiche de méthodologie" className="mx-auto block max-w-full rounded-xl bg-white object-contain" />) : isImageDescription ? <div className="mx-auto max-w-3xl rounded-3xl bg-white p-8 shadow-sm"><h4 className="text-3xl font-black text-violet-700">Description d’image ou de paysage</h4><div className="mt-6 space-y-5 text-lg font-bold text-slate-700"><div><strong className="text-red-600">1. Je décris le premier plan</strong><p className="mt-1">Ce qui est devant, donc le plus proche du spectateur.</p></div><div><strong className="text-red-600">2. Je décris le deuxième plan</strong><p className="mt-1">Ce qui se trouve au milieu de l’image.</p></div><div><strong className="text-red-600">3. Je décris l’arrière-plan</strong><p className="mt-1">Ce qui est derrière, donc le plus éloigné.</p></div><div><strong className="text-red-600">4. Certaines images n’ont que deux plans</strong><p className="mt-1">Dans ce cas, je décris seulement le premier plan et l’arrière-plan.</p></div></div></div> : <div className="flex min-h-[45vh] items-center justify-center rounded-2xl bg-white p-8 text-center font-bold text-slate-500">La fiche de méthodologie n’a pas encore été ajoutée aux fichiers de l’application.</div>}</div>
     </div>
   </div> : null;
 
@@ -4417,7 +4437,7 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
     <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-cyan-500 transition-all" style={{ width: `${((page + 1) / total) * 100}%` }} /></div>
     <div className="mt-4 grid min-h-[62vh] items-start gap-4 lg:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]">
       <div className="space-y-3">
-        {exercisePreview ? <div className="flex max-h-[58vh] items-center justify-center overflow-hidden rounded-2xl border-2 border-cyan-100 bg-slate-50"><img src={exercisePreview} alt={`Document ${page + 1}`} className="max-h-[58vh] w-full object-contain" /></div> : <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Document non disponible</div>}
+        {exercisePreview || exercise.imageSrc ? <div className="flex max-h-[58vh] items-center justify-center overflow-hidden rounded-2xl border-2 border-cyan-100 bg-slate-50"><img src={exercisePreview || exercise.imageSrc} alt={`Document ${page + 1}`} className="max-h-[58vh] w-full object-contain" /></div> : <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Document non disponible</div>}
         <button type="button" onClick={() => setShowSheet(true)} className="block w-full rounded-xl bg-blue-50 px-4 py-3 text-center text-xs font-black text-blue-700">📘 Consulter la fiche méthode</button>
       </div>
       <div className="space-y-3">{fields.map(([key, label]) => {
@@ -4441,10 +4461,10 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
       const stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
       if (stored && Array.isArray(stored.exercises)) {
         if (type === 'presentation') stored.exercises = stored.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected, subject: exercise.expected?.subject || exercise.expected?.source || '' } }));
-        return stored;
+        return withDefaultDocumentMethodContent(type, stored);
       }
     } catch (_) {}
-    return { videoUrl: '', exercises: [] };
+    return getDefaultDocumentMethodModel(type);
   });
   const [previews, setPreviews] = useState({});
   const [sheetPreview, setSheetPreview] = useState('');
@@ -4528,7 +4548,7 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
       <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">Exercice {index + 1}</div><button type="button" onClick={() => { setModel((previous) => ({ ...previous, exercises: previous.exercises.filter((item) => item.id !== exercise.id) })); setSaved(false); }} className="text-xs font-black text-red-500">Supprimer</button></div>
       <div className="mt-3 grid gap-4 lg:grid-cols-[300px_1fr]">
         <label className="flex min-h-[190px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-cyan-300 bg-white text-center">
-          {previews[exercise.id] ? <img src={previews[exercise.id]} alt={`Document exercice ${index + 1}`} className="h-full max-h-[300px] w-full object-contain" /> : <span className="p-5 text-sm font-black text-cyan-700">Ajouter l’image ou le document<br /><span className="text-[10px] text-slate-400">PNG, JPG, WEBP…</span></span>}
+          {previews[exercise.id] || exercise.imageSrc ? <img src={previews[exercise.id] || exercise.imageSrc} alt={`Document exercice ${index + 1}`} className="h-full max-h-[300px] w-full object-contain" /> : <span className="p-5 text-sm font-black text-cyan-700">Ajouter l’image ou le document<br /><span className="text-[10px] text-slate-400">PNG, JPG, WEBP…</span></span>}
           <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadImage(exercise, event.target.files?.[0])} />
         </label>
         <div className="space-y-3">{fields.map(([fieldKey, label]) => {

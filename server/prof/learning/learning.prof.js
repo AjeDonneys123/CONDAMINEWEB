@@ -1728,6 +1728,21 @@ router.post('/gpt-inbox', async (req, res) => {
             return res.status(401).json({ ok: false, error: 'Token GPT invalide' });
         }
         const body = req.body || {};
+        if (body.type === 'correction') {
+            const studentCode = String(body.studentCode || '').trim();
+            const requiredMissing = !studentCode || !String(body.message || '').trim();
+            if (requiredMissing) {
+                return res.status(400).json({ ok: false, error: 'studentCode et message sont requis' });
+            }
+            const ranges = { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
+            for (const [field, [min, max]] of Object.entries(ranges)) {
+                if (body[field] === undefined || body[field] === null || body[field] === '') continue;
+                const value = Number(body[field]);
+                if (!Number.isFinite(value) || value < min || value > max) {
+                    return res.status(400).json({ ok: false, error: `${field} doit être un nombre entre ${min} et ${max}` });
+                }
+            }
+        }
         const questionNumberRaw = body.questionNumber ?? body.question ?? body.numeroQuestion ?? body.numero;
         const questionNumber = Number.isFinite(Number(questionNumberRaw)) ? Number(questionNumberRaw) : null;
         const fallbackMessage = questionNumber ? `Question ${questionNumber} validée` : 'Message GPT reçu';
@@ -1735,8 +1750,12 @@ router.post('/gpt-inbox', async (req, res) => {
         const feedback = String(body.feedback || body.commentaire || body.correction || '').trim().slice(0, 5000);
         const summary = String(body.summary || body.resume || '').trim().slice(0, 2500);
         const mastered = body.mastered === true || body.mastered === 'true' || body.type === 'learning_validated';
-        const score = Number.isFinite(Number(body.score)) ? Number(body.score) : null;
+        const scoreRaw = body.note ?? body.score;
+        const score = Number.isFinite(Number(scoreRaw)) ? Number(scoreRaw) : null;
         const student = await findGptInboxStudent(body);
+        if (body.type === 'correction' && !student) {
+            return res.status(400).json({ ok: false, error: 'studentCode inconnu ou ambigu' });
+        }
         if (!message && !feedback && !summary && !sanitizeGptInboxImages(body.images).length) {
             return res.status(400).json({ ok: false, error: 'message, feedback, summary ou images requis' });
         }
@@ -1761,6 +1780,15 @@ router.post('/gpt-inbox', async (req, res) => {
             errors: sanitizeGptErrors(body.errors || body.erreurs),
             mastered,
             score,
+            sujet: String(body.sujet || '').trim().slice(0, 1000),
+            grading: {
+                forme: Number.isFinite(Number(body.forme)) ? Number(body.forme) : null,
+                introduction: Number.isFinite(Number(body.introduction)) ? Number(body.introduction) : null,
+                arguments: Number.isFinite(Number(body.arguments)) ? Number(body.arguments) : null,
+                exemples: Number.isFinite(Number(body.exemples)) ? Number(body.exemples) : null,
+                conclusion: Number.isFinite(Number(body.conclusion)) ? Number(body.conclusion) : null
+            },
+            conseils: String(body.conseils || '').trim().slice(0, 5000),
             images: sanitizeGptInboxImages(body.images || body.imageUrls || []),
             source: String(body.source || 'chatgpt').trim().slice(0, 80),
             raw: body.raw ? (typeof body.raw === 'string' ? body.raw : JSON.stringify(body.raw)).slice(0, 5000) : ''
@@ -1769,7 +1797,7 @@ router.post('/gpt-inbox', async (req, res) => {
         const learningMarked = mastered
             ? await markLearningValidatedFromGpt({ moduleId: entryPayload.moduleId, student })
             : false;
-        return res.json({ ok: true, entry, learningMarked });
+        return res.status(201).json({ ok: true, entry, learningMarked });
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }

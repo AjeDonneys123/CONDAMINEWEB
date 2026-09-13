@@ -9,11 +9,14 @@ const CommentSchema = new mongoose.Schema({
 });
 
 const ContributionSchema = new mongoose.Schema({
-    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+    contributionId: { type: String, default: () => `c_${Date.now()}_${Math.floor(Math.random() * 10000)}` },
+    anchorId: { type: String, default: '' },
+    studentId: { type: mongoose.Schema.Types.Mixed, required: true },
     studentName: { type: String, required: true, trim: true },
     studentFirstName: { type: String, default: '', trim: true },
-    text: { type: String, required: true, trim: true },
+    text: { type: String, default: '', trim: true },
     html: { type: String, default: '' },
+    color: { type: String, default: '#fef3c7' },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
     comments: { type: [CommentSchema], default: [] }
@@ -21,6 +24,7 @@ const ContributionSchema = new mongoose.Schema({
 
 const ParagraphSchema = new mongoose.Schema({
     paragraphId: { type: String, required: true },
+    title: { type: String, default: '' },
     baseText: { type: String, default: '' },
     baseHtml: { type: String, default: '' },
     order: { type: Number, default: 0 },
@@ -35,6 +39,8 @@ const CollaborativeSheetSchema = new mongoose.Schema({
     moduleId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningModule', required: true, index: true },
     stepId: { type: String, required: true, index: true },
     classroom: { type: String, default: '', index: true },
+    baseSheetHtml: { type: String, default: '' },
+    baseSheetText: { type: String, default: '' },
     paragraphs: { type: [ParagraphSchema], default: [] },
     updatedAt: { type: Date, default: Date.now }
 }, { collection: 'collaborative_sheets' });

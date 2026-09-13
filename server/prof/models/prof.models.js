@@ -778,6 +778,15 @@ const Models = {
         errors: { type: [Object], default: [] },
         mastered: { type: Boolean, default: false, index: true },
         score: { type: Number, default: null },
+        sujet: { type: String, default: '' },
+        grading: {
+            forme: { type: Number, default: null },
+            introduction: { type: Number, default: null },
+            arguments: { type: Number, default: null },
+            exemples: { type: Number, default: null },
+            conclusion: { type: Number, default: null }
+        },
+        conseils: { type: String, default: '' },
         images: { type: [Object], default: [] },
         source: { type: String, default: 'chatgpt' },
         raw: { type: String, default: '' },
