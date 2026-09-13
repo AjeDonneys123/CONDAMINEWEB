@@ -61,6 +61,7 @@ export default function StudentsManager({ globalClassId }) {
   const [latePunishmentNames, setLatePunishmentNames] = useState([]);
   const [chapterNameById, setChapterNameById] = useState({});
   const [dnbMethodProgress, setDnbMethodProgress] = useState({});
+  const [gptCorrectionsByStudent, setGptCorrectionsByStudent] = useState({});
 
   // MODALES
   const [editingSub, setEditingSub] = useState(null); 
@@ -480,6 +481,25 @@ export default function StudentsManager({ globalClassId }) {
             })
             .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
+        try {
+            const inboxParams = new URLSearchParams({ studentClass: currentClassName, limit: '60' });
+            const inboxResponse = await fetch(`/api/learning/gpt-inbox?${inboxParams.toString()}`);
+            const inboxData = inboxResponse.ok ? await inboxResponse.json() : { entries: [] };
+            const correctionsByStudent = {};
+            (Array.isArray(inboxData?.entries) ? inboxData.entries : []).forEach((entry) => {
+                if (String(entry?.type || '').toLowerCase() !== 'correction') return;
+                const sid = extractId(entry.studentId);
+                const student = myStudents.find((candidate) => sid && extractId(candidate._id) === sid)
+                    || myStudents.find((candidate) => norm(`${candidate.firstName || ''} ${candidate.lastName || ''}`) === norm(entry.studentName || ''));
+                const key = extractId(student?._id);
+                if (!key) return;
+                if (!correctionsByStudent[key]) correctionsByStudent[key] = [];
+                correctionsByStudent[key].push(entry);
+            });
+            setGptCorrectionsByStudent(correctionsByStudent);
+        } catch (_) {
+            setGptCorrectionsByStudent({});
+        }
         const currentClassNorm = norm(currentClassName);
         const myStudentIds = new Set(myStudents.map(s => extractId(s._id)));
         const myStudentNames = new Set(myStudents.map(s => norm(`${s.firstName || ''} ${s.lastName || ''}`)));
@@ -1689,11 +1709,11 @@ export default function StudentsManager({ globalClassId }) {
                                     {entry.mastered ? <span className="students-gpt-chip is-valid">Validé</span> : null}
                                 </div>
                                 {entry.message && <h3>{entry.message}</h3>}
-                                {entry.score !== null && entry.score !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.score}/10</div>}
+                                {(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.note ?? entry.score}/10</div>}
                                 {entry.sujet && <div className="students-gpt-subblock"><strong>Sujet :</strong> {entry.sujet}</div>}
-                                {entry.grading && Object.values(entry.grading).some((value) => value !== null && value !== undefined) && (
+                                {[entry.forme, entry.introduction, entry.arguments, entry.exemples, entry.conclusion].some((value) => value !== null && value !== undefined) && (
                                     <div className="students-gpt-subblock">
-                                        <strong>Barème :</strong> Forme {entry.grading.forme ?? '—'}/2 · Introduction {entry.grading.introduction ?? '—'}/3 · Arguments {entry.grading.arguments ?? '—'}/2 · Exemples {entry.grading.exemples ?? '—'}/2 · Conclusion {entry.grading.conclusion ?? '—'}/1
+                                        <strong>Barème :</strong> Forme {entry.forme ?? '—'}/2 · Introduction {entry.introduction ?? '—'}/3 · Arguments {entry.arguments ?? '—'}/2 · Exemples {entry.exemples ?? '—'}/2 · Conclusion {entry.conclusion ?? '—'}/1
                                     </div>
                                 )}
                                 {entry.feedback && <p>{entry.feedback}</p>}
@@ -2057,6 +2077,31 @@ export default function StudentsManager({ globalClassId }) {
                                         const items = [['presentation', 'DOC'], ['image', 'IMAGE']].filter(([key]) => progress[key]);
                                         if (!items.length) return null;
                                         return <div className="mt-1 flex flex-wrap gap-1">{items.map(([key, label]) => <span key={key} title={`Méthodo ${label.toLowerCase()} : ${progress[key].reached}/${progress[key].total}`} className={`rounded px-1.5 py-0.5 text-[8px] font-black ${progress[key].complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{label} {progress[key].complete ? '✓ FINI' : `${progress[key].reached}/${progress[key].total}`}</span>)}</div>;
+                                    })()}
+                                    {(() => {
+                                        const sid = extractId(s._id);
+                                        const studentName = norm(`${s.firstName || ''} ${s.lastName || ''}`);
+                                        const receivedControls = assessmentControls.flatMap((control) =>
+                                            (control.submissions || [])
+                                                .filter((copy) => (copy.studentId && String(copy.studentId) === sid) || (copy.studentName && norm(copy.studentName) === studentName))
+                                                .map((copy) => ({ control, copy }))
+                                        );
+                                        const gptCorrections = gptCorrectionsByStudent[sid] || [];
+                                        if (!receivedControls.length && !gptCorrections.length) return null;
+                                        return (
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                                {receivedControls.map(({ control, copy }) => (
+                                                    <button key={`control-${control._id}-${copy.id}`} type="button" onClick={() => handleOpenControlCopy(control, copy, s)} title={`Ouvrir ${control.title}`} className="rounded-full border border-violet-200 bg-violet-100 px-2.5 py-1 text-[9px] font-black text-violet-700 hover:bg-violet-200">
+                                                        📝 {control.title} · {copy.score}/{copy.total}
+                                                    </button>
+                                                ))}
+                                                {gptCorrections.map((entry, index) => (
+                                                    <button key={`gpt-${entry._id || index}`} type="button" onClick={() => openGptFeedback(s, null)} title="Voir la correction reçue du GPT" className="rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-[9px] font-black text-indigo-700 hover:bg-indigo-200">
+                                                        🤖 {entry.sujet || 'Correction GPT'}{(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined ? ` · ${entry.note ?? entry.score}/10` : ''}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        );
                                     })()}
                                 </td>
                                 <td className="p-2 text-center border-b">

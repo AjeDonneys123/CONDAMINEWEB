@@ -1728,19 +1728,21 @@ router.post('/gpt-inbox', async (req, res) => {
             return res.status(401).json({ ok: false, error: 'Token GPT invalide' });
         }
         const body = req.body || {};
-        if (body.type === 'correction') {
-            const studentCode = String(body.studentCode || '').trim();
-            const requiredMissing = !studentCode || !String(body.message || '').trim();
-            if (requiredMissing) {
-                return res.status(400).json({ ok: false, error: 'studentCode et message sont requis' });
-            }
-            const ranges = { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
-            for (const [field, [min, max]] of Object.entries(ranges)) {
-                if (body[field] === undefined || body[field] === null || body[field] === '') continue;
-                const value = Number(body[field]);
-                if (!Number.isFinite(value) || value < min || value > max) {
-                    return res.status(400).json({ ok: false, error: `${field} doit être un nombre entre ${min} et ${max}` });
-                }
+        const studentCode = String(body.studentCode || '').trim();
+        const type = String(body.type || '').trim();
+        const correctionMessage = String(body.message || '').trim();
+        if (!studentCode || !type || !correctionMessage) {
+            return res.status(400).json({ ok: false, error: 'studentCode, type et message sont requis' });
+        }
+        if (type !== 'correction') {
+            return res.status(400).json({ ok: false, error: 'type doit être égal à correction' });
+        }
+        const ranges = { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
+        for (const [field, [min, max]] of Object.entries(ranges)) {
+            if (body[field] === undefined || body[field] === null || body[field] === '') continue;
+            const value = Number(body[field]);
+            if (!Number.isFinite(value) || value < min || value > max) {
+                return res.status(400).json({ ok: false, error: `${field} doit être un nombre entre ${min} et ${max}` });
             }
         }
         const questionNumberRaw = body.questionNumber ?? body.question ?? body.numeroQuestion ?? body.numero;
@@ -1771,7 +1773,8 @@ router.post('/gpt-inbox', async (req, res) => {
                 ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
                 : String(body.studentName || body.eleve || '').trim().slice(0, 160),
             studentClass: String(student?.currentClass || body.studentClass || body.classe || '').trim().slice(0, 80),
-            type: String(body.type || 'feedback').trim().slice(0, 80),
+            studentCode,
+            type,
             questionNumber,
             message,
             feedback,
@@ -1781,13 +1784,12 @@ router.post('/gpt-inbox', async (req, res) => {
             mastered,
             score,
             sujet: String(body.sujet || '').trim().slice(0, 1000),
-            grading: {
-                forme: Number.isFinite(Number(body.forme)) ? Number(body.forme) : null,
-                introduction: Number.isFinite(Number(body.introduction)) ? Number(body.introduction) : null,
-                arguments: Number.isFinite(Number(body.arguments)) ? Number(body.arguments) : null,
-                exemples: Number.isFinite(Number(body.exemples)) ? Number(body.exemples) : null,
-                conclusion: Number.isFinite(Number(body.conclusion)) ? Number(body.conclusion) : null
-            },
+            note: score,
+            forme: Number.isFinite(Number(body.forme)) ? Number(body.forme) : null,
+            introduction: Number.isFinite(Number(body.introduction)) ? Number(body.introduction) : null,
+            arguments: Number.isFinite(Number(body.arguments)) ? Number(body.arguments) : null,
+            exemples: Number.isFinite(Number(body.exemples)) ? Number(body.exemples) : null,
+            conclusion: Number.isFinite(Number(body.conclusion)) ? Number(body.conclusion) : null,
             conseils: String(body.conseils || '').trim().slice(0, 5000),
             images: sanitizeGptInboxImages(body.images || body.imageUrls || []),
             source: String(body.source || 'chatgpt').trim().slice(0, 80),
@@ -1797,7 +1799,7 @@ router.post('/gpt-inbox', async (req, res) => {
         const learningMarked = mastered
             ? await markLearningValidatedFromGpt({ moduleId: entryPayload.moduleId, student })
             : false;
-        return res.status(201).json({ ok: true, entry, learningMarked });
+        return res.status(200).json({ ok: true, message: 'Correction enregistrée avec succès', entry, learningMarked });
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }

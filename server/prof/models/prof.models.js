@@ -769,9 +769,10 @@ const Models = {
         studentId: { type: String, default: '', index: true },
         studentName: { type: String, default: '', index: true },
         studentClass: { type: String, default: '', index: true },
-        type: { type: String, default: 'feedback', index: true },
+        studentCode: { type: String, required: true, trim: true, index: true },
+        type: { type: String, enum: ['correction'], required: true, index: true },
         questionNumber: { type: Number, default: null },
-        message: { type: String, default: '' },
+        message: { type: String, required: true },
         feedback: { type: String, default: '' },
         summary: { type: String, default: '' },
         weakPoints: { type: [String], default: [] },
@@ -779,18 +780,18 @@ const Models = {
         mastered: { type: Boolean, default: false, index: true },
         score: { type: Number, default: null },
         sujet: { type: String, default: '' },
-        grading: {
-            forme: { type: Number, default: null },
-            introduction: { type: Number, default: null },
-            arguments: { type: Number, default: null },
-            exemples: { type: Number, default: null },
-            conclusion: { type: Number, default: null }
-        },
+        note: { type: Number, min: 0, max: 10, default: null },
+        forme: { type: Number, min: 0, max: 2, default: null },
+        introduction: { type: Number, min: 0, max: 3, default: null },
+        arguments: { type: Number, min: 0, max: 2, default: null },
+        exemples: { type: Number, min: 0, max: 2, default: null },
+        conclusion: { type: Number, min: 0, max: 1, default: null },
         conseils: { type: String, default: '' },
         images: { type: [Object], default: [] },
         source: { type: String, default: 'chatgpt' },
         raw: { type: String, default: '' },
-        receivedAt: { type: Date, default: Date.now, index: true }
+        receivedAt: { type: Date, default: Date.now, index: true },
+        createdAt: { type: Date, default: Date.now, index: true }
     }),
 
     GameProgress: getModel('GameProgress', {
