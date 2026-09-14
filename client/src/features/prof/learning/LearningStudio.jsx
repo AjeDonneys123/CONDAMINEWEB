@@ -649,13 +649,6 @@ const formatGeneratedSheetBlock = (text = '', innerHtml = '', numberedIdeasPlain
                     keyword.style.fontWeight = '700';
                     keyword.style.textDecoration = '';
                 });
-            } else {
-                root?.querySelectorAll('strong, b').forEach((keyword) => {
-                    if (keyword.closest('u') || String(keyword.style.textDecoration || '').includes('underline')) return;
-                    const underline = doc.createElement('u');
-                    keyword.parentNode?.insertBefore(underline, keyword);
-                    underline.appendChild(keyword);
-                });
             }
             content = root?.innerHTML || content;
         } catch (_) {}

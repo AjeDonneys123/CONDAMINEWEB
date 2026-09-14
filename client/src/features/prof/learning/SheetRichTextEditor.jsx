@@ -234,12 +234,6 @@ const applySheetHeadingColors = (root, numberedIdeasPlain = false) => {
       }
       line.style.color = '#16a34a';
       line.style.fontWeight = '700';
-      // Dans une idée principale, seuls les vrais <strong>/<b> sont des
-      // mots-clés : les souligner les rend identifiables sans confondre le
-      // gras hiérarchique de toute la ligne avec un mot à compléter.
-      line.querySelectorAll('strong, b').forEach((keyword) => {
-        keyword.style.textDecoration = 'underline';
-      });
       return true;
     }
     return false;
@@ -330,6 +324,100 @@ export default function SheetRichTextEditor({
     event.preventDefault();
     editorRef.current?.focus();
     document.execCommand(name, false, value);
+    emitChange();
+  };
+
+  const toggleUnderline = (event) => {
+    event.preventDefault();
+    editorRef.current?.focus();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    let isUnderlined = false;
+    try {
+      isUnderlined = document.queryCommandState('underline');
+    } catch (_) {}
+
+    if (!isUnderlined) {
+      let node = selection.anchorNode;
+      while (node && node !== editorRef.current) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.tagName === 'U') { isUnderlined = true; break; }
+          const td = String(node.style?.textDecoration || node.style?.textDecorationLine || '').toLowerCase();
+          if (td.includes('underline')) { isUnderlined = true; break; }
+        }
+        node = node.parentNode;
+      }
+    }
+
+    if (isUnderlined) {
+      document.execCommand('underline', false, null);
+      // Strip lingering inline textDecoration on current selection and ancestors
+      let node = selection.anchorNode;
+      while (node && node !== editorRef.current) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.tagName === 'U') {
+            const parent = node.parentNode;
+            if (parent) {
+              while (node.firstChild) parent.insertBefore(node.firstChild, node);
+              parent.removeChild(node);
+            }
+          } else {
+            node.style.textDecoration = '';
+            node.style.textDecorationLine = '';
+          }
+        }
+        node = node.parentNode;
+      }
+      try {
+        const root = editorRef.current;
+        if (root) {
+          root.querySelectorAll('u, [style*="underline"]').forEach((el) => {
+            if (selection.containsNode(el, true)) {
+              if (el.tagName === 'U') {
+                const parent = el.parentNode;
+                if (parent) {
+                  while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                  parent.removeChild(el);
+                }
+              } else {
+                el.style.textDecoration = '';
+                el.style.textDecorationLine = '';
+              }
+            }
+          });
+        }
+      } catch (_) {}
+    } else {
+      document.execCommand('underline', false, null);
+    }
+    emitChange();
+  };
+
+  const handleRemoveFormat = (event) => {
+    event.preventDefault();
+    editorRef.current?.focus();
+    document.execCommand('removeFormat', false, null);
+    try {
+      const selection = window.getSelection();
+      const root = editorRef.current;
+      if (root && selection) {
+        root.querySelectorAll('u, [style*="underline"]').forEach((el) => {
+          if (selection.containsNode(el, true)) {
+            if (el.tagName === 'U') {
+              const parent = el.parentNode;
+              if (parent) {
+                while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                parent.removeChild(el);
+              }
+            } else {
+              el.style.textDecoration = '';
+              el.style.textDecorationLine = '';
+            }
+          }
+        });
+      }
+    } catch (_) {}
     emitChange();
   };
 
@@ -560,7 +648,7 @@ export default function SheetRichTextEditor({
         <button
           type="button"
           className="grid h-10 min-w-10 place-items-center rounded-lg border-2 border-slate-300 bg-white px-3 text-lg font-black underline text-slate-900 shadow-sm hover:bg-slate-100"
-          onMouseDown={command('underline')}
+          onMouseDown={toggleUnderline}
           title="Souligner"
         >U</button>
         <button
@@ -601,7 +689,7 @@ export default function SheetRichTextEditor({
         <button
           type="button"
           className="rounded-lg border-2 border-slate-300 bg-white px-3 py-2 text-xs font-black uppercase text-slate-600 hover:bg-slate-100"
-          onMouseDown={command('removeFormat')}
+          onMouseDown={handleRemoveFormat}
         >Effacer le format</button>
       </div>
       <div

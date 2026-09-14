@@ -196,13 +196,47 @@ const checkGptInboxToken = (req) => {
     return auth === expected || bodyToken === expected;
 };
 
+const describeOpenAiFileRefs = (value) => {
+    const rows = Array.isArray(value) ? value : (value === undefined || value === null ? [] : [value]);
+    return {
+        present: value !== undefined && value !== null,
+        container: Array.isArray(value) ? 'array' : typeof value,
+        count: rows.length,
+        items: rows.slice(0, 10).map((item) => {
+            if (item && typeof item === 'object') {
+                return {
+                    kind: 'object',
+                    keys: Object.keys(item).sort().slice(0, 20),
+                    hasId: Boolean(item.id || item.fileId || item.file_id),
+                    hasDownloadLink: Boolean(item.download_link || item.downloadUrl || item.download_url || item.url),
+                    mimeType: String(item.mime_type || item.mimeType || '').slice(0, 80)
+                };
+            }
+            const text = typeof item === 'string' ? item.trim() : '';
+            return {
+                kind: typeof item,
+                length: text.length,
+                looksLikeFileId: /^file[-_]/i.test(text),
+                looksLikeJson: /^[\[{]/.test(text)
+            };
+        })
+    };
+};
+
 const normalizeOpenAiFileRefs = (value) => {
-    const rows = Array.isArray(value) ? value : (value ? [value] : []);
+    let source = value;
+    if (typeof source === 'string' && /^[\[{]/.test(source.trim())) {
+        try { source = JSON.parse(source); } catch (_) { /* traité comme un identifiant brut */ }
+    }
+    if (source && !Array.isArray(source) && typeof source === 'object') {
+        source = source.openaiFileIdRefs || source.files || source.refs || source;
+    }
+    const rows = Array.isArray(source) ? source : (source ? [source] : []);
     const refs = rows.map((item, index) => {
         if (item && typeof item === 'object') {
             return {
                 id: String(item.id || item.fileId || item.file_id || '').trim(),
-                downloadUrl: String(item.download_link || item.downloadUrl || item.url || '').trim(),
+                downloadUrl: String(item.download_link || item.downloadUrl || item.download_url || item.url || '').trim(),
                 name: String(item.name || item.filename || `copie-${index + 1}`).trim().slice(0, 120),
                 mimeType: String(item.mime_type || item.mimeType || '').trim().toLowerCase()
             };
@@ -1825,8 +1859,14 @@ router.post('/gpt-inbox', async (req, res) => {
         if (isUnifiedCorrection && !student) {
             return res.status(400).json({ ok: false, error: 'Élève introuvable ou ambigu pour ce nom et ce niveau' });
         }
+        const fileRefShape = describeOpenAiFileRefs(body.openaiFileIdRefs);
+        if (isUnifiedCorrection) console.info('[gpt-inbox] openaiFileIdRefs shape', fileRefShape);
         const openaiFileIdRefs = normalizeOpenAiFileRefs(body.openaiFileIdRefs);
         const durableImages = isUnifiedCorrection ? await downloadOpenAiCopyImages(openaiFileIdRefs) : [];
+        if (isUnifiedCorrection) console.info('[gpt-inbox] image import result', {
+            normalizedRefs: openaiFileIdRefs.length,
+            storedImages: durableImages.length
+        });
         if (!message && !feedback && !summary && !sanitizeGptInboxImages(body.images).length) {
             return res.status(400).json({ ok: false, error: 'message, feedback, summary ou images requis' });
         }
@@ -1872,7 +1912,17 @@ router.post('/gpt-inbox', async (req, res) => {
         const learningMarked = mastered
             ? await markLearningValidatedFromGpt({ moduleId: entryPayload.moduleId, student })
             : false;
-        return res.status(200).json({ ok: true, message: 'Correction enregistrée avec succès', entry, learningMarked });
+        return res.status(200).json({
+            ok: true,
+            message: 'Correction enregistrée avec succès',
+            entry,
+            learningMarked,
+            fileImport: isUnifiedCorrection ? {
+                referencesReceived: fileRefShape.count,
+                referencesRecognized: openaiFileIdRefs.length,
+                imagesStored: durableImages.length
+            } : undefined
+        });
     } catch (e) {
         return res.status(e.status || 500).json({ ok: false, error: e.message });
     }
@@ -2160,7 +2210,13 @@ router.patch('/:id/structure', async (req, res) => {
             const masterStep = steps.find(s => s?.isGeneralSheetMaster === true) || steps.find(s => s?.type === 'sheet');
             if (masterStep && masterStep.sheetTextHtml) {
                 const freshSections = splitTextIntoInitialParagraphsProf(masterStep.sheetText, masterStep.sheetTextHtml);
-                const colSheets = await CollaborativeSheet.find({ moduleId: row._id });
+                const colSheets = await CollaborativeSheet.find({
+                    moduleId: row._id,
+                    $or: [
+                        { stepId: String(masterStep.id) },
+                        { stepId: 'superfiche' }
+                    ]
+                });
                 for (const colSheet of colSheets) {
                     const existingContribsByPId = new Map();
                     (colSheet.paragraphs || []).forEach(p => {
