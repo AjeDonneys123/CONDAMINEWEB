@@ -447,6 +447,12 @@ const connectMongoWithRetry = async (delayMs = 10000) => {
         await mongoose.connect(process.env.MONGODB_URI);
         console.log("📂 MongoDB Connecté.");
         try {
+            const { ensureEssentialIndexes } = require('./services/dbIndexes.service');
+            ensureEssentialIndexes().catch((e) => console.warn('[DBIndexes] Startup warning:', e));
+        } catch (e) {
+            console.warn('[DBIndexes] Init error:', e);
+        }
+        try {
             const { ensureTestStudents } = require('./services/testStudents.service');
             ensureTestStudents().catch((e) => console.error('[TestStudents] Startup error:', e));
         } catch (e) {

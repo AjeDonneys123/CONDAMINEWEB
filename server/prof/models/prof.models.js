@@ -170,6 +170,9 @@ StudentSchema.pre('updateMany', function forceSharedEmailBeforeUpdateMany(next) 
     next();
 });
 
+StudentSchema.index({ currentClass: 1 });
+StudentSchema.index({ classId: 1 });
+
 // --- DÉFINITION DES MODÈLES ---
 const Models = {
     Chapter: getModel('Chapter', {

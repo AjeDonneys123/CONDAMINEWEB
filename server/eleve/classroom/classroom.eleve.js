@@ -140,61 +140,150 @@ router.get('/status/:studentId', async (req, res) => {
     res.json(student.toObject());
 });
 
+async function getCachedTeachers() {
+    const Teacher = mongoose.model('Teacher');
+    return Teacher.find(
+        {},
+        '_id firstName lastName taughtSubjects subjectSections assignedClasses'
+    ).lean();
+}
+
+let cachedSubjectsData = null;
+let cachedSubjectsExpiry = 0;
+async function getCachedSubjects() {
+    const now = Date.now();
+    if (cachedSubjectsData && now < cachedSubjectsExpiry) {
+        return cachedSubjectsData;
+    }
+    const Subject = mongoose.model('Subject');
+    const subjects = await Subject.find({}, '_id name').lean();
+    cachedSubjectsData = subjects;
+    cachedSubjectsExpiry = now + 60000;
+    return subjects;
+}
+
+async function getCachedChapters() {
+    const Chapter = mongoose.model('Chapter');
+    return Chapter.find(
+        { active: { $ne: false }, isArchived: { $ne: true } },
+        '_id title section classroom sharedLevel teacherId active isArchived'
+    ).lean();
+}
+
+let cachedClassroomsData = null;
+let cachedClassroomsExpiry = 0;
+async function getCachedClassrooms() {
+    const now = Date.now();
+    if (cachedClassroomsData && now < cachedClassroomsExpiry) {
+        return cachedClassroomsData;
+    }
+    const Classroom = mongoose.model('Classroom');
+    const classrooms = await Classroom.find({}, 'name level').lean();
+    cachedClassroomsData = classrooms;
+    cachedClassroomsExpiry = now + 60000;
+    return classrooms;
+}
+
+function buildStudentClassTargetsSync(student, enrollments = [], allClassrooms = []) {
+    const targets = new Set();
+    addClassTarget(targets, student?.currentClass);
+
+    const classById = new Map((allClassrooms || []).map(c => [String(c._id), c.name]));
+
+    const classId = student?.classId && String(student.classId);
+    if (classId && classById.has(classId)) {
+        addClassTarget(targets, classById.get(classId));
+    } else if (classId) {
+        addClassTarget(targets, classId);
+    }
+
+    const groupRaw = (student?.assignedGroups || [])
+        .map(g => String((g && g._id) ? g._id : g))
+        .filter(Boolean);
+
+    groupRaw.forEach(idOrName => {
+        if (classById.has(idOrName)) {
+            addClassTarget(targets, classById.get(idOrName));
+        } else {
+            addClassTarget(targets, idOrName);
+        }
+    });
+
+    (enrollments || []).forEach(e => {
+        const clsId = String(e?.classId || '');
+        if (classById.has(clsId)) {
+            addClassTarget(targets, classById.get(clsId));
+        }
+    });
+
+    return [...targets];
+}
+
 router.get('/status-summary/:studentId', async (req, res) => {
+    const t0 = Date.now();
     try {
         const Student = mongoose.model('Student');
-        const Teacher = mongoose.model('Teacher');
-        const Subject = mongoose.model('Subject');
         const Homework = mongoose.model('Homework');
         const LearningModule = mongoose.model('LearningModule');
         const Expose = mongoose.model('Expose');
         const Lecture = mongoose.model('Lecture');
         const CommentActivity = mongoose.model('CommentActivity');
         const Production = mongoose.model('Production');
-        const Chapter = mongoose.model('Chapter');
         const Submission = mongoose.model('Submission');
         const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
 
         const isVisitor = req.query?.visitor === '1';
         const visitorLevel = academicLevel(req.query?.level);
-        const studentDoc = isVisitor
-            ? null
-            : await Student.findById(req.params.studentId, '_id currentClass classId assignedGroups behaviorRecords');
+
+        const studentPromise = isVisitor
+            ? Promise.resolve(null)
+            : Student.findById(req.params.studentId, '_id currentClass classId assignedGroups behaviorRecords');
+        const enrollmentPromise = (Enrollment && !isVisitor && req.params.studentId)
+            ? Enrollment.find({ studentId: req.params.studentId }, 'classId').lean()
+            : Promise.resolve([]);
+
+        const tStep1 = Date.now();
+        const [studentDoc, enrollments, allTeachers, allSubjects, allChapters, allClassrooms] = await Promise.all([
+            studentPromise,
+            enrollmentPromise,
+            getCachedTeachers(),
+            getCachedSubjects(),
+            getCachedChapters(),
+            getCachedClassrooms()
+        ]);
+        const dStep1 = Date.now() - tStep1;
+
         if (!studentDoc && !isVisitor) return res.json({ disciplines: [] });
+        const tDecay = Date.now();
         if (studentDoc && applyCrossDecay(studentDoc.behaviorRecords || [])) {
             studentDoc.markModified('behaviorRecords');
             await studentDoc.save();
         }
+        const dDecay = Date.now() - tDecay;
+
         const student = studentDoc ? studentDoc.toObject() : {
             _id: null,
             currentClass: String(req.query?.level || '').toUpperCase(),
             assignedGroups: [],
             behaviorRecords: []
         };
-        const classTargets = studentDoc ? await buildStudentClassTargets(studentDoc) : [student.currentClass];
+        const classTargets = studentDoc ? buildStudentClassTargetsSync(studentDoc, enrollments, allClassrooms) : [student.currentClass];
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
         const classScopeIds = []
             .concat(student.classId ? [student.classId] : [])
             .concat((student.assignedGroups || []).map(g => (typeof g === 'object' ? g._id : g)).filter(Boolean));
-        if (Enrollment && student?._id) {
-            const enrollments = await Enrollment.find({ studentId: student._id }, 'classId').lean();
-            enrollments.forEach(e => {
-                if (e?.classId) classScopeIds.push(e.classId);
-            });
-        }
+        (enrollments || []).forEach(e => {
+            if (e?.classId) classScopeIds.push(e.classId);
+        });
 
-        const teachers = await Teacher.find(
-            isVisitor ? {} : (classScopeIds.length > 0 ? { assignedClasses: { $in: classScopeIds } } : { _id: null }),
-            '_id firstName lastName taughtSubjects subjectSections'
-        ).lean();
+        const classScopeKeySet = new Set(classScopeIds.map(String));
+        const teachers = isVisitor
+            ? allTeachers
+            : (classScopeKeySet.size > 0
+                ? allTeachers.filter(t => (t.assignedClasses || []).some(clsId => classScopeKeySet.has(String(typeof clsId === 'object' ? clsId._id : clsId))))
+                : []);
 
-        const subjectIds = [...new Set(
-            teachers.flatMap(t => (t.taughtSubjects || []).map(s => String(typeof s === 'object' ? s._id : s))).filter(Boolean)
-        )];
-        const subjectRows = subjectIds.length > 0
-            ? await Subject.find({ _id: { $in: subjectIds } }, '_id name').lean()
-            : [];
-        const subjectById = new Map(subjectRows.map(s => [String(s._id), (s.name || '').toUpperCase()]));
+        const subjectById = new Map(allSubjects.map(s => [String(s._id), (s.name || '').toUpperCase()]));
 
         const normalizeSubject = (v) => normalizeSubjectName(v);
         const getTeacherSubjects = (teacher) => {
@@ -272,37 +361,39 @@ router.get('/status-summary/:studentId', async (req, res) => {
             return assigned || (item.isAllClass && matchesClassTargets(item.targetClassrooms, classTargetKeys));
         };
 
-        const homeworks = (await Homework.find({ ...activityQuery, isPunishment: { $ne: true } }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean()).filter(visibleActivity);
-
-        const rawLearningModules = await LearningModule.find({ ...activityQuery, active: { $ne: false } }, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions active').lean();
-        const learningModules = rawLearningModules.filter(visibleActivity);
-        const [rawExposes, rawLectures, rawComments, rawProductions] = await Promise.all([
+        const tStep2 = Date.now();
+        const [
+            rawHomeworks,
+            rawLearningModules,
+            rawExposes,
+            rawLectures,
+            rawComments,
+            rawProductions,
+            submissions
+        ] = await Promise.all([
+            Homework.find({ ...activityQuery, isPunishment: { $ne: true } }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean(),
+            LearningModule.find({ ...activityQuery, active: { $ne: false } }, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass completions active').lean(),
             Expose.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass presentations').lean(),
             Lecture.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions').lean(),
             CommentActivity.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions').lean(),
-            Production.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions productionType').lean()
+            Production.find(activityQuery, '_id title subject chapterId teacherId targetClassrooms assignedStudents isAllClass submissions productionType').lean(),
+            student._id ? Submission.find({ studentId: student._id }, 'homeworkId').lean() : Promise.resolve([])
         ]);
+
+        const homeworks = rawHomeworks.filter(visibleActivity);
+        const learningModules = rawLearningModules.filter(visibleActivity);
         const exposes = rawExposes.filter(visibleActivity);
         const lectures = rawLectures.filter(visibleActivity);
         const comments = rawComments.filter(visibleActivity);
         const productions = rawProductions.filter(visibleActivity);
 
-        const chapterIds = [...new Set(
+        const teacherIds = new Set(teachers.map((teacher) => String(teacher._id)).filter(Boolean));
+        const linkedChapterIds = new Set(
             [...homeworks, ...learningModules, ...exposes, ...lectures, ...comments, ...productions]
-                .map(it => it.chapterId ? String(it.chapterId) : null)
+                .map((item) => String(item?.chapterId || ''))
                 .filter(Boolean)
-        )];
-        const teacherIds = teachers.map((teacher) => teacher._id).filter(Boolean);
+        );
         const studentLevel = academicLevel(student.currentClass);
-        const chapterScopeQuery = {
-            active: { $ne: false },
-            isArchived: { $ne: true },
-            ...(teacherIds.length > 0 ? { teacherId: { $in: teacherIds } } : {})
-        };
-        const scopedChapterRows = await Chapter.find(
-            chapterScopeQuery,
-            '_id title section classroom sharedLevel teacherId active isArchived'
-        ).lean();
         const chapterMatchesStudent = (chapter) => {
             if (normalizeSubject(chapter?.title) === 'GÉNÉRAL') return false;
             const sharedLevel = academicLevel(chapter?.sharedLevel);
@@ -310,15 +401,15 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const classroom = normalizeTargetKey(chapter?.classroom);
             return classroom ? classTargetKeys.has(classroom) : true;
         };
-        const visibleScopedChapters = scopedChapterRows.filter(chapterMatchesStudent);
-        const missingChapterIds = chapterIds.filter((id) => !visibleScopedChapters.some((chapter) => String(chapter._id) === id));
-        const linkedChapterRows = missingChapterIds.length > 0
-            ? await Chapter.find({ _id: { $in: missingChapterIds }, active: { $ne: false }, isArchived: { $ne: true } }, '_id title section classroom sharedLevel teacherId active isArchived').lean()
-            : [];
-        const chapterRows = [...new Map(
-            [...visibleScopedChapters, ...linkedChapterRows.filter(chapterMatchesStudent)]
-                .map((chapter) => [String(chapter._id), chapter])
-        ).values()];
+
+        const chapterRows = allChapters.filter(ch => {
+            const isLinkedToVisibleActivity = linkedChapterIds.has(String(ch._id));
+            if (!isLinkedToVisibleActivity && teacherIds.size > 0 && ch.teacherId && !teacherIds.has(String(ch.teacherId))) {
+                return false;
+            }
+            return chapterMatchesStudent(ch);
+        });
+
         const activeChapterIds = new Set(chapterRows.map((chapter) => String(chapter._id)));
         const hiddenByChapter = (item) => Boolean(item?.chapterId) && !activeChapterIds.has(String(item.chapterId));
         const chapterSectionById = new Map(
@@ -373,7 +464,6 @@ router.get('/status-summary/:studentId', async (req, res) => {
             }
         });
 
-        const submissions = student._id ? await Submission.find({ studentId: student._id }, 'homeworkId').lean() : [];
         const submittedHomeworkIds = new Set(submissions.map(s => String(s.homeworkId)));
         for (const hw of homeworks) {
             if (hiddenByChapter(hw)) continue;

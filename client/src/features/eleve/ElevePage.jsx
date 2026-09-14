@@ -1,20 +1,26 @@
-// @signatures: ElevePage, fetchFreshData
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
-import GamesGrid from './games/GamesGrid';
-import CommentsList from './comments/CommentsList';
-import ControlRecoveryList from './controlRecovery/ControlRecoveryList';
 import StatusOverview from './status/StatusOverview';
-import LearningList from './learning/LearningList';
-import HomeworkList from './homework/HomeworkList';
-import EleveChatWorkspace from './chat/EleveChatWorkspace';
-import EleveCoursesList from './courses/EleveCoursesList';
-import ExamTrainingHub from './training/ExamTrainingHub';
-import DilWorkspace from './dil/DilWorkspace';
-import ControlList from './controls/ControlList';
 import { STUDENT_STARS_EVENT } from './utils/studentStars';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
+
+const GamesGrid = lazy(() => import('./games/GamesGrid'));
+const CommentsList = lazy(() => import('./comments/CommentsList'));
+const ControlRecoveryList = lazy(() => import('./controlRecovery/ControlRecoveryList'));
+const LearningList = lazy(() => import('./learning/LearningList'));
+const HomeworkList = lazy(() => import('./homework/HomeworkList'));
+const EleveChatWorkspace = lazy(() => import('./chat/EleveChatWorkspace'));
+const EleveCoursesList = lazy(() => import('./courses/EleveCoursesList'));
+const ExamTrainingHub = lazy(() => import('./training/ExamTrainingHub'));
+const DilWorkspace = lazy(() => import('./dil/DilWorkspace'));
+const ControlList = lazy(() => import('./controls/ControlList'));
+
+const TabLoading = () => (
+  <div className="flex items-center justify-center p-12 text-slate-400 font-bold text-sm animate-pulse">
+    Chargement…
+  </div>
+);
 
 function GptCorrections({ user }) {
   const [entries, setEntries] = useState([]);
@@ -70,19 +76,27 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
           return undefined;
       }
       const fetchFreshData = async () => {
+          if (typeof document !== 'undefined' && document.hidden) return;
           try {
               const id = user._id || user.id;
               // FIX V99 : Utilisation de la route HERMÉTIQUE ÉLÈVE
               const res = await fetch(`/api/eleve/auth/student-fresh/${id}`);
               if (res.ok) {
                   const data = await res.json();
-                  setFreshUser(prev => ({ ...prev, ...data }));
+                  if (data) setFreshUser(prev => ({ ...prev, ...data }));
               }
           } catch (e) { console.error("Sync behavior error", e); }
       };
       fetchFreshData();
-      const interval = setInterval(fetchFreshData, 5000);
-      return () => clearInterval(interval);
+      const interval = setInterval(fetchFreshData, 20000);
+      const onVisibilityChange = () => {
+          if (!document.hidden) fetchFreshData();
+      };
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      return () => {
+          clearInterval(interval);
+          document.removeEventListener('visibilitychange', onVisibilityChange);
+      };
   }, [user]);
 
   useEffect(() => {
@@ -192,50 +206,52 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             hidePunishmentAlert={showPunishmentSplash}
           />
           <div className="eleve-main-content">
-            {tab === 'status' && <><GptCorrections user={freshUser} /><StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} /></>}
-            {tab === 'courses' && <EleveCoursesList user={freshUser} />}
-            {tab === 'exams' && <ControlList user={freshUser} openItemId={new URLSearchParams(window.location.search).get('control') || ''} />}
-            {tab === 'controles' && (
-              <ControlRecoveryList
-                user={freshUser}
-                pendingActivity={pendingActivity}
-                openPunishmentDirect={openPunishmentDirect}
-                onPunishmentOpened={() => setOpenPunishmentDirect(false)}
-                onActivityHandled={clearPendingIfMatch}
-              />
-            )}
-            {tab === 'francais' && <DilWorkspace user={freshUser} frenchMode />}
-            {tab === 'comment' && (
-              <CommentsList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'comment' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('comment')}
-              />
-            )}
-            {tab === 'learning' && (
-              <LearningList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('learning')}
-              />
-            )}
-            {tab === 'homework' && (
-              <HomeworkList
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'homework' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('homework')}
-              />
-            )}
-            {tab === 'chat' && <EleveChatWorkspace user={freshUser} onQuit={() => setTab('status')} />}
-            {tab === 'training' && <ExamTrainingHub user={freshUser} canCalibrate={Boolean(onBackToProf) && freshUser?.isVisitorPreview !== true} />}
-            {tab === 'dil' && (freshUser?.isDil === true || freshUser?.isVisitorPreview === true) && <DilWorkspace user={freshUser} />}
-            {tab === 'jeux' && (
-              <GamesGrid
-                user={freshUser}
-                openItemId={pendingActivity?.type === 'game' ? pendingActivity?.id : ''}
-                onOpenHandled={() => clearPendingIfMatch('game')}
-              />
-            )}
+            <Suspense fallback={<TabLoading />}>
+              {tab === 'status' && <><GptCorrections user={freshUser} /><StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} /></>}
+              {tab === 'courses' && <EleveCoursesList user={freshUser} />}
+              {tab === 'exams' && <ControlList user={freshUser} openItemId={new URLSearchParams(window.location.search).get('control') || ''} />}
+              {tab === 'controles' && (
+                <ControlRecoveryList
+                  user={freshUser}
+                  pendingActivity={pendingActivity}
+                  openPunishmentDirect={openPunishmentDirect}
+                  onPunishmentOpened={() => setOpenPunishmentDirect(false)}
+                  onActivityHandled={clearPendingIfMatch}
+                />
+              )}
+              {tab === 'francais' && <DilWorkspace user={freshUser} frenchMode />}
+              {tab === 'comment' && (
+                <CommentsList
+                  user={freshUser}
+                  openItemId={pendingActivity?.type === 'comment' ? pendingActivity?.id : ''}
+                  onOpenHandled={() => clearPendingIfMatch('comment')}
+                />
+              )}
+              {tab === 'learning' && (
+                <LearningList
+                  user={freshUser}
+                  openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''}
+                  onOpenHandled={() => clearPendingIfMatch('learning')}
+                />
+              )}
+              {tab === 'homework' && (
+                <HomeworkList
+                  user={freshUser}
+                  openItemId={pendingActivity?.type === 'homework' ? pendingActivity?.id : ''}
+                  onOpenHandled={() => clearPendingIfMatch('homework')}
+                />
+              )}
+              {tab === 'chat' && <EleveChatWorkspace user={freshUser} onQuit={() => setTab('status')} />}
+              {tab === 'training' && <ExamTrainingHub user={freshUser} canCalibrate={Boolean(onBackToProf) && freshUser?.isVisitorPreview !== true} />}
+              {tab === 'dil' && (freshUser?.isDil === true || freshUser?.isVisitorPreview === true) && <DilWorkspace user={freshUser} />}
+              {tab === 'jeux' && (
+                <GamesGrid
+                  user={freshUser}
+                  openItemId={pendingActivity?.type === 'game' ? pendingActivity?.id : ''}
+                  onOpenHandled={() => clearPendingIfMatch('game')}
+                />
+              )}
+            </Suspense>
           </div>
         </div>
         <BugReportWidget user={freshUser} />

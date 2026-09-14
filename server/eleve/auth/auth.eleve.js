@@ -374,16 +374,25 @@ router.post('/student-password/google-verify', async (req, res) => {
 });
 
 router.get('/student-fresh/:id', async (req, res) => {
-    const student = await Student.findById(req.params.id).populate('assignedGroups', 'name type level');
-    if (!student) return res.json(null);
-    if (applyCrossDecay(student.behaviorRecords || [])) {
-        student.markModified('behaviorRecords');
+    try {
+        const student = await Student.findById(req.params.id).populate('assignedGroups', 'name type level');
+        if (!student) return res.json(null);
+        let changed = false;
+        if (applyCrossDecay(student.behaviorRecords || [])) {
+            student.markModified('behaviorRecords');
+            changed = true;
+        }
+        if (await syncPunishmentState(student)) {
+            student.markModified('behaviorRecords');
+            changed = true;
+        }
+        if (changed) {
+            await student.save();
+        }
+        res.json(student.toObject());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
-    if (await syncPunishmentState(student)) {
-        student.markModified('behaviorRecords');
-    }
-    await student.save();
-    res.json(student.toObject());
 });
 
 // Ancienne route conservée pour les onglets déjà ouverts : elle ne modifie plus
