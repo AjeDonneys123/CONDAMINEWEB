@@ -5775,10 +5775,24 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/training-config/fifth-grade-scales').then(async (response) => {
-      if (!response.ok) return null;
-      return response.json();
-    }).then((payload) => {
+    const loadScaleConfiguration = async () => {
+      const response = await fetch('/api/training-config/fifth-grade-scales');
+      let payload = response.ok ? await response.json() : null;
+      const isLocalDevelopment = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+      if (isLocalDevelopment && (!payload?.imageUrls || Object.keys(payload.imageUrls).length === 0)) {
+        const productionOrigin = 'https://condaweb.vercel.app';
+        const productionResponse = await fetch(`${productionOrigin}/api/training-config/fifth-grade-scales`);
+        if (productionResponse.ok) {
+          const productionPayload = await productionResponse.json();
+          payload = {
+            ...productionPayload,
+            imageUrls: Object.fromEntries(Object.entries(productionPayload.imageUrls || {}).map(([id, url]) => [id, new URL(url, productionOrigin).href]))
+          };
+        }
+      }
+      return payload;
+    };
+    loadScaleConfiguration().then((payload) => {
       if (!payload?.model || cancelled || !Array.isArray(payload.model.questions)) return;
       setScaleMapQuestions(payload.model.questions);
       setScaleMapPreviews(payload.imageUrls || {});
