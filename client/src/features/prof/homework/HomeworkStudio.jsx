@@ -555,7 +555,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     </div>
                 </div>
 
-                <StudioDistributionSidebar 
+                <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}
                     user={user}
                     allClasses={allClasses} // Données passées
                     allStudents={allStudents} // Données passées

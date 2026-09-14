@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import ExamTrainingHub from '../../eleve/training/ExamTrainingHub';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
-export default function TrainingAssignmentStudio({ user, allClasses, allStudents, chapters, globalClass, globalClassId, globalLevel, targetSection, onClose }) {
+export default function TrainingAssignmentStudio({ user, allClasses, allStudents, chapters, globalClass, globalClassId, globalLevel, targetSection, initialData, onClose }) {
   const [selection, setSelection] = useState(new Map());
-  const [distribution, setDistribution] = useState(() => globalClass ? { [globalClass]: { chapterId: '', studentIds: [] } } : {});
+  const sourceChapterId = String(initialData?.chapterId || '');
+  const [distribution, setDistribution] = useState(() => globalClass ? { [globalClass]: { chapterId: sourceChapterId, studentIds: [] } } : {});
   const [viewingClass, setViewingClass] = useState(globalClass || '');
   const [studentSearch, setStudentSearch] = useState('');
   const [saving, setSaving] = useState(false);
@@ -41,7 +42,7 @@ export default function TrainingAssignmentStudio({ user, allClasses, allStudents
     <header className="flex items-center justify-between border-b bg-white px-6 py-4"><div><div className="text-[10px] font-black uppercase text-violet-500">Nouvelle activité</div><h2 className="text-2xl font-black text-slate-900">Créer un entraînement</h2></div><button type="button" onClick={onClose} className="h-11 w-11 rounded-full border bg-slate-50 text-xl font-black">✕</button></header>
     <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px]">
       <main className="overflow-auto p-5"><div className="mx-auto max-w-6xl rounded-[30px] border bg-white p-4 shadow-sm"><ExamTrainingHub user={previewUser} canCalibrate={false} assignmentMode selectedAssignmentIds={new Set(selection.keys())} onAssignmentToggle={toggle} /></div></main>
-      <StudioDistributionSidebar user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} targetSection={targetSection} loading={saving} onSave={publish} saveLabel={`PUBLIER L’ENTRAÎNEMENT (${selection.size}) 🚀`} />
+      <StudioDistributionSidebar user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} targetSection={targetSection} loading={saving} onSave={publish} hideChapterSelector defaultSelectAllClasses saveLabel={`PUBLIER L’ENTRAÎNEMENT (${selection.size}) 🚀`} />
     </div>
   </div>;
 }

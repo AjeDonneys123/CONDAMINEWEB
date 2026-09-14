@@ -20,6 +20,10 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     const [allClasses, setAllClasses] = useState([]); // Ajouté
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
+    const levelKey = (value = '') => String(value || '').trim().toUpperCase().match(/^[1-6T]/)?.[0] || '';
+    const defaultTargetClassrooms = allClasses
+        .filter((classroom) => levelKey(classroom.level || classroom.name) === levelKey(globalLevel || globalClass))
+        .map((classroom) => classroom.name);
 
     const loadData = async () => {
         setLoading(true);
@@ -189,7 +193,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                     data: {
                         chapterId: String(chapterId || ''),
                         subject: section || 'GÉNÉRAL',
-                        targetClassrooms: globalClass ? [globalClass] : [],
+                        targetClassrooms: defaultTargetClassrooms.length ? defaultTargetClassrooms : (globalClass ? [globalClass] : []),
                         assignedStudents: [],
                         isAllClass: true
                     }

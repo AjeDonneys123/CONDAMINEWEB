@@ -421,7 +421,7 @@ export default function ProductionStudio({
                     )}
                 </div>
 
-                <StudioDistributionSidebar
+                <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}
                     user={user}
                     allClasses={allClasses}
                     allStudents={allStudents}

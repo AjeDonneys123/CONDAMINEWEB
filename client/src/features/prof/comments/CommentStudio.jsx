@@ -534,7 +534,7 @@ export default function CommentStudio({ initialData, chapters, user, targetSecti
                         </div>
                     </div>
                 </div>
-                <StudioDistributionSidebar
+                <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}
                     user={user}
                     allClasses={allClasses}
                     allStudents={allStudents}

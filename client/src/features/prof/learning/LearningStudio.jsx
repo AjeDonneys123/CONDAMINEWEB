@@ -7806,7 +7806,7 @@ VÉRIFICATION AVANT DE RÉPONDRE
                     )}
                 </div>
 
-                <StudioDistributionSidebar
+                <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}
                     user={user}
                     allClasses={allClasses}
                     allStudents={allStudents}

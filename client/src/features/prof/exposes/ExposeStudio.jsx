@@ -138,7 +138,7 @@ export default function ExposeStudio({
                     </div>
                 </div>
 
-                <StudioDistributionSidebar
+                <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}
                     user={user}
                     allClasses={allClasses}
                     allStudents={allStudents}

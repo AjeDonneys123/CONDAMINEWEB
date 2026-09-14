@@ -503,7 +503,7 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                 </div>
 
                 {/* 3. SIDEBAR DROITE : DISTRIBUTION UNIFIÉE */}
-                <StudioDistributionSidebar 
+                <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}
                     user={user}
                     allClasses={allClasses}
                     allStudents={allStudents}

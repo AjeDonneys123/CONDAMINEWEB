@@ -36,8 +36,10 @@ const normalizeLevel = (value = '') => {
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
-    targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀", punishmentMode = false
+    targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀", punishmentMode = false,
+    hideChapterSelector = true, defaultSelectAllClasses = false
 }) {
+    const didApplyDefaultSelection = React.useRef(false);
 
     // 1. FILTRAGE STRICT DES CLASSES (NIVEAU & PROF)
     const availableClasses = (allClasses || []).filter(c => {
@@ -101,6 +103,20 @@ export default function StudioDistributionSidebar({
         const chaptersForClass = getAvailableChaptersForClass(className);
         return chaptersForClass.length > 0 ? chaptersForClass[0]._id : "";
     };
+
+    useEffect(() => {
+        if (!defaultSelectAllClasses || didApplyDefaultSelection.current || availableClasses.length === 0) return;
+        didApplyDefaultSelection.current = true;
+        const next = {};
+        availableClasses.forEach((classroom) => {
+            next[classroom.name] = {
+                chapterId: distribution?.[classroom.name]?.chapterId || findBestDefaultChapter(classroom.name),
+                studentIds: []
+            };
+        });
+        setDistribution(next);
+        if (!viewingClass) setViewingClass(availableClasses[0].name);
+    }, [defaultSelectAllClasses, availableClasses, distribution, viewingClass]);
 
     useEffect(() => {
         if (!punishmentMode) return;
@@ -241,7 +257,7 @@ export default function StudioDistributionSidebar({
                         <div className="v84-check-badge checked">✓</div>
                     </div>
 
-                    <div className="v84-folder-select-box">
+                    {!hideChapterSelector && <div className="v84-folder-select-box">
                         <label className="v84-folder-label">Dossier de destination (commun) :</label>
                         <select
                             className="v84-folder-select"
@@ -254,7 +270,7 @@ export default function StudioDistributionSidebar({
                                 <option key={c._id} value={c._id}>{c.title}</option>
                             ))}
                         </select>
-                    </div>
+                    </div>}
 
                     <div className="text-[10px] font-black text-slate-500 uppercase leading-5 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-2">
                         Classes ciblées automatiquement : {availableClasses.map(c => c.name).join(', ') || 'Aucune'}.
@@ -303,7 +319,7 @@ export default function StudioDistributionSidebar({
                         <div className={`v84-check-badge ${isClassSelected ? 'checked' : ''}`}>{isClassSelected && '✓'}</div>
                     </div>
 
-                    <div className="v84-folder-select-box">
+                    {!hideChapterSelector && <div className="v84-folder-select-box">
                         <label className="v84-folder-label">Dossier de destination :</label>
                         <select 
                             className="v84-folder-select" 
@@ -319,7 +335,7 @@ export default function StudioDistributionSidebar({
                                 <option key={c._id} value={c._id}>{c.title}</option>
                             ))}
                         </select>
-                    </div>
+                    </div>}
 
                     <div className="v84-search-box">
                         <span>🔎</span>
