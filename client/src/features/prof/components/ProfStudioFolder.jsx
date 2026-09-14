@@ -438,7 +438,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
-        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'production' || type === 'comment' || type === 'scan') {
+        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'fiche' || type === 'production' || type === 'comment' || type === 'scan' || type === 'training') {
             if (onDeleteItem) onDeleteItem(id, type, name);
             return;
         }
