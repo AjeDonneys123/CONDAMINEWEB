@@ -35,7 +35,7 @@ function GptCorrections({ user }) {
     <h2 className="m-0 text-xl font-black text-indigo-900">🤖 Mes corrections GPT</h2>
     <div className="mt-3 space-y-3">{entries.map((entry) => {
       const isOpen = openId === entry.id;
-      const isRqp = entry.evaluationType === 'RQP_SECONDE' || entry.developpement != null || entry.expression != null;
+      const isRqp = String(entry.evaluationType || '').toLowerCase() === 'rqp_seconde' || entry.developpement != null || entry.expression != null;
       const noteTotal = isRqp ? 20 : 10;
       return <article key={entry.id} className="overflow-hidden rounded-2xl border border-indigo-200 bg-white">
         <button type="button" onClick={() => setOpenId(isOpen ? '' : entry.id)} className="flex w-full items-center justify-between gap-3 p-4 text-left">

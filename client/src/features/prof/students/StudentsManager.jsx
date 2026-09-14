@@ -103,6 +103,34 @@ export default function StudentsManager({ globalClassId }) {
     setPromptsDraft({});
   };
 
+  const handleDeleteControlCopy = async () => {
+    if (!viewingControlCopy) return;
+    const { control, copy } = viewingControlCopy;
+    if (!window.confirm(`Supprimer définitivement la copie de ${copy.studentName || 'cet élève'} et sa correction ?`)) return;
+    try {
+      const response = await fetch(`/api/controls/${encodeURIComponent(control._id)}/submissions/${encodeURIComponent(copy.id)}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Suppression impossible');
+      setAssessmentControls((current) => current.map((item) => String(item._id) === String(control._id)
+        ? { ...item, submissions: (item.submissions || []).filter((submission) => String(submission.id) !== String(copy.id)) }
+        : item));
+      setViewingControlCopy(null);
+    } catch (error) { alert(error.message || 'Suppression impossible'); }
+  };
+
+  const handleDeleteGptCorrection = async (entry) => {
+    if (!entry?._id) return;
+    if (!window.confirm('Supprimer définitivement cette copie et la correction reçue de ChatGPT ?')) return;
+    try {
+      const response = await fetch(`/api/learning/gpt-inbox/${encodeURIComponent(entry._id)}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Suppression impossible');
+      setGptFeedbackEntries((current) => current.filter((item) => String(item._id) !== String(entry._id)));
+      const sid = extractId(gptFeedbackModal?.student?._id);
+      if (sid) setGptCorrectionsByStudent((current) => ({ ...current, [sid]: (current[sid] || []).filter((item) => String(item._id) !== String(entry._id)) }));
+    } catch (error) { alert(error.message || 'Suppression impossible'); }
+  };
+
   const handleDeleteAssessmentControl = async (control) => {
     if (!control?._id) return;
     if (!window.confirm(`Supprimer définitivement le contrôle « ${control.title || 'Contrôle'} » et toutes ses copies ?`)) return;
@@ -1707,13 +1735,14 @@ export default function StudentsManager({ globalClassId }) {
                                     <span className="students-gpt-chip">{entry.type || 'feedback'}</span>
                                     {entry.questionNumber ? <span className="students-gpt-chip is-question">Question {entry.questionNumber}</span> : null}
                                     {entry.mastered ? <span className="students-gpt-chip is-valid">Validé</span> : null}
+                                    <button type="button" onClick={() => handleDeleteGptCorrection(entry)} className="ml-auto rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-black text-red-600 hover:bg-red-600 hover:text-white">🗑️ Supprimer</button>
                                 </div>
                                 {entry.message && <h3>{entry.message}</h3>}
-                                {(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.note ?? entry.score}/{entry.evaluationType === 'RQP_SECONDE' ? 20 : 10}</div>}
+                                {(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.note ?? entry.score}/{String(entry.evaluationType || '').toLowerCase() === 'rqp_seconde' ? 20 : 10}</div>}
                                 {entry.sujet && <div className="students-gpt-subblock"><strong>Sujet :</strong> {entry.sujet}</div>}
                                 {[entry.forme, entry.introduction, entry.arguments, entry.exemples, entry.conclusion].some((value) => value !== null && value !== undefined) && (
                                     <div className="students-gpt-subblock">
-                                        <strong>Barème :</strong> {entry.evaluationType === 'RQP_SECONDE' ? `Introduction ${entry.introduction ?? '—'}/5 · Développement ${entry.developpement ?? '—'}/10 · Conclusion ${entry.conclusion ?? '—'}/2 · Expression ${entry.expression ?? '—'}/3` : `Forme ${entry.forme ?? '—'}/2 · Introduction ${entry.introduction ?? '—'}/3 · Arguments ${entry.arguments ?? '—'}/2 · Exemples ${entry.exemples ?? '—'}/2 · Conclusion ${entry.conclusion ?? '—'}/1`}
+                                        <strong>Barème :</strong> {String(entry.evaluationType || '').toLowerCase() === 'rqp_seconde' ? `Introduction ${entry.introduction ?? '—'}/5 · Développement ${entry.developpement ?? '—'}/10 · Conclusion ${entry.conclusion ?? '—'}/2 · Expression ${entry.expression ?? '—'}/3` : `Forme ${entry.forme ?? '—'}/2 · Introduction ${entry.introduction ?? '—'}/3 · Arguments ${entry.arguments ?? '—'}/2 · Exemples ${entry.exemples ?? '—'}/2 · Conclusion ${entry.conclusion ?? '—'}/1`}
                                     </div>
                                 )}
                                 {entry.feedback && <p>{entry.feedback}</p>}
@@ -2097,7 +2126,7 @@ export default function StudentsManager({ globalClassId }) {
                                                 ))}
                                                 {gptCorrections.map((entry, index) => (
                                                     <button key={`gpt-${entry._id || index}`} type="button" onClick={() => openGptFeedback(s, null)} title="Voir la correction reçue du GPT" className="rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-[9px] font-black text-indigo-700 hover:bg-indigo-200">
-                                                        🤖 {entry.sujet || 'Correction GPT'}{(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined ? ` · ${entry.note ?? entry.score}/${entry.evaluationType === 'RQP_SECONDE' ? 20 : 10}` : ''}
+                                                        🤖 {entry.sujet || 'Correction GPT'}{(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined ? ` · ${entry.note ?? entry.score}/${String(entry.evaluationType || '').toLowerCase() === 'rqp_seconde' ? 20 : 10}` : ''}
                                                     </button>
                                                 ))}
                                             </div>
@@ -2209,6 +2238,9 @@ export default function StudentsManager({ globalClassId }) {
                             className="text-slate-400 hover:text-slate-600 text-2xl font-bold w-9 h-9 rounded-full flex items-center justify-center hover:bg-slate-200"
                         >
                             ×
+                        </button>
+                        <button type="button" onClick={handleDeleteControlCopy} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-600 hover:bg-red-600 hover:text-white">
+                            🗑️ Supprimer la copie
                         </button>
                     </div>
 

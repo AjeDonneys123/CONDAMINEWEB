@@ -4241,7 +4241,10 @@ function TrainingMethodSheetModal({ src, title, onClose }) {
 
 function DnbDocumentsMethodology({ onBack, user }) {
   const [module, setModule] = useState('home');
-  const canCalibrate = user?.isDeveloper === true || user?.isTestAccount === true;
+  const accountEmail = String(user?.email || user?.mail || '').trim().toLowerCase();
+  const accountName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim().toUpperCase();
+  const canCalibrate = user?.isTestAccount !== true && user?.isVisitorPreview !== true
+    && (accountEmail === 'vuillet.jean@condamine.edu.ec' || accountName === 'JP VUILLET');
   if (module === 'presentation') return canCalibrate
     ? <DnbDocumentMethodCalibration type="presentation" onBack={() => setModule('home')} />
     : <DnbDocumentMethodReader type="presentation" user={user} onBack={() => setModule('home')} />;
@@ -4269,9 +4272,29 @@ const DEFAULT_DNB_IMAGE_METHOD_MODEL = {
   exercises: []
 };
 
+const DEFAULT_DNB_PRESENTATION_METHOD_MODEL = {
+  videoUrl: 'https://www.youtube.com/watch?v=NVh1P8Lbx1A',
+  sheetSrc: '/2d-AnalyseDoc.png',
+  sheetName: 'Fiche méthode DANSE',
+  sheetMime: 'image/png',
+  exercises: [{
+    id: 'presentation-hitler-propagande',
+    imageSrc: '/dnb-presEx.png',
+    imageName: 'Hitler et l’Allemagne nazie',
+    expected: {
+      date: 'Cette affiche date des "années 1930".',
+      author: 'L’"auteur est inconnu".',
+      nature: 'C’est une "affiche de propagande nazie".',
+      subject: 'Le document présente "Hitler" et l’"Allemagne nazie".',
+      context: 'Hitler arrive au pouvoir en "janvier 1933" et installe un "régime totalitaire nazi".'
+    },
+    correction: 'Méthode DANSE : Date, Auteur, Nature, Sujet et Environnement historique. Il faut identifier précisément le document avant de commencer son analyse.'
+  }]
+};
+
 const getDefaultDocumentMethodModel = (type) => type === 'image'
   ? { ...DEFAULT_DNB_IMAGE_METHOD_MODEL, exercises: DEFAULT_DNB_IMAGE_METHOD_MODEL.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected } })) }
-  : { videoUrl: '', exercises: [] };
+  : { ...DEFAULT_DNB_PRESENTATION_METHOD_MODEL, exercises: DEFAULT_DNB_PRESENTATION_METHOD_MODEL.exercises.map((exercise) => ({ ...exercise, expected: { ...exercise.expected } })) };
 
 const withDefaultDocumentMethodContent = (type, stored) => {
   const fallback = getDefaultDocumentMethodModel(type);
@@ -4360,13 +4383,14 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
   const [answers, setAnswers] = useState({});
   const [checked, setChecked] = useState({});
   const [exercisePreview, setExercisePreview] = useState('');
+  const [exercisePreview2, setExercisePreview2] = useState('');
   const [sheetPreview, setSheetPreview] = useState('');
   const total = model.exercises.length;
   const exercise = model.exercises[page];
   const lessonVideoUrl = type === 'presentation'
     ? 'https://www.youtube.com/embed/NVh1P8Lbx1A'
     : youtubeEmbedUrl(model.videoUrl);
-  const effectiveSheetPreview = sheetPreview || (type === 'presentation' ? '/dnb-danse.png' : '');
+  const effectiveSheetPreview = sheetPreview || model.sheetSrc || '';
 
   useEffect(() => {
     let cancelled = false;
@@ -4392,6 +4416,19 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
     }).catch(() => {});
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [exercise?.imageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let url = '';
+    setExercisePreview2('');
+    if (!exercise?.imageKey2) return undefined;
+    loadDnbMethodImage(exercise.imageKey2).then((blob) => {
+      if (!blob || cancelled) return;
+      url = URL.createObjectURL(blob);
+      setExercisePreview2(url);
+    }).catch(() => {});
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [exercise?.imageKey2]);
 
   const reportProgress = (reached) => {
     const studentId = user?._id || user?.id;
@@ -4437,7 +4474,10 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
     <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-cyan-500 transition-all" style={{ width: `${((page + 1) / total) * 100}%` }} /></div>
     <div className="mt-4 grid min-h-[62vh] items-start gap-4 lg:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]">
       <div className="space-y-3">
-        {exercisePreview || exercise.imageSrc ? <div className="flex max-h-[58vh] items-center justify-center overflow-hidden rounded-2xl border-2 border-cyan-100 bg-slate-50"><img src={exercisePreview || exercise.imageSrc} alt={`Document ${page + 1}`} className="max-h-[58vh] w-full object-contain" /></div> : <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Document non disponible</div>}
+        <div className={`grid gap-3 ${(exercisePreview2 || exercise.imageSrc2) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {exercisePreview || exercise.imageSrc ? <div className="flex max-h-[58vh] items-center justify-center overflow-hidden rounded-2xl border-2 border-cyan-100 bg-slate-50"><img src={exercisePreview || exercise.imageSrc} alt={`Document ${page + 1}`} className="max-h-[58vh] w-full object-contain" /></div> : <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-bold text-slate-400">Document non disponible</div>}
+          {(exercisePreview2 || exercise.imageSrc2) && <div className="flex max-h-[58vh] items-center justify-center overflow-hidden rounded-2xl border-2 border-cyan-100 bg-slate-50"><img src={exercisePreview2 || exercise.imageSrc2} alt={`Légende du document ${page + 1}`} className="max-h-[58vh] w-full object-contain" /></div>}
+        </div>
         <button type="button" onClick={() => setShowSheet(true)} className="block w-full rounded-xl bg-blue-50 px-4 py-3 text-center text-xs font-black text-blue-700">📘 Consulter la fiche méthode</button>
       </div>
       <div className="space-y-3">{fields.map(([key, label]) => {
@@ -4474,14 +4514,16 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
     let cancelled = false;
     const urls = [];
     Promise.all(model.exercises.map(async (exercise) => {
-      if (!exercise.imageKey || previews[exercise.id]) return;
-      try {
-        const blob = await loadDnbMethodImage(exercise.imageKey);
-        if (!blob || cancelled) return;
-        const url = URL.createObjectURL(blob);
-        urls.push(url);
-        setPreviews((previous) => ({ ...previous, [exercise.id]: url }));
-      } catch (_) {}
+      for (const [key, previewKey] of [[exercise.imageKey, exercise.id], [exercise.imageKey2, `${exercise.id}:2`]]) {
+        if (!key || previews[previewKey]) continue;
+        try {
+          const blob = await loadDnbMethodImage(key);
+          if (!blob || cancelled) continue;
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          setPreviews((previous) => ({ ...previous, [previewKey]: url }));
+        } catch (_) {}
+      }
     }));
     return () => { cancelled = true; urls.forEach((url) => URL.revokeObjectURL(url)); };
   }, []);
@@ -4508,14 +4550,16 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
     setModel((previous) => ({ ...previous, exercises: previous.exercises.map((exercise) => exercise.id === id ? { ...exercise, ...patch } : exercise) }));
     setSaved(false);
   };
-  const uploadImage = async (exercise, file) => {
+  const uploadImage = async (exercise, file, slot = 1) => {
     if (!file) return;
-    const imageKey = `${storageKey}:${exercise.id}`;
+    const suffix = slot === 2 ? ':2' : '';
+    const previewKey = `${exercise.id}${suffix}`;
+    const imageKey = `${storageKey}:${exercise.id}${suffix}`;
     await saveDnbMethodImage(imageKey, file);
-    const previousUrl = previews[exercise.id];
+    const previousUrl = previews[previewKey];
     if (previousUrl) URL.revokeObjectURL(previousUrl);
-    setPreviews((previous) => ({ ...previous, [exercise.id]: URL.createObjectURL(file) }));
-    updateExercise(exercise.id, { imageKey, imageName: file.name });
+    setPreviews((previous) => ({ ...previous, [previewKey]: URL.createObjectURL(file) }));
+    updateExercise(exercise.id, slot === 2 ? { imageKey2: imageKey, imageName2: file.name } : { imageKey, imageName: file.name });
   };
   const uploadMethodSheet = async (file) => {
     if (!file) return;
@@ -4541,16 +4585,22 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
     {embedUrl && <div className="mx-auto mt-4 max-w-[760px] overflow-hidden rounded-2xl border-2 border-cyan-200 bg-slate-950"><div className="aspect-video"><iframe className="h-full w-full" src={embedUrl} title={`Vidéo ${isImageDescription ? 'description image' : 'présentation document'}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div></div>}
     <div className="mx-auto mt-4 max-w-[760px] rounded-2xl border-2 border-blue-200 bg-blue-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase text-blue-600">Fiche méthode</div><div className="text-sm font-bold text-slate-700">{model.sheetName || 'Aucune fiche ajoutée'}</div></div><label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white">+ Ajouter la fiche<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(event) => uploadMethodSheet(event.target.files?.[0])} /></label></div>
-      {sheetPreview && <div className="mt-3 overflow-hidden rounded-xl border border-blue-200 bg-white">{model.sheetMime === 'application/pdf' ? <iframe src={sheetPreview} title="Fiche méthode PDF" className="h-[520px] w-full" /> : <a href={sheetPreview} target="_blank" rel="noreferrer"><img src={sheetPreview} alt="Fiche méthode" className="block max-h-[720px] w-full object-contain" /></a>}</div>}
+      {(sheetPreview || model.sheetSrc) && <div className="mt-3 overflow-hidden rounded-xl border border-blue-200 bg-white">{model.sheetMime === 'application/pdf' && sheetPreview ? <iframe src={sheetPreview} title="Fiche méthode PDF" className="h-[520px] w-full" /> : <a href={sheetPreview || model.sheetSrc} target="_blank" rel="noreferrer"><img src={sheetPreview || model.sheetSrc} alt="Fiche méthode" className="block max-h-[720px] w-full object-contain" /></a>}</div>}
     </div>
     <div className="mt-5 flex items-center justify-between gap-3"><div className="text-lg font-black text-slate-900">Exercices calibrés ({model.exercises.length})</div><button type="button" onClick={addExercise} className="rounded-xl bg-cyan-600 px-4 py-3 text-xs font-black text-white">+ Ajouter un exercice</button></div>
     <div className="mt-4 space-y-5">{model.exercises.map((exercise, index) => <article key={exercise.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">Exercice {index + 1}</div><button type="button" onClick={() => { setModel((previous) => ({ ...previous, exercises: previous.exercises.filter((item) => item.id !== exercise.id) })); setSaved(false); }} className="text-xs font-black text-red-500">Supprimer</button></div>
       <div className="mt-3 grid gap-4 lg:grid-cols-[300px_1fr]">
-        <label className="flex min-h-[190px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-cyan-300 bg-white text-center">
-          {previews[exercise.id] || exercise.imageSrc ? <img src={previews[exercise.id] || exercise.imageSrc} alt={`Document exercice ${index + 1}`} className="h-full max-h-[300px] w-full object-contain" /> : <span className="p-5 text-sm font-black text-cyan-700">Ajouter l’image ou le document<br /><span className="text-[10px] text-slate-400">PNG, JPG, WEBP…</span></span>}
-          <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadImage(exercise, event.target.files?.[0])} />
-        </label>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+          <label className="flex min-h-[190px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-cyan-300 bg-white text-center">
+            {previews[exercise.id] || exercise.imageSrc ? <img src={previews[exercise.id] || exercise.imageSrc} alt={`Document exercice ${index + 1}`} className="h-full max-h-[300px] w-full object-contain" /> : <span className="p-5 text-sm font-black text-cyan-700">Ajouter la première image<br /><span className="text-[10px] text-slate-400">PNG, JPG, WEBP…</span></span>}
+            <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadImage(exercise, event.target.files?.[0], 1)} />
+          </label>
+          <label className="flex min-h-[150px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-violet-300 bg-white text-center">
+            {previews[`${exercise.id}:2`] || exercise.imageSrc2 ? <img src={previews[`${exercise.id}:2`] || exercise.imageSrc2} alt={`Légende exercice ${index + 1}`} className="h-full max-h-[300px] w-full object-contain" /> : <span className="p-5 text-sm font-black text-violet-700">+ Ajouter une deuxième image<br /><span className="text-[10px] text-slate-400">Légende ou complément</span></span>}
+            <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadImage(exercise, event.target.files?.[0], 2)} />
+          </label>
+        </div>
         <div className="space-y-3">{fields.map(([fieldKey, label]) => {
           const rawRule = exercise.expected?.[fieldKey] || '';
           const parsedRule = parseExpectedCorrectionRule(rawRule);

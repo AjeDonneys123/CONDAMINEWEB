@@ -117,14 +117,9 @@ async function findGptInboxStudent(body = {}) {
         const byId = await Student.findById(studentId).lean();
         if (byId) return byId;
     }
-    const studentCode = String(body.studentCode || body.code || body.numero || body.num || '').replace(/\D/g, '').trim();
-    if (studentCode) {
-        const candidates = await Student.find({}, 'firstName lastName nickname currentClass').lean();
-        const matches = candidates.filter((student) => getStudentGptCode(student) === studentCode);
-        if (matches.length === 1) return matches[0];
-        return null;
-    }
-    const name = String(body.studentName || body.eleve || body.name || '').trim();
+    const explicitFirstName = String(body.firstName || body.prenom || body.prénom || '').trim();
+    const explicitLastName = String(body.lastName || body.nom || '').trim();
+    const name = `${explicitFirstName} ${explicitLastName}`.trim() || String(body.nomEleve || body.studentName || body.eleve || body.name || '').trim();
     if (!name) return null;
     const parts = name.split(/\s+/).filter(Boolean);
     if (!parts.length) return null;
@@ -134,15 +129,21 @@ async function findGptInboxStudent(body = {}) {
             return { $or: [{ firstName: rx }, { lastName: rx }, { nickname: rx }] };
         })
     };
+    const evaluationType = String(body.evaluationType || '').trim().toLowerCase();
+    const expectedLevel = evaluationType === 'rqp_seconde' ? '2' : (evaluationType === 'dnb_developpement_construit' ? '3' : '');
     const cls = String(body.studentClass || body.classe || body.className || '').trim();
     const matches = await Student.find(query).limit(5).lean();
     if (!matches.length) return null;
     const classKey = normalizeClassKey(cls);
     if (classKey) {
-        const classMatch = matches.find((student) => normalizeClassKey(student?.currentClass) === classKey);
-        if (classMatch) return classMatch;
+        const classMatches = matches.filter((student) => normalizeClassKey(student?.currentClass) === classKey);
+        if (classMatches.length === 1) return classMatches[0];
+        if (classMatches.length > 1) return null;
     }
-    return matches.length === 1 ? matches[0] : null;
+    const levelMatches = expectedLevel
+        ? matches.filter((student) => normalizeClassKey(student?.currentClass).startsWith(expectedLevel))
+        : matches;
+    return levelMatches.length === 1 ? levelMatches[0] : null;
 }
 
 async function markLearningValidatedFromGpt({ moduleId = '', student = null }) {
@@ -208,7 +209,7 @@ const normalizeOpenAiFileRefs = (value) => {
         }
         return { id: String(item || '').trim(), downloadUrl: '', name: `copie-${index + 1}`, mimeType: '' };
     }).filter((ref) => ref.id || ref.downloadUrl);
-    return refs.filter((ref, index) => refs.findIndex((candidate) => (candidate.id || candidate.downloadUrl) === (ref.id || ref.downloadUrl)) === index).slice(0, 8);
+    return refs.filter((ref, index) => refs.findIndex((candidate) => (candidate.id || candidate.downloadUrl) === (ref.id || ref.downloadUrl)) === index).slice(0, 10);
 };
 
 const downloadOpenAiCopyImages = async (refs) => {
@@ -1760,29 +1761,56 @@ router.get('/gpt-inbox', async (req, res) => {
     }
 });
 
+router.delete('/gpt-inbox/:entryId', async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.entryId)) return res.status(400).json({ ok: false, error: 'Correction invalide' });
+        const entry = await GptInboxMessage.findByIdAndDelete(req.params.entryId);
+        if (!entry) return res.status(404).json({ ok: false, error: 'Correction introuvable' });
+        return res.json({ ok: true, deleted: 1 });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/gpt-inbox', async (req, res) => {
     try {
         if (!checkGptInboxToken(req)) {
             return res.status(401).json({ ok: false, error: 'Token GPT invalide' });
         }
         const body = req.body || {};
-        const studentCode = String(body.studentCode || '').trim();
         const type = String(body.type || '').trim();
         const correctionMessage = String(body.message || '').trim();
         const isUnifiedCorrection = type === 'correction';
-        if (isUnifiedCorrection && (!studentCode || !correctionMessage)) {
-            return res.status(400).json({ ok: false, error: 'studentCode, type et message sont requis' });
+        const submittedStudentName = `${String(body.firstName || body.prenom || body.prénom || '').trim()} ${String(body.lastName || body.nom || '').trim()}`.trim()
+            || String(body.nomEleve || body.studentName || body.eleve || body.name || '').trim();
+        if (isUnifiedCorrection && (!submittedStudentName || !correctionMessage)) {
+            return res.status(400).json({ ok: false, error: 'prénom/nom de l’élève, type et message sont requis' });
         }
-        const isRqpSeconde = body.developpement !== undefined || body.expression !== undefined || String(body.evaluationType || '').toUpperCase() === 'RQP_SECONDE';
+        const requestedEvaluationType = String(body.evaluationType || '').trim().toLowerCase();
+        const isRqpSeconde = requestedEvaluationType === 'rqp_seconde';
+        if (isUnifiedCorrection) {
+        if (isUnifiedCorrection && !['dnb_developpement_construit', 'rqp_seconde'].includes(requestedEvaluationType)) {
+            return res.status(400).json({ ok: false, error: 'evaluationType doit être dnb_developpement_construit ou rqp_seconde' });
+        }
         const ranges = isRqpSeconde
             ? { note: [0, 20], introduction: [0, 5], developpement: [0, 10], conclusion: [0, 2], expression: [0, 3] }
             : { note: [0, 10], forme: [0, 2], introduction: [0, 3], arguments: [0, 2], exemples: [0, 2], conclusion: [0, 1] };
         for (const [field, [min, max]] of Object.entries(ranges)) {
-            if (body[field] === undefined || body[field] === null || body[field] === '') continue;
+            if (body[field] === undefined || body[field] === null || body[field] === '') {
+                return res.status(400).json({ ok: false, error: `${field} est requis pour ${requestedEvaluationType}` });
+            }
             const value = Number(body[field]);
             if (!Number.isFinite(value) || value < min || value > max) {
                 return res.status(400).json({ ok: false, error: `${field} doit être un nombre entre ${min} et ${max}` });
             }
+        }
+        const detailFields = isRqpSeconde
+            ? ['introduction', 'developpement', 'conclusion', 'expression']
+            : ['forme', 'introduction', 'arguments', 'exemples', 'conclusion'];
+        const detailTotal = detailFields.reduce((sum, field) => sum + Number(body[field]), 0);
+        if (Math.abs(detailTotal - Number(body.note)) > 0.001) {
+            return res.status(400).json({ ok: false, error: `Le détail du barème (${detailTotal}) ne correspond pas à la note (${body.note})` });
+        }
         }
         const questionNumberRaw = body.questionNumber ?? body.question ?? body.numeroQuestion ?? body.numero;
         const questionNumber = Number.isFinite(Number(questionNumberRaw)) ? Number(questionNumberRaw) : null;
@@ -1795,7 +1823,7 @@ router.post('/gpt-inbox', async (req, res) => {
         const score = Number.isFinite(Number(scoreRaw)) ? Number(scoreRaw) : null;
         const student = await findGptInboxStudent(body);
         if (isUnifiedCorrection && !student) {
-            return res.status(400).json({ ok: false, error: 'studentCode inconnu ou ambigu' });
+            return res.status(400).json({ ok: false, error: 'Élève introuvable ou ambigu pour ce nom et ce niveau' });
         }
         const openaiFileIdRefs = normalizeOpenAiFileRefs(body.openaiFileIdRefs);
         const durableImages = isUnifiedCorrection ? await downloadOpenAiCopyImages(openaiFileIdRefs) : [];
@@ -1814,7 +1842,6 @@ router.post('/gpt-inbox', async (req, res) => {
                 ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
                 : String(body.studentName || body.eleve || '').trim().slice(0, 160),
             studentClass: String(student?.currentClass || body.studentClass || body.classe || '').trim().slice(0, 80),
-            studentCode,
             type: type || 'feedback',
             questionNumber,
             message,
@@ -1827,7 +1854,7 @@ router.post('/gpt-inbox', async (req, res) => {
             sujet: String(body.sujet || '').trim().slice(0, 1000),
             devoirComplet: String(body.devoirComplet || '').trim().slice(0, 50000),
             openaiFileIdRefs: openaiFileIdRefs.map((ref) => ref.id).filter(Boolean),
-            evaluationType: isRqpSeconde ? 'RQP_SECONDE' : 'DNB',
+            evaluationType: isRqpSeconde ? 'rqp_seconde' : 'dnb_developpement_construit',
             note: score,
             forme: Number.isFinite(Number(body.forme)) ? Number(body.forme) : null,
             introduction: Number.isFinite(Number(body.introduction)) ? Number(body.introduction) : null,

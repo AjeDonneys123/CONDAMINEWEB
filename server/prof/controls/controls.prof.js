@@ -159,6 +159,19 @@ router.put('/:id/submissions/:submissionId', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.delete('/:id/submissions/:submissionId', async (req, res) => {
+    try {
+        const row = await AssessmentControl.findById(req.params.id);
+        if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
+        const before = Array.isArray(row.submissions) ? row.submissions.length : 0;
+        row.submissions = (row.submissions || []).filter((submission) => String(submission.id) !== String(req.params.submissionId));
+        if (row.submissions.length === before) return res.status(404).json({ error: 'Copie introuvable' });
+        row.markModified('submissions');
+        await row.save();
+        return res.json({ ok: true, deleted: 1 });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
+});
+
 router.patch('/:id/contest/:submissionId/:itemId', async (req, res) => {
     try {
         const row = await AssessmentControl.findById(req.params.id);
