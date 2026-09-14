@@ -1915,7 +1915,7 @@ router.post('/gpt-inbox', async (req, res) => {
         return res.status(200).json({
             ok: true,
             message: 'Correction enregistrée avec succès',
-            entry,
+            entryId: String(entry._id),
             learningMarked,
             fileImport: isUnifiedCorrection ? {
                 referencesReceived: fileRefShape.count,

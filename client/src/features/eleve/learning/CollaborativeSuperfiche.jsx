@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import SheetRichTextEditor from '../../prof/learning/SheetRichTextEditor';
 
 const COLOR_PRESETS = [
@@ -21,6 +21,8 @@ export default function CollaborativeSuperfiche({
     const [stepTitle, setStepTitle] = useState(initialStep?.title || 'Fiche de cours');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [viewMode, setViewMode] = useState('workshop'); // 'workshop' | 'clean'
+    const [showPeerContributions, setShowPeerContributions] = useState(true);
 
     // Éditeur en cours d'injection
     const [injectingParagraphId, setInjectingParagraphId] = useState(null); // paragraphId où l'élève ajoute
@@ -36,6 +38,11 @@ export default function CollaborativeSuperfiche({
     const [commentDraft, setCommentDraft] = useState('');
     const [sendingComment, setSendingComment] = useState(false);
     const [deletingContribId, setDeletingContribId] = useState(null);
+
+    const paragraphs = sheet?.paragraphs || [];
+    const totalContributions = useMemo(() => {
+        return (sheet?.paragraphs || []).reduce((acc, p) => acc + (p.contributions?.length || 0), 0);
+    }, [sheet]);
 
     const studentId = String(user?._id || user?.id || '').trim();
     const studentName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || (isTeacher ? 'Professeur' : 'Élève');
@@ -238,8 +245,6 @@ export default function CollaborativeSuperfiche({
         );
     }
 
-    const paragraphs = sheet?.paragraphs || [];
-
     return (
         <div className="w-full max-w-4xl mx-auto py-4 px-2 sm:px-4 space-y-6">
             {/* Bannière d'en-tête de la fiche collaborative */}
@@ -256,28 +261,144 @@ export default function CollaborativeSuperfiche({
                             {stepTitle}
                         </h2>
                         <p className="text-xs sm:text-sm text-indigo-200/90 max-w-xl">
-                            Le cours officiel du professeur est affiché ci-dessous. Tu peux sélectionner n’importe quelle partie pour y injecter tes modifications, compléments ou exemples, et échanger avec tes camarades !
+                            {viewMode === 'clean'
+                                ? 'Fiche complète continue pour la révision et l’apprentissage. Tous les points du cours sont présentés sans coupure.'
+                                : 'Le cours officiel du professeur est affiché ci-dessous. Tu peux sélectionner n’importe quelle partie pour y injecter tes modifications, compléments ou exemples, et échanger avec tes camarades !'}
                         </p>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={() => handleStartInjection('new')}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-lg shadow-emerald-950/20 transition cursor-pointer"
-                    >
-                        <span>➕</span>
-                        <span>Proposer une section libre</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode((curr) => curr === 'clean' ? 'workshop' : 'clean')}
+                            className={`inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer shadow-lg active:scale-95 ${
+                                viewMode === 'clean'
+                                    ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-950/20 ring-2 ring-white/50'
+                                    : 'bg-white hover:bg-slate-100 text-indigo-950 shadow-indigo-950/20'
+                            }`}
+                        >
+                            <span>{viewMode === 'clean' ? '✍️ Mode Atelier (Ajouts)' : '📖 Voir la fiche complète pour apprendre'}</span>
+                        </button>
+
+                        {viewMode === 'workshop' && (
+                            <button
+                                type="button"
+                                onClick={() => handleStartInjection('new')}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-lg shadow-emerald-950/20 transition cursor-pointer"
+                            >
+                                <span>➕</span>
+                                <span>Proposer une section libre</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Structure du cours avec injection collaborative par zone */}
-            <div className="space-y-8">
-                {paragraphs.length === 0 ? (
-                    <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center text-slate-500">
-                        <p className="font-semibold text-sm">Aucune partie configurée sur cette fiche.</p>
+            {viewMode === 'clean' ? (
+                /* VUE FICHE COMPLÈTE CONTINUE (POUR APPRENDRE ET RÉVISER DANS SON ENSEMBLE PROPREMENT) */
+                <div className="space-y-6">
+                    {/* Barre d'outils de révision */}
+                    <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex flex-wrap items-center justify-between gap-4 no-print">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">📖</span>
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900">Fiche complète d’apprentissage</h3>
+                                <p className="text-xs text-slate-500 font-medium">Document d’un seul tenant, épuré des boutons d’édition, conçu pour la mémorisation et l’étude.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                            {totalContributions > 0 && (
+                                <label className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 cursor-pointer text-xs font-bold text-slate-700 transition">
+                                    <input
+                                        type="checkbox"
+                                        checked={showPeerContributions}
+                                        onChange={(e) => setShowPeerContributions(e.target.checked)}
+                                        className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                                    />
+                                    <span>Ajouts des camarades ({totalContributions})</span>
+                                </label>
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={() => window.print()}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition shadow-2xs cursor-pointer"
+                            >
+                                <span>🖨️</span>
+                                <span>Imprimer / PDF</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('workshop')}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition shadow-sm cursor-pointer"
+                            >
+                                <span>✍️</span>
+                                <span>Mode Atelier (Ajouts)</span>
+                            </button>
+                        </div>
                     </div>
-                ) : (
+
+                    {/* Feuille de cours continue propre */}
+                    <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-12 shadow-sm space-y-6 print:border-none print:shadow-none print:p-0">
+                        {paragraphs.length === 0 ? (
+                            <p className="text-center text-slate-500 py-8">Aucun contenu sur cette fiche.</p>
+                        ) : (
+                            paragraphs.map((p, pIndex) => {
+                                const contributions = p.contributions || [];
+
+                                return (
+                                    <div key={p.paragraphId || pIndex} className="space-y-4">
+                                        {/* Rendu officiel du professeur */}
+                                        <div
+                                            className="teacher-rich-content text-slate-900 leading-relaxed text-base sm:text-lg space-y-1"
+                                            dangerouslySetInnerHTML={{ __html: p.baseHtml || p.baseText }}
+                                        />
+
+                                        {/* Compléments des camarades intégrés proprement sous la sous-partie */}
+                                        {showPeerContributions && contributions.length > 0 && (
+                                            <div className="my-3 space-y-2.5 pl-3 sm:pl-5 border-l-4 border-indigo-200">
+                                                {contributions.map((contrib, cIdx) => (
+                                                    <div
+                                                        key={contrib.contributionId || contrib._id || cIdx}
+                                                        style={{ backgroundColor: contrib.color || COLOR_PRESETS[0].bg }}
+                                                        className="rounded-2xl p-4 border border-black/10 shadow-2xs"
+                                                    >
+                                                        <div className="text-[11px] font-black uppercase tracking-wider text-slate-700 mb-1.5 flex items-center justify-between gap-2">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <span>💡 Complément ·</span>
+                                                                <span className="text-slate-900">{contrib.studentName || 'Camarade'}</span>
+                                                                {contrib.studentFirstName && <span className="text-slate-500">({contrib.studentFirstName})</span>}
+                                                            </span>
+                                                            {contrib.createdAt && (
+                                                                <span className="text-[10px] text-slate-400 font-normal">
+                                                                    {new Date(contrib.createdAt).toLocaleDateString([], { day: '2-digit', month: '2-digit' })}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div
+                                                            className="student-rich-content text-slate-900 text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-medium"
+                                                            dangerouslySetInnerHTML={{ __html: contrib.html || contrib.text }}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            ) : (
+                /* Structure du cours avec injection collaborative par zone (Atelier) */
+                <div className="space-y-8">
+                    {paragraphs.length === 0 ? (
+                        <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center text-slate-500">
+                            <p className="font-semibold text-sm">Aucune partie configurée sur cette fiche.</p>
+                        </div>
+                    ) : (
                     paragraphs.map((p, pIndex) => {
                         const contributions = p.contributions || [];
                         const isInjectingHere = injectingParagraphId === p.paragraphId;
@@ -635,12 +756,17 @@ export default function CollaborativeSuperfiche({
                     </div>
                 )}
             </div>
+            )}
 
             <style>{`
                 .teacher-rich-content { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 1.05rem; }
                 .teacher-rich-content div { min-height: 1.5em; line-height: 1.7; }
                 .teacher-rich-content strong, .teacher-rich-content b { font-weight: 700; }
                 .student-rich-content strong, .student-rich-content b { font-weight: 700; }
+                @media print {
+                    .no-print { display: none !important; }
+                    body { background: white !important; }
+                }
             `}</style>
         </div>
     );
