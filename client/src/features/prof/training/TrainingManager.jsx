@@ -4,6 +4,7 @@ import ExamTrainingHub from '../../eleve/training/ExamTrainingHub';
 import './TrainingManager.css';
 
 export default function TrainingManager({ globalClassId, globalClass, user }) {
+    const [addingExercise, setAddingExercise] = useState(false);
     if (!globalClassId) {
         return (
             <div className="tm-empty">
@@ -13,13 +14,12 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
         );
     }
 
-    const studentPreviewUser = {
-        ...user,
-        currentClass: globalClass || '',
-        className: globalClass || '',
-    };
-
-    return <ExamTrainingHub user={studentPreviewUser} canCalibrate={false} />;
+    const previewUser = { ...user, currentClass: globalClass || '', className: globalClass || '', classId: globalClassId };
+    if (addingExercise) return <div><button type="button" onClick={() => setAddingExercise(false)} className="m-4 rounded-xl border bg-white px-4 py-2 font-black text-slate-600">← Retour à la vue élève</button><LegacyTrainingManager globalClassId={globalClassId} globalClass={globalClass} user={user} /></div>;
+    return <div className="relative pb-20">
+        <div className="sticky top-2 z-40 mb-3 flex justify-end px-4"><button type="button" onClick={() => setAddingExercise(true)} className="rounded-2xl bg-violet-600 px-5 py-3 font-black text-white shadow-lg">＋ Ajouter ou modifier des exercices</button></div>
+        <ExamTrainingHub user={previewUser} canCalibrate={false} />
+    </div>;
 }
 
 // ─── Helpers de niveau et section ───────────────────────────────────────────
@@ -219,7 +219,7 @@ function LegacyTrainingManager({ globalClassId, globalClass, user }) {
             const res = await fetch(`/api/prof/training/class/${encodeURIComponent(globalClassId)}/assignment`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items: selectedItems, teacherId }),
+                body: JSON.stringify({ items: selectedItems, teacherId, applyToLevel: true }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erreur lors de la sauvegarde');
@@ -565,7 +565,7 @@ function LegacyTrainingManager({ globalClassId, globalClass, user }) {
             )}
 
             {/* ── FOOTER STICKY DÉFINIR ENTRAÎNEMENT ── */}
-            <div className="tm-footer">
+            {(totalSelected > 0 || saved) && <div className="tm-footer">
                 {saved && (
                     <div className="tm-saved-msg">
                         ✅ Entraînement mis à jour et envoyé aux élèves de {globalClass} !
@@ -580,15 +580,15 @@ function LegacyTrainingManager({ globalClassId, globalClass, user }) {
                     {saving ? (
                         <><span className="tm-btn-spinner" /> Enregistrement en cours…</>
                     ) : (
-                        <>🚀 Définir l'entraînement pour {globalClass}{totalSelected > 0 ? ` (${totalSelected} sélectionné${totalSelected > 1 ? 's' : ''})` : ''}</>
+                        <>🚀 Créer entraînement ({totalSelected} sélectionné{totalSelected > 1 ? 's' : ''})</>
                     )}
                 </button>
                 {totalSelected > 0 && (
                     <p className="tm-footer-hint">
-                        Les {totalSelected} activité{totalSelected > 1 ? 's' : ''} cochée{totalSelected > 1 ? 's' : ''} apparaîtront directement sur l'interface d'entraînement des élèves de <strong>{globalClass}</strong>.
+                        Cet entraînement apparaîtra pour toutes les classes du niveau <strong>{activeLevelLabel}</strong>.
                     </p>
                 )}
-            </div>
+            </div>}
 
             {/* ── MODAL : VOIR UN EXERCICE ── */}
             {viewItem && (

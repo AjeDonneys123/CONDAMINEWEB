@@ -339,21 +339,29 @@ router.put('/class/:classId/assignment', async (req, res) => {
                 content: item.content || {}
             }));
 
-        if (cleanItems.length === 0) {
-            classroom.activeTrainingAssignment = null;
-        } else {
-            classroom.activeTrainingAssignment = {
+        const level = extractLevel(classroom.level || classroom.name);
+        const assignment = cleanItems.length === 0 ? null : {
+                id: String(req.body?.assignmentId || new mongoose.Types.ObjectId()),
+                title: String(req.body?.title || 'Nouvel entraînement').trim(),
+                chapterId: String(req.body?.chapterId || '').trim(),
                 items: cleanItems,
                 assignedAt: new Date(),
                 teacherId: req.body?.teacherId || null,
+                assignedStudentIds: Array.isArray(req.body?.assignedStudentIds) ? req.body.assignedStudentIds.map(String) : [],
+                progress: []
             };
-        }
-        await classroom.save();
+        const classrooms = req.body?.applyToLevel && level
+            ? (await Classroom.find({}).select('_id name level')).filter((row) => extractLevel(row.level || row.name) === level)
+            : [classroom];
+        await Promise.all(classrooms.map((row) => Classroom.updateOne(
+            { _id: row._id },
+            { $set: { activeTrainingAssignment: assignment } }
+        )));
         console.info('[CondaWeb training] entraînement défini', {
             classId: String(classroom._id),
             items: cleanItems.length,
         });
-        res.json({ ok: true, assignment: classroom.activeTrainingAssignment });
+        res.json({ ok: true, assignment, classroomsUpdated: classrooms.length });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -606,15 +614,62 @@ router.get('/chapters', async (req, res) => {
 router.get('/active/:classId', async (req, res) => {
     try {
         const { Classroom } = getModels();
-        const classroom = await Classroom.findById(req.params.classId)
-            .select('activeTrainingAssignment name')
-            .lean();
+        const classroom = mongoose.isValidObjectId(req.params.classId)
+            ? await Classroom.findById(req.params.classId).select('activeTrainingAssignment name').lean()
+            : await Classroom.findOne({ name: req.params.classId }).select('activeTrainingAssignment name').lean();
         if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
+        const assignment = classroom.activeTrainingAssignment || null;
+        const studentId = String(req.query?.studentId || '').trim();
+        const allowed = !assignment || !Array.isArray(assignment.assignedStudentIds) || assignment.assignedStudentIds.length === 0 || assignment.assignedStudentIds.includes(studentId);
         res.json({
             classId: String(classroom._id),
             className: classroom.name || '',
-            assignment: classroom.activeTrainingAssignment || null,
+            assignment: allowed ? assignment : null,
         });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/active/:classId/progress', async (req, res) => {
+    try {
+        const { Classroom } = getModels();
+        const classroom = mongoose.isValidObjectId(req.params.classId)
+            ? await Classroom.findById(req.params.classId)
+            : await Classroom.findOne({ name: req.params.classId });
+        if (!classroom?.activeTrainingAssignment) return res.status(404).json({ error: 'Entraînement introuvable' });
+        const studentId = String(req.body?.studentId || '').trim();
+        const itemId = String(req.body?.itemId || '').trim();
+        const assignment = classroom.activeTrainingAssignment;
+        if (!studentId || !itemId || String(req.body?.assignmentId || '') !== String(assignment.id || '')) {
+            return res.status(400).json({ error: 'Progression invalide' });
+        }
+        const progress = Array.isArray(assignment.progress) ? assignment.progress : [];
+        let row = progress.find((entry) => String(entry.studentId) === studentId);
+        if (!row) {
+            row = { studentId, startedAt: new Date(), completedItemIds: [] };
+            progress.push(row);
+        }
+        if (req.body?.startedOnly !== true && !row.completedItemIds.includes(itemId)) row.completedItemIds.push(itemId);
+        if (row.completedItemIds.length >= assignment.items.length) row.completedAt = new Date();
+        assignment.progress = progress;
+        classroom.activeTrainingAssignment = assignment;
+        classroom.markModified('activeTrainingAssignment');
+        await classroom.save();
+        res.json({ ok: true, progress: row });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/assignment/:assignmentId', async (req, res) => {
+    try {
+        const { Classroom } = getModels();
+        const result = await Classroom.updateMany(
+            { 'activeTrainingAssignment.id': String(req.params.assignmentId) },
+            { $set: { activeTrainingAssignment: null } }
+        );
+        res.json({ ok: true, classroomsUpdated: result.modifiedCount || 0 });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

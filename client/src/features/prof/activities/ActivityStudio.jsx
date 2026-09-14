@@ -10,6 +10,7 @@ import CommentStudio from '../comments/CommentStudio';
 import ProductionStudio from '../productions/ProductionStudio';
 import RevisionStudio from '../revisions/RevisionStudio';
 import ControlStudio from '../controls/ControlStudio';
+import TrainingAssignmentStudio from '../training/TrainingAssignmentStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 
 export default function ActivityStudio({ globalClass, globalClassId, globalLevel, user, onRefreshRequest }) {
@@ -49,6 +50,32 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 fetchJson('/api/admin/classrooms') // Ajouté
             ]);
             
+            const trainingById = new Map();
+            (cls || []).forEach((classroom) => {
+                const assignment = classroom?.activeTrainingAssignment;
+                if (!assignment?.id || !Array.isArray(assignment.items) || assignment.items.length === 0) return;
+                const id = String(assignment.id);
+                const assignmentSection = String(assignment.items?.[0]?.section || '').toUpperCase();
+                const fallbackChapter = (cp || []).find((chapter) => !chapter.isArchived && (!assignmentSection || String(chapter.section || '').toUpperCase().includes(assignmentSection)));
+                const previous = trainingById.get(id) || {
+                    _id: id,
+                    title: assignment.title || 'Nouvel entraînement',
+                    chapterId: assignment.chapterId || fallbackChapter?._id || '',
+                    actType: 'training',
+                    typeLabel: '🏋️ ENTRAÎNEMENT',
+                    targetClassrooms: [],
+                    assignedStudents: [],
+                    isAllClass: true,
+                    items: assignment.items,
+                    assignedAt: assignment.assignedAt
+                };
+                previous.targetClassrooms.push(classroom.name);
+                if (Array.isArray(assignment.assignedStudentIds) && assignment.assignedStudentIds.length > 0) {
+                    previous.isAllClass = false;
+                    previous.assignedStudents.push(...assignment.assignedStudentIds);
+                }
+                trainingById.set(id, previous);
+            });
             setActivities([
                 ...(hw || []).map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 
                 ...(gm || []).map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'})),
@@ -59,7 +86,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...(comments || []).map(x => ({...x, actType: 'comment', typeLabel: '🧾 COM'})),
                 ...(prod || []).map(x => ({...x, actType: 'production', typeLabel: '🏗️ PROD'})),
                 ...(rev || []).map(x => ({...x, actType: 'revision', typeLabel: '🧩 REV'})),
-                ...(controls || []).map(x => ({...x, actType: 'control', typeLabel: '📝 CTRL'}))
+                ...(controls || []).map(x => ({...x, actType: 'control', typeLabel: '📝 CTRL'})),
+                ...trainingById.values()
             ]);
             setChapters(cp || []);
             setAllStudents(sts || []);
@@ -107,6 +135,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         else if (type === 'production') url = `/api/productions/${id}`;
         else if (type === 'revision') url = `/api/revisions/${id}`;
         else if (type === 'control') url = `/api/controls/${id}`;
+        else if (type === 'training') url = `/api/prof/training/assignment/${id}`;
         else if (type === 'scan') url = `/api/scans/sessions/${id}`;
         else url = `/api/structure/chapters/${id}`;
 
@@ -139,6 +168,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         if (editingItem.type === 'production') return <ProductionStudio {...props} />;
         if (editingItem.type === 'revision') return <RevisionStudio {...props} />;
         if (editingItem.type === 'control') return <ControlStudio {...props} />;
+        if (editingItem.type === 'training') return <TrainingAssignmentStudio {...props} />;
         return <GameStudio {...props} />;
     }
 

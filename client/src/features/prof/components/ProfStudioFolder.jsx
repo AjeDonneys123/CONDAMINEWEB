@@ -12,6 +12,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const ACTIVITY_OPTIONS = [
         { type: 'homework', label: 'Devoir', icon: '📝', tone: 'bg-orange-50 border-orange-200 text-orange-700' },
         { type: 'learning', label: 'Apprentissage', icon: '🧠', tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+        { type: 'training', label: 'Entraînement', icon: '🏋️', tone: 'bg-violet-50 border-violet-200 text-violet-700' },
         { type: 'control', label: 'Contrôle', icon: '📝', tone: 'bg-rose-50 border-rose-200 text-rose-700' },
         { type: 'lecture', label: 'Lecture', icon: '📖', tone: 'bg-sky-50 border-sky-200 text-sky-700' },
         ...(isHgTeacher ? [{ type: 'comment', label: 'Commentaire', icon: '🧾', tone: 'bg-amber-50 border-amber-200 text-amber-700' }] : []),
@@ -143,6 +144,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         if (it.actType === 'fiche') return '🗂️';
         if (it.actType === 'production') return '🏗️';
         if (it.actType === 'comment') return '🧾';
+        if (it.actType === 'training') return '🏋️';
         return '📝';
     };
     const getActivityApiBase = (type = '') => {

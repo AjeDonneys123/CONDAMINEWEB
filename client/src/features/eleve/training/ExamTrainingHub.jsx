@@ -17,6 +17,84 @@ const reportTrainingScore = (exerciseId, correct, total) => {
   }));
 };
 
+function AssignedTraining({ user }) {
+  const classRef = String(user?.classId || user?.currentClass || user?.className || '').trim();
+  const studentId = String(user?._id || user?.id || '').trim();
+  const [assignment, setAssignment] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [answers, setAnswers] = useState({});
+  const [completed, setCompleted] = useState(new Set());
+
+  useEffect(() => {
+    if (!classRef) return;
+    fetch(`/api/prof/training/active/${encodeURIComponent(classRef)}?studentId=${encodeURIComponent(studentId)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        const next = payload?.assignment || null;
+        setAssignment(next);
+        const mine = (next?.progress || []).find((row) => String(row.studentId) === studentId);
+        setCompleted(new Set(mine?.completedItemIds || []));
+      })
+      .catch(() => setAssignment(null));
+  }, [classRef, studentId]);
+
+  useEffect(() => {
+    if (!assignment?.id) return undefined;
+    const onScore = (event) => {
+      const scoreId = String(event?.detail?.exerciseId || '');
+      const item = assignment.items.find((entry) => entry.id === scoreId.replace('5e-geo-', '5e-'));
+      if (item) validate(item);
+    };
+    window.addEventListener(TRAINING_SCORE_EVENT, onScore);
+    return () => window.removeEventListener(TRAINING_SCORE_EVENT, onScore);
+  }, [assignment, classRef, studentId]);
+
+  if (!assignment?.items?.length) return null;
+
+  const validate = async (item) => {
+    const value = answers[item.id];
+    if (value === undefined || String(value).trim() === '') return;
+    const response = await fetch(`/api/prof/training/active/${encodeURIComponent(classRef)}/progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignmentId: assignment.id, studentId, itemId: item.id })
+    });
+    if (response.ok) setCompleted((current) => new Set([...current, item.id]));
+  };
+
+  const openAssignedActivity = async (item) => {
+    window.dispatchEvent(new CustomEvent('condaweb:open-assigned-training', { detail: { view: item.content?.view } }));
+    await fetch(`/api/prof/training/active/${encodeURIComponent(classRef)}/progress`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignmentId: assignment.id, studentId, itemId: item.id, startedOnly: true })
+    });
+    setOpen(false);
+  };
+
+  return (
+    <section className="mx-4 rounded-3xl border-2 border-violet-300 bg-white p-4 shadow-sm">
+      <button type="button" onClick={() => setOpen((value) => !value)} className="w-full rounded-2xl bg-violet-600 px-5 py-4 text-left font-black text-white">
+        🏋️ Nouvel entraînement · {completed.size}/{assignment.items.length} exercice(s)
+      </button>
+      {open && <div className="mt-4 grid gap-4">
+        {assignment.items.map((item) => {
+          const done = completed.has(item.id);
+          const content = item.content || {};
+          return <article key={item.id} className={`rounded-2xl border p-4 ${done ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+            <div className="font-black text-slate-900">{done ? '✅' : '⬜'} {item.title}</div>
+            {(item.images || []).length > 0 && <div className="mt-3 flex flex-wrap gap-3">{item.images.map((image, index) => <img key={`${item.id}-${index}`} src={image.url} alt={image.caption || item.title} className="max-h-64 rounded-xl object-contain" />)}</div>}
+            <p className="mt-3 whitespace-pre-wrap text-sm font-bold text-slate-700">{content.question || content.text || ''}</p>
+            {item.questionType === 'navigation' ? <button type="button" onClick={() => openAssignedActivity(item)} className="mt-3 rounded-xl bg-violet-600 px-4 py-2 font-black text-white">Ouvrir l’activité</button>
+              : item.questionType === 'qcm' ? <div className="mt-3 grid gap-2">{(content.choices || []).map((choice, index) => <label key={index} className="rounded-xl bg-white p-3"><input type="radio" name={`assigned-${item.id}`} className="mr-2" checked={Number(answers[item.id]) === index} onChange={() => setAnswers((old) => ({ ...old, [item.id]: index }))} />{choice}</label>)}</div>
+              : <textarea className="mt-3 min-h-28 w-full rounded-xl border border-slate-200 bg-white p-3" placeholder="Écris ta réponse ici…" value={answers[item.id] || ''} onChange={(event) => setAnswers((old) => ({ ...old, [item.id]: event.target.value }))} />}
+            {!done && item.questionType !== 'navigation' && <button type="button" onClick={() => validate(item)} className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 font-black text-white">Valider cet exercice</button>}
+          </article>;
+        })}
+      </div>}
+    </section>
+  );
+}
+
 function TrainingPointsBadge({ user }) {
   const studentKey = String(user?._id || user?.id || user?.name || 'student').replace(/[^a-zA-Z0-9_-]/g, '_');
   const storageKey = `condaweb-training-points-v1:${studentKey}`;
@@ -5659,7 +5737,7 @@ function FifthGradeDatesTimelineTraining() {
   );
 }
 
-function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = false }) {
+function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = false, assignmentMode = false, selectedAssignmentIds, onAssignmentToggle }) {
   const [view, setView] = useState('learn');
   const [checked, setChecked] = useState(false);
   const [worldAnswers, setWorldAnswers] = useState({});
@@ -5667,6 +5745,11 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
   const [attributeAnswers, setAttributeAnswers] = useState({});
   const [scaleAnswers, setScaleAnswers] = useState({});
   const [curveAnswers, setCurveAnswers] = useState({});
+  useEffect(() => {
+    const open = (event) => event?.detail?.view && resetCheck(event.detail.view);
+    window.addEventListener('condaweb:open-assigned-training', open);
+    return () => window.removeEventListener('condaweb:open-assigned-training', open);
+  }, []);
   const canCalibrate = canCalibrateFromProf || user?.isDeveloper === true || user?.isTestAccount === true;
   const worldMapImageKey = 'condaweb-fifth-grade-world-map-v1';
   const worldMapModelKey = 'condaweb-fifth-grade-world-map-model-v1';
@@ -6246,9 +6329,13 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
             ['learn', '📖 Apprendre'], ['world', '🌍 Continents et océans'], ['compass', '🧭 Points cardinaux'],
             ['attributes', '🗺️ Attributs de la carte'], ['scales', '🔎 Échelles géographiques'],
             ['curves', '📈 Courbes démographiques'], ['dates', '📅 Dates et frise']
-          ].map(([key, label]) => (
-            <button key={key} type="button" onClick={() => resetCheck(key)} className={`rounded-2xl border px-4 py-3 text-sm font-black ${view === key ? 'border-emerald-700 bg-emerald-600 text-white' : 'border-white bg-white text-slate-700 shadow-sm'}`}>{label}</button>
-          ))}
+          ].map(([key, label]) => {
+            const id = `5e-${key}`;
+            return <div key={key} className="flex items-center gap-2 rounded-2xl bg-white p-1 shadow-sm">
+              {assignmentMode && <input type="checkbox" aria-label={`Sélectionner ${label}`} checked={selectedAssignmentIds?.has(id) || false} onChange={(event) => onAssignmentToggle?.({ id, title: label, section: 'GEO', subject: 'Géographie', questionType: 'navigation', content: { view: key } }, event.target.checked)} className="ml-2 h-5 w-5 accent-violet-600" />}
+              <button type="button" onClick={() => resetCheck(key)} className={`rounded-xl border px-4 py-3 text-sm font-black ${view === key ? 'border-emerald-700 bg-emerald-600 text-white' : 'border-white bg-white text-slate-700'}`}>{label}</button>
+            </div>;
+          })}
         </nav>
       </header>
 
@@ -6526,7 +6613,7 @@ function RqpMethodExercises() {
   </div>;
 }
 
-export default function ExamTrainingHub({ user, canCalibrate = false }) {
+export default function ExamTrainingHub({ user, canCalibrate = false, assignmentMode = false, selectedAssignmentIds = new Set(), onAssignmentToggle }) {
   const mode = getTrainingModeForStudent(user);
   const [section, setSection] = useState(mode === 'seconde' ? 'rqp' : 'full');
   const [dnbSubject, setDnbSubject] = useState('all');
@@ -6534,9 +6621,17 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
   const [selectedLocalDnbActivity, setSelectedLocalDnbActivity] = useState('');
   const [secondeMethodSheet, setSecondeMethodSheet] = useState('');
   const [secondeRqpModule, setSecondeRqpModule] = useState('home');
+  useEffect(() => {
+    const open = (event) => {
+      const next = event?.detail?.view;
+      if (next && DNB_TABS.some((tab) => tab.key === next)) setSection(next);
+    };
+    window.addEventListener('condaweb:open-assigned-training', open);
+    return () => window.removeEventListener('condaweb:open-assigned-training', open);
+  }, []);
 
   if (mode === 'cinquieme') {
-    return <FifthGradeGeoTraining user={user} canCalibrate={canCalibrate} />;
+    return <><AssignedTraining user={user} /><FifthGradeGeoTraining user={user} canCalibrate={canCalibrate} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} /></>;
   }
 
   if (mode === 'dnb') {
@@ -6560,6 +6655,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
     return (
       <section className="training-responsive flex flex-col gap-4">
         <TrainingPointsBadge user={user} />
+        <AssignedTraining user={user} />
         <div className="mx-4 rounded-3xl border border-violet-200 bg-violet-50 p-5">
           <div className="text-[11px] font-black uppercase text-violet-500">Brevet</div>
           <h2 className="text-3xl font-black text-slate-900 m-0">Entraînement DNB</h2>
@@ -6567,9 +6663,11 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
             Choisis le brevet complet ou entraîne-toi exercice par exercice.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {DNB_TABS.map((tab) => (
+            {DNB_TABS.map((tab) => {
+              const assignmentId = `dnb-${tab.key}`;
+              return <div key={tab.key} className="flex items-center gap-2 rounded-2xl bg-white p-1">
+              {assignmentMode && <input type="checkbox" aria-label={`Sélectionner ${tab.label}`} checked={selectedAssignmentIds.has(assignmentId)} onChange={(event) => onAssignmentToggle?.({ id: assignmentId, title: tab.label, section: 'DNB', subject: 'Histoire-Géographie', questionType: 'navigation', content: { view: tab.key } }, event.target.checked)} className="ml-2 h-5 w-5 accent-violet-600" />}
               <button
-                key={tab.key}
                 type="button"
                 onClick={() => {
 	                  setSection(tab.key);
@@ -6582,7 +6680,8 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
               >
                 {tab.label}
               </button>
-            ))}
+              </div>;
+            })}
           </div>
           {showSubjectFilter && (
             <div className="mt-3 flex flex-wrap gap-2 items-center">
@@ -6664,6 +6763,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false }) {
     return (
       <section className="training-responsive flex flex-col gap-4">
         <TrainingPointsBadge user={user} />
+        <AssignedTraining user={user} />
         <div className="mx-4 rounded-3xl border border-blue-200 bg-blue-50 p-5">
           <div className="text-[11px] font-black uppercase text-blue-500">Seconde</div>
           <h2 className="text-3xl font-black text-slate-900 m-0">Entraînement</h2>

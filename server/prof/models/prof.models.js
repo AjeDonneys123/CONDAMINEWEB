@@ -212,7 +212,8 @@ const Models = {
         activePersistentDebts: { type: Array, default: [] },
         activeHourWarnings: { type: Array, default: [] },
         classNotification: { type: Object, default: null },
-        classPlanVisible: { type: Boolean, default: false }
+        classPlanVisible: { type: Boolean, default: false },
+        activeTrainingAssignment: { type: mongoose.Schema.Types.Mixed, default: null }
     }),
 
     Student: getModel('Student', StudentSchema),

@@ -62,6 +62,7 @@ export default function StudentsManager({ globalClassId }) {
   const [chapterNameById, setChapterNameById] = useState({});
   const [dnbMethodProgress, setDnbMethodProgress] = useState({});
   const [gptCorrectionsByStudent, setGptCorrectionsByStudent] = useState({});
+  const [trainingAssignment, setTrainingAssignment] = useState(null);
 
   // MODALES
   const [editingSub, setEditingSub] = useState(null); 
@@ -478,7 +479,7 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, lms, exs, fiches, prods, subs, progs, chapters, draftDocs, controls] = await Promise.all([
+        const [sts, clsList, hws, gms, lms, exs, fiches, prods, subs, progs, chapters, draftDocs, controls, training] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
@@ -491,8 +492,10 @@ export default function StudentsManager({ globalClassId }) {
             fetch('/api/games/progress').then(r => r.json()),
             fetch('/api/structure/chapters').then(r => r.ok ? r.json() : []),
             fetch('/api/homework/draft-docs').then(r => r.ok ? r.json() : []),
-            fetch('/api/controls/all').then(r => r.ok ? r.json() : [])
+            fetch('/api/controls/all').then(r => r.ok ? r.json() : []),
+            fetch(`/api/prof/training/class/${encodeURIComponent(globalClassId)}/assignment`).then(r => r.ok ? r.json() : { assignment: null })
         ]);
+        setTrainingAssignment(training?.assignment || null);
 
         const currentClassObj = clsList.find(c => c._id === globalClassId);
         const currentClassName = currentClassObj ? currentClassObj.name : "";
@@ -2068,6 +2071,7 @@ export default function StudentsManager({ globalClassId }) {
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[100px]">Action</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[120px]">Récup contrôle</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[130px]">Réalisations</th>
+                            {trainingAssignment?.items?.length > 0 && <th className="p-4 text-[9px] font-black text-violet-700 uppercase text-center border-b min-w-[130px]">🏋️ Nouvel entraînement</th>}
                             {activities.filter((a) => !a.isPunishment && (a.todoClassrooms || []).some((name) => norm(name) === norm(className))).map(act => (
                                 <th
                                     key={act._id}
@@ -2181,6 +2185,16 @@ export default function StudentsManager({ globalClassId }) {
                                         {real.totals.learning > 0 && <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200">{real.learning}</span>}
                                     </div>
                                 </td>
+                                {trainingAssignment?.items?.length > 0 && <td className="p-2 text-center border-b">
+                                    {(() => {
+                                        const progress = (trainingAssignment.progress || []).find((row) => String(row.studentId) === extractId(s._id));
+                                        const count = Array.isArray(progress?.completedItemIds) ? progress.completedItemIds.length : 0;
+                                        const total = trainingAssignment.items.length;
+                                        const done = Boolean(progress?.completedAt) || count >= total;
+                                        const style = done ? 'border-emerald-300 bg-emerald-100 text-emerald-700' : progress ? 'border-amber-300 bg-amber-100 text-amber-800' : 'border-red-300 bg-red-100 text-red-700';
+                                        return <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black ${style}`}>{done ? 'FINI' : progress ? `COMMENCÉ ${count}/${total}` : 'PAS FAIT'}</span>;
+                                    })()}
+                                </td>}
                                 {activities.filter((a) => !a.isPunishment && (a.todoClassrooms || []).some((name) => norm(name) === norm(className))).map(act => {
                                     const studentNameKey = norm(`${s.firstName || ''} ${s.lastName || ''}`);
                                     const sid = extractId(s._id);
