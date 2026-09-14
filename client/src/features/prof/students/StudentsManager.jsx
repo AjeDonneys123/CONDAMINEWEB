@@ -1737,6 +1737,17 @@ export default function StudentsManager({ globalClassId }) {
                                     {entry.mastered ? <span className="students-gpt-chip is-valid">Validé</span> : null}
                                     <button type="button" onClick={() => handleDeleteGptCorrection(entry)} className="ml-auto rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-black text-red-600 hover:bg-red-600 hover:text-white">🗑️ Supprimer</button>
                                 </div>
+                                {Array.isArray(entry.images) && entry.images.length > 0 && (
+                                    <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        {entry.images.map((image, index) => (
+                                            <a key={`${entry._id || 'copy'}-page-${index}`} href={image.url} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                                                <img src={image.url} alt={`Page ${index + 1} de la copie`} className="block max-h-96 w-full object-contain" />
+                                                <span className="block p-2 text-center text-xs font-black text-slate-500">Page {index + 1}</span>
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
+                                {entry.devoirComplet && <div className="students-gpt-subblock whitespace-pre-wrap"><strong>Copie telle que l’IA l’a comprise :</strong><br />{entry.devoirComplet}</div>}
                                 {entry.message && <h3>{entry.message}</h3>}
                                 {(entry.note ?? entry.score) !== null && (entry.note ?? entry.score) !== undefined && <div className="students-gpt-subblock"><strong>Note :</strong> {entry.note ?? entry.score}/{String(entry.evaluationType || '').toLowerCase() === 'rqp_seconde' ? 20 : 10}</div>}
                                 {entry.sujet && <div className="students-gpt-subblock"><strong>Sujet :</strong> {entry.sujet}</div>}
