@@ -41,6 +41,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const [draggedActivity, setDraggedActivity] = useState(null);
     const [dropChapterId, setDropChapterId] = useState('');
     const [enabledOverrides, setEnabledOverrides] = useState({});
+    const [todoOverrides, setTodoOverrides] = useState({});
     const [chapterActiveOverrides, setChapterActiveOverrides] = useState({});
 
     const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
@@ -160,6 +161,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         if (typeof override === 'boolean') return !override;
         if (item.actType === 'learning' && typeof item.active === 'boolean') return !item.active;
         return item.isEnabled === false;
+    };
+    const isItemTodo = (item = {}) => {
+        const override = todoOverrides[String(item?._id || '')];
+        if (typeof override === 'boolean') return override;
+        const classKey = normalizeClassKey(classFilter);
+        return Boolean(classKey) && (item.todoClassrooms || []).some((name) => normalizeClassKey(name) === classKey);
     };
 
     // --- CHARGEMENT ---
@@ -351,6 +358,33 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
             return;
         }
         if (onRefresh) onRefresh();
+    }
+
+    async function handleToggleActivityTodo(e, item) {
+        e.stopPropagation();
+        if (!item?._id || !classFilter) return;
+        const currentValue = isItemTodo(item);
+        const nextValue = !currentValue;
+        const classKey = normalizeClassKey(classFilter);
+        const todoClassrooms = (item.todoClassrooms || []).filter((name) => normalizeClassKey(name) !== classKey);
+        if (nextValue) todoClassrooms.push(classFilter);
+        const base = getActivityApiBase(item.actType);
+        if (!base) return;
+        setTodoOverrides((previous) => ({ ...previous, [String(item._id)]: nextValue }));
+        const payload = { ...item, todoClassrooms };
+        delete payload.actType;
+        delete payload.typeLabel;
+        const response = await fetch(base, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            setTodoOverrides((previous) => ({ ...previous, [String(item._id)]: currentValue }));
+            alert("Impossible de modifier le statut « À faire ».");
+            return;
+        }
+        if (onRefresh) await onRefresh();
     }
 
     async function handleMoveActivityToChapter(item, targetChapterId) {
@@ -678,6 +712,15 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2 shrink-0 self-start">
+                                                    {['homework', 'game', 'learning', 'expose', 'fiche', 'production'].includes(it.actType) && (
+                                                        <button
+                                                            onClick={(e) => handleToggleActivityTodo(e, it)}
+                                                            className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${isItemTodo(it) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200'}`}
+                                                            title={`Afficher ou masquer cette activité dans le suivi de ${classFilter}`}
+                                                        >
+                                                            {isItemTodo(it) ? '✓ À FAIRE' : 'À FAIRE'}
+                                                        </button>
+                                                    )}
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
                                                     {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose' || it.actType === 'lecture' || it.actType === 'fiche' || it.actType === 'production') && (
                                                         <button

@@ -74,7 +74,10 @@ router.get('/fifth-grade-scales', async (_req, res) => {
 
 router.get('/fifth-grade-scales/image/:id', async (req, res) => {
     try {
-        const document = await TrainingConfig.findOne({ key: SCALE_CONFIG_KEY }).select('images').lean();
+        const document = await TrainingConfig.findOne(
+            { key: SCALE_CONFIG_KEY, 'images.id': req.params.id },
+            { images: { $elemMatch: { id: req.params.id } } }
+        ).lean();
         const image = (document?.images || []).find((entry) => entry.id === req.params.id);
         if (!image) return res.status(404).end();
         res.setHeader('Content-Type', image.contentType || 'image/png');

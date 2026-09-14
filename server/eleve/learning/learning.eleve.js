@@ -920,7 +920,11 @@ router.get('/list/:studentId', async (req, res) => {
         // Répare paresseusement les anciennes questions dès leur prochaine
         // consultation. La réponse envoyée à l'élève est déjà corrigée, sans
         // attendre l'écriture MongoDB.
-        if (repairs.length > 0) await LearningModule.bulkWrite(repairs, { ordered: false });
+        if (repairs.length > 0) {
+            LearningModule.bulkWrite(repairs, { ordered: false }).catch((error) => {
+                console.error('Learning lazy repair error:', error);
+            });
+        }
 
         const modules = rawModules.filter(m => {
             if (forGames) return true;

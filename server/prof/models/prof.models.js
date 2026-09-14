@@ -221,6 +221,7 @@ const Models = {
         teacherId: mongoose.Schema.Types.ObjectId, levels: Array,
         assignedStudents: [mongoose.Schema.Types.ObjectId], isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         date: { type: Date, default: Date.now }
     }),
 
@@ -234,6 +235,7 @@ const Models = {
         questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         // MIROIR
         scenes: { type: Array, default: [] }, 
         generatedCode: { type: String, default: "" },
@@ -251,6 +253,7 @@ const Models = {
         isAllClass: { type: Boolean, default: true },
         active: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         presentationUrl: { type: String, default: '' },
         presentationSourceUrl: { type: String, default: '' },
         generalSheetDocUrl: { type: String, default: '' },
@@ -336,6 +339,7 @@ const Models = {
         assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         presentations: {
             type: [{
                 studentId: mongoose.Schema.Types.ObjectId,
@@ -425,6 +429,7 @@ const Models = {
         assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         readingUrl: { type: String, default: '' },
         maxScrollSpeed: { type: Number, default: 2600 },
         readingWpm: { type: Number, default: 300 },
@@ -466,6 +471,7 @@ const Models = {
         assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         presentationUrl: { type: String, default: '' },
         selectedSlides: { type: [Number], default: [] },
         teacherInstructions: { type: String, default: '' },
@@ -496,6 +502,7 @@ const Models = {
         assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        todoClassrooms: { type: [String], default: [] },
         presentationUrl: { type: String, default: '' },
         selectedSlides: { type: [Number], default: [] },
         teacherInstructions: { type: String, default: '' },

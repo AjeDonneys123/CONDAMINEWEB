@@ -646,7 +646,10 @@ export default function StudentsManager({ globalClassId }) {
         progs.forEach(prog => {
             const sid = extractId(prog.studentId);
             const gid = extractId(prog.gameId);
-            map[`${sid}_${gid}`] = { done: true, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ', levelReached: Number(prog.levelReached || 0) };
+            const game = gms.find((row) => extractId(row._id) === gid);
+            const totalLevels = Math.max(1, Number(game?.levels?.length || 1));
+            const levelReached = Number(prog.levelReached || 0);
+            map[`${sid}_${gid}`] = { started: true, done: levelReached >= totalLevels, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ', levelReached };
         });
         lms.forEach((lm) => {
             const lmId = extractId(lm._id);
@@ -654,7 +657,8 @@ export default function StudentsManager({ globalClassId }) {
                 const sid = extractId(c.studentId);
                 if (!sid || !lmId) return;
                 map[`${sid}_${lmId}`] = {
-                    done: true,
+                    started: true,
+                    done: Boolean(c.completedAt),
                     score: `STEP ${Number(c.currentStep || 0)}`,
                     currentStep: Number(c.currentStep || 0)
                 };
@@ -666,7 +670,8 @@ export default function StudentsManager({ globalClassId }) {
                 const sid = extractId(p.studentId);
                 if (!sid || !exposeId) return;
                 map[`${sid}_${exposeId}`] = {
-                    done: true,
+                    started: true,
+                    done: Boolean(p.recordingUrl || p.slidesText),
                     score: '🎤',
                     presentation: {
                         canvasUrl: p.canvasUrl || '',
@@ -684,7 +689,8 @@ export default function StudentsManager({ globalClassId }) {
                 if (!sid || !ficheId) return;
                 map[`${sid}_${ficheId}`] = {
                     // Nouvelle règle: toute sauvegarde, même incomplète, est visible côté prof.
-                    done: true,
+                    started: true,
+                    done: Boolean(sub.completedAt),
                     score: 'FICHE',
                     fiche: {
                         title: fiche.title || 'Fiche',
@@ -706,7 +712,8 @@ export default function StudentsManager({ globalClassId }) {
                 if (!sid || !prodId) return;
                 map[`${sid}_${prodId}`] = {
                     // Nouvelle règle: toute autosauvegarde ou sauvegarde manuelle apparaît côté prof.
-                    done: true,
+                    started: true,
+                    done: Boolean(sub.completedAt),
                     score: prod.productionType === 'qcm'
                         ? `${Number(sub.score || 0)} QCM`
                         : (prod.productionType === 'questionnaire' ? `${Array.isArray(sub.answers) ? sub.answers.length : 0} questions` : 'FICHE'),
@@ -2061,7 +2068,7 @@ export default function StudentsManager({ globalClassId }) {
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[100px]">Action</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[120px]">Récup contrôle</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[130px]">Réalisations</th>
-                            {activities.filter(a => !a.isPunishment).map(act => (
+                            {activities.filter((a) => !a.isPunishment && (a.todoClassrooms || []).some((name) => norm(name) === norm(className))).map(act => (
                                 <th
                                     key={act._id}
                                     className={`p-4 text-[9px] font-black text-slate-600 uppercase text-center border-b min-w-[100px] max-w-[170px] ${isBoardActivity(act) ? 'students-activity-head is-clickable' : ''}`}
@@ -2174,7 +2181,7 @@ export default function StudentsManager({ globalClassId }) {
                                         {real.totals.learning > 0 && <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200">{real.learning}</span>}
                                     </div>
                                 </td>
-                                {activities.filter(a => !a.isPunishment).map(act => {
+                                {activities.filter((a) => !a.isPunishment && (a.todoClassrooms || []).some((name) => norm(name) === norm(className))).map(act => {
                                     const studentNameKey = norm(`${s.firstName || ''} ${s.lastName || ''}`);
                                     const sid = extractId(s._id);
                                     const aid = extractId(act._id);
@@ -2203,7 +2210,11 @@ export default function StudentsManager({ globalClassId }) {
                                                     >
                                                         {status.score || 'OK'}
                                                     </button>
-                                                ) : <div className="text-slate-200 text-xs">•</div>}
+                                                ) : status || status?.started ? (
+                                                    <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[10px] font-black text-amber-800" title="Activité commencée mais non terminée">COMMENCÉ</span>
+                                                ) : (
+                                                    <span className="inline-flex items-center rounded-full border border-red-300 bg-red-100 px-3 py-1 text-[10px] font-black text-red-700" title="Activité non commencée">PAS FAIT</span>
+                                                )}
                                                 {act.type === 'learning' && (
                                                     <button
                                                         type="button"

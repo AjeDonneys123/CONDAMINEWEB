@@ -5,7 +5,7 @@ import LearningWorkspace from './LearningWorkspace';
 export default function LearningList({ user, openItemId = '', onOpenHandled }) {
     const [modules, setModules] = useState([]);
     const [selected, setSelected] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const loadData = async () => {
         setLoading(true);
@@ -57,7 +57,14 @@ export default function LearningList({ user, openItemId = '', onOpenHandled }) {
                     {loading ? '...' : '🔄 ACTUALISER'}
                 </button>
             </div>
-            <DashboardFolder items={modules} type="learning" onSelect={setSelected} />
+            {loading && modules.length === 0 ? (
+                <div className="mx-4 flex min-h-[320px] flex-col items-center justify-center rounded-3xl border-2 border-emerald-100 bg-white/70 text-center">
+                    <div className="text-5xl animate-pulse">🧠</div>
+                    <div className="mt-4 text-sm font-black uppercase tracking-wide text-emerald-700">Chargement des apprentissages…</div>
+                </div>
+            ) : (
+                <DashboardFolder items={modules} type="learning" onSelect={setSelected} />
+            )}
         </div>
     );
 }
