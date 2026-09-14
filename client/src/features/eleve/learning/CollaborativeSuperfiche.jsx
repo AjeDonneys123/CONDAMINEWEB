@@ -291,15 +291,24 @@ export default function CollaborativeSuperfiche({
                                 <div className="px-5 py-2.5 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2.5">
                                         {(() => {
-                                            const rawTitle = String(p.title || '').trim();
-                                            const romanMatch = rawTitle.match(/^([IVX]+)\./i);
-                                            const badgeLabel = romanMatch
-                                                ? `Partie ${romanMatch[1].toUpperCase()}`
-                                                : /QCM/i.test(rawTitle)
-                                                    ? 'QCM de révision'
-                                                    : /LEÇON\s*(\d+)/i.test(rawTitle)
-                                                        ? `Leçon ${rawTitle.match(/LEÇON\s*(\d+)/i)[1]}`
-                                                        : `Partie ${pIndex + 1}`;
+                                            let badgeLabel = `Partie ${pIndex + 1}`;
+                                            if (p.romanPart && p.subpart) {
+                                                badgeLabel = `Partie ${p.romanPart} · Sous-partie ${p.subpart}`;
+                                            } else if (p.romanPart) {
+                                                badgeLabel = `Partie ${p.romanPart}`;
+                                            } else if (p.subpart) {
+                                                badgeLabel = `Sous-partie ${p.subpart}`;
+                                            } else {
+                                                const rawTitle = String(p.title || '').trim();
+                                                const romanMatch = rawTitle.match(/^([IVX]+)\./i);
+                                                if (romanMatch) {
+                                                    badgeLabel = `Partie ${romanMatch[1].toUpperCase()}`;
+                                                } else if (/QCM/i.test(rawTitle)) {
+                                                    badgeLabel = 'QCM de révision';
+                                                } else if (/LEÇON\s*(\d+)/i.test(rawTitle)) {
+                                                    badgeLabel = `Leçon ${rawTitle.match(/LEÇON\s*(\d+)/i)[1]}`;
+                                                }
+                                            }
                                             return (
                                                 <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-900 text-xs font-black tracking-wide uppercase">
                                                     {badgeLabel}
@@ -546,7 +555,7 @@ export default function CollaborativeSuperfiche({
                                             className="w-full py-2.5 px-4 rounded-xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-white/70 hover:bg-indigo-50/50 text-indigo-700 hover:text-indigo-900 text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs group"
                                         >
                                             <span className="w-5 h-5 rounded-full bg-indigo-100 group-hover:bg-indigo-200 text-indigo-700 flex items-center justify-center text-xs">➕</span>
-                                            <span>Injecter une modification ou un complément sur cette partie</span>
+                                            <span>{p.subpart ? `Injecter sur la sous-partie ${p.subpart}` : 'Injecter une modification ou un complément sur cette partie'}</span>
                                         </button>
                                     )}
                                 </div>

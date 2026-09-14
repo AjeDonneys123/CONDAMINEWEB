@@ -28,6 +28,8 @@ const ParagraphSchema = new mongoose.Schema({
     baseText: { type: String, default: '' },
     baseHtml: { type: String, default: '' },
     order: { type: Number, default: 0 },
+    romanPart: { type: String, default: '' },
+    subpart: { type: String, default: '' },
     authorRole: { type: String, enum: ['teacher', 'student'], default: 'teacher' },
     createdById: { type: mongoose.Schema.Types.ObjectId, default: null },
     createdByName: { type: String, default: '' },

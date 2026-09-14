@@ -1646,6 +1646,8 @@ const splitHtmlIntoSections = (html = '', fallbackText = '') => {
             baseText: chunk,
             baseHtml: '',
             order: idx,
+            romanPart: '',
+            subpart: '',
             authorRole: 'teacher',
             baseComments: [],
             contributions: []
@@ -1665,6 +1667,8 @@ const splitHtmlIntoSections = (html = '', fallbackText = '') => {
             baseText: fallbackText || rawHtml.replace(/<[^>]+>/g, ' ').trim(),
             baseHtml: rawHtml,
             order: 0,
+            romanPart: '',
+            subpart: '',
             authorRole: 'teacher',
             baseComments: [],
             contributions: []
@@ -1674,24 +1678,50 @@ const splitHtmlIntoSections = (html = '', fallbackText = '') => {
     const sections = [];
     let currentHtml = [];
     let currentTitle = '';
+    let currentRoman = '';
+    let currentSubpart = '';
+    let inQcm = false;
 
-    blocks.forEach((block) => {
+    for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
         const textOnly = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        const isRomanHeading = /^[IVX]+\.\s*/i.test(textOnly);
-        const isQcmHeader = /^QCM\s+DE\s+RÉVISION/i.test(textOnly);
-        const isLecon = /^LEÇON\s+\d+/i.test(textOnly);
+        if (!textOnly) continue;
+
         const isChapter = /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(textOnly);
+        const isRomanHeading = /^[IVX]+[\.\-\)]\s*/i.test(textOnly);
+        const isNumberedSubpart = /^\d+[\.\-\)]\s*/i.test(textOnly);
+        const isLetterSubpart = /^[A-Z][\.\-\)]\s*/i.test(textOnly) && !/^[IVX]+[\.\-\)]\s*/i.test(textOnly);
+        const isSubpart = isNumberedSubpart || isLetterSubpart;
+        const isQcmHeader = /^QCM\s+DE\s+RÉVISION/i.test(textOnly);
 
-        // A new section begins on a Roman numeral (I., II., III.),
-        // on QCM DE RÉVISION, or on a LEÇON (unless already in a QCM group)
-        const shouldStartNewSection = (isRomanHeading || isQcmHeader || (isLecon && !currentHtml.some(b => /QCM/i.test(b))))
-            && currentHtml.length > 0
-            && !currentHtml.every(b => /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(b.replace(/<[^>]+>/g, ' ').trim()));
+        if (isQcmHeader) inQcm = true;
 
-        if (shouldStartNewSection) {
+        let shouldSplit = false;
+
+        if (inQcm) {
+            if (isQcmHeader && currentHtml.length > 0) {
+                shouldSplit = true;
+            }
+        } else if (isRomanHeading) {
+            if (currentHtml.length > 0 && !currentHtml.every(b => /^(?:CH\d+:|CHAPITRE\s*\d*)/i.test(b.replace(/<[^>]+>/g, ' ').trim()))) {
+                shouldSplit = true;
+            }
+        } else if (isSubpart) {
+            const hasSubpartAlready = currentHtml.some(b => {
+                const t = b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                return (/^\d+[\.\-\)]\s*/i.test(t) || (/^[A-Z][\.\-\)]\s*/i.test(t) && !/^[IVX]+[\.\-\)]\s*/i.test(t)));
+            });
+            if (hasSubpartAlready) {
+                shouldSplit = true;
+            }
+        }
+
+        if (shouldSplit) {
             sections.push({
                 paragraphId: `p_${sections.length}`,
                 title: currentTitle || `Section ${sections.length + 1}`,
+                romanPart: currentRoman,
+                subpart: currentSubpart,
                 baseHtml: currentHtml.join(''),
                 baseText: currentHtml.map(b => b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n'),
                 order: sections.length,
@@ -1700,18 +1730,42 @@ const splitHtmlIntoSections = (html = '', fallbackText = '') => {
                 contributions: []
             });
             currentHtml = [block];
-            currentTitle = textOnly;
+            if (isRomanHeading) {
+                const rMatch = textOnly.match(/^([IVX]+)/i);
+                currentRoman = rMatch ? rMatch[1].toUpperCase() : '';
+                currentSubpart = '';
+                currentTitle = textOnly;
+            } else if (isSubpart) {
+                const sMatch = textOnly.match(/^([0-9]+|[A-Z])/i);
+                currentSubpart = sMatch ? sMatch[1].toUpperCase() : '';
+                currentTitle = textOnly;
+            } else if (isQcmHeader) {
+                currentRoman = '';
+                currentSubpart = '';
+                currentTitle = 'QCM DE RÉVISION';
+            } else {
+                currentTitle = textOnly;
+            }
         } else {
+            if (isRomanHeading) {
+                const rMatch = textOnly.match(/^([IVX]+)/i);
+                currentRoman = rMatch ? rMatch[1].toUpperCase() : '';
+            } else if (isSubpart) {
+                const sMatch = textOnly.match(/^([0-9]+|[A-Z])/i);
+                currentSubpart = sMatch ? sMatch[1].toUpperCase() : '';
+            }
             if (!currentTitle && textOnly && !isChapter) currentTitle = textOnly;
-            if (isRomanHeading || isQcmHeader) currentTitle = textOnly;
+            else if (isSubpart && (!currentTitle || isRomanHeading)) currentTitle = textOnly;
             currentHtml.push(block);
         }
-    });
+    }
 
     if (currentHtml.length > 0) {
         sections.push({
             paragraphId: `p_${sections.length}`,
             title: currentTitle || `Section ${sections.length + 1}`,
+            romanPart: inQcm ? '' : currentRoman,
+            subpart: inQcm ? '' : currentSubpart,
             baseHtml: currentHtml.join(''),
             baseText: currentHtml.map(b => b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n'),
             order: sections.length,
@@ -1766,7 +1820,11 @@ router.get('/:moduleId/collaborative-sheet/:stepId', async (req, res) => {
                 updatedAt: new Date()
             });
             sheet = created.toObject();
-        } else if (step.sheetTextHtml && (sheet.paragraphs?.length < 3 || sheet.paragraphs.length > 5 || sheet.paragraphs.some(p => !p.baseHtml || (p.title?.startsWith('CH') && p.baseHtml.length < 60)) || sheet.baseSheetHtml !== step.sheetTextHtml)) {
+        } else if (step.sheetTextHtml && (
+            sheet.baseSheetHtml !== step.sheetTextHtml ||
+            sheet.paragraphs?.length < 3 ||
+            sheet.paragraphs.some(p => !p.baseHtml || (p.title?.startsWith('CH') && p.baseHtml.length < 60) || (!p.subpart && /^\s*(\d+|[A-Z])[\.\-\)]/m.test(p.baseText)))
+        )) {
             const freshSections = splitHtmlIntoSections(step.sheetTextHtml, step.sheetText);
             const existingContribsByPId = new Map();
             (sheet.paragraphs || []).forEach(p => {

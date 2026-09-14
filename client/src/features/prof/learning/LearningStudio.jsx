@@ -5369,6 +5369,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         } : null);
         const masterSheet = {
             ...emptyStep('sheet'),
+            id: previousMaster?.id || uid(),
             sectionId: finalSection.id,
             title: `Superfiche générale · ${parsed.documentTitle}`,
             sheetText: importText,
@@ -5469,6 +5470,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setActiveStep(0);
         setShowGeneralSheetBuilder(false);
         if (formData._id) {
+            fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/structure`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sections, steps: orderedSteps })
+            }).catch((err) => console.error('Erreur auto-sauvegarde structure:', err));
             api.post(`/learning/${formData._id}/sync-scenes`).catch(() => {});
         }
         if (formData.generalSheetCourseId) {
