@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.34';
+  const BRIDGE_VERSION = '1.0.36';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -1086,17 +1086,39 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             return;
         }
 
-        const digitsEl = widget.querySelector('.conda-timer-digits');
-        if (digitsEl) {
-            digitsEl.textContent = formatTimerTime(timerRemainingSeconds);
-            if (timerAlarmPlaying) {
-                digitsEl.style.color = '#ef4444';
-            } else if (timerIsRunning) {
-                digitsEl.style.color = '#38bdf8';
-            } else {
-                digitsEl.style.color = '#f8fafc';
+        const minInput = widget.querySelector('.conda-timer-min-input');
+        const secDigits = widget.querySelector('.conda-timer-sec-digits');
+        const colonEl = widget.querySelector('.conda-timer-colon');
+
+        const s = Math.max(0, Math.floor(timerRemainingSeconds));
+        const mins = Math.floor(s / 60);
+        const secs = s % 60;
+
+        if (minInput) {
+            const isEditing = (document.activeElement === minInput) || (root?.activeElement === minInput);
+            if (!isEditing) {
+                minInput.value = String(mins).padStart(2, '0');
+                minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
             }
         }
+        if (secDigits) {
+            secDigits.textContent = String(secs).padStart(2, '0');
+        }
+
+        const digitsColor = timerAlarmPlaying ? '#ef4444' : (timerIsRunning ? '#38bdf8' : '#f8fafc');
+        if (minInput) minInput.style.color = digitsColor;
+        if (secDigits) secDigits.style.color = digitsColor;
+        if (colonEl) colonEl.style.color = digitsColor;
+
+        const presetBtns = widget.querySelectorAll('.conda-timer-preset-btn');
+        presetBtns.forEach(btn => {
+            const sec = parseInt(btn.dataset.sec, 10);
+            if (sec === timerTotalSeconds && !timerIsRunning) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
 
         const statusEl = widget.querySelector('.conda-timer-status');
         if (statusEl) {
@@ -1341,7 +1363,74 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
         const digits = document.createElement('div');
         digits.className = 'conda-timer-digits';
-        digits.textContent = formatTimerTime(timerRemainingSeconds);
+
+        const minInput = document.createElement('input');
+        minInput.type = 'number';
+        minInput.className = 'conda-timer-min-input';
+        minInput.min = '0';
+        minInput.max = '999';
+        const initialMin = Math.floor(Math.max(0, timerRemainingSeconds) / 60);
+        minInput.value = String(initialMin).padStart(2, '0');
+        minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
+        minInput.title = 'Entrer les minutes au clavier';
+
+        minInput.onpointerdown = (e) => e.stopPropagation();
+        minInput.onmousedown = (e) => e.stopPropagation();
+        minInput.onfocus = () => { minInput.select(); };
+
+        const applyMinInput = (formatPad = false) => {
+            const raw = minInput.value.trim();
+            if (raw === '') {
+                if (formatPad) {
+                    const s = Math.max(0, Math.floor(timerRemainingSeconds));
+                    minInput.value = String(Math.floor(s / 60)).padStart(2, '0');
+                    minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
+                }
+                return;
+            }
+            const val = parseInt(raw, 10);
+            if (!Number.isFinite(val) || val < 0) return;
+            const newMin = Math.min(999, Math.max(0, val));
+            stopTimerAlarm();
+            const currentSec = Math.max(0, Math.floor(timerRemainingSeconds)) % 60;
+            if (timerIsRunning) {
+                timerRemainingSeconds = (newMin * 60) + currentSec;
+                timerTotalSeconds = Math.max(timerTotalSeconds, timerRemainingSeconds);
+            } else {
+                timerTotalSeconds = (newMin * 60) + currentSec;
+                timerRemainingSeconds = timerTotalSeconds;
+            }
+            if (formatPad) {
+                minInput.value = String(newMin).padStart(2, '0');
+            }
+            minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
+            updateTimerDisplay();
+            updateTimerDockButton();
+        };
+
+        minInput.oninput = () => applyMinInput(false);
+        minInput.onchange = () => applyMinInput(true);
+        minInput.onblur = () => applyMinInput(true);
+        minInput.onkeydown = (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                minInput.blur();
+            }
+        };
+        minInput.onkeyup = (e) => e.stopPropagation();
+        minInput.onkeypress = (e) => e.stopPropagation();
+
+        const colon = document.createElement('span');
+        colon.className = 'conda-timer-colon';
+        colon.textContent = ':';
+
+        const secDigits = document.createElement('span');
+        secDigits.className = 'conda-timer-sec-digits';
+        const initialSec = Math.max(0, Math.floor(timerRemainingSeconds)) % 60;
+        secDigits.textContent = String(initialSec).padStart(2, '0');
+
+        digits.append(minInput, colon, secDigits);
 
         const status = document.createElement('div');
         status.className = 'conda-timer-status';
@@ -1368,6 +1457,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         presets.forEach(({ label, sec }) => {
             const btn = document.createElement('button');
             btn.type = 'button';
+            btn.dataset.sec = String(sec);
             btn.className = `conda-timer-preset-btn ${timerTotalSeconds === sec ? 'active' : ''}`;
             btn.textContent = label;
             btn.onclick = () => {
@@ -1382,62 +1472,23 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         });
         widget.appendChild(presetsRow);
 
-        // Custom time definition row (Entrer des minutes libres)
-        const customRow = document.createElement('div');
-        customRow.className = 'conda-timer-custom-row';
-
-        const customInput = document.createElement('input');
-        customInput.type = 'number';
-        customInput.className = 'conda-timer-custom-input';
-        customInput.min = '1';
-        customInput.max = '180';
-        customInput.placeholder = 'Minutes libres (ex: 8)…';
-        customInput.title = 'Entrer une durée en minutes et valider';
-
-        const customBtn = document.createElement('button');
-        customBtn.type = 'button';
-        customBtn.className = 'conda-timer-custom-btn';
-        customBtn.textContent = 'DÉFINIR';
-
-        const applyCustom = () => {
-            const val = parseInt(customInput.value, 10);
-            if (!Number.isFinite(val) || val <= 0) return;
-            stopTimerAlarm();
-            timerTotalSeconds = val * 60;
-            timerRemainingSeconds = timerTotalSeconds;
-            timerIsRunning = false;
-            customInput.value = '';
-            renderTimerWidget(root);
-            updateTimerDockButton();
-        };
-
-        customBtn.onclick = applyCustom;
-        customInput.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                applyCustom();
-            }
-        };
-
-        customRow.append(customInput, customBtn);
-        widget.appendChild(customRow);
-
-        // Modulation Buttons (-1m, -30s, +30s, +1m)
+        // Modulation Buttons (-2m, -1m, +1m, +2m)
         const modRow = document.createElement('div');
         modRow.className = 'conda-timer-mod-row';
 
         const modButtons = [
-            { label: '- 1m', delta: -60 },
-            { label: '- 30s', delta: -30 },
-            { label: '+ 30s', delta: +30 },
-            { label: '+ 1m', delta: +60 }
+            { label: '- 2m', delta: -120, is2m: true, title: 'Retirer 2 minutes' },
+            { label: '- 1m', delta: -60, is2m: false, title: 'Retirer 1 minute' },
+            { label: '+ 1m', delta: +60, is2m: false, title: 'Ajouter 1 minute' },
+            { label: '+ 2m', delta: +120, is2m: true, title: 'Ajouter 2 minutes' }
         ];
 
-        modButtons.forEach(({ label, delta }) => {
+        modButtons.forEach(({ label, delta, is2m, title }) => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'conda-timer-mod-btn';
+            btn.className = `conda-timer-mod-btn ${is2m ? 'conda-timer-mod-2m' : 'conda-timer-mod-1m'}`;
             btn.textContent = label;
+            btn.title = title;
             btn.onclick = () => {
                 stopTimerAlarm();
                 if (timerIsRunning) {
@@ -1447,7 +1498,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                         triggerTimerAlarm();
                     }
                 } else {
-                    timerTotalSeconds = Math.max(10, timerTotalSeconds + delta);
+                    timerTotalSeconds = Math.max(0, timerTotalSeconds + delta);
                     timerRemainingSeconds = timerTotalSeconds;
                 }
                 updateTimerDisplay();
@@ -2001,15 +2052,15 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 const card = document.createElement('div');
                 const seatX = Math.max(0, Math.min(cols - 1, Number(s.seatX)));
                 const seatY = Math.max(0, Math.min(rows - 1, Number(s.seatY)));
-                card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 6px 10px; background: #ffffff; border: 3px solid #94a3b8; border-radius: 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);`;
+                card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 6px 10px; background: #ffffff !important; color: #000000 !important; border: 3px solid #94a3b8; border-radius: 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);`;
                             
                 const sName = document.createElement('strong');
-                sName.style.cssText = 'display: block; font-size: clamp(16px, 2.2vw, 32px); font-weight: 950; line-height: 1.15; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;';
+                sName.style.cssText = 'display: block; font-size: clamp(16px, 2.2vw, 32px); font-weight: 950; line-height: 1.15; color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;';
                 sName.textContent = String(s.nickname || s.firstName || '').trim();
                 card.appendChild(sName);
 
                 const initial = document.createElement('span');
-                initial.style.cssText = 'display: block; font-size: clamp(12px, 1.2vw, 18px); color: #64748b; font-weight: 900; margin-top: 2px;';
+                initial.style.cssText = 'display: block; font-size: clamp(12px, 1.2vw, 18px); color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; font-weight: 900; margin-top: 2px;';
                 initial.textContent = `${String(s.lastName || '').slice(0, 1)}.`;
                 card.appendChild(initial);
 

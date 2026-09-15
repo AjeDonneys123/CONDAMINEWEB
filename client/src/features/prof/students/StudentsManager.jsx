@@ -759,7 +759,7 @@ export default function StudentsManager({ globalClassId }) {
 
   const handleRemovePunishment = async (hwId, sId) => {
       if(!confirm("Annuler cette punition pour l'élève ?")) return;
-      await fetch('/api/homework/remove-punishment', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ homeworkId: hwId, studentId: sId }) });
+      await fetch('/api/homework/remove-punishment', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ homeworkId: hwId, studentId: sId, classId: globalClassId }) });
       // On recharge la matrice pour mettre à jour la vue
       loadMatrix();
       setViewingStudent(null); // On ferme la modale pour rafraîchir

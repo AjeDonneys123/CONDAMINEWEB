@@ -1,7 +1,7 @@
 // @signatures: ProfHomeworkRouter, listAll, create, delete, getOne
 const express = require('express');
 const router = express.Router();
-const { Homework, Submission, Student, HomeworkDraftDoc } = require('../models/prof.models');
+const { Homework, Submission, Student, Classroom, HomeworkDraftDoc } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const AIEngine = require('../../core/ai.engine');
 const multer = require('multer');
@@ -168,12 +168,69 @@ router.put('/submission/:id', async (req, res) => {
 
 router.post('/remove-punishment', async (req, res) => {
     try {
-        const { homeworkId, studentId } = req.body || {};
+        const { homeworkId, studentId, classId } = req.body || {};
         await Homework.findByIdAndUpdate(homeworkId, { $pull: { assignedStudents: studentId } });
-        await Student.findByIdAndUpdate(studentId, {
-            $set: { punishmentStatus: 'NONE', punishmentDueDate: null }
-        });
-        res.json({ ok: true });
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ error: 'Élève introuvable' });
+
+        let restoredPoints = 0;
+        let restoredScore = null;
+        const records = Array.isArray(student.behaviorRecords) ? student.behaviorRecords : [];
+        for (let recordIndex = records.length - 1; recordIndex >= 0 && !restoredPoints; recordIndex -= 1) {
+            const scores = Array.isArray(records[recordIndex]?.scores) ? records[recordIndex].scores : [];
+            for (let scoreIndex = scores.length - 1; scoreIndex >= 0; scoreIndex -= 1) {
+                const score = scores[scoreIndex];
+                if (!score?.punishment) continue;
+                const previous = Number(score.value || 0);
+                const penalty = Math.max(0, Number(score.penaltyAmount || 0));
+                restoredPoints = Math.min(9, penalty || 9);
+                score.value = Math.max(0, Math.min(20, previous + restoredPoints));
+                score.penaltyAmount = Math.max(0, penalty - restoredPoints);
+                score.punishment = false;
+                score.punishmentText = '';
+                restoredScore = Number(score.value);
+                records[recordIndex].selectedScoreId = String(score.id || score._id || '');
+                break;
+            }
+        }
+        student.punishmentStatus = 'NONE';
+        student.punishmentDueDate = null;
+        student.punishmentLateMailSentAt = null;
+        student.punishmentLateMailTo = '';
+        student.punishmentLateMailError = '';
+        student.markModified('behaviorRecords');
+        await student.save();
+
+        if (classId && restoredPoints) {
+            const displayName = String(student.nickname || '').trim()
+                || `${String(student.firstName || '').trim()} ${String(student.lastName || '').trim().slice(0, 1)}.`.trim();
+            const now = new Date();
+            const alertId = `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
+            const alert = {
+                id: alertId,
+                message: `Punition faite · ${displayName} +${restoredPoints}`,
+                type: 'positive',
+                studentId: String(student._id),
+                studentName: displayName,
+                pointsDelta: restoredPoints,
+                score: restoredScore,
+                createdAt: now
+            };
+            await Classroom.updateOne(
+                { _id: classId },
+                {
+                    $set: {
+                        activeStudentBonusAlert: alert.message,
+                        activeStudentBonusAlertTime: now,
+                        scoreAlertReplayId: alertId
+                    },
+                    $inc: { scoreAlertSyncVersion: 1 },
+                    $push: { activeScoreAlerts: { $each: [alert], $slice: -6 } },
+                    $pull: { activePersistentDebts: { studentId: String(student._id) } }
+                }
+            );
+        }
+        res.json({ ok: true, restoredPoints, score: restoredScore });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

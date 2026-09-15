@@ -775,17 +775,15 @@ router.post('/behavior', async (req, res) => {
             } else {
                 const field = type === 'TOGGLE_SCORE_PUNISHMENT' ? 'punishment' : 'workIncomplete';
                 const penaltyDelta = type === 'TOGGLE_SCORE_INCOMPLETE' ? 6 : 9;
-                const hadPenaltyReason = Boolean(score.punishment || score.workIncomplete);
+                const wasActive = Boolean(score[field]);
                 score[field] = !Boolean(score[field]);
-                const hasPenaltyReason = Boolean(score.punishment || score.workIncomplete);
                 const prevValue = Number(score.value || 0);
-                if (!hadPenaltyReason && hasPenaltyReason) {
+                if (!wasActive && score[field]) {
                     score.value = Math.max(0, Math.min(20, Number(score.value || 0) - penaltyDelta));
-                    score.penaltyAmount = penaltyDelta;
-                } else if (hadPenaltyReason && !hasPenaltyReason) {
-                    const restoreAmount = Math.max(0, Number(score.penaltyAmount || penaltyDelta));
-                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) + restoreAmount));
-                    score.penaltyAmount = 0;
+                    score.penaltyAmount = Math.max(0, Number(score.penaltyAmount || 0)) + penaltyDelta;
+                } else if (wasActive && !score[field]) {
+                    score.value = Math.max(0, Math.min(20, Number(score.value || 0) + penaltyDelta));
+                    score.penaltyAmount = Math.max(0, Number(score.penaltyAmount || penaltyDelta) - penaltyDelta);
                 }
                 appliedClassPointDelta = Number(score.value) - prevValue;
                 if (field === 'workIncomplete' && !score.workIncomplete) {
@@ -812,6 +810,13 @@ router.post('/behavior', async (req, res) => {
                         s.punishmentDueDate = null;
                         r.punishmentText = '';
                         resetLateMailState(s);
+                        try {
+                            const { Homework } = require('../models/prof.models');
+                            await Homework.updateMany(
+                                { isPunishment: true, assignedStudents: s._id },
+                                { $pull: { assignedStudents: s._id } }
+                            );
+                        } catch (_) {}
                     }
                 }
             }
@@ -915,7 +920,7 @@ router.post('/behavior', async (req, res) => {
 
         s.markModified('behaviorRecords');
         await s.save();
-        const scoreClassId = String(extraData?.classId || '').trim();
+        const scoreClassId = String(extraData?.classId || req.body?.classId || s?.classId || '').trim();
         if (scoreClassId && mongoose.Types.ObjectId.isValid(scoreClassId) && ['TOGGLE_SCORE_PUNISHMENT', 'TOGGLE_SCORE_INCOMPLETE', 'TOGGLE_SCORE_WARNING'].includes(type)) {
             const classroomForDebts = await Classroom.findById(scoreClassId);
             if (classroomForDebts) {
@@ -977,6 +982,14 @@ router.post('/behavior', async (req, res) => {
                         message = `Punition · ${displayName} −9`;
                         alertType = 'negative';
                         alertScore = targetScoreValue;
+                    } else {
+                        const restoredDelta = appliedClassPointDelta > 0 ? appliedClassPointDelta : 9;
+                        const restored = Number.isInteger(restoredDelta)
+                            ? String(restoredDelta)
+                            : restoredDelta.toFixed(1).replace('.', ',');
+                        message = `Punition faite · ${displayName} +${restored}`;
+                        alertType = 'positive';
+                        alertScore = targetScoreValue;
                     }
                 } else if (type === 'ADD_PUNISHMENT') {
                     message = `Punition : ${displayName}`;
@@ -988,7 +1001,11 @@ router.post('/behavior', async (req, res) => {
                         alertType = 'negative';
                         alertScore = targetScoreValue;
                     } else {
-                        message = `Travail validé · ${displayName} +6`;
+                        const restoredDelta = appliedClassPointDelta > 0 ? appliedClassPointDelta : 6;
+                        const restored = Number.isInteger(restoredDelta)
+                            ? String(restoredDelta)
+                            : restoredDelta.toFixed(1).replace('.', ',');
+                        message = `Travail validé · ${displayName} +${restored}`;
                         alertType = 'positive';
                         alertScore = targetScoreValue;
                     }

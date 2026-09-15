@@ -280,10 +280,24 @@
     margin-top: 2px !important;
 }
 
-.conda-slide-timer-widget.minimized .conda-timer-presets-row,
-.conda-slide-timer-widget.minimized .conda-timer-custom-row,
-.conda-slide-timer-widget.minimized .conda-timer-mod-row {
+.conda-slide-timer-widget.minimized .conda-timer-presets-row {
     display: none !important;
+}
+
+.conda-slide-timer-widget.minimized .conda-timer-mod-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 5px !important;
+}
+
+.conda-slide-timer-widget.minimized .conda-timer-mod-2m {
+    display: none !important;
+}
+
+.conda-slide-timer-widget.minimized .conda-timer-mod-btn {
+    padding: 4px 0 !important;
+    font-size: 10.5px !important;
+    border-radius: 6px !important;
 }
 
 .conda-slide-timer-widget.minimized .conda-timer-actions-row {
@@ -383,13 +397,68 @@
 }
 
 .conda-timer-digits {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 46px;
     font-weight: 900;
     font-family: 'SF Mono', 'Roboto Mono', Monaco, Consolas, monospace;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     line-height: 1;
     color: #38bdf8;
     text-shadow: 0 2px 10px rgba(56, 189, 248, 0.3);
+}
+
+.conda-timer-min-input {
+    width: 2.2ch;
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    color: inherit;
+    text-shadow: inherit;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    text-align: right;
+    padding: 0 2px;
+    margin: 0;
+    outline: none;
+    cursor: text;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    -moz-appearance: textfield;
+}
+
+.conda-timer-min-input::-webkit-outer-spin-button,
+.conda-timer-min-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.conda-timer-min-input:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+.conda-timer-min-input:focus {
+    background: rgba(15, 23, 42, 0.95);
+    border-color: #38bdf8;
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+}
+
+.conda-timer-colon {
+    padding: 0 1px;
+    user-select: none;
+    color: inherit;
+    text-shadow: inherit;
+}
+
+.conda-timer-sec-digits {
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    color: inherit;
+    text-shadow: inherit;
+    user-select: none;
 }
 
 .conda-timer-status {
@@ -450,44 +519,6 @@
     background: rgba(124, 58, 237, 0.3);
     border-color: #a78bfa;
     color: #e0e7ff;
-}
-
-.conda-timer-custom-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.conda-timer-custom-input {
-    flex: 1;
-    background: rgba(30, 41, 59, 0.8);
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    border-radius: 8px;
-    padding: 6px 10px;
-    color: #f8fafc;
-    font-size: 12px;
-    font-weight: 800;
-    outline: none;
-    box-sizing: border-box;
-    text-align: center;
-}
-.conda-timer-custom-input:focus {
-    border-color: #818cf8;
-    background: rgba(30, 41, 59, 1);
-}
-.conda-timer-custom-btn {
-    background: #6366f1;
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 11px;
-    font-weight: 850;
-    cursor: pointer;
-    transition: background .15s;
-    white-space: nowrap;
-}
-.conda-timer-custom-btn:hover {
-    background: #4f46e5;
 }
 
 .conda-timer-actions-row {
@@ -1002,6 +1033,23 @@
     overflow: hidden;
     animation: conda-modal-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     z-index: 1000;
+}
+
+/* Google Slides applique des styles très prioritaires aux textes de son canevas.
+   Le plan injecté doit toujours conserver des noms noirs sur ses cartes blanches. */
+.conda-class-plan-modal div strong,
+.conda-class-plan-modal div span,
+.conda-class-plan-modal div small,
+.conda-class-plan-modal div b {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+}
+.conda-class-plan-modal [style*="color: #000000"],
+.conda-class-plan-modal strong,
+.conda-class-plan-modal span {
+    text-shadow: none !important;
 }
 
 /* Animations */

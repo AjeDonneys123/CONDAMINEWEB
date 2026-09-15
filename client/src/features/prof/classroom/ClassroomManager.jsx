@@ -1037,16 +1037,14 @@ export default function ClassroomManager({ globalClassId, user }) {
                     if (type === 'TOGGLE_SCORE_WARNING') return { ...grade, boardWarning: !Boolean(grade.boardWarning) };
                     const field = type === 'TOGGLE_SCORE_PUNISHMENT' ? 'punishment' : 'workIncomplete';
                     const penaltyDelta = type === 'TOGGLE_SCORE_INCOMPLETE' ? 6 : 9;
-                    const hadPenaltyReason = Boolean(grade.punishment || grade.workIncomplete);
+                    const wasActive = Boolean(grade[field]);
                     const next = { ...grade, [field]: !Boolean(grade[field]) };
-                    const hasPenaltyReason = Boolean(next.punishment || next.workIncomplete);
-                    if (!hadPenaltyReason && hasPenaltyReason) {
+                    if (!wasActive && next[field]) {
                         next.value = Math.max(0, Math.min(20, Number(next.value || 0) - penaltyDelta));
-                        next.penaltyAmount = penaltyDelta;
-                    } else if (hadPenaltyReason && !hasPenaltyReason) {
-                        const restoreAmount = Number(next.penaltyAmount || penaltyDelta);
-                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) + restoreAmount));
-                        next.penaltyAmount = 0;
+                        next.penaltyAmount = Math.max(0, Number(next.penaltyAmount || 0)) + penaltyDelta;
+                    } else if (wasActive && !next[field]) {
+                        next.value = Math.max(0, Math.min(20, Number(next.value || 0) + penaltyDelta));
+                        next.penaltyAmount = Math.max(0, Number(next.penaltyAmount || penaltyDelta) - penaltyDelta);
                     }
                     if (field === 'workIncomplete' && !next.workIncomplete) {
                         next.workIncompleteText = '';
