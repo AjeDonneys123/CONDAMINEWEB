@@ -275,6 +275,15 @@
     letter-spacing: 1px;
 }
 
+.conda-slide-timer-widget.minimized .conda-timer-min-input {
+    width: 48px !important;
+    min-width: 42px !important;
+    max-width: 60px !important;
+    padding: 1px 2px !important;
+    border-radius: 6px !important;
+    margin-right: 2px !important;
+}
+
 .conda-slide-timer-widget.minimized .conda-timer-status {
     font-size: 10px !important;
     margin-top: 2px !important;
@@ -410,21 +419,25 @@
 }
 
 .conda-timer-min-input {
-    width: 2.2ch;
+    width: 76px !important;
+    min-width: 68px !important;
+    max-width: 92px !important;
+    box-sizing: border-box !important;
     font-size: inherit;
     font-weight: inherit;
     font-family: inherit;
     color: inherit;
     text-shadow: inherit;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    text-align: right;
-    padding: 0 2px;
-    margin: 0;
+    background: rgba(30, 41, 59, 0.45);
+    border: 1.5px solid rgba(148, 163, 184, 0.3);
+    border-radius: 10px;
+    text-align: center;
+    padding: 2px 4px;
+    margin: 0 3px 0 0;
     outline: none;
     cursor: text;
     transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    -webkit-appearance: none;
     -moz-appearance: textfield;
 }
 
@@ -435,14 +448,14 @@
 }
 
 .conda-timer-min-input:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(148, 163, 184, 0.35);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(56, 189, 248, 0.6);
 }
 
 .conda-timer-min-input:focus {
     background: rgba(15, 23, 42, 0.95);
     border-color: #38bdf8;
-    box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.5);
 }
 
 .conda-timer-colon {

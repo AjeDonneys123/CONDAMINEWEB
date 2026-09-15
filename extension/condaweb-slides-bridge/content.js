@@ -941,6 +941,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
     let timerAlarmPlaying = false;
     let timerAlarmIntervalId = null;
     let timerAudioCtx = null;
+    let isEditingTimerMinutes = false;
 
     function updateNotesDockButton(btn) {
         if (!btn) {
@@ -1095,10 +1096,9 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         const secs = s % 60;
 
         if (minInput) {
-            const isEditing = (document.activeElement === minInput) || (root?.activeElement === minInput);
+            const isEditing = isEditingTimerMinutes || (document.activeElement === minInput);
             if (!isEditing) {
                 minInput.value = String(mins).padStart(2, '0');
-                minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
             }
         }
         if (secDigits) {
@@ -1365,31 +1365,39 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         digits.className = 'conda-timer-digits';
 
         const minInput = document.createElement('input');
-        minInput.type = 'number';
+        minInput.type = 'text';
+        minInput.inputMode = 'numeric';
+        minInput.maxLength = 3;
         minInput.className = 'conda-timer-min-input';
-        minInput.min = '0';
-        minInput.max = '999';
         const initialMin = Math.floor(Math.max(0, timerRemainingSeconds) / 60);
         minInput.value = String(initialMin).padStart(2, '0');
-        minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
-        minInput.title = 'Entrer les minutes au clavier';
+        minInput.title = 'Entrer les minutes au clavier (ex: 12)';
 
-        minInput.onpointerdown = (e) => e.stopPropagation();
-        minInput.onmousedown = (e) => e.stopPropagation();
-        minInput.onfocus = () => { minInput.select(); };
+        minInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+        minInput.addEventListener('mousedown', (e) => e.stopPropagation());
+        minInput.addEventListener('click', (e) => e.stopPropagation());
 
-        const applyMinInput = (formatPad = false) => {
-            const raw = minInput.value.trim();
-            if (raw === '') {
-                if (formatPad) {
-                    const s = Math.max(0, Math.floor(timerRemainingSeconds));
-                    minInput.value = String(Math.floor(s / 60)).padStart(2, '0');
-                    minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
-                }
+        minInput.addEventListener('focus', () => {
+            isEditingTimerMinutes = true;
+            setTimeout(() => {
+                try { minInput.select(); } catch (_) {}
+            }, 10);
+        });
+
+        const commitMinutes = () => {
+            isEditingTimerMinutes = false;
+            const cleaned = (minInput.value || '').replace(/[^0-9]/g, '');
+            if (cleaned === '') {
+                const s = Math.max(0, Math.floor(timerRemainingSeconds));
+                minInput.value = String(Math.floor(s / 60)).padStart(2, '0');
                 return;
             }
-            const val = parseInt(raw, 10);
-            if (!Number.isFinite(val) || val < 0) return;
+            const val = parseInt(cleaned, 10);
+            if (!Number.isFinite(val) || val < 0) {
+                const s = Math.max(0, Math.floor(timerRemainingSeconds));
+                minInput.value = String(Math.floor(s / 60)).padStart(2, '0');
+                return;
+            }
             const newMin = Math.min(999, Math.max(0, val));
             stopTimerAlarm();
             const currentSec = Math.max(0, Math.floor(timerRemainingSeconds)) % 60;
@@ -1400,26 +1408,50 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 timerTotalSeconds = (newMin * 60) + currentSec;
                 timerRemainingSeconds = timerTotalSeconds;
             }
-            if (formatPad) {
-                minInput.value = String(newMin).padStart(2, '0');
-            }
-            minInput.style.width = Math.max(2, minInput.value.length) + 'ch';
+            minInput.value = String(newMin).padStart(2, '0');
             updateTimerDisplay();
             updateTimerDockButton();
         };
 
-        minInput.oninput = () => applyMinInput(false);
-        minInput.onchange = () => applyMinInput(true);
-        minInput.onblur = () => applyMinInput(true);
-        minInput.onkeydown = (e) => {
+        minInput.addEventListener('input', () => {
+            const filtered = minInput.value.replace(/[^0-9]/g, '');
+            if (minInput.value !== filtered) {
+                minInput.value = filtered;
+            }
+            if (minInput.value.length > 3) {
+                minInput.value = minInput.value.slice(0, 3);
+            }
+            if (minInput.value.length > 0) {
+                const val = parseInt(minInput.value, 10);
+                if (Number.isFinite(val) && val >= 0) {
+                    const newMin = Math.min(999, val);
+                    stopTimerAlarm();
+                    const currentSec = Math.max(0, Math.floor(timerRemainingSeconds)) % 60;
+                    if (timerIsRunning) {
+                        timerRemainingSeconds = (newMin * 60) + currentSec;
+                        timerTotalSeconds = Math.max(timerTotalSeconds, timerRemainingSeconds);
+                    } else {
+                        timerTotalSeconds = (newMin * 60) + currentSec;
+                        timerRemainingSeconds = timerTotalSeconds;
+                    }
+                    updateTimerDockButton();
+                }
+            }
+        });
+
+        minInput.addEventListener('change', commitMinutes);
+        minInput.addEventListener('blur', commitMinutes);
+
+        const stopKeyNav = (e) => {
             e.stopPropagation();
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' || e.key === 'Escape') {
                 e.preventDefault();
                 minInput.blur();
             }
         };
-        minInput.onkeyup = (e) => e.stopPropagation();
-        minInput.onkeypress = (e) => e.stopPropagation();
+        minInput.addEventListener('keydown', stopKeyNav, true);
+        minInput.addEventListener('keyup', (e) => e.stopPropagation(), true);
+        minInput.addEventListener('keypress', (e) => e.stopPropagation(), true);
 
         const colon = document.createElement('span');
         colon.className = 'conda-timer-colon';

@@ -2546,12 +2546,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (!embedVideoUrl) return '';
         try {
             const u = new URL(embedVideoUrl);
-            u.searchParams.set('controls', '0');
+            u.searchParams.set('controls', '1');
             u.searchParams.set('disablekb', '1');
             u.searchParams.set('playsinline', '1');
             u.searchParams.set('enablejsapi', '1');
             u.searchParams.set('origin', window.location.origin);
-            u.searchParams.set('autoplay', videoEmbedStarted ? '1' : '0');
+            // Keep the iframe URL stable. Changing autoplay on the first click
+            // remounted YouTube and the play command was sent to the old frame.
+            u.searchParams.set('autoplay', '0');
             return u.toString();
         } catch (_) { return embedVideoUrl; }
     })();
@@ -2565,6 +2567,18 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (!frameWindow) return;
         frameWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
     }, []);
+    const connectEmbedVideoEvents = useCallback(() => {
+        const frameWindow = videoEmbedRef.current?.contentWindow;
+        if (!frameWindow) return;
+        // YouTube does not emit infoDelivery/onStateChange until the parent
+        // announces itself as a listener on the iframe postMessage channel.
+        frameWindow.postMessage(JSON.stringify({
+            event: 'listening',
+            id: 'conda-learning-video',
+            channel: 'conda-learning-video'
+        }), '*');
+        sendEmbedVideoCommand('addEventListener', ['onStateChange']);
+    }, [sendEmbedVideoCommand]);
     const seekInsideVideoSegment = useCallback((value) => {
         const nextTime = clampToVideoSegment(value);
         setVideoPosition(nextTime);
@@ -2596,12 +2610,17 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             return;
         }
         setVideoEmbedStarted(true);
-        setVideoPlaying(true);
-        window.setTimeout(() => {
+        // YouTube alone confirms the real playing state through onStateChange.
+        // Send once during the user gesture, then retry after the player is ready.
+        connectEmbedVideoEvents();
+        sendEmbedVideoCommand('seekTo', [clampToVideoSegment(videoPosition || segmentStart), true]);
+        sendEmbedVideoCommand('playVideo');
+        [200, 600, 1200].forEach((delay) => window.setTimeout(() => {
+            connectEmbedVideoEvents();
             sendEmbedVideoCommand('seekTo', [clampToVideoSegment(videoPosition || segmentStart), true]);
             sendEmbedVideoCommand('playVideo');
-        }, 350);
-    }, [clampToVideoSegment, directVideo, segmentStart, sendEmbedVideoCommand, videoEmbedStarted, videoPlaying, videoPosition]);
+        }, delay));
+    }, [clampToVideoSegment, connectEmbedVideoEvents, directVideo, segmentStart, sendEmbedVideoCommand, videoEmbedStarted, videoPlaying, videoPosition]);
     const generalSheetMedia = currentStep?.type === 'sheet'
         ? (steps.find((candidate) => String(candidate?.id || '') === String(currentStep?.generalSheetParentId || ''))
             || steps.find((candidate) => candidate?.type === 'sheet' && candidate?.isGeneralSheetMaster === true)
@@ -2719,12 +2738,17 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
             }
         };
         window.addEventListener('message', onPlayerMessage);
-        const poll = window.setInterval(() => sendEmbedVideoCommand('getCurrentTime'), 500);
+        connectEmbedVideoEvents();
+        const poll = window.setInterval(() => {
+            connectEmbedVideoEvents();
+            sendEmbedVideoCommand('getCurrentTime');
+            sendEmbedVideoCommand('getDuration');
+        }, 500);
         return () => {
             window.removeEventListener('message', onPlayerMessage);
             window.clearInterval(poll);
         };
-    }, [currentStep?.id, currentStep?.type, directVideo, hasVideoSegmentEnd, segmentEnd, segmentStart, sendEmbedVideoCommand, videoEmbedStarted]);
+    }, [connectEmbedVideoEvents, currentStep?.id, currentStep?.type, directVideo, hasVideoSegmentEnd, segmentEnd, segmentStart, sendEmbedVideoCommand, videoEmbedStarted]);
 
     const renderSegmentWithPink = (segment) => {
         const source = String(segment?.text || '');
@@ -3012,9 +3036,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                         allowFullScreen
                                         onLoad={() => {
-                                            if (!videoEmbedStarted) return;
                                             window.setTimeout(() => {
-                                                sendEmbedVideoCommand('addEventListener', ['onStateChange']);
+                                                connectEmbedVideoEvents();
+                                                if (!videoEmbedStarted) return;
                                                 sendEmbedVideoCommand('seekTo', [segmentStart, true]);
                                                 sendEmbedVideoCommand('playVideo');
                                             }, 200);
@@ -3046,6 +3070,21 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             <div className="learning-missing">Aucune vidéo configurée.</div>
                         )}
                         <div className="learning-meta">{videoUnlocked ? '✅ Vidéo terminée' : '⏳ En attente de fin vidéo'}</div>
+                        {!directVideo && videoEmbedStarted && !videoUnlocked && (
+                            <button
+                                type="button"
+                                className="learning-btn ghost"
+                                onClick={() => {
+                                    setVideoManualDone(true);
+                                    setVideoEnded(true);
+                                    setVideoUnlocked(true);
+                                    setVideoPlaying(false);
+                                    setGateHint('');
+                                }}
+                            >
+                                ✓ J’ai fini de regarder
+                            </button>
+                        )}
                         {moduleSongItems.length > 0 && (
                             <div className="learning-sheet-media">
                                 <div className="learning-sheet-media-title">🎵 {moduleSongItems[0].name || 'Chanson de la séquence'}</div>
