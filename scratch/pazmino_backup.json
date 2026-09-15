@@ -1,0 +1,77 @@
+{
+  "activeTutorSession": {
+    "expiresAt": null,
+    "updatedAt": null,
+    "instructionDocId": "",
+    "instructionDocUrl": "",
+    "moduleId": "",
+    "sourceUrl": "",
+    "stepId": "",
+    "stepIndex": 0,
+    "token": "",
+    "validationUrl": ""
+  },
+  "totalPunishments": 0,
+  "_id": "6a91be9f4d49426e1db0c954",
+  "firstName": "Hugo",
+  "lastName": "PAZMINO",
+  "fullName": "Pazmiño Zambrano Hugo Javier",
+  "gender": "M",
+  "birthDate": "20/07/2011",
+  "password": "20072011",
+  "email": "pazmino.hugo@condamine.edu.ec",
+  "classId": "6a91bdff4d49426e1db0c90f",
+  "currentClass": "2B",
+  "assignedGroups": [
+    "6a91be9b4d49426e1db0c92e"
+  ],
+  "seatX": 0,
+  "seatY": 3,
+  "punishmentStatus": "NONE",
+  "hasReward": false,
+  "test": "N",
+  "isTestAccount": false,
+  "behaviorRecords": [
+    {
+      "lastCrossDate": null,
+      "workIncompleteText": "",
+      "punishmentText": "",
+      "teacherId": "6971b5a43239caebdd2c1322",
+      "baseScore": 15,
+      "crosses": 0,
+      "bonuses": 0,
+      "weeksToRedemption": 3,
+      "nextCrossRemovalAt": null,
+      "selectedScoreId": "",
+      "forcedSix": false,
+      "forcedSixCount": 0,
+      "forcedSixScoreId": "",
+      "forcedSixDebtAmount": 0,
+      "workIncomplete": false,
+      "_id": "6a96f7ee8032d5e793ed3d18",
+      "scores": []
+    }
+  ],
+  "teacherNotes": [
+    {
+      "teacherId": "6971b5a43239caebdd2c1322",
+      "text": "Dificultes ",
+      "_id": "6a96f7ee8032d5e793ed3d19"
+    }
+  ],
+  "lastLogin": "2026-08-28T17:00:15.287Z",
+  "__v": 1,
+  "dateOfBirth": "",
+  "dob": "",
+  "hasStudentPassword": false,
+  "indicators": [],
+  "isDil": false,
+  "manualScanGrades": [],
+  "nickname": "",
+  "punishmentLateMailError": "",
+  "punishmentLateMailTo": "",
+  "spellingMistakes": [],
+  "studentPassword": "",
+  "trainingStars": 0,
+  "updatedAt": "2026-09-11T14:37:38.000Z"
+}

@@ -213,7 +213,8 @@ const Models = {
         activeHourWarnings: { type: Array, default: [] },
         classNotification: { type: Object, default: null },
         classPlanVisible: { type: Boolean, default: false },
-        activeTrainingAssignment: { type: mongoose.Schema.Types.Mixed, default: null }
+        activeTrainingAssignment: { type: mongoose.Schema.Types.Mixed, default: null },
+        trainingAssignments: { type: [mongoose.Schema.Types.Mixed], default: [] }
     }),
 
     Student: getModel('Student', StudentSchema),

@@ -1,10 +1,12 @@
 // @signatures: TrainingManager, ExerciseViewModal, ExerciseEditorModal, ExerciseRow
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ExamTrainingHub from '../../eleve/training/ExamTrainingHub';
+import TrainingAssignmentStudio from './TrainingAssignmentStudio';
 import './TrainingManager.css';
 
 export default function TrainingManager({ globalClassId, globalClass, user }) {
     const [addingExercise, setAddingExercise] = useState(false);
+    const [creatingTraining, setCreatingTraining] = useState(false);
     if (!globalClassId) {
         return (
             <div className="tm-empty">
@@ -15,9 +17,10 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
     }
 
     const previewUser = { ...user, currentClass: globalClass || '', className: globalClass || '', classId: globalClassId };
+    if (creatingTraining) return <TrainingAssignmentStudio user={user} allClasses={[{ _id: globalClassId, name: globalClass, level: globalClass }]} allStudents={[]} chapters={[]} globalClass={globalClass} globalClassId={globalClassId} globalLevel={extractLevel(globalClass)} targetSection="GÉNÉRAL" initialData={{}} onClose={() => setCreatingTraining(false)} />;
     if (addingExercise) return <div><button type="button" onClick={() => setAddingExercise(false)} className="m-4 rounded-xl border bg-white px-4 py-2 font-black text-slate-600">← Retour à la vue élève</button><LegacyTrainingManager globalClassId={globalClassId} globalClass={globalClass} user={user} /></div>;
     return <div className="relative pb-20">
-        <div className="sticky top-2 z-40 mb-3 flex justify-end px-4"><button type="button" onClick={() => setAddingExercise(true)} className="rounded-2xl bg-violet-600 px-5 py-3 font-black text-white shadow-lg">＋ Ajouter ou modifier des exercices</button></div>
+        <div className="sticky top-2 z-40 mb-3 flex justify-end gap-2 px-4"><button type="button" onClick={() => setCreatingTraining(true)} className="rounded-2xl bg-slate-900 px-5 py-3 font-black text-white shadow-lg">✨ Nouvel entraînement</button><button type="button" onClick={() => setAddingExercise(true)} className="rounded-2xl bg-violet-600 px-5 py-3 font-black text-white shadow-lg">＋ Ajouter ou modifier des exercices</button></div>
         <ExamTrainingHub user={previewUser} canCalibrate={false} />
     </div>;
 }

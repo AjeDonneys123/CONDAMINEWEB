@@ -56,7 +56,10 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
             
             const trainingById = new Map();
             (cls || []).forEach((classroom) => {
-                const assignment = classroom?.activeTrainingAssignment;
+                const classroomAssignments = Array.isArray(classroom?.trainingAssignments) && classroom.trainingAssignments.length
+                    ? classroom.trainingAssignments
+                    : (classroom?.activeTrainingAssignment ? [classroom.activeTrainingAssignment] : []);
+                classroomAssignments.forEach((assignment) => {
                 if (!assignment?.id || !Array.isArray(assignment.items) || assignment.items.length === 0) return;
                 const id = String(assignment.id);
                 const assignmentSection = String(assignment.items?.[0]?.section || '').toUpperCase();
@@ -79,6 +82,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                     previous.assignedStudents.push(...assignment.assignedStudentIds);
                 }
                 trainingById.set(id, previous);
+                });
             });
             setActivities([
                 ...(hw || []).map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 

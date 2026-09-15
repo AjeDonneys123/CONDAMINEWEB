@@ -21,8 +21,10 @@ function AssignedTraining({ user }) {
   const classRef = String(user?.classId || user?.currentClass || user?.className || '').trim();
   const studentId = String(user?._id || user?.id || '').trim();
   const [assignment, setAssignment] = useState(null);
+  const [assignments, setAssignments] = useState([]);
   const [open, setOpen] = useState(false);
   const [answers, setAnswers] = useState({});
+  const [feedback, setFeedback] = useState({});
   const [completed, setCompleted] = useState(new Set());
 
   useEffect(() => {
@@ -30,7 +32,9 @@ function AssignedTraining({ user }) {
     fetch(`/api/prof/training/active/${encodeURIComponent(classRef)}?studentId=${encodeURIComponent(studentId)}`)
       .then((response) => response.ok ? response.json() : null)
       .then((payload) => {
-        const next = payload?.assignment || null;
+        const available = Array.isArray(payload?.assignments) ? payload.assignments : (payload?.assignment ? [payload.assignment] : []);
+        const next = available.at(-1) || null;
+        setAssignments(available);
         setAssignment(next);
         const mine = (next?.progress || []).find((row) => String(row.studentId) === studentId);
         setCompleted(new Set(mine?.completedItemIds || []));
@@ -42,7 +46,8 @@ function AssignedTraining({ user }) {
     if (!assignment?.id) return undefined;
     const onScore = (event) => {
       const scoreId = String(event?.detail?.exerciseId || '');
-      const item = assignment.items.find((entry) => entry.id === scoreId.replace('5e-geo-', '5e-'));
+      const normalizedScoreId = scoreId.replace('5e-geo-', '5e-').replace(/::\d+$/, '');
+      const item = assignment.items.find((entry) => entry.id === normalizedScoreId);
       if (item) validate(item);
     };
     window.addEventListener(TRAINING_SCORE_EVENT, onScore);
@@ -51,9 +56,9 @@ function AssignedTraining({ user }) {
 
   if (!assignment?.items?.length) return null;
 
-  const validate = async (item) => {
+  const validate = async (item, allowEmpty = false) => {
     const value = answers[item.id];
-    if (value === undefined || String(value).trim() === '') return;
+    if (!allowEmpty && (value === undefined || String(value).trim() === '')) return;
     const response = await fetch(`/api/prof/training/active/${encodeURIComponent(classRef)}/progress`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -62,8 +67,22 @@ function AssignedTraining({ user }) {
     if (response.ok) setCompleted((current) => new Set([...current, item.id]));
   };
 
+  const validateCustomPage = (item) => {
+    const exercise = item.content?.exercise;
+    if (!exercise) return validate(item, true);
+    const answer = answers[item.id];
+    if (answer === undefined || String(answer).trim() === '') return setFeedback((old) => ({ ...old, [item.id]: 'Réponds avant de continuer.' }));
+    const normalize = (value) => String(value ?? '').trim().toLocaleLowerCase('fr').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const correct = exercise.type === 'qcm'
+      ? Number(answer) === Number(exercise.correctIndex)
+      : normalize(answer) === normalize(exercise.expected);
+    if (!correct) return setFeedback((old) => ({ ...old, [item.id]: 'Ce n’est pas encore juste. Relis la consigne et réessaie.' }));
+    setFeedback((old) => ({ ...old, [item.id]: 'Bonne réponse ! Passage à la page suivante.' }));
+    return validate(item, true);
+  };
+
   const openAssignedActivity = async (item) => {
-    window.dispatchEvent(new CustomEvent('condaweb:open-assigned-training', { detail: { view: item.content?.view } }));
+    window.dispatchEvent(new CustomEvent('condaweb:open-assigned-training', { detail: { ...(item.content || {}), view: item.content?.view } }));
     await fetch(`/api/prof/training/active/${encodeURIComponent(classRef)}/progress`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignmentId: assignment.id, studentId, itemId: item.id, startedOnly: true })
@@ -71,23 +90,43 @@ function AssignedTraining({ user }) {
     setOpen(false);
   };
 
+  const selectAssignment = (next) => {
+    setAssignment(next); setOpen(true); setAnswers({}); setFeedback({});
+    const mine = (next?.progress || []).find((row) => String(row.studentId) === studentId);
+    setCompleted(new Set(mine?.completedItemIds || []));
+  };
+
   return (
     <section className="mx-4 rounded-3xl border-2 border-violet-300 bg-white p-4 shadow-sm">
+      {assignments.length > 1 && <div className="mb-3 flex flex-wrap gap-2">{assignments.map((entry) => <button key={entry.id} type="button" onClick={() => selectAssignment(entry)} className={`rounded-xl px-3 py-2 text-xs font-black ${entry.id === assignment?.id ? 'bg-violet-600 text-white' : 'border bg-white text-violet-700'}`}>{entry.title}</button>)}</div>}
       <button type="button" onClick={() => setOpen((value) => !value)} className="w-full rounded-2xl bg-violet-600 px-5 py-4 text-left font-black text-white">
-        🏋️ Nouvel entraînement · {completed.size}/{assignment.items.length} exercice(s)
+        🏋️ {assignment.title || 'Nouvel entraînement'} · {completed.size}/{assignment.items.length} page(s)
       </button>
       {open && <div className="mt-4 grid gap-4">
-        {assignment.items.map((item) => {
+        {assignment.items.filter((item) => item.questionType !== 'custom_page' || item.id === assignment.items.find((entry) => entry.questionType === 'custom_page' && !completed.has(entry.id))?.id).map((item) => {
           const done = completed.has(item.id);
           const content = item.content || {};
           return <article key={item.id} className={`rounded-2xl border p-4 ${done ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
             <div className="font-black text-slate-900">{done ? '✅' : '⬜'} {item.title}</div>
-            {(item.images || []).length > 0 && <div className="mt-3 flex flex-wrap gap-3">{item.images.map((image, index) => <img key={`${item.id}-${index}`} src={image.url} alt={image.caption || item.title} className="max-h-64 rounded-xl object-contain" />)}</div>}
+            {item.questionType !== 'custom_page' && (item.images || []).length > 0 && <div className="mt-3 flex flex-wrap gap-3">{item.images.map((image, index) => <img key={`${item.id}-${index}`} src={image.url} alt={image.caption || item.title} className="max-h-64 rounded-xl object-contain" />)}</div>}
             <p className="mt-3 whitespace-pre-wrap text-sm font-bold text-slate-700">{content.question || content.text || ''}</p>
-            {item.questionType === 'navigation' ? <button type="button" onClick={() => openAssignedActivity(item)} className="mt-3 rounded-xl bg-violet-600 px-4 py-2 font-black text-white">Ouvrir l’activité</button>
+            {item.questionType === 'custom_page' ? <div className="mt-4 grid gap-4">
+              {(content.blocks || []).map((block, blockIndex) => <div key={block.id} style={{ order: (content.elementOrder || []).indexOf(block.id) >= 0 ? content.elementOrder.indexOf(block.id) : blockIndex }} className="rounded-2xl bg-white p-4">
+                {block.type === 'text' && <div className="whitespace-pre-wrap font-bold text-slate-700">{block.value}</div>}
+                {block.type === 'image' && <img src={block.value} alt={block.name || item.title} className="mx-auto max-h-[560px] rounded-xl object-contain" />}
+                {block.type === 'video' && (() => { const match = String(block.value || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([^?&/]+)/i); return match?.[1] ? <iframe className="aspect-video w-full rounded-xl" src={`https://www.youtube.com/embed/${match[1]}`} title={item.title} allowFullScreen /> : null; })()}
+              </div>)}
+              {content.exercise && <div style={{ order: (content.elementOrder || []).indexOf('exercise') >= 0 ? content.elementOrder.indexOf('exercise') : (content.blocks || []).length }} className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-4">
+                <div className="whitespace-pre-wrap font-black text-slate-900">{content.exercise.question}</div>
+                {content.exercise.type === 'qcm' ? <div className="mt-3 grid gap-2">{(content.exercise.choices || []).map((choice, index) => <label key={index} className="rounded-xl bg-white p-3"><input type="radio" name={`custom-${item.id}`} className="mr-2" checked={Number(answers[item.id]) === index} onChange={() => setAnswers((old) => ({ ...old, [item.id]: index }))} />{choice}</label>)}</div>
+                  : <textarea className="mt-3 min-h-24 w-full rounded-xl border bg-white p-3" value={answers[item.id] || ''} onChange={(event) => setAnswers((old) => ({ ...old, [item.id]: event.target.value }))} placeholder="Écris ta réponse…" />}
+              </div>}
+              {feedback[item.id] && <div style={{ order: 10000 }} className={`rounded-xl p-3 text-sm font-black ${feedback[item.id].startsWith('Bonne') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>{feedback[item.id]}</div>}
+              <button type="button" style={{ order: 10001 }} onClick={() => validateCustomPage(item)} className="rounded-xl bg-violet-600 px-4 py-3 font-black text-white">{content.exercise ? 'Corriger et page suivante →' : 'Page suivante →'}</button>
+            </div> : item.questionType === 'navigation' ? <button type="button" onClick={() => openAssignedActivity(item)} className="mt-3 rounded-xl bg-violet-600 px-4 py-2 font-black text-white">Ouvrir l’activité</button>
               : item.questionType === 'qcm' ? <div className="mt-3 grid gap-2">{(content.choices || []).map((choice, index) => <label key={index} className="rounded-xl bg-white p-3"><input type="radio" name={`assigned-${item.id}`} className="mr-2" checked={Number(answers[item.id]) === index} onChange={() => setAnswers((old) => ({ ...old, [item.id]: index }))} />{choice}</label>)}</div>
               : <textarea className="mt-3 min-h-28 w-full rounded-xl border border-slate-200 bg-white p-3" placeholder="Écris ta réponse ici…" value={answers[item.id] || ''} onChange={(event) => setAnswers((old) => ({ ...old, [item.id]: event.target.value }))} />}
-            {!done && item.questionType !== 'navigation' && <button type="button" onClick={() => validate(item)} className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 font-black text-white">Valider cet exercice</button>}
+            {!done && !['navigation', 'custom_page'].includes(item.questionType) && <button type="button" onClick={() => validate(item)} className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 font-black text-white">Valider cet exercice</button>}
           </article>;
         })}
       </div>}
@@ -4317,8 +4356,11 @@ function TrainingMethodSheetModal({ src, title, onClose }) {
   </div>;
 }
 
-function DnbDocumentsMethodology({ onBack, user }) {
-  const [module, setModule] = useState('home');
+function DnbDocumentsMethodology({ onBack, user, assignmentMode = false, selectedAssignmentIds = new Set(), onAssignmentToggle, initialModule = '' }) {
+  const [module, setModule] = useState(initialModule || 'home');
+  useEffect(() => {
+    if (initialModule) setModule(initialModule);
+  }, [initialModule]);
   const accountEmail = String(user?.email || user?.mail || '').trim().toLowerCase();
   const accountName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim().toUpperCase();
   const canCalibrate = user?.isTestAccount !== true && user?.isVisitorPreview !== true
@@ -4335,12 +4377,18 @@ function DnbDocumentsMethodology({ onBack, user }) {
       <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour aux dossiers</button>
     </div>
     <div className="mt-5 grid gap-4 md:grid-cols-2">
-      <button type="button" onClick={() => setModule('presentation')} className="rounded-3xl border-2 border-blue-200 bg-blue-50 p-6 text-left transition hover:border-blue-500 hover:shadow-md">
+      <div className={`relative rounded-3xl ${selectedAssignmentIds.has('dnb-doc-method-presentation') ? 'ring-4 ring-violet-400' : ''}`}>
+      {assignmentMode && <input type="checkbox" aria-label="Sélectionner Présentation de document" checked={selectedAssignmentIds.has('dnb-doc-method-presentation')} onChange={(event) => onAssignmentToggle?.({ id: 'dnb-doc-method-presentation', title: 'Présentation de document', section: 'DNB', subject: 'Méthodologie', questionType: 'navigation', content: { view: 'docs', dnbTarget: 'methodology', module: 'presentation' } }, event.target.checked)} className="absolute left-4 top-4 z-10 h-6 w-6 accent-violet-600" />}
+      <button type="button" onClick={() => setModule('presentation')} className={`w-full rounded-3xl border-2 border-blue-200 bg-blue-50 p-6 text-left transition hover:border-blue-500 hover:shadow-md ${assignmentMode ? 'pl-14' : ''}`}>
         <div className="text-3xl">📄</div><div className="mt-3 text-xl font-black text-slate-900">Présentation de document</div><div className="mt-2 text-sm font-bold text-blue-800">Date, auteur, nature, sujet et contexte.</div><div className="mt-5 inline-flex rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
       </button>
-      <button type="button" onClick={() => setModule('image')} className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-6 text-left transition hover:border-emerald-500 hover:shadow-md">
+      </div>
+      <div className={`relative rounded-3xl ${selectedAssignmentIds.has('dnb-doc-method-image') ? 'ring-4 ring-violet-400' : ''}`}>
+      {assignmentMode && <input type="checkbox" aria-label="Sélectionner Description d’image" checked={selectedAssignmentIds.has('dnb-doc-method-image')} onChange={(event) => onAssignmentToggle?.({ id: 'dnb-doc-method-image', title: 'Description d’image', section: 'DNB', subject: 'Méthodologie', questionType: 'navigation', content: { view: 'docs', dnbTarget: 'methodology', module: 'image' } }, event.target.checked)} className="absolute left-4 top-4 z-10 h-6 w-6 accent-violet-600" />}
+      <button type="button" onClick={() => setModule('image')} className={`w-full rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-6 text-left transition hover:border-emerald-500 hover:shadow-md ${assignmentMode ? 'pl-14' : ''}`}>
         <div className="text-3xl">🖼️</div><div className="mt-3 text-xl font-black text-slate-900">Description d’image</div><div className="mt-2 text-sm font-bold text-emerald-800">Premier plan, deuxième plan et arrière-plan.</div><div className="mt-5 inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">{canCalibrate ? 'Calibrer l’apprentissage' : 'Commencer'}</div>
       </button>
+      </div>
     </div>
   </section>;
 }
@@ -6619,12 +6667,17 @@ export default function ExamTrainingHub({ user, canCalibrate = false, assignment
   const [dnbSubject, setDnbSubject] = useState('all');
   const [selectedDnbChapter, setSelectedDnbChapter] = useState(null);
   const [selectedLocalDnbActivity, setSelectedLocalDnbActivity] = useState('');
+  const [assignedDnbModule, setAssignedDnbModule] = useState('');
   const [secondeMethodSheet, setSecondeMethodSheet] = useState('');
   const [secondeRqpModule, setSecondeRqpModule] = useState('home');
   useEffect(() => {
     const open = (event) => {
       const next = event?.detail?.view;
       if (next && DNB_TABS.some((tab) => tab.key === next)) setSection(next);
+      if (event?.detail?.dnbTarget === 'methodology') {
+        setSelectedDnbChapter({ subject: 'methodo-docs', title: 'Présenter et décrire un document' });
+        setAssignedDnbModule(event.detail.module || '');
+      }
     };
     window.addEventListener('condaweb:open-assigned-training', open);
     return () => window.removeEventListener('condaweb:open-assigned-training', open);
@@ -6664,9 +6717,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false, assignment
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {DNB_TABS.map((tab) => {
-              const assignmentId = `dnb-${tab.key}`;
               return <div key={tab.key} className="flex items-center gap-2 rounded-2xl bg-white p-1">
-              {assignmentMode && <input type="checkbox" aria-label={`Sélectionner ${tab.label}`} checked={selectedAssignmentIds.has(assignmentId)} onChange={(event) => onAssignmentToggle?.({ id: assignmentId, title: tab.label, section: 'DNB', subject: 'Histoire-Géographie', questionType: 'navigation', content: { view: tab.key } }, event.target.checked)} className="ml-2 h-5 w-5 accent-violet-600" />}
               <button
                 type="button"
                 onClick={() => {
@@ -6715,7 +6766,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false, assignment
 	        ) : section === 'paragraphe' && selectedDnbChapter?.subject === 'methodo' ? (
 	          <DnbParagraphMethodology onBack={() => setSelectedDnbChapter(null)} />
 	        ) : section === 'docs' && selectedDnbChapter?.subject === 'methodo-docs' ? (
-	          <DnbDocumentsMethodology user={user} onBack={() => setSelectedDnbChapter(null)} />
+	          <DnbDocumentsMethodology user={user} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} initialModule={assignedDnbModule} onBack={() => { setSelectedDnbChapter(null); setAssignedDnbModule(''); }} />
 	        ) : showChapterFolders && !selectedDnbChapter ? (
 	          <DnbChapterFolders user={user} sectionFilter={section} onOpenChapter={(chapter) => {
 	            setSelectedDnbChapter(chapter);

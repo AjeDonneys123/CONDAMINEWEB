@@ -208,7 +208,25 @@ export default function Login({ onLoginSuccess }) {
         clean(p.lastName) === typedLast
       );
       if (teacherMatch) {
-        handleSelectSuggestion(teacherMatch);
+        setLoading(true);
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firstName: teacherMatch.firstName,
+              lastName: teacherMatch.lastName,
+              password
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Identifiants incorrects');
+          localStorage.setItem('player', JSON.stringify(data.user));
+          onLoginSuccess(data.user);
+        } catch (error) {
+          alert(error.message || 'Connexion impossible.');
+        }
+        setLoading(false);
         return;
       }
       const studentMatch = allUsersData.find(p =>
@@ -218,9 +236,23 @@ export default function Login({ onLoginSuccess }) {
         (!typedClass || clean(p.className) === typedClass)
       );
       if (studentMatch) {
-        handleSelectSuggestion(studentMatch);
+        setLoading(true);
+        try {
+          const res = await fetch('/api/eleve/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId: studentMatch.id, password })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Identifiants incorrects');
+          localStorage.setItem('player', JSON.stringify(data.user));
+          onLoginSuccess(data.user);
+        } catch (error) {
+          alert(error.message || 'Connexion impossible.');
+        }
+        setLoading(false);
       } else {
-        alert("Profil élève introuvable. Ajoute la classe exacte, par exemple 6Z.");
+        alert("Profil élève introuvable. Vérifie le nom et le prénom.");
       }
       return;
     }
@@ -346,7 +378,7 @@ export default function Login({ onLoginSuccess }) {
   const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
     ? (isTestStudentProfile || devFinderEnabled || password.trim().length > 0)
-    : hasTypedIdentity;
+    : (visitorIdentity || (hasTypedIdentity && password.trim().length > 0));
 
   const handleStudentPasswordSetup = async () => {
     if (!selectedProfile?.id) return;
@@ -389,21 +421,24 @@ export default function Login({ onLoginSuccess }) {
     <div className="login-screen">
       <div className="login-card narrow">
         <h2 className="app-logo">Connexion</h2>
-        <p className="app-subtitle">Nom, prénom, classe. Le profil est détecté automatiquement.</p>
+        <p className="app-subtitle">Choisis ton mode de connexion</p>
         {devFinderEnabled && <div className="dev-mode-badge">DEV ON</div>}
 
         <form onSubmit={handleLogin} className="login-inputs mt-6">
-          <div className="finder-wrapper">
-            <input
-              className="login-field"
-              placeholder="Classe (élève uniquement, ex: 6A)"
-              value={inputClass}
-              onChange={e => {
-                setInputClass(e.target.value);
-                if (selectedProfile) { setSelectedProfile(null); setPassword(''); setConfirmPassword(''); setShowStudentPasswordSetup(false); setStudentResetMode(false); setStudentResetToken(''); setStudentResetNotice(''); }
-              }}
-            />
+          {googleClientId && (
+            <div className="login-google-section login-google-primary">
+              <div className="login-google-title">Connexion avec Gmail</div>
+              <div className="login-google-help">Utilise ton adresse <strong>@condamine.edu.ec</strong>. Google transmet automatiquement ton nom et ton prénom.</div>
+              <div className="login-google-wrap">
+                <div ref={googleBtnRef} />
+                {!googleReady && <button type="button" className="login-google-btn" disabled>Chargement Google...</button>}
+              </div>
+            </div>
+          )}
 
+          <div className="login-separator"><span>ou</span></div>
+          <div className="login-manual-title">Connexion avec ton identité</div>
+          <div className="finder-wrapper">
             <div className="finder-row">
               <div className="finder-col-name">
                 <input
@@ -428,6 +463,16 @@ export default function Login({ onLoginSuccess }) {
                 />
               </div>
             </div>
+
+            {!selectedProfile && (
+              <input
+                className="login-field"
+                placeholder="Date de naissance (JJ/MM/AAAA)"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                autoComplete="bday"
+              />
+            )}
 
             {devFinderEnabled && !isTeacherProfile && suggestions.length > 0 && (
               <div className="suggestions-box custom-scrollbar">
@@ -574,19 +619,6 @@ export default function Login({ onLoginSuccess }) {
           >
             {loading ? 'Ouverture...' : '👀 ACCÈS PROFESSEUR VISITEUR'}
           </button>
-          {googleClientId && (
-            <div className="login-google-section">
-              <div className="login-google-label">Connexion avec Google</div>
-              <div className="login-google-wrap">
-              <div ref={googleBtnRef} />
-              {!googleReady && (
-                <button type="button" className="login-google-btn" disabled>
-                  Chargement Google...
-                </button>
-              )}
-              </div>
-            </div>
-          )}
         </form>
       </div>
     </div>

@@ -1,6 +1,6 @@
 .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100%; }
 .login-card { background: rgba(255, 255, 255, 0.92); padding: 2.5rem; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.16); width: 100%; max-width: 800px; text-align: center; transition: all 0.3s; border: 1px solid rgba(148, 163, 184, 0.22); backdrop-filter: blur(16px); }
-.login-card.narrow { max-width: 450px; }
+.login-card.narrow { max-width: 520px; }
 
 .app-logo { font-weight: 900; font-size: 2rem; color: #1e293b; margin-bottom: 0.5rem; letter-spacing: -1px; text-transform: uppercase; }
 .app-subtitle { color: #94a3b8; font-weight: 700; margin-bottom: 3rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
@@ -54,6 +54,12 @@
 .login-google-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .login-google-wrap { display: flex; justify-content: center; margin-top: 0.25rem; }
 .login-google-section { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.1rem; }
+.login-google-primary { padding: 1.4rem; border: 2px solid #bfdbfe; border-radius: 24px; background: linear-gradient(135deg, #eff6ff, #fff); text-align: center; }
+.login-google-title { color: #172554; font-size: 1.45rem; font-weight: 950; }
+.login-google-help { color: #64748b; font-size: 0.82rem; font-weight: 700; line-height: 1.45; }
+.login-separator { display: flex; align-items: center; gap: 12px; color: #94a3b8; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
+.login-separator::before, .login-separator::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+.login-manual-title { text-align: center; color: #334155; font-size: 1rem; font-weight: 900; }
 .login-google-label { text-align: center; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; color: #64748b; letter-spacing: 0.12em; }
 .student-password-tools { display: flex; flex-direction: column; gap: 10px; }
 .student-password-btn { width: 100%; padding: 0.95rem 1.1rem; background: #eff6ff; color: #1d4ed8; border-radius: 16px; font-weight: 900; border: 2px solid #dbeafe; text-transform: uppercase; font-size: 0.78rem; }
