@@ -11,6 +11,14 @@ const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 const visitorPassword = () => String(process.env.VISITOR_PROF_PASSWORD || 'spartacus');
 const visitorSecret = () => String(process.env.VISITOR_SESSION_SECRET || process.env.JWT_SECRET || process.env.SESSION_SECRET || visitorPassword()).trim();
+const controlAuthSecret = () => String(process.env.CONTROL_AUTH_SECRET || process.env.JWT_SECRET || process.env.SESSION_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+const signControlStudent = (studentId) => {
+    const secret = controlAuthSecret();
+    if (!secret) throw new Error('CONTROL_AUTH_SECRET manquant');
+    const payload = Buffer.from(JSON.stringify({ kind: 'control-student', studentId: String(studentId), exp: Date.now() + 12 * 60 * 60 * 1000 })).toString('base64url');
+    const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+};
 const signVisitorSession = () => {
     const secret = visitorSecret();
     if (!secret) throw new Error('VISITOR_SESSION_SECRET manquant');
@@ -410,7 +418,7 @@ router.post('/google-login', async (req, res) => {
                     return res.status(401).json({ ok: false, message: "Ce compte n'est pas un compte test Google." });
                 }
                 const plain = targetStudent.toObject();
-                return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+                return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student', controlAuthToken: signControlStudent(plain._id) } });
             }
         }
 
@@ -433,7 +441,7 @@ router.post('/google-login', async (req, res) => {
         let user = await Student.findOne({ email }).populate('assignedGroups', 'name type level');
         if (user) {
             const plain = user.toObject();
-            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
+            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student', controlAuthToken: signControlStudent(plain._id) } });
         }
 
         return res.status(401).json({ ok: false, message: "Aucun compte Condamine n'est lié à cet email Google." });

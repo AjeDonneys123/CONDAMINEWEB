@@ -14,6 +14,30 @@ const AppLoading = () => <div className="min-h-screen grid place-items-center bg
 
 const VISITOR_LEVELS = ['5e', '3e', '2de'];
 
+function PublicControlGate({ controlId }) {
+  const [student, setStudent] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('player') || 'null');
+      return saved && saved.role === 'student' && saved.controlAuthToken ? saved : null;
+    } catch (_) { return null; }
+  });
+  if (!student) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-8">
+        <section className="mx-auto max-w-xl rounded-[32px] border border-blue-200 bg-white p-6 shadow-xl">
+          <div className="mb-6 text-center">
+            <div className="text-sm font-black uppercase tracking-widest text-blue-600">Contrôle CondaWeb</div>
+            <h1 className="mt-2 text-3xl font-black text-slate-900">Identifie-toi avec Google</h1>
+            <p className="mt-2 font-bold text-slate-500">Utilise ton adresse @condamine.edu.ec. Ton contrôle s’ouvrira automatiquement.</p>
+          </div>
+          <Login onLoginSuccess={setStudent} googleOnly />
+        </section>
+      </main>
+    );
+  }
+  return <Suspense fallback={<AppLoading />}><PublicAssessmentControl controlId={controlId} currentUser={student} /></Suspense>;
+}
+
 function VisitorLevelChooser({ user, onChoose, onLogout }) {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12">
@@ -38,9 +62,6 @@ export default function App() {
   }
 
   const publicControlId = String(urlParams.get('control') || '').trim();
-  if (publicControlId) {
-    return <Suspense fallback={<AppLoading />}><PublicAssessmentControl controlId={publicControlId} /></Suspense>;
-  }
 
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -119,6 +140,8 @@ export default function App() {
           }
       } catch(e) { console.error(e); }
   };
+
+  if (publicControlId) return <PublicControlGate controlId={publicControlId} />;
 
   if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
   

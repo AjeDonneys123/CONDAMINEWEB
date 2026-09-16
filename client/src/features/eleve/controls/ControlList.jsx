@@ -6,7 +6,7 @@ const FillQuestion = ({ item, values, onChange, locked, correction }) => {
   return <div className="leading-[2.8] text-lg font-bold">{parts.map((part, i) => {
     const match = part.match(/^["“«]([^"”»]+)["”»]$/); if (!match) return <React.Fragment key={i}>{part}</React.Fragment>;
     const index = blank++; const detail=correction?.blankResults?.find(row=>Number(row.index)===index); const bad = locked && correction && (detail ? !detail.correct : !correction.correct);
-    return <span key={i} className="inline-flex flex-col align-middle mx-1 leading-tight"><input disabled={locked} value={values[index] || ''} onChange={e=>onChange(index,e.target.value)} className={`min-w-[150px] max-w-[260px] px-2 py-1 border-b-4 bg-slate-50 text-center ${bad?'border-red-500 text-red-600':'border-blue-500'}`}/>{bad&&<><small className="text-green-700 text-center">{correction.expectedAnswers?.[index]}</small><button type="button" onClick={()=>correction.onContest?.(index)} className="text-[10px] text-red-700 underline">{detail?.contestStatus==='pending'?'Contesté':'Contester'}</button></>}</span>;
+    return <span key={i} className="inline-flex flex-col align-middle mx-1 leading-tight"><input disabled={locked} value={values[index] || ''} onChange={e=>onChange(index,e.target.value)} className={`min-w-[150px] max-w-[260px] px-2 py-1 border-b-4 bg-slate-50 text-center ${bad?'border-red-500 text-red-600':'border-blue-500'}`}/>{bad&&<small className="text-red-700 text-center">{detail?.feedback || correction?.feedback || 'Connaissance à revoir'}</small>}</span>;
   })}</div>;
 };
 
@@ -41,6 +41,7 @@ function ControlWorkspace({ control, user, onQuit }) {
     const payload = {
       studentName: studentFullName,
       studentId: user._id || user.id || '',
+      authToken: user.controlAuthToken || '',
       reason: reason || "Sortie du plein écran / Changement d'application sur mobile",
       timestamp: now
     };
@@ -88,7 +89,7 @@ function ControlWorkspace({ control, user, onQuit }) {
       const r = await fetch(`/api/eleve/controls/${control._id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: user._id || user.id, answers: payload })
+        body: JSON.stringify({ studentId: user._id || user.id, authToken: user.controlAuthToken || '', answers: payload })
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Erreur');
@@ -101,22 +102,6 @@ function ControlWorkspace({ control, user, onQuit }) {
   };
 
   const correction = id => (result?.corrections || result?.answers || []).find(a => String(a.itemId) === String(id));
-  const contest = async (itemId, blankIndex) => {
-    const r = await fetch(`/api/eleve/controls/${control._id}/contest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: user._id || user.id, itemId, blankIndex })
-    });
-    if (r.ok) setResult(v => ({
-      ...v,
-      corrections: (v.corrections || v.answers || []).map(a => a.itemId === itemId ? {
-        ...a,
-        contestStatus: Number.isInteger(blankIndex) ? a.contestStatus : 'pending',
-        blankResults: (a.blankResults || []).map(b => b.index === blankIndex ? { ...b, contestStatus: 'pending' } : b)
-      } : a)
-    }));
-  };
-
   return (
     <div className="max-w-5xl mx-auto p-5">
       <div className="flex justify-between mb-4">
@@ -156,12 +141,11 @@ function ControlWorkspace({ control, user, onQuit }) {
         )
       )}
 
-      {result && <div className="mb-5 p-5 rounded-2xl bg-blue-50 text-blue-900 font-black text-xl">Résultat automatique : {result.score}/{result.total}</div>}
+      {result && <div className="mb-5 p-5 rounded-2xl bg-blue-50 text-blue-900 font-black text-xl">Correction IA : {result.score}/{result.total}{result.explanation ? <p className="mt-2 text-sm">{result.explanation}</p> : null}</div>}
 
       <div className="space-y-5">
         {(control.items || []).map((item, index) => {
           const corr = correction(item.id);
-          const decorated = corr ? { ...corr, onContest: (blankIndex) => contest(item.id, blankIndex) } : corr;
           return (
             <article key={item.id} className={`p-5 rounded-3xl border-2 bg-white ${corr && !corr.correct ? 'border-red-200' : 'border-slate-200'}`}>
               <div className="text-xs font-black text-violet-600 mb-2">{index + 1}. {item.lessonTitle}</div>
@@ -170,7 +154,7 @@ function ControlWorkspace({ control, user, onQuit }) {
                   item={item}
                   values={answers[item.id]?.values || []}
                   locked={!!result}
-                  correction={decorated}
+                  correction={corr}
                   onChange={(i, value) => setAnswers(v => ({ ...v, [item.id]: { values: Object.assign([...(v[item.id]?.values || [])], { [i]: value }) } }))}
                 />
               ) : item.type === 'qcm' ? (
@@ -201,14 +185,7 @@ function ControlWorkspace({ control, user, onQuit }) {
                   />
                 </>
               )}
-              {corr && !corr.correct && item.type !== 'fill' && (
-                <div className="mt-3 flex items-center justify-between rounded-xl bg-red-50 p-3 text-red-700 font-black">
-                  <span>Compté comme faux</span>
-                  <button onClick={() => contest(item.id)} disabled={corr.contestStatus === 'pending'} className="bg-white border rounded-lg px-3 py-2">
-                    {corr.contestStatus === 'pending' ? 'Contestation envoyée' : 'Contester'}
-                  </button>
-                </div>
-              )}
+              {corr?.feedback && <div className="mt-3 rounded-xl bg-slate-50 p-3 text-slate-700 font-bold">{corr.feedback}</div>}
             </article>
           );
         })}

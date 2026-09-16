@@ -102,6 +102,55 @@ router.get('/all', async (_req, res) => {
     catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// Création rapide d'un devoir noté depuis une liste « Nom Prénom : note ».
+// Les élèves sont déjà rapprochés dans l'interface ; le serveur vérifie qu'ils
+// appartiennent bien à la classe avant de créer un contrôle exportable Pronote.
+router.post('/manual-grades', async (req, res) => {
+    try {
+        const classId = String(req.body?.classId || '').trim();
+        const title = String(req.body?.title || 'Notes dictées').trim().slice(0, 180);
+        const outOf = Math.max(1, Math.min(100, pronoteNumber(req.body?.outOf, 20)));
+        const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+        if (!mongoose.isValidObjectId(classId)) return res.status(400).json({ error: 'Classe invalide.' });
+        if (!entries.length) return res.status(400).json({ error: 'Aucune note reconnue.' });
+
+        const classroom = await Classroom.findById(classId).lean();
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const Student = mongoose.model('Student');
+        const ids = [...new Set(entries.map(entry => String(entry?.studentId || '')).filter(mongoose.isValidObjectId))];
+        const students = await Student.find({ _id: { $in: ids }, classId }).lean();
+        const byId = new Map(students.map(student => [String(student._id), student]));
+        const submissions = entries.map((entry, index) => {
+            const student = byId.get(String(entry?.studentId || ''));
+            const score = Number(entry?.score);
+            if (!student || !Number.isFinite(score) || score < 0 || score > outOf) return null;
+            return {
+                id: `manual_${Date.now()}_${index + 1}`,
+                studentId: student._id,
+                studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+                firstName: String(student.firstName || ''),
+                lastName: String(student.lastName || ''),
+                score: roundGrade(score),
+                total: outOf,
+                answers: [],
+                submittedAt: new Date()
+            };
+        }).filter(Boolean);
+        if (!submissions.length) return res.status(400).json({ error: 'Aucune note valide pour cette classe.' });
+
+        const control = await AssessmentControl.create({
+            title,
+            subject: 'NOTE MANUELLE',
+            targetClassrooms: [String(classroom.name || '').trim().toUpperCase()].filter(Boolean),
+            active: false,
+            items: [],
+            submissions,
+            date: req.body?.date ? new Date(req.body.date) : new Date()
+        });
+        res.status(201).json(control);
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 router.get('/:id/results', async (req, res) => {
     try {
         const row = await AssessmentControl.findById(req.params.id).lean();

@@ -28,6 +28,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
   const [cheatAlertCount, setCheatAlertCount] = useState(0);
   const [showCheatWarningModal, setShowCheatWarningModal] = useState(false);
   const lastAlertTimeRef = useRef(0);
+  const enteredFullscreenRef = useRef(false);
 
   const requestExamFullscreen = async () => {
     try {
@@ -37,6 +38,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
       } else if (el.webkitRequestFullscreen) {
         await el.webkitRequestFullscreen();
       }
+      enteredFullscreenRef.current = true;
       setIsFullscreen(true);
     } catch (_) {}
   };
@@ -58,6 +60,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
     const payload = {
       studentName: studentFullName,
       studentId: currentUser?._id || currentUser?.id || '',
+      authToken: currentUser?.controlAuthToken || '',
       reason: reason || "Sortie de l'écran / Changement d'application sur mobile",
       timestamp: now
     };
@@ -88,9 +91,18 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    const handleFullscreenChange = () => {
+      const active = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      setIsFullscreen(active);
+      if (!active && enteredFullscreenRef.current) triggerCheatAlert('Sortie du plein écran détectée');
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, [control, submissionResult, triggerCheatAlert]);
 
@@ -104,7 +116,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
       setLoading(true);
       try {
         const studentId = String(currentUser?._id || currentUser?.id || '').trim();
-        const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
+        const query = studentId ? `?studentId=${encodeURIComponent(studentId)}&authToken=${encodeURIComponent(currentUser?.controlAuthToken || '')}` : '';
         const res = await fetch(`/api/eleve/controls/${encodeURIComponent(controlId)}${query}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || 'Contrôle introuvable ou indisponible.');
@@ -161,11 +173,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    if (!firstName.trim() || !lastName.trim()) {
-      setSubmissionError('Veuillez renseigner votre prénom et votre nom en haut de la page.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
+    if (!currentUser?._id && !currentUser?.id) return setSubmissionError('Reconnecte-toi avec ton compte Google Condamine.');
     setSubmissionError('');
     setSubmitting(true);
 
@@ -184,7 +192,8 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          studentId: currentUser?._id || '',
+          studentId: currentUser?._id || currentUser?.id || '',
+          authToken: currentUser?.controlAuthToken || '',
           answers: payloadAnswers
         })
       });
@@ -274,6 +283,40 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
 
   const items = control.items || [];
   const totalPoints = items.reduce((sum, it) => sum + (Number(it.points) || 1), 0);
+
+  if (submissionResult) {
+    const corrections = submissionResult.corrections || [];
+    return (
+      <div className="public-control-shell">
+        <div className="public-control-container">
+          <div className="public-control-score-card">
+            <div className="public-control-score-title">Correction terminée</div>
+            <div className="public-control-score-number">{submissionResult.score} / {submissionResult.total}</div>
+            <div className="public-control-score-notice">Copie de {submissionResult.studentName || `${firstName} ${lastName}`}</div>
+          </div>
+          {submissionResult.explanation && (
+            <div className="public-control-correction-card correct">
+              <strong>Explication</strong><p>{submissionResult.explanation}</p>
+            </div>
+          )}
+          {items.map((item, index) => {
+            const correction = corrections.find((entry) => String(entry.itemId) === String(item.id)) || {};
+            return (
+              <div key={item.id} className={`public-control-correction-card ${correction.correct ? 'correct' : 'incorrect'}`}>
+                <div className="public-control-item-head">
+                  <span className="public-control-item-number">Question {index + 1}</span>
+                  <span className="public-control-item-points">{correction.awardedPoints || 0} / {correction.maxPoints || item.points || 1} pt(s)</span>
+                </div>
+                <div className="public-control-prompt">{item.prompt}</div>
+                {correction.feedback && <p style={{ marginTop: 10, fontWeight: 700, color: '#475569' }}>{correction.feedback}</p>}
+              </div>
+            );
+          })}
+          <p style={{ textAlign: 'center', color: '#64748b', fontWeight: 700 }}>La correction évalue les connaissances, sans pénaliser l’orthographe, les accents ni les espaces.</p>
+        </div>
+      </div>
+    );
+  }
 
   // ==================== RENDU : PHASE DE CORRECTION ====================
   if (submissionResult) {
@@ -547,34 +590,26 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
           </div>
         )}
 
-        {/* Identification : Prenom et Nom en haut */}
+        {/* Identité certifiée par la connexion Google CondaWeb */}
         <div className="public-control-identity-card">
           <div className="public-control-identity-title">
-            <span>👤 Ton identité</span>
+            <span>✅ Élève authentifié</span>
           </div>
           <div className="public-control-identity-row">
             <div className="public-control-input-group">
-              <label htmlFor="student-firstname">Prénom *</label>
+              <label>Prénom</label>
               <input
-                id="student-firstname"
                 type="text"
-                placeholder="Ex. Jean"
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                autoComplete="given-name"
-                required
+                readOnly
               />
             </div>
             <div className="public-control-input-group">
-              <label htmlFor="student-lastname">Nom *</label>
+              <label>Nom</label>
               <input
-                id="student-lastname"
                 type="text"
-                placeholder="Ex. Dupont"
                 value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                autoComplete="family-name"
-                required
+                readOnly
               />
             </div>
           </div>
@@ -681,7 +716,7 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
               className="public-control-submit-btn"
               disabled={submitting}
             >
-              {submitting ? 'Validation en cours...' : 'VALIDER ET CORRIGER'}
+              {submitting ? 'CORRECTION IA EN COURS…' : 'ENVOYER À LA CORRECTION'}
             </button>
           </div>
         </form>

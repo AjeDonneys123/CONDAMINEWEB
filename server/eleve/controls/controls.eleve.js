@@ -1,12 +1,27 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 require('../../prof/models/prof.models');
+const EleveAI = require('../core/eleve.ai');
 const router = express.Router();
 
 // Même règle que côté professeur : la correction ignore accents, casse,
 // apostrophes, ponctuation et espaces parasites, y compris sur les téléphones.
 const norm = (value = '') => String(value ?? '').normalize('NFKD').replace(/\p{M}/gu, '').replace(/œ/g, 'oe').replace(/æ/g, 'ae').replace(/ß/g, 'ss').toLowerCase().replace(/[’']/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 const classKey = (value = '') => norm(value).replace(/\s/g, '');
+const verifyControlStudent = (token = '', expectedStudentId = '') => {
+    const secret = String(process.env.CONTROL_AUTH_SECRET || process.env.JWT_SECRET || process.env.SESSION_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+    const [payload, signature] = String(token || '').split('.');
+    if (!secret || !payload || !signature) return false;
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return false;
+    try {
+        const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+        return data.kind === 'control-student'
+            && String(data.studentId || '') === String(expectedStudentId || '')
+            && Number(data.exp || 0) > Date.now();
+    } catch (_) { return false; }
+};
 
 // Les articles, accents, apostrophes et espaces oubliés ne transforment pas
 // une bonne réponse en erreur. Les mots importants restent comparés.
@@ -68,9 +83,19 @@ router.get('/list/:studentId', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const Control = mongoose.model('AssessmentControl');
+        const Student = mongoose.model('Student');
         const row = await Control.findById(req.params.id).lean();
         if (!row || row.active === false) return res.status(404).json({ error: 'Contrôle indisponible' });
         const studentId = String(req.query?.studentId || '').trim();
+        if (!mongoose.Types.ObjectId.isValid(studentId)) {
+            return res.status(401).json({ error: 'Connexion Google élève requise.' });
+        }
+        if (!verifyControlStudent(req.query?.authToken, studentId)) return res.status(401).json({ error: 'Session Google expirée. Reconnecte-toi.' });
+        const student = await Student.findById(studentId, 'currentClass').lean();
+        if (!student) return res.status(401).json({ error: 'Compte élève introuvable.' });
+        if (!(row.targetClassrooms || []).some((className) => classKey(className) === classKey(student.currentClass))) {
+            return res.status(403).json({ error: 'Ce contrôle n’est pas attribué à ta classe.' });
+        }
         const submitted = mongoose.Types.ObjectId.isValid(studentId)
             ? (row.submissions || []).find((submission) => String(submission?.studentId || '') === studentId) || null
             : null;
@@ -86,85 +111,65 @@ router.post('/:id/submit', async (req, res) => {
         if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
 
         const reqStudentId = String(req.body?.studentId || '').trim();
-        const firstName = String(req.body?.firstName || '').trim();
-        const lastName = String(req.body?.lastName || '').trim();
-
-        if (!mongoose.Types.ObjectId.isValid(reqStudentId) && !firstName && !lastName) {
-            return res.status(400).json({ error: 'Prénom et nom requis pour rendre le contrôle.' });
+        if (!mongoose.Types.ObjectId.isValid(reqStudentId)) {
+            return res.status(401).json({ error: 'Connexion Google élève requise.' });
         }
-
-        let matchedStudent = null;
-        if (mongoose.Types.ObjectId.isValid(reqStudentId)) {
-            matchedStudent = await Student.findById(reqStudentId, 'firstName lastName currentClass').lean();
-        } else if (firstName || lastName) {
-            const allStudents = await Student.find({}, 'firstName lastName currentClass').lean();
-            const targetKey1 = norm(`${firstName} ${lastName}`);
-            const targetKey2 = norm(`${lastName} ${firstName}`);
-            matchedStudent = allStudents.find(s => {
-                const k1 = norm(`${s.firstName} ${s.lastName}`);
-                const k2 = norm(`${s.lastName} ${s.firstName}`);
-                return k1 === targetKey1 || k2 === targetKey1 || k1 === targetKey2;
-            });
-        }
+        if (!verifyControlStudent(req.body?.authToken, reqStudentId)) return res.status(401).json({ error: 'Session Google expirée. Reconnecte-toi.' });
+        const matchedStudent = await Student.findById(reqStudentId, 'firstName lastName currentClass').lean();
+        if (!matchedStudent) return res.status(401).json({ error: 'Compte élève introuvable.' });
 
         const assignedStudentId = matchedStudent ? String(matchedStudent._id) : null;
-        const assignedStudentName = matchedStudent
-            ? `${matchedStudent.firstName} ${matchedStudent.lastName}`
-            : (`${firstName} ${lastName}`.trim() || 'Élève');
+        const assignedStudentName = `${matchedStudent.firstName} ${matchedStudent.lastName}`.trim();
         const assignedClass = matchedStudent?.currentClass || '';
+        if (!(row.targetClassrooms || []).some((className) => classKey(className) === classKey(assignedClass))) {
+            return res.status(403).json({ error: 'Ce contrôle n’est pas attribué à ta classe.' });
+        }
 
         const raw = Array.isArray(req.body?.answers) ? req.body.answers : [];
+        const total = (row.items || []).reduce((sum, item) => sum + (Number(item.points) || 1), 0);
+        const aiCorrection = await EleveAI.correctAssessmentControl({
+            title: row.title,
+            subject: row.subject,
+            studentClass: assignedClass,
+            items: row.items || [],
+            answers: raw
+        });
+        if (!Number.isFinite(Number(aiCorrection?.score)) || aiCorrection?._ai_debug?.parsed === false) {
+            return res.status(503).json({ error: 'La correction IA est momentanément indisponible. Tes réponses sont conservées sur cet écran : réessaie dans un instant.' });
+        }
+        const aiItems = new Map((aiCorrection.items || []).map((item) => [String(item?.itemId || ''), item]));
         const answers = (row.items || []).map((item) => {
-            const given = raw.find(a => String(a.itemId) === String(item.id));
-            const values = Array.isArray(given?.values) ? given.values.map(v => String(v || '')) : [String(given?.value ?? '')];
-            let correct = false;
-            if (item.type === 'qcm') correct = Number(given?.value) === Number(item.correctIndex);
-            else if (item.type === 'fill') correct = (item.expectedAnswers || []).every((expected, index) => matchAnswer(values[index], expected));
-            else if ((item.expectedKeywords || []).length) correct = (item.expectedKeywords || []).every(keyword => containsAnswer(values[0], keyword));
-            else correct = (item.expectedAnswers || []).some(expected => matchAnswer(values[0], expected));
-
-            const blankResults = item.type === 'fill' ? (item.expectedAnswers || []).map((expected, index) => ({
-                index,
-                value: String(values[index] || ''),
-                expected: String(expected || ''),
-                correct: matchAnswer(values[index], expected),
-                contestStatus: ''
-            })) : [];
-
+            const given = raw.find((answer) => String(answer?.itemId) === String(item.id)) || {};
+            const corrected = aiItems.get(String(item.id)) || {};
             const maxPoints = Number(item.points) || 1;
-            const awardedPoints = item.type === 'fill'
-                ? maxPoints * blankResults.filter(result => result.correct).length / Math.max(1, blankResults.length)
-                : item.type === 'target' && (item.expectedKeywords || []).length
-                    ? maxPoints * (item.expectedKeywords || []).filter(keyword => containsAnswer(values[0], keyword)).length / item.expectedKeywords.length
-                : (correct ? maxPoints : 0);
-
+            const awardedPoints = Math.max(0, Math.min(maxPoints, Number(corrected.awardedPoints) || 0));
             return {
                 itemId: item.id,
-                values,
-                value: given?.value,
-                correct,
-                blankResults,
-                contestStatus: '',
+                values: Array.isArray(given.values) ? given.values.map((value) => String(value || '')) : [],
+                value: given.value,
+                correct: corrected.correct === true || awardedPoints >= maxPoints,
                 awardedPoints: Math.round(awardedPoints * 100) / 100,
-                maxPoints
+                maxPoints,
+                feedback: String(corrected.feedback || '').trim()
             };
         });
-
         const score = answers.reduce((sum, answer) => sum + answer.awardedPoints, 0);
-        const total = (row.items || []).reduce((sum, item) => sum + (Number(item.points) || 1), 0);
         const submission = {
             id: `copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             studentId: assignedStudentId,
             studentName: assignedStudentName,
-            firstName: firstName || matchedStudent?.firstName || '',
-            lastName: lastName || matchedStudent?.lastName || '',
+            firstName: matchedStudent.firstName || '',
+            lastName: matchedStudent.lastName || '',
             currentClass: assignedClass,
             answers,
             score: Math.round(score * 100) / 100,
             total: Math.round(total * 100) / 100,
             submittedAt: new Date(),
-            reviewClosed: false,
-            reviewClosedAt: null
+            correctionStatus: 'completed',
+            explanation: String(aiCorrection.explanation || '').trim(),
+            correctedBy: 'ai',
+            reviewClosed: true,
+            reviewClosedAt: new Date()
         };
 
         const submissions = Array.isArray(row.submissions) ? [...row.submissions] : [];
@@ -173,7 +178,7 @@ router.post('/:id/submit', async (req, res) => {
             (assignedStudentName && norm(s.studentName) === norm(assignedStudentName))
         );
         if (existingIndex >= 0 && submissions[existingIndex]?.reviewClosed === true) {
-            return res.status(409).json({ error: 'Cette copie est définitivement terminée. Les contestations ont été transmises au professeur.' });
+            return res.status(409).json({ error: 'Ce contrôle a déjà été rendu.' });
         }
         if (existingIndex >= 0) {
             submissions[existingIndex] = { ...submissions[existingIndex], ...submission, id: submissions[existingIndex].id || submission.id };
@@ -185,11 +190,7 @@ router.post('/:id/submit', async (req, res) => {
 
         res.json({
             ...submission,
-            corrections: answers.map((a, i) => ({
-                ...a,
-                expectedAnswers: row.items[i]?.expectedAnswers || [],
-                expectedKeywords: row.items[i]?.expectedKeywords || []
-            }))
+            corrections: answers
         });
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
@@ -274,10 +275,11 @@ router.post('/:id/cheat-alert', async (req, res) => {
         }
 
         const reqStudentId = String(bodyData?.studentId || '').trim();
-        let rawStudentName = String(bodyData?.studentName || '').trim();
+        if (!verifyControlStudent(bodyData?.authToken, reqStudentId)) return res.status(401).json({ error: 'Session Google expirée.' });
+        let rawStudentName = '';
         const reason = String(bodyData?.reason || "Sortie de l'écran / Changement d'application sur mobile").trim();
 
-        if (!rawStudentName && mongoose.Types.ObjectId.isValid(reqStudentId)) {
+        if (mongoose.Types.ObjectId.isValid(reqStudentId)) {
             const student = await Student.findById(reqStudentId, 'firstName lastName').lean();
             if (student) {
                 rawStudentName = `${student.firstName} ${student.lastName}`.trim();

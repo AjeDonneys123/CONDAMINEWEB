@@ -440,6 +440,42 @@ const EleveAI = {
         return EleveAI._askJSON(prompt, system, { quality_score: 0.4, level_fit: 0.4, should_ask_security: false, reason: "Qualité insuffisante pour une vérification supplémentaire." });
     },
 
+    correctAssessmentControl: async ({ title = '', subject = '', studentClass = '', items = [], answers = [] } = {}) => {
+        const total = items.reduce((sum, item) => sum + (Number(item?.points) || 1), 0);
+        const answerById = new Map((answers || []).map((answer) => [String(answer?.itemId || ''), answer]));
+        const questions = items.map((item, index) => {
+            const answer = answerById.get(String(item?.id || '')) || {};
+            const studentAnswer = item?.type === 'fill'
+                ? (Array.isArray(answer.values) ? answer.values : []).join(' | ')
+                : item?.type === 'qcm'
+                    ? String(item?.choices?.[Number(answer.value)] ?? '')
+                    : String(answer.value ?? '');
+            const expected = item?.type === 'qcm'
+                ? String(item?.choices?.[Number(item.correctIndex)] ?? '')
+                : [...(item?.expectedAnswers || []), ...(item?.expectedKeywords || [])].join(' | ');
+            return {
+                itemId: String(item?.id || index),
+                question: String(item?.prompt || ''),
+                studentAnswer,
+                expectedKnowledge: expected,
+                maxPoints: Number(item?.points) || 1
+            };
+        });
+        const fallback = { score: null, total, explanation: '', items: [] };
+        return EleveAI._askJSON(
+            `Contrôle: ${title}\nMatière: ${subject}\nNiveau: ${EleveAI._levelLabel(studentClass)}\nQuestions et réponses: ${JSON.stringify(questions)}`,
+            [
+                "Tu corriges un contrôle scolaire en évaluant UNIQUEMENT les connaissances démontrées.",
+                "Ne retire jamais de point pour l'orthographe, les accents, les majuscules, la ponctuation, la grammaire, les espaces ou une formulation maladroite.",
+                "Accepte une réponse dès que le savoir attendu est clairement identifiable, même avec des fautes.",
+                "Respecte le maximum de points de chaque question et calcule exactement le total.",
+                'Réponds uniquement en JSON strict: {"score":number,"total":number,"explanation":"explication globale courte pour l’élève","items":[{"itemId":"...","awardedPoints":number,"correct":boolean,"feedback":"explication pédagogique courte"}]}.'
+            ].join('\n'),
+            fallback,
+            { route: 'assessment-control', feature: 'assessment-control-correction', temperature: 0, maxOutputTokens: 4096 }
+        );
+    },
+
     generateIntegrityChallenge: async (instruction, userText, studentClass = '') => {
         const level = EleveAI._levelLabel(studentClass);
         const shortText = String(userText || '').slice(0, 2200);

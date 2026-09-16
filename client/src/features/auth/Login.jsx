@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './Login.css';
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, googleOnly = false }) {
   const [allUsersData, setAllUsersData] = useState([]);
   const [inputClass, setInputClass] = useState('');
   const [inputLast, setInputLast] = useState('');
@@ -436,6 +436,7 @@ export default function Login({ onLoginSuccess }) {
             </div>
           )}
 
+          {!googleOnly && <>
           <div className="login-separator"><span>ou</span></div>
           <div className="login-manual-title">Connexion avec ton identité</div>
           <div className="finder-wrapper">
@@ -619,6 +620,7 @@ export default function Login({ onLoginSuccess }) {
           >
             {loading ? 'Ouverture...' : '👀 ACCÈS PROFESSEUR VISITEUR'}
           </button>
+          </>}
         </form>
       </div>
     </div>

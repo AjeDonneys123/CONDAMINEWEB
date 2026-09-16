@@ -91,6 +91,11 @@ export default function StudentsManager({ globalClassId }) {
   const [pronoteDraft, setPronoteDraft] = useState({ title: '', date: '', coefficient: '1', outOf: '20' });
   const [preparingPronote, setPreparingPronote] = useState(false);
   const [pronotePrepared, setPronotePrepared] = useState(null);
+  const [manualGradeOpen, setManualGradeOpen] = useState(false);
+  const [manualGradeDraft, setManualGradeDraft] = useState({ title: '', date: new Date().toISOString().slice(0, 10), outOf: '20', text: '' });
+  const [manualGradeSaving, setManualGradeSaving] = useState(false);
+  const [manualGradeError, setManualGradeError] = useState('');
+  const [manualGradePromptCopied, setManualGradePromptCopied] = useState(false);
 
   const isCopyContested = (copy) => (copy?.answers || []).some((a) =>
     a.contestStatus === 'pending' || (a.blankResults || []).some((b) => b.contestStatus === 'pending')
@@ -206,6 +211,86 @@ export default function StudentsManager({ globalClassId }) {
       alert(error.message || 'Préparation Pronote impossible');
     } finally {
       setPreparingPronote(false);
+    }
+  };
+
+  const parseManualGrades = () => {
+    const outOf = Math.max(1, Math.min(100, Number(String(manualGradeDraft.outOf || '20').replace(',', '.')) || 20));
+    const roster = students.map((student) => {
+      const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
+      const reverse = norm(`${student.lastName || ''}${student.firstName || ''}`);
+      return { student, keys: new Set([direct, reverse, norm(student.nickname || '')].filter(Boolean)) };
+    });
+    const matched = [];
+    const errors = [];
+    String(manualGradeDraft.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach((line, index) => {
+      const match = line.match(/^(.+?)\s*[:=]\s*(-?\d+(?:[.,]\d+)?)\s*(?:\/\s*(\d+(?:[.,]\d+)?))?\s*$/);
+      if (!match) { errors.push(`Ligne ${index + 1} non comprise : ${line}`); return; }
+      const nameKey = norm(match[1]);
+      const candidates = roster.filter(row => row.keys.has(nameKey));
+      const score = Number(match[2].replace(',', '.'));
+      const lineTotal = match[3] ? Number(match[3].replace(',', '.')) : outOf;
+      const normalizedScore = lineTotal > 0 ? score * outOf / lineTotal : NaN;
+      if (candidates.length !== 1) { errors.push(`${match[1].trim()} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}`); return; }
+      if (!Number.isFinite(normalizedScore) || normalizedScore < 0 || normalizedScore > outOf) { errors.push(`${match[1].trim()} : note invalide`); return; }
+      matched.push({ studentId: extractId(candidates[0].student._id), score: Math.round(normalizedScore * 100) / 100, student: candidates[0].student });
+    });
+    return { outOf, matched, errors };
+  };
+
+  const createManualGradeControl = async () => {
+    const parsed = parseManualGrades();
+    if (parsed.errors.length) { setManualGradeError(parsed.errors.join('\n')); return; }
+    if (!parsed.matched.length) { setManualGradeError('Collez au moins une ligne « Nom Prénom : note ».'); return; }
+    setManualGradeSaving(true);
+    setManualGradeError('');
+    try {
+      const response = await fetch('/api/controls/manual-grades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId: globalClassId,
+          title: manualGradeDraft.title || 'Notes dictées',
+          date: manualGradeDraft.date,
+          outOf: parsed.outOf,
+          entries: parsed.matched.map(({ studentId, score }) => ({ studentId, score }))
+        })
+      });
+      const control = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(control?.error || 'Création impossible');
+      setAssessmentControls(current => [control, ...current]);
+      setManualGradeOpen(false);
+      setManualGradeDraft({ title: '', date: new Date().toISOString().slice(0, 10), outOf: '20', text: '' });
+    } catch (error) { setManualGradeError(error.message || 'Création impossible'); }
+    finally { setManualGradeSaving(false); }
+  };
+
+  const copyManualGradePrompt = async () => {
+    const roster = students
+      .map(student => `${String(student.firstName || '').trim()} ${String(student.lastName || '').trim()}`.trim())
+      .filter(Boolean)
+      .join('\n');
+    const prompt = `Je vais te dicter ou te fournir des notes pour la classe ${className || 'sélectionnée'}.
+
+Reformate uniquement les notes que je te donne en respectant exactement ces règles :
+- une seule ligne par élève ;
+- format strict : Prénom NOM : note ;
+- reprends exactement l'orthographe du prénom et du nom dans la liste officielle ci-dessous ;
+- n'invente aucun élève et n'ajoute pas les élèves pour lesquels je ne donne aucune note ;
+- conserve le barème dicté sous la forme note/barème s'il est précisé (exemple : 8/10) ;
+- sinon écris seulement la note (exemple : 15 ou 12,5) ;
+- aucun tableau, aucune puce, aucun titre, aucune explication, aucun bloc de code.
+
+LISTE OFFICIELLE DES ÉLÈVES :
+${roster}
+
+Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`;
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setManualGradePromptCopied(true);
+      window.setTimeout(() => setManualGradePromptCopied(false), 2500);
+    } catch (_) {
+      setManualGradeError('Impossible de copier le prompt automatiquement. Autorisez le presse-papiers dans le navigateur.');
     }
   };
 
@@ -2038,6 +2123,16 @@ export default function StudentsManager({ globalClassId }) {
             </div>
         )}
 
+        <div className="mb-5 flex justify-end">
+            <button
+                type="button"
+                onClick={() => { setManualGradeError(''); setManualGradeOpen(true); }}
+                className="rounded-2xl bg-violet-600 px-5 py-3 text-sm font-black text-white shadow-lg transition hover:bg-violet-700"
+            >
+                ➕ Ajouter une note
+            </button>
+        </div>
+
         {/* TABLEAU DES CONTRÔLES & CONTESTATIONS */}
         {assessmentControls.length > 0 && (
             <div className="mb-5 rounded-[26px] border border-slate-200 bg-slate-50 p-5">
@@ -2753,6 +2848,68 @@ export default function StudentsManager({ globalClassId }) {
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {manualGradeOpen && (
+            <div className="fixed inset-0 z-[112] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Ajouter des notes dictées">
+                <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+                        <div>
+                            <div className="text-xl font-black text-slate-900">➕ Ajouter une note</div>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Collez la liste générée par ChatGPT. Un devoir fermé et exportable vers Pronote sera créé.</p>
+                        </div>
+                        <button type="button" onClick={() => setManualGradeOpen(false)} className="text-3xl font-black leading-none text-slate-400 hover:text-slate-800" aria-label="Fermer">×</button>
+                    </div>
+                    <div className="space-y-4 overflow-y-auto p-5">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <label className="text-xs font-black text-slate-700 sm:col-span-2">Titre du devoir
+                                <input value={manualGradeDraft.title} onChange={event => setManualGradeDraft(draft => ({ ...draft, title: event.target.value }))} placeholder="Ex. Interrogation chapitre 2" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                            </label>
+                            <label className="text-xs font-black text-slate-700">Date
+                                <input type="date" value={manualGradeDraft.date} onChange={event => setManualGradeDraft(draft => ({ ...draft, date: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                            </label>
+                            <label className="text-xs font-black text-slate-700">Barème
+                                <input type="number" min="1" max="100" step="0.5" value={manualGradeDraft.outOf} onChange={event => setManualGradeDraft(draft => ({ ...draft, outOf: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                            </label>
+                        </div>
+                        <label className="block text-xs font-black text-slate-700">Liste des notes
+                            <textarea
+                                value={manualGradeDraft.text}
+                                onChange={event => { setManualGradeError(''); setManualGradeDraft(draft => ({ ...draft, text: event.target.value })); }}
+                                placeholder={'Antonella Alegria : 15\nVictoria Araujo : 12,5\nPedro Auda : 8/10'}
+                                className="mt-1 min-h-[280px] w-full resize-y rounded-2xl border-2 border-violet-200 bg-violet-50/40 p-4 font-mono text-sm outline-none focus:border-violet-500"
+                            />
+                        </label>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700">
+                            Format accepté : <code>Nom Prénom : note</code>, une ligne par élève. Les notes comme <code>8/10</code> sont automatiquement converties vers le barème choisi.
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void copyManualGradePrompt()}
+                            className="w-full rounded-2xl border-2 border-indigo-300 bg-indigo-50 px-4 py-3 text-sm font-black text-indigo-800 transition hover:bg-indigo-100"
+                        >
+                            {manualGradePromptCopied ? '✅ Prompt copié dans le presse-papiers' : '📋 Copier le prompt pour ChatGPT'}
+                        </button>
+                        {manualGradeDraft.text.trim() && (() => {
+                            const preview = parseManualGrades();
+                            return (
+                                <div className={`rounded-2xl border p-4 text-sm ${preview.errors.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-emerald-300 bg-emerald-50 text-emerald-950'}`}>
+                                    <div className="font-black">{preview.matched.length} élève(s) reconnu(s) sur {preview.outOf}</div>
+                                    {preview.matched.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{preview.matched.map(row => <span key={row.studentId} className="rounded-full bg-white px-2 py-1 font-bold shadow-sm">{row.student.firstName} {row.student.lastName} : {row.score}</span>)}</div>}
+                                    {preview.errors.length > 0 && <pre className="mt-3 whitespace-pre-wrap font-sans font-bold">{preview.errors.join('\n')}</pre>}
+                                </div>
+                            );
+                        })()}
+                        {manualGradeError && <pre className="whitespace-pre-wrap rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{manualGradeError}</pre>}
+                    </div>
+                    <div className="flex justify-end gap-3 border-t border-slate-200 p-4">
+                        <button type="button" onClick={() => setManualGradeOpen(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700">Annuler</button>
+                        <button type="button" disabled={manualGradeSaving} onClick={() => void createManualGradeControl()} className="rounded-xl bg-violet-600 px-5 py-2 text-xs font-black text-white hover:bg-violet-700 disabled:opacity-50">
+                            {manualGradeSaving ? 'Création…' : '✓ Créer le devoir noté'}
+                        </button>
                     </div>
                 </div>
             </div>
