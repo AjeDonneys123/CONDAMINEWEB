@@ -1,0 +1,503 @@
+/* RedactionWorkspace.css - CondaWeb Rédaction Studio */
+
+.conda-redaction-container {
+    min-height: 100vh;
+    background: #0f172a;
+    color: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Header */
+.conda-redaction-header {
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.7);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.conda-redaction-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.conda-redaction-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.conda-redaction-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+}
+
+.conda-redaction-header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.conda-redaction-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    padding: 6px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 800;
+    font-family: 'SF Mono', 'Roboto Mono', monospace;
+    color: #38bdf8;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.conda-redaction-quit-btn {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.conda-redaction-quit-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+}
+
+/* Topic Banner */
+.conda-redaction-topic-banner {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+    padding: 20px 32px;
+}
+
+.conda-redaction-topic-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #a5b4fc;
+    margin-bottom: 6px;
+}
+
+.conda-redaction-topic-text {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.6;
+    color: #f8fafc;
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+/* Main Split View */
+.conda-redaction-main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    position: relative;
+}
+
+@media (max-width: 1024px) {
+    .conda-redaction-main {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Essay Editor Area (Left/Center) */
+.conda-redaction-editor-panel {
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border-right: 1px solid rgba(51, 65, 85, 0.6);
+    background: #0f172a;
+}
+
+.conda-redaction-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.conda-redaction-tool-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.conda-redaction-tool-btn {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.conda-redaction-tool-btn:hover:not(:disabled) {
+    background: rgba(51, 65, 85, 0.9);
+    border-color: #64748b;
+    color: #f8fafc;
+}
+
+.conda-redaction-tool-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.conda-redaction-words-counter {
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+}
+
+.conda-redaction-textarea {
+    flex: 1;
+    min-height: 480px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1.5px solid rgba(51, 65, 85, 0.7);
+    border-radius: 16px;
+    padding: 22px;
+    color: #f8fafc;
+    font-size: 16px;
+    font-family: inherit;
+    line-height: 1.7;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.conda-redaction-textarea:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.conda-redaction-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 12px;
+    flex-wrap: wrap;
+}
+
+.conda-btn-ia-copy {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    border: none;
+    color: #ffffff;
+    font-size: 13.5px;
+    font-weight: 800;
+    padding: 12px 20px;
+    border-radius: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+    transition: all 0.2s ease;
+}
+
+.conda-btn-ia-copy:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45);
+}
+
+.conda-btn-validate {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    border: none;
+    color: #ffffff;
+    font-size: 13.5px;
+    font-weight: 800;
+    padding: 12px 24px;
+    border-radius: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    transition: all 0.2s ease;
+}
+
+.conda-btn-validate:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+}
+
+/* Persistent Draft Panel (Right) */
+.conda-redaction-draft-panel {
+    background: rgba(15, 23, 42, 0.85);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    max-height: calc(100vh - 150px);
+}
+
+.conda-draft-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.conda-draft-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.conda-draft-badge {
+    font-size: 10px;
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.conda-draft-textarea {
+    width: 100%;
+    min-height: 180px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    border-radius: 12px;
+    padding: 14px;
+    color: #e2e8f0;
+    font-size: 13.5px;
+    line-height: 1.6;
+    outline: none;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.conda-draft-textarea:focus {
+    border-color: #38bdf8;
+}
+
+/* AI Notes Section inside Draft */
+.conda-ai-notes-box {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(124, 58, 237, 0.08) 100%);
+    border: 1.5px solid rgba(129, 140, 248, 0.4);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: fadeIn 0.3s ease;
+}
+
+.conda-ai-notes-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #c7d2fe;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.conda-ai-notes-hint {
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.conda-ai-notes-textarea {
+    width: 100%;
+    min-height: 140px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(129, 140, 248, 0.4);
+    border-radius: 10px;
+    padding: 12px;
+    color: #f1f5f9;
+    font-size: 13px;
+    line-height: 1.6;
+    outline: none;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.conda-ai-notes-textarea:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+}
+
+/* Modals */
+.conda-redaction-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 100;
+    animation: fadeIn 0.2s ease;
+}
+
+.conda-redaction-modal {
+    background: #1e293b;
+    border: 1px solid rgba(71, 85, 105, 0.6);
+    border-radius: 24px;
+    padding: 32px;
+    max-width: 600px;
+    width: 100%;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    color: #f8fafc;
+}
+
+.conda-redaction-warning-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+}
+
+.conda-redaction-modal-title {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 12px;
+    color: #f8fafc;
+}
+
+.conda-redaction-modal-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #cbd5e1;
+    margin-bottom: 24px;
+}
+
+.conda-redaction-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.conda-modal-btn-cancel {
+    background: rgba(51, 65, 85, 0.8);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    color: #e2e8f0;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.conda-modal-btn-cancel:hover {
+    background: rgba(71, 85, 105, 0.9);
+}
+
+.conda-modal-btn-confirm {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    border: none;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 10px 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.conda-modal-btn-confirm:hover {
+    filter: brightness(1.1);
+}
+
+.conda-modal-btn-danger {
+    background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+    border: none;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 10px 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+/* Toast */
+.conda-redaction-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(239, 68, 68, 0.95);
+    color: #ffffff;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.5);
+    z-index: 200;
+    animation: slideUp 0.25s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translate(-50%, 15px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}

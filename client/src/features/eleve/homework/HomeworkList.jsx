@@ -1,6 +1,7 @@
 // @signatures: HomeworkList, loadData
 import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
+import RedactionWorkspace from './RedactionWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
 export default function HomeworkList({
@@ -83,13 +84,33 @@ export default function HomeworkList({
     if (onOpenHandled) onOpenHandled();
   }, [openItemId, homeworks, selectedHw, onOpenHandled]);
 
-  if (selectedHw) return (
+  const isRedactionHw = (hw) => {
+    if (!hw) return false;
+    if (hw.mode === 'redaction') return true;
+    if (hw.assessmentKind === 'rqp' || hw.assessmentKind === 'commentaire') return true;
+    const hasDocs = (hw.levels || []).some((l) => (l.instructionUrls && l.instructionUrls.length > 0) || (l.attachmentUrls && l.attachmentUrls.length > 0));
+    if (!hasDocs && (hw.levels || []).length === 1 && String(hw.levels[0]?.dnbSection || '') === 'paragraphe') return true;
+    return false;
+  };
+
+  if (selectedHw) {
+    if (isRedactionHw(selectedHw)) {
+      return (
+        <RedactionWorkspace 
+          homework={selectedHw} 
+          user={user} 
+          onQuit={() => { setSelectedHw(null); loadData(); }} 
+        />
+      );
+    }
+    return (
       <HomeworkWorkspace 
         homework={selectedHw} 
         user={user} 
         onQuit={() => { setSelectedHw(null); loadData(); }} 
       />
-  );
+    );
+  }
 
   return (
       <div className="flex flex-col gap-4">

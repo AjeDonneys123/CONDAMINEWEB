@@ -8,7 +8,10 @@ const DEFAULT_HW_DATA = {
     title: '', content: '', date: '', teacherId: null, 
     levels: [{ instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '', aiHintUrls: [], dnbSection: 'docs', dnbSubject: 'histoire' }],
     isPunishment: false,
-    assessmentKind: ''
+    assessmentKind: '',
+    mode: 'docs',
+    promptTopic: '',
+    minTimeMinutes: 25
 };
 
 const DNB_SECTION_OPTIONS = [
@@ -47,6 +50,9 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             aiHintUrls: [],
             ...lvl
         }));
+        base.mode = base.mode || 'docs';
+        base.promptTopic = base.promptTopic || '';
+        base.minTimeMinutes = Number(base.minTimeMinutes || 25);
         if (!base.date) {
             const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
             base.date = tomorrow.toISOString().split('T')[0];
@@ -249,6 +255,9 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title || targets.length === 0) return alert("❌ Titre et au moins une Classe requis !");
+        if (formData.mode === 'redaction' && !String(formData.promptTopic || '').trim()) {
+            return alert("❌ Veuillez saisir le sujet de la rédaction !");
+        }
         
         setLoading(true);
         try {
@@ -281,6 +290,18 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     isAllClass: grp.isAllClass,
                     teacherId: user.id || user._id
                 };
+                if (payload.mode === 'redaction') {
+                    payload.levels = [{
+                        instruction: String(payload.promptTopic || '').trim(),
+                        instructionUrls: [],
+                        attachmentUrls: [],
+                        aiHints: '',
+                        aiHintUrls: [],
+                        responseMode: 'text',
+                        dnbSection: 'paragraphe',
+                        dnbSubject: 'histoire'
+                    }];
+                }
                 if (formData.isPunishment) {
                     // Une punition est un template ciblé par classe:
                     // elle ne doit jamais être publiée en "classe entière" classique.
@@ -312,46 +333,150 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
 
             <div className="v84-hw-body">
                 <div className="v84-hw-editor custom-scrollbar">
-                    <div className="mb-4 p-3 rounded-2xl border border-slate-200 bg-white flex flex-wrap items-center gap-2">
-                        <div className="text-[11px] font-black uppercase text-slate-400 mr-2">Type d'entraînement</div>
-                        <button
-                            type="button"
-                            className={`v84-res-btn upload ${formData.assessmentKind === '' ? 'bg-slate-900 text-white' : ''}`}
-                            onClick={() => handleInput('assessmentKind', '')}
-                        >
-                            Devoir classique
-                        </button>
-                        {canMarkDnb && (
+                    {/* SÉLECTEUR DE FORMAT : DOCS vs RÉDACTION */}
+                    <div className="mb-4 p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                            <span className="text-2xl">🎛️</span>
+                            <div>
+                                <div className="text-xs font-black uppercase text-indigo-950 tracking-wider">Format du devoir</div>
+                                <div className="text-[11px] font-medium text-slate-500">Choisissez entre l'analyse documentaire multi-questions ou la rédaction argumentée.</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
                             <button
                                 type="button"
-                                className={`v84-res-btn upload ${formData.assessmentKind === 'dnb' ? 'bg-violet-600 text-white border-violet-700' : ''}`}
-                                onClick={() => handleInput('assessmentKind', 'dnb')}
+                                className={`px-4 py-2 rounded-xl text-xs font-black transition ${formData.mode !== 'redaction' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}
+                                onClick={() => handleInput('mode', 'docs')}
                             >
-                                Définir en DNB
+                                📄 Documents & Questions (Docs)
                             </button>
-                        )}
-                        {canMarkSecondeTraining && (
-                            <>
-                                <button
-                                    type="button"
-                                    className={`v84-res-btn upload ${formData.assessmentKind === 'rqp' ? 'bg-blue-600 text-white border-blue-700' : ''}`}
-                                    onClick={() => handleInput('assessmentKind', 'rqp')}
-                                >
-                                    Définir en RQP
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`v84-res-btn upload ${formData.assessmentKind === 'commentaire' ? 'bg-emerald-600 text-white border-emerald-700' : ''}`}
-                                    onClick={() => handleInput('assessmentKind', 'commentaire')}
-                                >
-                                    Définir en commentaire
-                                </button>
-                            </>
-                        )}
-                        {!canMarkDnb && !canMarkSecondeTraining && (
-                            <span className="text-[11px] font-bold text-slate-400">Sélectionne une classe de 3e ou de 2de pour afficher les marquages spéciaux.</span>
-                        )}
+                            <button
+                                type="button"
+                                className={`px-4 py-2 rounded-xl text-xs font-black transition ${formData.mode === 'redaction' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}
+                                onClick={() => handleInput('mode', 'redaction')}
+                            >
+                                ✍️ Rédaction & Sujet Libre
+                            </button>
+                        </div>
                     </div>
+
+                    {formData.mode === 'redaction' ? (
+                        <div className="v84-hw-card bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                            <div>
+                                <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-2">
+                                    📌 Sujet de la Rédaction (Énoncé / Consigne principale)
+                                </label>
+                                <textarea
+                                    className="w-full h-44 p-4 rounded-2xl border border-slate-200 bg-slate-50 font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition outline-none resize-y text-sm leading-relaxed"
+                                    placeholder="Exemple : Dans un développement argumenté d'une vingtaine de lignes, expliquez le fonctionnement de la démocratie athénienne au Ve siècle av. J.-C. et ses limites..."
+                                    value={formData.promptTopic || ''}
+                                    onChange={(e) => handleInput('promptTopic', e.target.value)}
+                                />
+                            </div>
+
+                            <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70">
+                                <div className="flex items-start justify-between flex-wrap gap-4">
+                                    <div className="flex items-start gap-2.5 max-w-lg">
+                                        <span className="text-2xl mt-0.5">⏱️</span>
+                                        <div>
+                                            <div className="text-xs font-black uppercase text-amber-950 tracking-wider">
+                                                Temps minimum indicatif attendu (anti-vitesse / anti-triche)
+                                            </div>
+                                            <p className="text-[11px] text-amber-900/80 mt-1 leading-relaxed">
+                                                Si l'élève tente de valider avant ce seuil, un message lui indiquera son temps de travail (<em>« C'est un peu court... es-tu sûr(e) d'avoir terminé ? »</em>) et l'invitera à relire et enrichir ses arguments. Un rendu expédié sera également signalé dans votre correction.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {[15, 25, 40, 50].map((mins) => (
+                                            <button
+                                                key={mins}
+                                                type="button"
+                                                className={`px-3.5 py-2 rounded-xl text-xs font-black transition ${Number(formData.minTimeMinutes) === mins ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-amber-950 border border-amber-200 hover:bg-amber-100/60'}`}
+                                                onClick={() => handleInput('minTimeMinutes', mins)}
+                                            >
+                                                {mins} min
+                                            </button>
+                                        ))}
+                                        <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-amber-200">
+                                            <input
+                                                type="number"
+                                                min="5"
+                                                max="180"
+                                                className="w-14 text-center text-xs font-black text-amber-950 outline-none"
+                                                value={formData.minTimeMinutes || 25}
+                                                onChange={(e) => handleInput('minTimeMinutes', Math.max(5, parseInt(e.target.value, 10) || 5))}
+                                            />
+                                            <span className="text-[11px] font-bold text-slate-400">min</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 text-[12px] text-slate-600 space-y-1.5">
+                                <div className="font-black text-slate-800 uppercase tracking-wide text-[11px]">🛡️ Sécurité & IA en mode Rédaction</div>
+                                <div>• <strong>Chronomètre actif :</strong> plus d'alerte anxiogène de perte de focus (adapté au volet <em>Demander à Gemini</em> dans Chrome).</div>
+                                <div>• <strong>Anti copier-coller :</strong> collage externe désactivé sur la copie et le brouillon pour forcer la saisie manuelle.</div>
+                                <div>• <strong>Brouillon persistant avec notes IA :</strong> l'élève copie son travail pour l'IA, reçoit les pistes et doit noter ses remarques dans son brouillon avant sa prochaine tentative.</div>
+                                <div>• <strong>Audit final :</strong> à la validation, l'élève colle son historique d'échange avec l'IA pour transmission au correcteur.</div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="mb-4 p-3 rounded-2xl border border-slate-200 bg-white flex flex-wrap items-center gap-2">
+                                <div className="text-[11px] font-black uppercase text-slate-400 mr-2">Type d'entraînement</div>
+                                <button
+                                    type="button"
+                                    className={`v84-res-btn upload ${formData.assessmentKind === '' ? 'bg-slate-900 text-white' : ''}`}
+                                    onClick={() => handleInput('assessmentKind', '')}
+                                >
+                                    Devoir classique
+                                </button>
+                                {canMarkDnb && (
+                                    <button
+                                        type="button"
+                                        className={`v84-res-btn upload ${formData.assessmentKind === 'dnb' ? 'bg-violet-600 text-white border-violet-700' : ''}`}
+                                        onClick={() => handleInput('assessmentKind', 'dnb')}
+                                    >
+                                        Définir en DNB
+                                    </button>
+                                )}
+                                {canMarkSecondeTraining && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className={`v84-res-btn upload ${formData.assessmentKind === 'rqp' ? 'bg-blue-600 text-white border-blue-700' : ''}`}
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    assessmentKind: 'rqp',
+                                                    mode: 'redaction',
+                                                    promptTopic: prev.promptTopic || prev.levels?.[0]?.instruction || ''
+                                                }));
+                                            }}
+                                        >
+                                            Définir en RQP
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`v84-res-btn upload ${formData.assessmentKind === 'commentaire' ? 'bg-emerald-600 text-white border-emerald-700' : ''}`}
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    assessmentKind: 'commentaire',
+                                                    mode: 'redaction',
+                                                    promptTopic: prev.promptTopic || prev.levels?.[0]?.instruction || ''
+                                                }));
+                                            }}
+                                        >
+                                            Définir en commentaire
+                                        </button>
+                                    </>
+                                )}
+                                {!canMarkDnb && !canMarkSecondeTraining && (
+                                    <span className="text-[11px] font-bold text-slate-400">Sélectionne une classe de 3e ou de 2de pour afficher les marquages spéciaux.</span>
+                                )}
+                            </div>
                     <div className="hw-level-tabs">
                         {formData.levels.map((lvl, idx) => (<div key={idx} onClick={() => setActiveLevelIdx(idx)} className={`hw-tab-btn ${activeLevelIdx === idx ? 'active' : ''}`}><span>Question {idx + 1}</span>{formData.levels.length > 1 && (<span className="hw-tab-delete" onClick={(e) => handleRemoveLevel(e, idx)}>✕</span>)}</div>))}
                         <button className="hw-tab-add" onClick={handleAddLevel}>+</button>
@@ -553,6 +678,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                             </div>
                         )}
                     </div>
+                        </>
+                    )}
                 </div>
 
                 <StudioDistributionSidebar defaultSelectAllClasses={!initialData?._id}

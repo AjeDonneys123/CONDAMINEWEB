@@ -9,6 +9,11 @@ const HomeworkSchema = new mongoose.Schema({
     // NOUVEAU : Matière (String simple pour l'affichage élève)
     subject: { type: String, default: "Général" },
 
+    // NOUVEAU : Mode de devoir ('docs' pour multi-questions/documents ou 'redaction' pour sujet libre/développement)
+    mode: { type: String, enum: ['docs', 'redaction'], default: 'docs' },
+    promptTopic: { type: String, default: '' },
+    minTimeMinutes: { type: Number, default: 25 },
+
     // Ancien champ (gardé pour compatibilité)
     classroom: String,
     

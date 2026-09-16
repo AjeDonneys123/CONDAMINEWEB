@@ -809,18 +809,34 @@ router.post('/submit-local-dnb-paragraph', async (req, res) => {
 });
 
 router.post('/submit', async (req, res) => {
-    const { userText, homeworkId, levelIndex, playerId, antiCheat, draftDocMeta } = req.body;
+    const {
+        userText,
+        homeworkId,
+        levelIndex,
+        playerId,
+        antiCheat,
+        draftDocMeta,
+        draftContent,
+        aiNotes,
+        aiConversationLog,
+        timeSpentSeconds,
+        attemptsCount
+    } = req.body;
     const Homework = mongoose.model('Homework');
     const Submission = mongoose.model('Submission');
     const Student = mongoose.model('Student');
 
     const hw = await Homework.findById(homeworkId);
-    const lvl = hw.levels[levelIndex];
+    const lvl = (hw.levels && hw.levels[levelIndex]) || { instruction: hw?.promptTopic || '' };
     const compactCorrection = lvl?.compactCorrection && typeof lvl.compactCorrection === 'object'
         ? lvl.compactCorrection
         : null;
 
     const student = await Student.findById(playerId, 'currentClass').lean();
+    const instructionText = hw?.mode === 'redaction'
+        ? (hw.promptTopic || lvl?.instruction || 'Rédaction')
+        : (lvl?.instruction || '');
+
     const correctionContext = {
         assessmentKind: hw?.assessmentKind || '',
         dnbSection: lvl?.dnbSection || '',
@@ -828,27 +844,33 @@ router.post('/submit', async (req, res) => {
         maxPoints: Number(compactCorrection?.total_points || lvl?.maxPoints || 0) || (hw?.assessmentKind === 'dnb' && lvl?.dnbSection === 'docs' ? 20 : 10),
         hasCompactCorrection: Boolean(compactCorrection)
     };
-    const analysis = String(hw?.assessmentKind || '') === 'dnb'
-        ? await EleveAI.correctDnbSimple({
-            userText,
-            instruction: lvl?.instruction || '',
-            aiHints: compactCorrection ? JSON.stringify(compactCorrection) : (lvl?.aiHints || ''),
-            studentClass: student?.currentClass || '',
-            context: correctionContext
-        })
-        : await EleveAI.analyze(userText, lvl.instruction, lvl.aiHints, student?.currentClass || '', correctionContext);
+    const isRedaction = hw?.mode === 'redaction';
+    let analysis = { grade: '', feedback_fond: 'Devoir enregistré. Transmis à votre professeur pour correction.' };
     let spellingMistakes = [];
-    try {
-        spellingMistakes = await Promise.race([
-            EleveAI.extractSpellingMistakes({
+
+    if (!isRedaction) {
+        analysis = String(hw?.assessmentKind || '') === 'dnb'
+            ? await EleveAI.correctDnbSimple({
                 userText,
-                instruction: lvl?.instruction || '',
-                studentClass: student?.currentClass || ''
-            }),
-            new Promise((resolve) => setTimeout(() => resolve([]), 8000))
-        ]);
-    } catch (e) {
-        spellingMistakes = [];
+                instruction: instructionText,
+                aiHints: compactCorrection ? JSON.stringify(compactCorrection) : (lvl?.aiHints || ''),
+                studentClass: student?.currentClass || '',
+                context: correctionContext
+            })
+            : await EleveAI.analyze(userText, instructionText, lvl?.aiHints || '', student?.currentClass || '', correctionContext);
+
+        try {
+            spellingMistakes = await Promise.race([
+                EleveAI.extractSpellingMistakes({
+                    userText,
+                    instruction: instructionText,
+                    studentClass: student?.currentClass || ''
+                }),
+                new Promise((resolve) => setTimeout(() => resolve([]), 8000))
+            ]);
+        } catch (e) {
+            spellingMistakes = [];
+        }
     }
     const cleanFeedback = stripUnderlinedMarkup(analysis?.feedback_fond || '');
     
@@ -860,9 +882,43 @@ router.post('/submit', async (req, res) => {
             draftDocRevisionCount: Number(draftDocMeta.revisionCount || 0)
         };
     }
+
+    if (hw?.mode === 'redaction') {
+        const minTimeSec = (hw.minTimeMinutes || 25) * 60;
+        const actualSec = Number(timeSpentSeconds || 0);
+        const tooShort = actualSec < minTimeSec;
+        antiCheatSnapshot.isRedaction = true;
+        antiCheatSnapshot.timeSpentSeconds = actualSec;
+        antiCheatSnapshot.minTimeMinutes = hw.minTimeMinutes || 25;
+        if (tooShort) {
+            antiCheatSnapshot.tooShort = true;
+            antiCheatSnapshot.tooShortWarned = true;
+            const minsSpent = Math.max(1, Math.round(actualSec / 60));
+            antiCheatSnapshot.reasons.unshift(`Temps trop court (${minsSpent} min / min. ${hw.minTimeMinutes || 25} min)`);
+            if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
+        }
+        const notesWords = String(aiNotes || '').trim().split(/\s+/).filter(Boolean).length;
+        antiCheatSnapshot.aiNotesWordCount = notesWords;
+        if (notesWords < 8) {
+            antiCheatSnapshot.aiNotesSuspicious = true;
+            antiCheatSnapshot.reasons.push(`Notes sur l'IA très faibles (${notesWords} mots)`);
+            if (tooShort && antiCheatSnapshot.level !== 'RED') antiCheatSnapshot.level = 'RED';
+        }
+    }
+
     await Submission.create({ 
-        studentId: playerId, homeworkId, levelIndex, 
-        content: userText, feedback: cleanFeedback, grade: analysis.grade,
+        studentId: playerId,
+        homeworkId,
+        levelIndex: levelIndex || 0,
+        mode: hw?.mode || 'docs',
+        content: userText,
+        draftContent: String(draftContent || ''),
+        aiNotes: String(aiNotes || ''),
+        aiConversationLog: String(aiConversationLog || ''),
+        timeSpentSeconds: Number(timeSpentSeconds || 0),
+        attemptsCount: Number(attemptsCount || 1),
+        feedback: cleanFeedback,
+        grade: analysis.grade,
         antiCheat: antiCheatSnapshot
     });
     await MistakeService.recordForStudent({

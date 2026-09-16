@@ -1820,30 +1820,83 @@ export default function StudentsManager({ globalClassId }) {
                                         </div>
                                     )}
                                 </div>
-                                <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
-                                    <div className="text-[10px] font-black text-slate-500 uppercase mb-2">Surveillance</div>
-                                    <div className="text-[11px] text-slate-700 font-semibold">
-                                        Temps réflexion avant écriture: {formatMs(editorData?.antiCheat?.telemetry?.firstWriteDelayMs || 0)}
-                                    </div>
-                                    <div className="text-[11px] text-slate-700 font-semibold">
-                                        QCM vérification (durées): {(editorData?.antiCheat?.verification?.qcmDurationsMs || []).length > 0 ? (editorData.antiCheat.verification.qcmDurationsMs.map(formatMs).join(' / ')) : 'n/a'}
-                                    </div>
-                                    <div className="text-[11px] text-slate-700 font-semibold">
-                                        Score QCM: {Number(editorData?.antiCheat?.verification?.qcmScore || 0).toFixed(2)}
-                                    </div>
-                                    <div className="text-[11px] text-slate-700 font-semibold">
-                                        Mode réponse ouverte: {editorData?.antiCheat?.verification?.mode || 'texte'}
-                                    </div>
-                                    <div className="text-[11px] text-slate-700 font-semibold">
-                                        Temps réponse ouverte: {formatMs(editorData?.antiCheat?.verification?.responseDurationMs || 0)}
-                                    </div>
-                                    <div className="mt-2 text-[11px] text-slate-700">
-                                        <span className="font-black uppercase text-slate-500">Transcription / Réponse ouverte</span>
-                                        <div className="mt-1 p-2 rounded border border-slate-100 bg-slate-50 whitespace-pre-wrap">
-                                            {editorData?.antiCheat?.verification?.transcript || 'Aucune donnée'}
+                                {editorData.mode === 'redaction' || editorData.draftContent || editorData.aiConversationLog ? (
+                                    <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg">✍️</span>
+                                                <span className="text-xs font-black uppercase text-indigo-950 tracking-wider">Audit Rédaction & IA</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {editorData.antiCheat?.tooShort ? (
+                                                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-red-100 text-red-700 border border-red-200">
+                                                        ⚠️ Rendu trop rapide ({Math.round((editorData.timeSpentSeconds || 0) / 60)} min / min. {editorData.antiCheat?.minTimeMinutes || 25} min)
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                                        ⏱️ Temps : {Math.round((editorData.timeSpentSeconds || 0) / 60)} min
+                                                    </span>
+                                                )}
+                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-white text-slate-700 border border-slate-200">
+                                                    {editorData.attemptsCount || 1} tentative(s)
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {editorData.antiCheat?.aiNotesSuspicious && (
+                                            <div className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-1.5">
+                                                🚩 Notes IA suspectes : l'élève n'a pris que {editorData.antiCheat?.aiNotesWordCount || 0} mot(s) de notes sur les conseils de l'IA.
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                                <div className="text-[10px] font-black uppercase text-slate-500 mb-1">📝 Brouillon persistant élève</div>
+                                                <div className="text-xs text-slate-700 whitespace-pre-wrap max-h-36 overflow-y-auto font-mono bg-slate-50 p-2 rounded border border-slate-100">
+                                                    {editorData.draftContent || '(Brouillon vide)'}
+                                                </div>
+                                            </div>
+                                            <div className="rounded-xl border border-indigo-200 bg-white p-3">
+                                                <div className="text-[10px] font-black uppercase text-indigo-600 mb-1">🤖 Notes prises sur les conseils IA</div>
+                                                <div className="text-xs text-slate-700 whitespace-pre-wrap max-h-36 overflow-y-auto font-mono bg-indigo-50/50 p-2 rounded border border-indigo-100">
+                                                    {editorData.aiNotes || '(Aucune note IA renseignée)'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                            <div className="text-[10px] font-black uppercase text-slate-500 mb-1">📋 Échange avec Gemini / IA collé par l'élève</div>
+                                            <div className="text-xs text-slate-700 whitespace-pre-wrap max-h-36 overflow-y-auto font-mono bg-slate-50 p-2 rounded border border-slate-100">
+                                                {editorData.aiConversationLog || '(Aucun historique IA collé)'}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+                                        <div className="text-[10px] font-black text-slate-500 uppercase mb-2">Surveillance</div>
+                                        <div className="text-[11px] text-slate-700 font-semibold">
+                                            Temps réflexion avant écriture: {formatMs(editorData?.antiCheat?.telemetry?.firstWriteDelayMs || 0)}
+                                        </div>
+                                        <div className="text-[11px] text-slate-700 font-semibold">
+                                            QCM vérification (durées): {(editorData?.antiCheat?.verification?.qcmDurationsMs || []).length > 0 ? (editorData.antiCheat.verification.qcmDurationsMs.map(formatMs).join(' / ')) : 'n/a'}
+                                        </div>
+                                        <div className="text-[11px] text-slate-700 font-semibold">
+                                            Score QCM: {Number(editorData?.antiCheat?.verification?.qcmScore || 0).toFixed(2)}
+                                        </div>
+                                        <div className="text-[11px] text-slate-700 font-semibold">
+                                            Mode réponse ouverte: {editorData?.antiCheat?.verification?.mode || 'texte'}
+                                        </div>
+                                        <div className="text-[11px] text-slate-700 font-semibold">
+                                            Temps réponse ouverte: {formatMs(editorData?.antiCheat?.verification?.responseDurationMs || 0)}
+                                        </div>
+                                        <div className="mt-2 text-[11px] text-slate-700">
+                                            <span className="font-black uppercase text-slate-500">Transcription / Réponse ouverte</span>
+                                            <div className="mt-1 p-2 rounded border border-slate-100 bg-slate-50 whitespace-pre-wrap">
+                                                {editorData?.antiCheat?.verification?.transcript || 'Aucune donnée'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="corr-panel-student">
                                     <label className="corr-label">✍️ TEXTE ÉLÈVE</label>
                                     <textarea className="corr-textarea student" value={editorData.content} onChange={e => setEditorData({...editorData, content: e.target.value})} />
