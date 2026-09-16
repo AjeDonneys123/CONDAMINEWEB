@@ -226,6 +226,11 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
         const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
 
+        const bonusGuidance = `
+Système de bonus CondaWeb (applicable sur le prochain contrôle sur table, plafonné à 15,5/20) :
+- Si ma copie a déjà un très bon niveau : dis-moi clairement "Très bonne base, tu n'as pas vraiment besoin de bonus toi ! Par contre voyons des détails qui te permettront d'améliorer ta rédaction pour de vrai : demande-moi ce que tu veux (exemples précis, anecdotes historiques, chiffres clés, citations d'époque, vocabulaire de spécialiste)."
+- Si ma copie est encore fragile ou incomplète : dis-moi "Pour l'instant, il te reste une grande marge de progression (et de précieux points bonus à aller chercher pour ton DS !)", puis donne-moi 2 ou 3 pistes prioritaires sur la structure, les arguments oubliés et le plan, sans jamais rédiger à ma place.`;
+
         let textToCopy = '';
         if (attemptsCount === 1) {
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
@@ -240,7 +245,7 @@ Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
 Tu agis comme tuteur pédagogique exigeant et bienveillant. Analyse mon travail sans JAMAIS rédiger à ma place.
 Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
 "[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentToken}]"
-puis donne-moi 2 ou 3 pistes précises d'amélioration sur le fond, le vocabulaire historique/géographique et la structure.`;
+${bonusGuidance}`;
         } else {
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
@@ -254,7 +259,8 @@ Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
 Tu agis comme tuteur pédagogique sans JAMAIS rédiger à ma place.
 Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
 "[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON | RÉF: ${currentToken}]"
-suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents. Ensuite, donne-moi de nouveaux retours constructifs sans rédiger à ma place.`;
+suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents.
+${bonusGuidance}`;
         }
 
         try {
@@ -405,7 +411,7 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                                 +{bonus} <span className="text-2xl font-bold text-amber-200">pt{bonus > 1 ? 's' : ''}</span>
                             </div>
                             <p className="text-xs text-amber-100/90 font-medium max-w-lg mx-auto">
-                                Ce bonus sera ajouté directement par votre professeur à votre note du prochain devoir surveillé sur table !
+                                Ce bonus sera ajouté par votre professeur à votre note du prochain contrôle sur table (applicable jusqu'au plafond de 15,5/20).
                             </p>
                         </div>
                     ) : (
@@ -763,7 +769,7 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                                         Validation Finale & Fiche Mémo DS
                                     </h3>
                                     <p className="text-xs text-slate-400 m-0">
-                                        Prouvez ce que vous avez appris pour débloquer votre bonus de <strong>+2.5 pts</strong> au prochain contrôle !
+                                        Prouvez ce que vous avez appris pour débloquer votre bonus (jusqu'à <strong>+2.5 pts</strong>, applicable jusqu'au palier de 15,5/20) !
                                     </p>
                                 </div>
                             </div>

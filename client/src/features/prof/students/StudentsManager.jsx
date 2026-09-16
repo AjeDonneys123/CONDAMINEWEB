@@ -1881,8 +1881,10 @@ export default function StudentsManager({ globalClassId }) {
                                                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                                                     <div>
                                                         <div className="text-[10px] font-black uppercase text-amber-600 tracking-wider">Récompense Pédagogique</div>
-                                                        <div className="text-sm font-black text-slate-800">
-                                                            Bonus Prochain Examen : <span className="text-amber-600 font-extrabold text-base">+{editorData.examBonusPoints ?? editorData.learningEfficiency.examBonusPoints ?? 0.5} pt(s)</span>
+                                                        <div className="text-sm font-black text-slate-800 flex items-baseline gap-1.5 flex-wrap">
+                                                            <span>Bonus Prochain Examen :</span>
+                                                            <span className="text-amber-600 font-extrabold text-base">+{editorData.examBonusPoints ?? editorData.learningEfficiency.examBonusPoints ?? 0.5} pt(s)</span>
+                                                            <span className="text-[10px] font-bold text-slate-400">(Plafond d'application : 15,5/20)</span>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -1895,8 +1897,8 @@ export default function StudentsManager({ globalClassId }) {
                                                                 🛡️ #{editorData.sessionToken || editorData.learningEfficiency.sessionToken} {editorData.learningEfficiency.tokenVerified !== false && editorData.learningEfficiency.watermarkVerified !== false ? '🔒✅' : '🚩'}
                                                             </span>
                                                         )}
-                                                        <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-                                                            🎟️ Bonus DS sur table
+                                                        <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200" title="Ce bonus permet de faire monter la note du DS jusqu'à 15,5/20 maximum.">
+                                                            🎟️ Bonus DS (max 15,5)
                                                         </span>
                                                     </div>
                                                 </div>

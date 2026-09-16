@@ -1099,6 +1099,7 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             score: totalScore,
             scoreOutOf10: (totalScore / 10).toFixed(1),
             examBonusPoints,
+            examBonusPointsMaxCap: 15.5,
             studentMessage,
             teacherSummary,
             sessionToken: expectedToken,
