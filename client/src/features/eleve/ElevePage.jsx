@@ -14,7 +14,7 @@ const EleveChatWorkspace = lazy(() => import('./chat/EleveChatWorkspace'));
 const EleveCoursesList = lazy(() => import('./courses/EleveCoursesList'));
 const ExamTrainingHub = lazy(() => import('./training/ExamTrainingHub'));
 const DilWorkspace = lazy(() => import('./dil/DilWorkspace'));
-const ControlList = lazy(() => import('./controls/ControlList'));
+const LearnedWorkspace = lazy(() => import('./learned/LearnedWorkspace'));
 
 const TabLoading = () => (
   <div className="flex items-center justify-center p-12 text-slate-400 font-bold text-sm animate-pulse">
@@ -209,7 +209,13 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             <Suspense fallback={<TabLoading />}>
               {tab === 'status' && <><GptCorrections user={freshUser} /><StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} /></>}
               {tab === 'courses' && <EleveCoursesList user={freshUser} />}
-              {tab === 'exams' && <ControlList user={freshUser} openItemId={new URLSearchParams(window.location.search).get('control') || ''} />}
+              {tab === 'exams' && (
+                <LearnedWorkspace
+                  user={freshUser}
+                  openItemId={new URLSearchParams(window.location.search).get('control') || ''}
+                  onNavigate={(newTab) => setTab(newTab)}
+                />
+              )}
               {tab === 'controles' && (
                 <ControlRecoveryList
                   user={freshUser}

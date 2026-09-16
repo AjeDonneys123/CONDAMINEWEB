@@ -428,6 +428,45 @@ router.get('/submissions/:studentId', async (req, res) => {
     }
 });
 
+router.get('/learned/:studentId', async (req, res) => {
+    try {
+        const Submission = mongoose.model('Submission');
+        const studentId = String(req.params.studentId || '');
+        if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json([]);
+        const subs = await Submission.find({ studentId })
+            .populate('homeworkId', 'title promptTopic assessmentKind mode')
+            .sort({ createdAt: -1 })
+            .lean();
+        
+        const learned = subs.filter(s => 
+            s.memoSheet || 
+            s.draftContent || 
+            s.mode === 'redaction' || 
+            s.homeworkId?.mode === 'redaction' ||
+            s.homeworkId?.assessmentKind === 'rqp' ||
+            s.homeworkId?.assessmentKind === 'commentaire'
+        ).map(s => ({
+            id: s._id,
+            homeworkTitle: s.homeworkId?.title || 'Devoir Rédaction',
+            promptTopic: s.homeworkId?.promptTopic || '',
+            assessmentKind: s.homeworkId?.assessmentKind || 'redaction',
+            draftContent: s.draftContent || '',
+            aiNotes: s.aiNotes || '',
+            memoSheet: s.memoSheet || s.learningEfficiency?.memoSheet || '',
+            examBonusPoints: s.examBonusPoints ?? s.learningEfficiency?.examBonusPoints ?? 0,
+            examBonusPointsMaxCap: s.learningEfficiency?.examBonusPointsMaxCap || 15.5,
+            studentMessage: s.learningEfficiency?.studentMessage || '',
+            finalEssay: s.content || '',
+            createdAt: s.createdAt
+        }));
+
+        res.json(learned);
+    } catch (e) {
+        console.error('[Learned] Erreur récupération fiches:', e);
+        res.status(500).json([]);
+    }
+});
+
 router.get('/mistakes/:studentId', async (req, res) => {
     try {
         const MistakesBook = mongoose.model('MistakesBook');
