@@ -1865,66 +1865,94 @@ export default function StudentsManager({ globalClassId }) {
                                         </div>
 
                                         {editorData.learningEfficiency && (
-                                            <div className="rounded-xl border border-indigo-200 bg-white p-3.5 space-y-2.5">
-                                                <div className="flex items-center justify-between">
+                                            <div className="rounded-xl border border-amber-200 bg-white p-3.5 space-y-2.5">
+                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                                                     <div>
-                                                        <div className="text-[10px] font-black uppercase text-indigo-500 tracking-wider">Démarche & Méthode de Travail</div>
-                                                        <div className="text-xs font-black text-slate-800">Efficience de l'Apprentissage (hors copie finale)</div>
+                                                        <div className="text-[10px] font-black uppercase text-amber-600 tracking-wider">Récompense Pédagogique</div>
+                                                        <div className="text-sm font-black text-slate-800">
+                                                            Bonus Prochain Examen : <span className="text-amber-600 font-extrabold text-base">+{editorData.examBonusPoints ?? editorData.learningEfficiency.examBonusPoints ?? 0.5} pt(s)</span>
+                                                        </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className="text-base font-black text-indigo-600">{editorData.learningEfficiency.score}<span className="text-xs text-slate-400">/100</span></span>
-                                                        <span className="ml-2 text-[10px] font-bold text-slate-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                                                            {editorData.learningEfficiency.scoreOutOf10}/10
+                                                        <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                                                            🎟️ Bonus DS sur table
                                                         </span>
                                                     </div>
                                                 </div>
 
+                                                {editorData.learningEfficiency.teacherSummary && (
+                                                    <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-900 font-medium">
+                                                        <span className="font-bold">📋 Synthèse d'Audit :</span> {editorData.learningEfficiency.teacherSummary}
+                                                    </div>
+                                                )}
+
+                                                {editorData.learningEfficiency.studentMessage && (
+                                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-[11px] text-slate-700">
+                                                        <span className="font-bold text-slate-800">💬 Encouragement élève :</span> {editorData.learningEfficiency.studentMessage}
+                                                    </div>
+                                                )}
+
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
                                                     <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                                                         <div className="text-slate-500 font-bold">📝 Brouillon / Plan</div>
-                                                        <div className="font-black text-slate-800">{editorData.learningEfficiency.breakdown?.draftScore ?? 0}/25 pts</div>
-                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.draftWordCount || 0} mots</div>
+                                                        <div className="font-black text-slate-800">{editorData.learningEfficiency.draftWordCount || 0} mots</div>
+                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.breakdown?.draftScore ?? 0}/25 pts</div>
                                                     </div>
                                                     <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                                                         <div className="text-slate-500 font-bold">🤖 Notes conseils IA</div>
-                                                        <div className="font-black text-slate-800">{editorData.learningEfficiency.breakdown?.aiNotesScore ?? 0}/25 pts</div>
-                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.aiNotesWordCount || 0} mots</div>
+                                                        <div className="font-black text-slate-800">{editorData.learningEfficiency.aiNotesWordCount || 0} mots</div>
+                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.breakdown?.aiNotesScore ?? 0}/25 pts</div>
                                                     </div>
                                                     <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                                                         <div className="text-slate-500 font-bold">🔄 Vraies tentatives</div>
-                                                        <div className="font-black text-slate-800">{editorData.learningEfficiency.breakdown?.attemptsScore ?? 0}/25 pts</div>
-                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.substantialAttemptsCount || 0} de ≥20 lignes</div>
+                                                        <div className="font-black text-slate-800">{editorData.learningEfficiency.substantialAttemptsCount || 0} de ≥20 lignes</div>
+                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.breakdown?.attemptsScore ?? 0}/25 pts</div>
                                                     </div>
                                                     <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                                                         <div className="text-slate-500 font-bold">🛡️ Démarche IA</div>
                                                         <div className="font-black">
                                                             {editorData.learningEfficiency.chatContainsAttempt1 ? (
-                                                                <span className="text-emerald-600">✅ Validée (+25)</span>
+                                                                <span className="text-emerald-600">✅ Validée</span>
                                                             ) : (
-                                                                <span className="text-red-600">🚩 Non trouvée (0)</span>
+                                                                <span className="text-red-600">🚩 Non trouvée</span>
                                                             )}
                                                         </div>
-                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.chatContainsAttempt1 ? 'Essai 1 dans le chat' : 'Essai 1 absent du chat'}</div>
+                                                        <div className="text-slate-400 text-[9px]">{editorData.learningEfficiency.chatContainsAttempt1 ? 'Essai 1 dans le chat' : 'Essai 1 absent'}</div>
                                                     </div>
                                                 </div>
 
                                                 {Array.isArray(editorData.learningEfficiency.attemptsHistory) && editorData.learningEfficiency.attemptsHistory.length > 1 && (
                                                     <div className="pt-2 border-t border-slate-100">
                                                         <div className="text-[10px] font-black uppercase text-slate-500 mb-1.5">Historique des versions / tentatives :</div>
-                                                        <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                                                            {editorData.learningEfficiency.attemptsHistory.map((att, aIdx) => (
-                                                                <details key={aIdx} className="text-[10px] rounded border border-slate-200 bg-slate-50 p-1.5">
-                                                                    <summary className="font-bold text-slate-700 cursor-pointer flex items-center justify-between">
-                                                                        <span>Tentative {att.attemptNumber || aIdx + 1} : {att.wordsCount || 0} mots ({att.linesCount || 0} lignes)</span>
-                                                                        <span className={`px-1.5 py-0.2 rounded text-[9px] ${att.isSubstantial ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                                            {att.isSubstantial ? '≥ 20 lignes' : '< 20 lignes'}
-                                                                        </span>
-                                                                    </summary>
-                                                                    <div className="mt-1.5 p-1.5 rounded bg-white border border-slate-200 text-slate-600 font-mono whitespace-pre-wrap">
-                                                                        {att.text || '(Texte vide)'}
-                                                                    </div>
-                                                                </details>
-                                                            ))}
+                                                        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                                                            {editorData.learningEfficiency.attemptsHistory.map((att, aIdx) => {
+                                                                const evalItem = (editorData.learningEfficiency.attemptsEvaluation || []).find(e => e.attemptNumber === (att.attemptNumber || aIdx + 1));
+                                                                return (
+                                                                    <details key={aIdx} className="text-[10px] rounded border border-slate-200 bg-slate-50 p-1.5">
+                                                                        <summary className="font-bold text-slate-700 cursor-pointer flex items-center justify-between">
+                                                                            <span>Tentative {att.attemptNumber || aIdx + 1} : {att.wordsCount || 0} mots ({att.linesCount || 0} lignes)</span>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                {evalItem?.adviceStatus && (
+                                                                                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${evalItem.adviceStatus === 'OUI' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                                                        Conseils: {evalItem.adviceStatus}
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className={`px-1.5 py-0.2 rounded text-[9px] ${att.isSubstantial ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                                                    {att.isSubstantial ? '≥ 20 lignes' : '< 20 lignes'}
+                                                                                </span>
+                                                                            </div>
+                                                                        </summary>
+                                                                        {evalItem?.comment && (
+                                                                            <div className="mt-1 text-[10px] text-indigo-700 italic bg-indigo-50/50 p-1 rounded">
+                                                                                💡 {evalItem.comment}
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="mt-1.5 p-1.5 rounded bg-white border border-slate-200 text-slate-600 font-mono whitespace-pre-wrap">
+                                                                            {att.text || '(Texte vide)'}
+                                                                        </div>
+                                                                    </details>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
                                                 )}

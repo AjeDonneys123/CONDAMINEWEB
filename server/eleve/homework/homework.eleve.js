@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const EleveAI = require('../core/eleve.ai');
+const AIEngine = require('../../core/ai.engine');
 const ProfDrive = require('../../prof/core/drive.prof');
 const MistakeService = require('../../services/mistake.service');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
@@ -951,18 +952,98 @@ router.post('/submit', async (req, res) => {
         const draftWords = String(draftContent || '').trim().split(/\s+/).filter(Boolean).length;
         const aiNotesWords = String(aiNotes || '').trim().split(/\s+/).filter(Boolean).length;
 
+        // Base rules: Brouillon + 1er essai sérieux = socle garanti +0.5 pt
+        let examBonusPoints = 0.5;
+        let studentMessage = "👏 Bravo, c'était fluide et facile pour toi ! Tu remportes +0.5 pt bonus pour ton prochain contrôle sur table. Tu n'as pas eu besoin de points supplémentaires, tu maîtrises déjà très bien ton sujet et tu auras une excellente note à l'examen !";
+        let teacherSummary = "Devoir réalisé en 1 seul jet direct avec brouillon initial. Bonne maîtrise immédiate (+0.5 pt bonus accordé).";
+        let attemptsEvaluation = [
+            { attemptNumber: 1, isSubstantial: normalizedHistory[0]?.isSubstantial || false, comment: "Premier essai rédigé avec brouillon initial." }
+        ];
+
+        // If multiple attempts, call Gemini 2.0 Flash to evaluate advice integration and progression
+        if (normalizedHistory.length > 1) {
+            try {
+                const topicPrompt = hw?.promptTopic || hw?.levels?.[0]?.instruction || hw?.title || 'Sujet de rédaction';
+                const attemptsSummary = normalizedHistory.map(a => `=== ESSAI N°${a.attemptNumber} (${a.wordsCount} mots, ~${a.linesCount} lignes) ===\n${a.text}`).join('\n\n');
+
+                const promptToGemini = `Voici le dossier complet de travail d'un élève pour un devoir de type Rédaction / RQP :
+
+SUJET DU DEVOIR :
+"${topicPrompt}"
+
+BROUILLON / PLAN INITIAL DE L'ÉLÈVE :
+${draftContent || '(Aucun brouillon)'}
+
+NOTES PRISES PAR L'ÉLÈVE SUR LES RETOURS DE L'IA (tuteur) :
+${aiNotes || '(Aucune note)'}
+
+DIFFÉRENTES VERSIONS / ESSAIS DE L'ÉLÈVE :
+${attemptsSummary}
+
+ÉCHANGE COMPLET AVEC L'IA (collé par l'élève) :
+${aiConversationLog || '(Aucun échange collé)'}
+
+CONSIGNE D'ATTRIBUTION DU BONUS POUR LE PROCHAIN CONTRÔLE :
+1. Socle de départ : Brouillon + Essai 1 sérieux = +0.5 pt garanti.
+2. Pour chaque nouvel essai (Essai 2, Essai 3...), vérifie s'il est consistant (≥ 15-20 lignes) ET s'il a RÉELLEMENT pris en compte les conseils de l'IA (regarde si les erreurs pointées ont été corrigées, si de nouveaux arguments/notions ont été ajoutés, ou si le chat contient la confirmation explicitement : '[CONSEILS_APPLIQUÉS : OUI]').
+3. Accorde +0.5 pt de bonus par essai amélioré respectant les conseils.
+4. Plafond maximum du bonus : +2.5 pts.
+5. Rédige un message chaleureux et stimulant pour l'élève ("studentMessage") détaillant ce qu'il a réussi et comment son travail acharné a payé.
+6. Rédige un résumé factuel pour le professeur ("teacherSummary").
+
+Réponds STRICTEMENT par un objet JSON valide suivant ce format :
+{
+  "examBonusPoints": 1.5,
+  "studentMessage": "Ton message d'encouragement personnalisé pour l'élève",
+  "teacherSummary": "Résumé concis pour le prof sur les versions et les conseils appliqués",
+  "attemptsEvaluation": [
+    { "attemptNumber": 1, "isSubstantial": true, "comment": "Premier jet sérieux avec plan." },
+    { "attemptNumber": 2, "isSubstantial": true, "tookAdviceIntoAccount": true, "adviceStatus": "OUI", "comment": "A bien approfondi le deuxième axe suggéré." }
+  ]
+}`;
+
+                const rawAiReply = await AIEngine.ask(promptToGemini, "Tu es un évaluateur pédagogique bienveillant et rigoureux. Réponds exclusivement en JSON valide.", { temperature: 0.2 });
+                const cleanJson = String(rawAiReply || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(cleanJson);
+
+                if (parsed && typeof parsed === 'object') {
+                    const parsedBonus = Number(parsed.examBonusPoints);
+                    if (!Number.isNaN(parsedBonus)) {
+                        examBonusPoints = Math.min(2.5, Math.max(0.5, Math.round(parsedBonus * 2) / 2));
+                    } else {
+                        examBonusPoints = 1.0;
+                    }
+                    if (parsed.studentMessage) studentMessage = String(parsed.studentMessage).trim();
+                    if (parsed.teacherSummary) teacherSummary = String(parsed.teacherSummary).trim();
+                    if (Array.isArray(parsed.attemptsEvaluation)) attemptsEvaluation = parsed.attemptsEvaluation;
+                }
+            } catch (aiErr) {
+                console.warn('[Redaction] Échec audit IA Gemini bonus, calcul heuristique de secours:', aiErr?.message || aiErr);
+                // Fallback heuristique robuste
+                let fallbackBonus = 0.5;
+                if (substantialAttemptsCount >= 2) fallbackBonus += 0.5;
+                if (aiNotesWords >= 15) fallbackBonus += 0.5;
+                examBonusPoints = Math.min(2.5, fallbackBonus);
+                studentMessage = `🌟 Superbe persévérance ! Tu remportes +${examBonusPoints} pts bonus pour ton prochain contrôle grâce à tes ${substantialAttemptsCount} essais et tes retours d'apprentissage !`;
+                teacherSummary = `Audit heuristique : ${substantialAttemptsCount} tentative(s) consistante(s), ${aiNotesWords} mots de notes IA. Bonus attribué : +${examBonusPoints} pt(s).`;
+            }
+        }
+
         const draftScore = draftWords >= 60 ? 25 : draftWords >= 30 ? 15 : draftWords >= 10 ? 8 : 0;
         const aiNotesScore = aiNotesWords >= 30 ? 25 : aiNotesWords >= 15 ? 15 : aiNotesWords >= 5 ? 8 : 0;
         const attemptsScore = substantialAttemptsCount >= 2 ? 25 : substantialAttemptsCount === 1 ? 15 : 0;
         const chatMatchScore = chatContainsAttempt1 ? 25 : 0;
-
         const totalScore = draftScore + aiNotesScore + attemptsScore + chatMatchScore;
 
         learningEfficiency = {
             score: totalScore,
             scoreOutOf10: (totalScore / 10).toFixed(1),
+            examBonusPoints,
+            studentMessage,
+            teacherSummary,
             substantialAttemptsCount,
             attemptsHistory: normalizedHistory,
+            attemptsEvaluation,
             chatContainsAttempt1,
             draftWordCount: draftWords,
             aiNotesWordCount: aiNotesWords,
@@ -982,6 +1063,8 @@ router.post('/submit', async (req, res) => {
         }
     }
 
+    const finalBonus = learningEfficiency?.examBonusPoints ?? 0;
+
     await Submission.create({ 
         studentId: playerId,
         homeworkId,
@@ -993,6 +1076,7 @@ router.post('/submit', async (req, res) => {
         aiConversationLog: String(aiConversationLog || ''),
         timeSpentSeconds: Number(timeSpentSeconds || 0),
         attemptsCount: Number(attemptsCount || 1),
+        examBonusPoints: finalBonus,
         learningEfficiency,
         feedback: cleanFeedback,
         grade: analysis.grade,
@@ -1019,7 +1103,7 @@ router.post('/submit', async (req, res) => {
         });
     }
 
-    res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes, learningEfficiency });
+    res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes, learningEfficiency, examBonusPoints: finalBonus });
 });
 
 router.post('/submit-chat', async (req, res) => {

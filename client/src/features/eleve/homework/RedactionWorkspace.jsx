@@ -170,14 +170,41 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         return entry;
     };
 
-    // "Copier pour l'IA" handler
+    // "Copier pour l'IA" handler with smart instruction prompt
     const handleCopyForAI = async () => {
-        const textToCopy = essayText.trim();
-        if (!textToCopy) {
+        const cleanEssay = essayText.trim();
+        if (!cleanEssay) {
             showToast("⚠️ Écrivez d'abord votre texte avant de le copier pour l'IA.");
             return;
         }
         archiveAttempt(attemptsCount, essayText);
+
+        let textToCopy = '';
+        if (attemptsCount === 1) {
+            textToCopy = `[SUJET DU DEVOIR : "${topicText}"]
+
+--- MON BROUILLON / PLAN INITIAL : ---
+${draftText.trim() || "(Plan en cours d'élaboration)"}
+
+--- MON 1ER ESSAI : ---
+${cleanEssay}
+
+Consigne pour l'IA (tuteur) :
+Agis en tuteur pédagogique bienveillant et exigeant. Analyse mon travail sans rédiger à ma place. Donne-moi 2 ou 3 pistes précises d'amélioration sur le fond, le vocabulaire historique/géographique et la structure.`;
+        } else {
+            textToCopy = `[SUJET DU DEVOIR : "${topicText}"]
+
+--- MA NOUVELLE TENTATIVE (Essai n°${attemptsCount}) : ---
+${cleanEssay}
+
+--- MES DERNIÈRES NOTES DE TES CONSEILS : ---
+${aiNotesText.trim() || "(Conseils précédents)"}
+
+Consigne OBLIGATOIRE pour l'IA (tuteur) :
+Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte :
+"[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON]" suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents. Ensuite, donne-moi de nouveaux retours constructifs sans rédiger à ma place.`;
+        }
+
         try {
             await navigator.clipboard.writeText(textToCopy);
             setShowAiNotes(true);
@@ -203,8 +230,12 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
     // Validation trigger
     const handleValidateClick = () => {
+        if (!draftText.trim()) {
+            alert("⚠️ Brouillon obligatoire : vous devez d'abord poser votre plan et vos idées dans le brouillon pour valider (+0.5 pt bonus de base garanti).");
+            return;
+        }
         if (!essayText.trim()) {
-            alert("Veuillez rédiger votre travail avant de valider.");
+            alert("⚠️ Veuillez rédiger votre travail avant de valider.");
             return;
         }
         const minTimeSec = minTimeMinutes * 60;
@@ -238,15 +269,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             aiConversationLog: aiConversationText,
             timeSpentSeconds: sessionSeconds,
             attemptsCount,
-            attemptsHistory: historyToSend,
-            antiCheat: {
-                flags: {
-                    pasteBursts: pasteAttemptCount,
-                    largeInserts: 0,
-                    tabSwitches: 0,
-                    hiddenMs: 0
-                }
-            }
+            attemptsHistory: historyToSend
         };
 
         try {
@@ -258,10 +281,15 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             const data = await res.json();
             setSubmitting(false);
             setShowFinalModal(false);
-            setSubmittedResult(data || { success: true });
+            if (data.error) {
+                alert(`Erreur: ${data.error}`);
+                return;
+            }
+            setSubmittedResult(data);
         } catch (err) {
             setSubmitting(false);
-            alert("Erreur lors de l'envoi de votre devoir : " + err.message);
+            setShowFinalModal(false);
+            alert(`Erreur réseau: ${err.message}`);
         }
     };
 
@@ -270,65 +298,68 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     // Render completion confirmation
     if (submittedResult) {
         const eff = submittedResult.learningEfficiency;
+        const bonus = submittedResult.examBonusPoints ?? eff?.examBonusPoints ?? 0.5;
+        const studentMsg = eff?.studentMessage || "Bravo pour votre investissement et votre rigueur !";
+        const attemptsEval = eff?.attemptsEvaluation || [];
+
         return (
             <div className="conda-redaction-container flex items-center justify-center p-6 text-center">
-                <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6">
-                    <div className="text-5xl">🎯</div>
-                    <h2 className="text-2xl font-black text-white uppercase tracking-wider">Devoir Rédaction Transmis !</h2>
-                    
-                    {eff && (
-                        <div className="bg-slate-800/90 border border-indigo-500/40 rounded-2xl p-6 text-left space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
-                                <div>
-                                    <div className="text-[11px] font-black uppercase text-indigo-400 tracking-wider">Indicateur de Démarche</div>
-                                    <h3 className="text-lg font-black text-white">Efficience de l'Apprentissage</h3>
-                                    <p className="text-[11px] text-slate-400 mt-0.5">Évaluation de votre méthode de travail (brouillon, vraies tentatives et usage tuteur de l'IA).</p>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-3xl font-black text-indigo-400">{eff.score}<span className="text-base text-slate-400">/100</span></div>
-                                    <div className="text-[10px] font-bold text-slate-400">Note : {eff.scoreOutOf10}/10</div>
-                                </div>
-                            </div>
+                <div className="bg-slate-900 border border-amber-500/50 rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6">
+                    <div className="text-5xl">🎟️</div>
+                    <div className="space-y-1">
+                        <div className="text-[11px] font-black uppercase text-amber-400 tracking-widest">Récompense d'Apprentissage</div>
+                        <h2 className="text-2xl font-black text-white uppercase tracking-wider">Devoir Terminé & Transmis !</h2>
+                    </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60">
-                                    <div className="font-bold text-slate-300">📝 Plan & Idées au brouillon</div>
-                                    <div className="text-slate-400 text-[11px] mt-1">{eff.draftWordCount} mots rédigés</div>
-                                    <div className="font-black text-indigo-400 mt-1">{eff.breakdown?.draftScore || 0} / 25 pts</div>
-                                </div>
-                                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60">
-                                    <div className="font-bold text-slate-300">🤖 Notes sur les conseils IA</div>
-                                    <div className="text-slate-400 text-[11px] mt-1">{eff.aiNotesWordCount} mots de synthèse</div>
-                                    <div className="font-black text-indigo-400 mt-1">{eff.breakdown?.aiNotesScore || 0} / 25 pts</div>
-                                </div>
-                                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60">
-                                    <div className="font-bold text-slate-300">🔄 Vraies tentatives (≥ 20 lignes)</div>
-                                    <div className="text-slate-400 text-[11px] mt-1">{eff.substantialAttemptsCount} tentative(s) consistante(s)</div>
-                                    <div className="font-black text-indigo-400 mt-1">{eff.breakdown?.attemptsScore || 0} / 25 pts</div>
-                                </div>
-                                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60">
-                                    <div className="font-bold text-slate-300">🛡️ Authenticité Démarche IA</div>
-                                    <div className="text-[11px] mt-1">
-                                        {eff.chatContainsAttempt1 ? (
-                                            <span className="text-emerald-400 font-bold">✅ Essai 1 soumis à l'IA</span>
-                                        ) : (
-                                            <span className="text-amber-400 font-bold">⚠️ Essai 1 absent du chat</span>
+                    {/* Gold Bonus Banner */}
+                    <div className="bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border-2 border-amber-400/60 rounded-2xl p-6 text-center shadow-lg relative overflow-hidden">
+                        <div className="text-xs font-black uppercase tracking-widest text-amber-300">Bonus pour le Prochain Contrôle sur Table</div>
+                        <div className="text-5xl font-black text-amber-300 my-2 drop-shadow-md">
+                            +{bonus} <span className="text-2xl font-bold text-amber-200">pt{bonus > 1 ? 's' : ''}</span>
+                        </div>
+                        <p className="text-xs text-amber-100/90 font-medium max-w-lg mx-auto">
+                            Ce bonus sera ajouté directement par votre professeur à votre note du prochain devoir surveillé sur table !
+                        </p>
+                    </div>
+
+                    {/* Personal Encouragement / Feedback */}
+                    <div className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-left space-y-3">
+                        <div className="text-[11px] font-black uppercase text-indigo-400 tracking-wider">Diagnostic Pédagogique</div>
+                        <p className="text-sm text-slate-200 font-medium leading-relaxed">
+                            {studentMsg}
+                        </p>
+
+                        {/* Breakdown per attempt */}
+                        {attemptsEval.length > 0 && (
+                            <div className="pt-3 border-t border-slate-700 space-y-2 text-xs">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Détail des versions évaluées :</div>
+                                {attemptsEval.map((att, idx) => (
+                                    <div key={idx} className="flex items-start justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60">
+                                        <div>
+                                            <span className="font-bold text-slate-200">Essai n°{att.attemptNumber || idx + 1} :</span>{' '}
+                                            <span className="text-slate-300">{att.comment || (att.isSubstantial ? 'Essai consistant' : 'Essai court')}</span>
+                                        </div>
+                                        {att.adviceStatus && (
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                att.adviceStatus === 'OUI' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                            }`}>
+                                                Conseils : {att.adviceStatus}
+                                            </span>
                                         )}
                                     </div>
-                                    <div className="font-black text-indigo-400 mt-1">{eff.breakdown?.chatMatchScore || 0} / 25 pts</div>
-                                </div>
+                                ))}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
-                    <div className="inline-block bg-indigo-500/15 border border-indigo-500/30 px-6 py-2.5 rounded-2xl text-indigo-300 font-black text-sm">
-                        ⏳ En attente de la correction de votre professeur
+                    <div className="inline-block bg-slate-800 border border-slate-700 px-6 py-2.5 rounded-2xl text-slate-400 font-semibold text-xs">
+                        ✍️ Copie enregistrée • Pas de note chiffrée automatique • Votre professeur validera votre bonus lors du prochain DS
                     </div>
                     <div>
                         <button
                             type="button"
                             onClick={onQuit}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm px-8 py-3.5 rounded-xl shadow-lg transition"
+                            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm px-8 py-3.5 rounded-xl shadow-lg transition"
                         >
                             Retour à la liste des devoirs
                         </button>
