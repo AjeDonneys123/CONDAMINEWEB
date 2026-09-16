@@ -1021,14 +1021,10 @@ router.post('/submit', async (req, res) => {
         const tokenVerified = chatString.includes(expectedToken) || chatString.includes(baseToken);
         const watermarkVerified = chatString.includes(expectedWatermark);
 
-        if (!tokenVerified && chatString.length > 30) {
-            antiCheatSnapshot.tokenSuspicious = true;
-            antiCheatSnapshot.reasons.push(`Jeton de session non trouvé dans l'échange IA (${expectedToken}) - risque d'échange copié ou fabriqué`);
-            if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
-        }
-
-        if (!watermarkVerified && chatString.length > 30) {
+        const isAuthentic = tokenVerified || watermarkVerified;
+        if (!isAuthentic && chatString.length > 30) {
             antiCheatSnapshot.watermarkMissing = true;
+            antiCheatSnapshot.tokenSuspicious = true;
             antiCheatSnapshot.reasons.push("Échec : tu as caché une partie de la conversation avec l'IA. Bonus bloqué.");
             antiCheatSnapshot.level = 'RED';
         }

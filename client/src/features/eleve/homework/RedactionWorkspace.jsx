@@ -974,7 +974,7 @@ ${bonusGuidance}`;
                                     />
                                 ) : (
                                     <div>
-                                        {isWatermarkInChat ? (
+                                        {isWatermarkInChat || isTokenInChat ? (
                                             <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-between">
                                                 <div className="flex items-center gap-2.5">
                                                     <span className="text-xl">✅</span>
