@@ -37,6 +37,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [showAiNotes, setShowAiNotes] = useState(false);
     const [attemptsCount, setAttemptsCount] = useState(1);
     const [attemptsHistory, setAttemptsHistory] = useState([]);
+    const [copyTargetMode, setCopyTargetMode] = useState('both'); // 'both' | 'draft' | 'essay'
     const [aiCopiedToast, setAiCopiedToast] = useState(false);
     const [isNotesFocusMode, setIsNotesFocusMode] = useState(false);
     const [pinnedAiNotes, setPinnedAiNotes] = useState('');
@@ -182,9 +183,10 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         showToast("⚠️ Copier-coller interdit.");
     };
 
-    // Helper to evaluate a substantial attempt (at least 20 lines or 150 words)
-    const formatAttemptData = (num, text) => {
+    // Helper to evaluate an attempt (at least 20 lines or 150 words)
+    const formatAttemptData = (num, text, draft, mode) => {
         const clean = String(text || '').trim();
+        const cleanDraft = String(draft || '').trim();
         const words = clean ? clean.split(/\s+/).filter(Boolean).length : 0;
         const rawLines = clean ? clean.split('\n').filter(l => l.trim().length > 0).length : 0;
         const lines = Math.max(rawLines, Math.round(words / 9));
@@ -192,6 +194,8 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         return {
             attemptNumber: num,
             text: clean,
+            draft: cleanDraft,
+            targetMode: mode || 'both',
             wordsCount: words,
             linesCount: lines,
             isSubstantial,
@@ -200,8 +204,8 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     };
 
     // Save or update an attempt in history
-    const archiveAttempt = (num, text) => {
-        const entry = formatAttemptData(num, text);
+    const archiveAttempt = (num, text, draft, mode) => {
+        const entry = formatAttemptData(num, text, draft, mode);
         setAttemptsHistory((prev) => {
             const idx = prev.findIndex((a) => a.attemptNumber === num);
             if (idx >= 0) {
@@ -216,12 +220,45 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
     // "Copier pour l'IA" handler with smart instruction prompt & unique session token
     const handleCopyForAI = async () => {
+        const cleanDraft = draftText.trim();
         const cleanEssay = essayText.trim();
-        if (!cleanEssay) {
-            showToast("⚠️ Écrivez d'abord votre texte avant de le copier pour l'IA.");
-            return;
+        const isAttempt1 = attemptsCount === 1;
+
+        // Validation rules based on attempt number and selected mode
+        if (isAttempt1) {
+            if (!cleanDraft || cleanDraft.length < 15) {
+                showToast("⚠️ Sas d'engagement : posez d'abord vos idées et votre plan dans le brouillon.");
+                return;
+            }
+            if (!cleanEssay || cleanEssay.length < 25) {
+                showToast("⚠️ Sas d'engagement : rédigez votre 1er essai de devoir (V1) avant de solliciter l'IA.");
+                return;
+            }
+        } else {
+            if (copyTargetMode === 'draft') {
+                if (!cleanDraft || cleanDraft.length < 15) {
+                    showToast("⚠️ Votre brouillon est vide. Posez ou ajustez votre plan avant de le copier pour l'IA.");
+                    return;
+                }
+            } else if (copyTargetMode === 'essay') {
+                if (!cleanEssay || cleanEssay.length < 25) {
+                    showToast("⚠️ Votre devoir rédigé est vide ou trop court.");
+                    return;
+                }
+            } else {
+                // 'both'
+                if (!cleanDraft || cleanDraft.length < 15) {
+                    showToast("⚠️ Votre brouillon est vide.");
+                    return;
+                }
+                if (!cleanEssay || cleanEssay.length < 25) {
+                    showToast("⚠️ Votre devoir rédigé est trop court.");
+                    return;
+                }
+            }
         }
-        archiveAttempt(attemptsCount, essayText);
+
+        archiveAttempt(attemptsCount, cleanEssay, cleanDraft, isAttempt1 ? 'both' : copyTargetMode);
 
         const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
         const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
@@ -232,13 +269,14 @@ Système de bonus CondaWeb (applicable sur le prochain contrôle sur table, plaf
 - Si ma copie est encore fragile ou incomplète : dis-moi "Pour l'instant, il te reste une grande marge de progression (et de précieux points bonus à aller chercher pour ton DS !)", puis donne-moi 2 ou 3 pistes prioritaires sur la structure, les arguments oubliés et le plan, sans jamais rédiger à ma place.`;
 
         let textToCopy = '';
-        if (attemptsCount === 1) {
+
+        if (isAttempt1) {
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON / PLAN INITIAL : ---
-${draftText.trim() || "(Plan en cours d'élaboration)"}
+${cleanDraft}
 
---- MON 1ER ESSAI : ---
+--- MON 1ER ESSAI RÉDIGÉ (V1) : ---
 ${cleanEssay}
 
 Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
@@ -246,10 +284,27 @@ Tu agis comme tuteur pédagogique exigeant et bienveillant. Analyse mon travail 
 Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
 "[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentToken}]"
 ${bonusGuidance}`;
-        } else {
+        } else if (copyTargetMode === 'draft') {
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
---- MA NOUVELLE TENTATIVE (Essai n°${attemptsCount}) : ---
+--- MON PLAN / BROUILLON RÉVISÉ (Essai n°${attemptsCount}) : ---
+${cleanDraft}
+
+--- MES DERNIÈRES NOTES DE TES CONSEILS : ---
+${aiNotesText.trim() || "(Conseils précédents)"}
+
+Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
+Tu agis comme tuteur pédagogique sans JAMAIS rédiger à ma place.
+J'ai retravaillé mon plan et mes arguments au brouillon suite à tes remarques. 
+Analyse spécifiquement mon brouillon : ce plan est-il équilibré et solide ? Mes exemples et arguments sont-ils pertinents avant que je ne passe à la rédaction ?
+Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
+"[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON | RÉF: ${currentToken}]"
+suivi d'une courte phrase expliquant si ce plan corrigé prend bien en compte tes remarques.
+${bonusGuidance}`;
+        } else if (copyTargetMode === 'essay') {
+            textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
+
+--- MA NOUVELLE TENTATIVE RÉDIGÉE (Essai n°${attemptsCount}) : ---
 ${cleanEssay}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
@@ -257,21 +312,50 @@ ${aiNotesText.trim() || "(Conseils précédents)"}
 
 Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
 Tu agis comme tuteur pédagogique sans JAMAIS rédiger à ma place.
+J'ai réécrit / enrichi ma copie. Analyse la rédaction : respect de la méthode AEI, fluidité, précision des arguments et clarté.
+Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
+"[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON | RÉF: ${currentToken}]"
+suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents.
+${bonusGuidance}`;
+        } else {
+            // 'both'
+            textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
+
+--- MON BROUILLON & PLAN CONSOLIDÉ (Essai n°${attemptsCount}) : ---
+${cleanDraft}
+
+--- MA NOUVELLE TENTATIVE RÉDIGÉE : ---
+${cleanEssay}
+
+--- MES DERNIÈRES NOTES DE TES CONSEILS : ---
+${aiNotesText.trim() || "(Conseils précédents)"}
+
+Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
+Tu agis comme tuteur pédagogique sans JAMAIS rédiger à ma place.
+Analyse mon plan au brouillon et ma rédaction : équilibre, méthode AEI, faits précis.
 Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
 "[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON | RÉF: ${currentToken}]"
 suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents.
 ${bonusGuidance}`;
         }
 
+        const modeLabel = isAttempt1
+            ? 'V1 complète (Brouillon + Copie)'
+            : copyTargetMode === 'draft'
+            ? 'Plan / Brouillon révisé'
+            : copyTargetMode === 'essay'
+            ? 'Devoir rédigé'
+            : 'Brouillon + Devoir';
+
         try {
             await navigator.clipboard.writeText(textToCopy);
             setIsNotesFocusMode(true);
             setAiCopiedToast(true);
-            showToast(`📋 Travail copié avec votre jeton #${currentToken} ! Collez-le à Gemini.`);
+            showToast(`📋 ${modeLabel} copié(e) avec jeton #${currentToken} ! Collez à Gemini.`);
         } catch (_) {
             setIsNotesFocusMode(true);
             setAiCopiedToast(true);
-            showToast(`ℹ️ Collez votre travail à Gemini et notez ses conseils.`);
+            showToast(`ℹ️ Collez votre ${modeLabel} à Gemini et notez ses conseils.`);
         }
     };
 
@@ -296,7 +380,7 @@ ${bonusGuidance}`;
         if (!confirm("Voulez-vous démarrer une nouvelle tentative ? Votre brouillon et vos notes sur l'IA seront conservés pour guider votre écriture.")) {
             return;
         }
-        archiveAttempt(attemptsCount, essayText);
+        archiveAttempt(attemptsCount, essayText, draftText, copyTargetMode);
         setAttemptsCount((prev) => prev + 1);
         setAiCopiedToast(false);
         showToast(`🔄 Tentative ${attemptsCount + 1} démarrée. Gardez vos notes de l'IA sous les yeux !`);
@@ -342,7 +426,7 @@ ${bonusGuidance}`;
         }
 
         setSubmitting(true);
-        const finalEntry = formatAttemptData(attemptsCount, essayText);
+        const finalEntry = formatAttemptData(attemptsCount, essayText, draftText, copyTargetMode);
         const historyToSend = attemptsHistory.filter(a => a.attemptNumber !== attemptsCount);
         historyToSend.push(finalEntry);
 
@@ -585,16 +669,79 @@ ${bonusGuidance}`;
                     />
 
                     <div className="conda-redaction-actions-bar">
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                className="conda-btn-ia-copy"
-                                onClick={handleCopyForAI}
-                                title="Copie votre travail avec votre jeton de session pour le soumettre à Gemini"
-                            >
-                                <span>📋</span>
-                                <span>Copier mon travail pour l'IA</span>
-                            </button>
+                        <div className="flex flex-wrap items-center gap-3">
+                            {attemptsCount === 1 && !showAiNotes ? (
+                                <button
+                                    type="button"
+                                    className="conda-btn-ia-copy"
+                                    onClick={handleCopyForAI}
+                                    title="Copie votre V1 (Brouillon + Copie obligatoires) avec votre jeton de session pour le soumettre à Gemini"
+                                >
+                                    <span>📋</span>
+                                    <span>Copier ma V1 pour l'IA (Brouillon + Copie)</span>
+                                </button>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="inline-flex bg-slate-900/90 border border-slate-700/80 rounded-2xl p-1 text-xs shadow-sm">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCopyTargetMode('draft')}
+                                            className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                                                copyTargetMode === 'draft'
+                                                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                                                    : 'text-slate-400 hover:text-white'
+                                            }`}
+                                            title="Envoyer uniquement le plan / brouillon révisé pour valider la structure et les arguments"
+                                        >
+                                            <span>📝</span>
+                                            <span>Plan seul (Brouillon)</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCopyTargetMode('essay')}
+                                            className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                                                copyTargetMode === 'essay'
+                                                    ? 'bg-indigo-600 text-white font-black shadow-sm'
+                                                    : 'text-slate-400 hover:text-white'
+                                            }`}
+                                            title="Envoyer le devoir rédigé pour vérifier le style et la méthode AEI"
+                                        >
+                                            <span>✍️</span>
+                                            <span>Devoir seul</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCopyTargetMode('both')}
+                                            className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                                                copyTargetMode === 'both'
+                                                    ? 'bg-rose-600 text-white font-black shadow-sm'
+                                                    : 'text-slate-400 hover:text-white'
+                                            }`}
+                                            title="Envoyer à la fois le brouillon et la copie pour un bilan complet"
+                                        >
+                                            <span>🌟</span>
+                                            <span>Brouillon + Devoir</span>
+                                        </button>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        className="conda-btn-ia-copy"
+                                        onClick={handleCopyForAI}
+                                        title="Copie le contenu sélectionné pour le soumettre à Gemini"
+                                    >
+                                        <span>📋</span>
+                                        <span>
+                                            {copyTargetMode === 'draft'
+                                                ? 'Copier mon Plan / Brouillon pour l’IA'
+                                                : copyTargetMode === 'essay'
+                                                ? 'Copier mon Devoir rédigé pour l’IA'
+                                                : 'Copier Brouillon + Devoir pour l’IA'}
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+
                             {showAiNotes && (
                                 <button
                                     type="button"
@@ -603,7 +750,7 @@ ${bonusGuidance}`;
                                     title="Démarrer une nouvelle tentative tout en conservant vos notes de brouillon"
                                 >
                                     <span>🔄</span>
-                                    <span>Nouvelle tentative</span>
+                                    <span>Nouvelle tentative ({attemptsCount + 1})</span>
                                 </button>
                             )}
                         </div>
