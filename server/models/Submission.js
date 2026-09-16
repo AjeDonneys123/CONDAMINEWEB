@@ -6,6 +6,8 @@ const SubmissionSchema = new mongoose.Schema({
     draftContent: { type: String, default: '' },
     aiNotes: { type: String, default: '' },
     aiConversationLog: { type: String, default: '' },
+    memoSheet: { type: String, default: '' },
+    sessionToken: { type: String, default: '' },
     timeSpentSeconds: { type: Number, default: 0 },
     attemptsCount: { type: Number, default: 1 },
     examBonusPoints: { type: Number, default: 0 },

@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './RedactionWorkspace.css';
 
+export const computeSessionToken = (studentId, homeworkId, attemptNum) => {
+    const raw = `${String(studentId || '')}_${String(homeworkId || '')}`;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+        hash = (hash << 5) - hash + raw.charCodeAt(i);
+        hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).toUpperCase().padStart(4, '0').slice(0, 4);
+    return `CW-${hex}-T${attemptNum || 1}`;
+};
+
 export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 1. Text & Undo/Redo State
     const [essayText, setEssayText] = useState('');
@@ -10,6 +21,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 2. Draft & AI Notes State (Persists across attempts)
     const [draftText, setDraftText] = useState('');
     const [aiNotesText, setAiNotesText] = useState('');
+    const [memoSheetText, setMemoSheetText] = useState('');
     const [showAiNotes, setShowAiNotes] = useState(false);
     const [attemptsCount, setAttemptsCount] = useState(1);
     const [attemptsHistory, setAttemptsHistory] = useState([]);
@@ -170,7 +182,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         return entry;
     };
 
-    // "Copier pour l'IA" handler with smart instruction prompt
+    // "Copier pour l'IA" handler with smart instruction prompt & unique session token
     const handleCopyForAI = async () => {
         const cleanEssay = essayText.trim();
         if (!cleanEssay) {
@@ -178,6 +190,8 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             return;
         }
         archiveAttempt(attemptsCount, essayText);
+
+        const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
 
         let textToCopy = '';
         if (attemptsCount === 1) {
@@ -189,8 +203,11 @@ ${draftText.trim() || "(Plan en cours d'élaboration)"}
 --- MON 1ER ESSAI : ---
 ${cleanEssay}
 
-Consigne pour l'IA (tuteur) :
-Agis en tuteur pédagogique bienveillant et exigeant. Analyse mon travail sans rédiger à ma place. Donne-moi 2 ou 3 pistes précises d'amélioration sur le fond, le vocabulaire historique/géographique et la structure.`;
+Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
+Tu agis comme tuteur pédagogique exigeant et bienveillant. Analyse mon travail sans JAMAIS rédiger à ma place.
+Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
+"[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentToken}]"
+puis donne-moi 2 ou 3 pistes précises d'amélioration sur le fond, le vocabulaire historique/géographique et la structure.`;
         } else {
             textToCopy = `[SUJET DU DEVOIR : "${topicText}"]
 
@@ -200,20 +217,22 @@ ${cleanEssay}
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
 
-Consigne OBLIGATOIRE pour l'IA (tuteur) :
-Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte :
-"[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON]" suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents. Ensuite, donne-moi de nouveaux retours constructifs sans rédiger à ma place.`;
+Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
+Tu agis comme tuteur pédagogique sans JAMAIS rédiger à ma place.
+Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette mention exacte :
+"[CONSEILS_APPLIQUÉS : OUI / PARTIELLEMENT / NON | RÉF: ${currentToken}]"
+suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en compte tes conseils précédents. Ensuite, donne-moi de nouveaux retours constructifs sans rédiger à ma place.`;
         }
 
         try {
             await navigator.clipboard.writeText(textToCopy);
             setShowAiNotes(true);
             setAiCopiedToast(true);
-            showToast("📋 Travail copié ! Collez-le à Gemini (panneau à droite) et notez ses conseils ci-dessous.");
+            showToast(`📋 Travail copié avec votre jeton #${currentToken} ! Collez-le à Gemini.`);
         } catch (_) {
             setShowAiNotes(true);
             setAiCopiedToast(true);
-            showToast("ℹ️ Notez les conseils de l'IA dans la section dédiée de votre brouillon.");
+            showToast(`ℹ️ Notez les conseils de l'IA (votre jeton : #${currentToken}).`);
         }
     };
 
@@ -259,6 +278,8 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
         const historyToSend = attemptsHistory.filter(a => a.attemptNumber !== attemptsCount);
         historyToSend.push(finalEntry);
 
+        const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
+
         const payload = {
             homeworkId: homework._id,
             levelIndex: 0,
@@ -266,6 +287,8 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
             userText: essayText,
             draftContent: draftText,
             aiNotes: aiNotesText,
+            memoSheet: memoSheetText,
+            sessionToken: currentToken,
             aiConversationLog: aiConversationText,
             timeSpentSeconds: sessionSeconds,
             attemptsCount,
@@ -378,6 +401,10 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
                     <h1 className="conda-redaction-title">{homework.title || 'Devoir Rédaction'}</h1>
                 </div>
                 <div className="conda-redaction-header-right">
+                    <span className="text-[11px] font-mono text-amber-300 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/30 hidden sm:inline-flex items-center gap-1.5" title="Jeton de session authentifiant vos échanges avec l'IA">
+                        <span>🛡️</span>
+                        <span>#{computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount)}</span>
+                    </span>
                     <div className="conda-redaction-timer" title="Temps de travail actif">
                         <span>⏱️</span>
                         <span>{formatTimer(sessionSeconds)}</span>
@@ -455,7 +482,7 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
                                 type="button"
                                 className="conda-btn-ia-copy"
                                 onClick={handleCopyForAI}
-                                title="Copie votre travail pour le soumettre à Gemini et ouvre la section de prise de notes"
+                                title="Copie votre travail avec votre jeton de session pour le soumettre à Gemini"
                             >
                                 <span>📋</span>
                                 <span>Copier mon travail pour l'IA</span>
@@ -508,7 +535,7 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
                         onDrop={handleBlockedPaste('le brouillon')}
                     />
 
-                    {/* Section Conseils de l'IA (s'affiche dès qu'on clique sur Copier pour l'IA) */}
+                    {/* Section Conseils de l'IA */}
                     {showAiNotes && (
                         <div className="conda-ai-notes-box">
                             <div className="conda-ai-notes-title">
@@ -526,6 +553,37 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
                                 onKeyDown={handleKeyDown}
                                 onPaste={handleBlockedPaste('les notes')}
                                 onDrop={handleBlockedPaste('les notes')}
+                            />
+                        </div>
+                    )}
+
+                    {/* Section Fiche Mémo DS : s'affiche dès qu'il y a eu un retour IA ou tentative >= 2 */}
+                    {(showAiNotes || attemptsCount >= 2) && (
+                        <div className="mt-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-left space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
+                                    <span>🧠</span>
+                                    <span>Fiche Mémo Contrôle sur table</span>
+                                </div>
+                                <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30">
+                                    Bonus Max (+2.5 pts)
+                                </span>
+                            </div>
+                            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                                Prouvez que vous avez assimilé le travail sans dépendre de l'IA :
+                                <br />
+                                <strong>1. Votre plan final structuré</strong> (Partie I, Partie II...)
+                                <br />
+                                <strong>2. Les notions et pièges clés</strong> à ne pas oublier le jour du DS.
+                            </p>
+                            <textarea
+                                className="w-full h-28 p-2.5 rounded-xl border border-amber-500/30 bg-slate-900 text-slate-100 text-xs font-mono outline-none focus:border-amber-400 resize-y placeholder:text-slate-600"
+                                placeholder="1. Mon plan final consolidé (I. ..., II. ...)&#10;2. Les 2-3 notions ou pièges retenus pour le DS..."
+                                value={memoSheetText}
+                                onChange={(e) => setMemoSheetText(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                onPaste={handleBlockedPaste('la fiche mémo')}
+                                onDrop={handleBlockedPaste('la fiche mémo')}
                             />
                         </div>
                     )}
@@ -563,43 +621,68 @@ Commence OBLIGATOIREMENT le tout début de ta réponse par cette mention exacte 
                 </div>
             )}
 
-            {/* Final Submission Modal: Paste AI Conversation */}
-            {showFinalModal && (
-                <div className="conda-redaction-modal-overlay">
-                    <div className="conda-redaction-modal">
-                        <div className="text-3xl mb-2">📋</div>
-                        <h3 className="conda-redaction-modal-title">Clôture du devoir & Échange avec l'IA</h3>
-                        <p className="conda-redaction-modal-text">
-                            Pour finaliser votre envoi, veuillez <strong>copier-coller ci-dessous l'intégralité de votre conversation avec Gemini / l'IA</strong>.
-                            Elle sera transmise à votre professeur pour valider votre démarche de travail :
-                        </p>
-                        <textarea
-                            className="w-full h-44 p-3 rounded-xl border border-slate-600 bg-slate-900 text-slate-100 text-xs font-mono mb-4 outline-none focus:border-indigo-500 resize-y"
-                            placeholder="Collez ici votre conversation avec Gemini (Ctrl+V / Cmd+V autorisé)..."
-                            value={aiConversationText}
-                            onChange={(e) => setAiConversationText(e.target.value)}
-                        />
-                        <div className="conda-redaction-modal-actions">
-                            <button
-                                type="button"
-                                className="conda-modal-btn-cancel"
-                                onClick={() => setShowFinalModal(false)}
-                                disabled={submitting}
-                            >
-                                Annuler
-                            </button>
-                            <button
-                                type="button"
-                                className="conda-modal-btn-confirm"
-                                onClick={handleFinalSubmit}
-                                disabled={submitting}
-                            >
-                                {submitting ? 'Envoi en cours...' : 'Envoyer définitivement mon devoir'}
-                            </button>
+            {/* Final Submission Modal: Paste AI Conversation with Token Check */}
+            {showFinalModal && (() => {
+                const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
+                const baseToken = computeSessionToken(user?._id || user?.id, homework?._id, 1);
+                const isTokenInChat = aiConversationText.includes(currentToken) || aiConversationText.includes(baseToken);
+
+                return (
+                    <div className="conda-redaction-modal-overlay">
+                        <div className="conda-redaction-modal">
+                            <div className="text-3xl mb-2">📋</div>
+                            <h3 className="conda-redaction-modal-title">Clôture du devoir & Échange avec l'IA</h3>
+                            <p className="conda-redaction-modal-text">
+                                Pour finaliser votre envoi, veuillez <strong>copier-coller ci-dessous l'intégralité de votre conversation avec Gemini / l'IA</strong>.
+                                Elle sera transmise à votre professeur pour valider votre démarche et authentifier votre jeton de session :
+                            </p>
+
+                            <div className="mb-3 p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-400">Jeton requis :</span>
+                                    <code className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 font-mono font-bold">#{currentToken}</code>
+                                </div>
+                                <div>
+                                    {aiConversationText.trim().length > 15 ? (
+                                        isTokenInChat ? (
+                                            <span className="text-emerald-400 font-bold flex items-center gap-1">✅ Jeton authentifié</span>
+                                        ) : (
+                                            <span className="text-amber-400 font-bold flex items-center gap-1">⚠️ Jeton non détecté dans le texte</span>
+                                        )
+                                    ) : (
+                                        <span className="text-slate-500 text-[11px]">Collez l'échange pour vérifier...</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <textarea
+                                className="w-full h-40 p-3 rounded-xl border border-slate-600 bg-slate-900 text-slate-100 text-xs font-mono mb-4 outline-none focus:border-indigo-500 resize-y"
+                                placeholder="Collez ici votre conversation avec Gemini (Ctrl+V / Cmd+V autorisé)..."
+                                value={aiConversationText}
+                                onChange={(e) => setAiConversationText(e.target.value)}
+                            />
+                            <div className="conda-redaction-modal-actions">
+                                <button
+                                    type="button"
+                                    className="conda-modal-btn-cancel"
+                                    onClick={() => setShowFinalModal(false)}
+                                    disabled={submitting}
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    type="button"
+                                    className="conda-modal-btn-confirm"
+                                    onClick={handleFinalSubmit}
+                                    disabled={submitting}
+                                >
+                                    {submitting ? 'Envoi en cours...' : 'Envoyer définitivement mon devoir'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Toast Alert */}
             {toastMessage && (

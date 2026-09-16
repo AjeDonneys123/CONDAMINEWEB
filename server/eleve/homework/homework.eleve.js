@@ -816,13 +816,27 @@ router.post('/submit', async (req, res) => {
         levelIndex,
         playerId,
         antiCheat,
-        draftDocMeta,
         draftContent,
         aiNotes,
         aiConversationLog,
         timeSpentSeconds,
-        attemptsCount
+        attemptsCount,
+        attemptsHistory,
+        memoSheet,
+        sessionToken
     } = req.body;
+
+    const computeSessionToken = (studId, hwId, attNum) => {
+        const raw = `${String(studId || '')}_${String(hwId || '')}`;
+        let hash = 0;
+        for (let i = 0; i < raw.length; i++) {
+            hash = (hash << 5) - hash + raw.charCodeAt(i);
+            hash |= 0;
+        }
+        const hex = Math.abs(hash).toString(16).toUpperCase().padStart(4, '0').slice(0, 4);
+        return `CW-${hex}-T${attNum || 1}`;
+    };
+
     const Homework = mongoose.model('Homework');
     const Submission = mongoose.model('Submission');
     const Student = mongoose.model('Student');
@@ -949,6 +963,17 @@ router.post('/submit', async (req, res) => {
             }
         }
 
+        const expectedToken = computeSessionToken(playerId, homeworkId, attemptsCount);
+        const baseToken = computeSessionToken(playerId, homeworkId, 1);
+        const chatString = String(aiConversationLog || '');
+        const tokenVerified = chatString.includes(expectedToken) || chatString.includes(baseToken);
+
+        if (!tokenVerified && chatString.length > 30) {
+            antiCheatSnapshot.tokenSuspicious = true;
+            antiCheatSnapshot.reasons.push(`Jeton de session non trouvé dans l'échange IA (${expectedToken}) - risque d'échange copié ou fabriqué`);
+            if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
+        }
+
         const draftWords = String(draftContent || '').trim().split(/\s+/).filter(Boolean).length;
         const aiNotesWords = String(aiNotes || '').trim().split(/\s+/).filter(Boolean).length;
 
@@ -971,8 +996,15 @@ router.post('/submit', async (req, res) => {
 SUJET DU DEVOIR :
 "${topicPrompt}"
 
+JETON DE SESSION UNIQUE :
+Attendu : "${expectedToken}"
+Statut d'authenticité : ${tokenVerified ? '✅ JETON AUTHENTIFIÉ DANS LA DISCUSSION' : '⚠️ JETON ABSENT OU INCORRECT (suspicion de faux dialogue Word ou de copie sur un camarade)'}
+
 BROUILLON / PLAN INITIAL DE L'ÉLÈVE :
 ${draftContent || '(Aucun brouillon)'}
+
+FICHE MÉMO DU CONTRÔLE SUR TABLE (Plan consolidé & pièges/notions retenus) :
+${memoSheet || '(Non complétée)'}
 
 NOTES PRISES PAR L'ÉLÈVE SUR LES RETOURS DE L'IA (tuteur) :
 ${aiNotes || '(Aucune note)'}
@@ -984,9 +1016,13 @@ ${attemptsSummary}
 ${aiConversationLog || '(Aucun échange collé)'}
 
 CONSIGNE D'ATTRIBUTION DU BONUS POUR LE PROCHAIN CONTRÔLE :
-1. Socle de départ : Brouillon + Essai 1 sérieux = +0.5 pt garanti.
-2. Pour chaque nouvel essai (Essai 2, Essai 3...), vérifie s'il est consistant (≥ 15-20 lignes) ET s'il a RÉELLEMENT pris en compte les conseils de l'IA (regarde si les erreurs pointées ont été corrigées, si de nouveaux arguments/notions ont été ajoutés, ou si le chat contient la confirmation explicitement : '[CONSEILS_APPLIQUÉS : OUI]').
-3. Accorde +0.5 pt de bonus par essai amélioré respectant les conseils.
+1. Socle de départ : Brouillon initial + Essai 1 sérieux = +0.5 pt garanti.
+2. Pour chaque nouvel essai (Essai 2, Essai 3...), vérifie :
+   - S'il est consistant (≥ 15-20 lignes).
+   - S'il a RÉELLEMENT pris en compte les conseils de l'IA (regarde si les erreurs pointées ont été corrigées, si de nouveaux arguments/notions ont été ajoutés, ou si le chat contient la formule '[CONSEILS_APPLIQUÉS : OUI]').
+   - Si la Fiche Mémo DS prouve une vraie assimilation de mémoire de la structure et des notions.
+   - Si le jeton de session est valide (pénalise si la discussion semble fabriquée ou externe).
+3. Accorde +0.5 pt de bonus par essai amélioré respectant les conseils et la démarche.
 4. Plafond maximum du bonus : +2.5 pts.
 5. Rédige un message chaleureux et stimulant pour l'élève ("studentMessage") détaillant ce qu'il a réussi et comment son travail acharné a payé.
 6. Rédige un résumé factuel pour le professeur ("teacherSummary").
@@ -995,7 +1031,7 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 {
   "examBonusPoints": 1.5,
   "studentMessage": "Ton message d'encouragement personnalisé pour l'élève",
-  "teacherSummary": "Résumé concis pour le prof sur les versions et les conseils appliqués",
+  "teacherSummary": "Résumé concis pour le prof sur les versions, la Fiche Mémo et les conseils appliqués",
   "attemptsEvaluation": [
     { "attemptNumber": 1, "isSubstantial": true, "comment": "Premier jet sérieux avec plan." },
     { "attemptNumber": 2, "isSubstantial": true, "tookAdviceIntoAccount": true, "adviceStatus": "OUI", "comment": "A bien approfondi le deuxième axe suggéré." }
@@ -1019,10 +1055,10 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
                 }
             } catch (aiErr) {
                 console.warn('[Redaction] Échec audit IA Gemini bonus, calcul heuristique de secours:', aiErr?.message || aiErr);
-                // Fallback heuristique robuste
                 let fallbackBonus = 0.5;
                 if (substantialAttemptsCount >= 2) fallbackBonus += 0.5;
                 if (aiNotesWords >= 15) fallbackBonus += 0.5;
+                if (memoSheet && memoSheet.trim().length >= 30) fallbackBonus += 0.5;
                 examBonusPoints = Math.min(2.5, fallbackBonus);
                 studentMessage = `🌟 Superbe persévérance ! Tu remportes +${examBonusPoints} pts bonus pour ton prochain contrôle grâce à tes ${substantialAttemptsCount} essais et tes retours d'apprentissage !`;
                 teacherSummary = `Audit heuristique : ${substantialAttemptsCount} tentative(s) consistante(s), ${aiNotesWords} mots de notes IA. Bonus attribué : +${examBonusPoints} pt(s).`;
@@ -1041,6 +1077,9 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             examBonusPoints,
             studentMessage,
             teacherSummary,
+            sessionToken: expectedToken,
+            tokenVerified,
+            memoSheet: String(memoSheet || ''),
             substantialAttemptsCount,
             attemptsHistory: normalizedHistory,
             attemptsEvaluation,
@@ -1074,6 +1113,8 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
         draftContent: String(draftContent || ''),
         aiNotes: String(aiNotes || ''),
         aiConversationLog: String(aiConversationLog || ''),
+        memoSheet: String(memoSheet || ''),
+        sessionToken: String(sessionToken || ''),
         timeSpentSeconds: Number(timeSpentSeconds || 0),
         attemptsCount: Number(attemptsCount || 1),
         examBonusPoints: finalBonus,

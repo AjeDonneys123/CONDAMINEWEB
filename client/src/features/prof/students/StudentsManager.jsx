@@ -1864,6 +1864,18 @@ export default function StudentsManager({ globalClassId }) {
                                             </div>
                                         </div>
 
+                                        {(editorData.memoSheet || editorData.learningEfficiency?.memoSheet) && (
+                                            <div className="rounded-xl border border-amber-300 bg-amber-50/50 p-3">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <div className="text-[10px] font-black uppercase text-amber-700">🧠 Fiche Mémo Contrôle sur table (Plan consolidé & pièges retenus)</div>
+                                                    <span className="text-[9px] font-bold text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded-full">Preuve d'assimilation</span>
+                                                </div>
+                                                <div className="text-xs text-slate-800 whitespace-pre-wrap max-h-32 overflow-y-auto font-mono bg-white p-2 rounded border border-amber-200">
+                                                    {editorData.memoSheet || editorData.learningEfficiency?.memoSheet}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {editorData.learningEfficiency && (
                                             <div className="rounded-xl border border-amber-200 bg-white p-3.5 space-y-2.5">
                                                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -1873,7 +1885,16 @@ export default function StudentsManager({ globalClassId }) {
                                                             Bonus Prochain Examen : <span className="text-amber-600 font-extrabold text-base">+{editorData.examBonusPoints ?? editorData.learningEfficiency.examBonusPoints ?? 0.5} pt(s)</span>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
+                                                    <div className="flex items-center gap-2">
+                                                        {(editorData.sessionToken || editorData.learningEfficiency.sessionToken) && (
+                                                            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                                                                editorData.learningEfficiency.tokenVerified !== false
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                    : 'bg-red-50 text-red-700 border-red-200'
+                                                            }`}>
+                                                                🛡️ #{editorData.sessionToken || editorData.learningEfficiency.sessionToken} {editorData.learningEfficiency.tokenVerified !== false ? '✅' : '🚩'}
+                                                            </span>
+                                                        )}
                                                         <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
                                                             🎟️ Bonus DS sur table
                                                         </span>
