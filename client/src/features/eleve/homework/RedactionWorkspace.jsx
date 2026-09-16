@@ -15,6 +15,129 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [attemptsHistory, setAttemptsHistory] = useState([]);
     const [aiCopiedToast, setAiCopiedToast] = useState(false);
 
+    // 3. Timing & Anti-Cheat Telemetry
+    const [sessionSeconds, setSessionSeconds] = useState(0);
+    const [pasteAttemptCount, setPasteAttemptCount] = useState(0);
+    const [toastMessage, setToastMessage] = useState('');
+    const toastTimerRef = useRef(null);
+
+    // 4. Modals State
+    const [showShortWarning, setShowShortWarning] = useState(false);
+    const [tooShortWarned, setToShortWarned] = useState(false);
+    const [showFinalModal, setShowFinalModal] = useState(false);
+    const [aiConversationText, setAiConversationText] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [submittedResult, setSubmittedResult] = useState(null);
+
+    // Homework configuration
+    const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
+    const topicText = String(homework?.promptTopic || homework?.levels?.[0]?.instruction || homework?.title || 'Sujet de rédaction');
+
+    // Live timer (ticks every 1s)
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setSessionSeconds((prev) => prev + 1);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const formatTimer = (totalSec) => {
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    };
+
+    const showToast = (msg) => {
+        setToastMessage(msg);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+            setToastMessage('');
+        }, 3200);
+    };
+
+    const draftWarnedRef = useRef(false);
+
+    // Text edition with Undo/Redo tracking & burst paste protection
+    const handleTextChange = (e) => {
+        const newText = e.target.value;
+        const prevText = essayText;
+
+        // If starting to write while draft is empty, remind student
+        if (!draftText.trim() && newText.trim().length > 0 && !draftWarnedRef.current) {
+            draftWarnedRef.current = true;
+            showToast("⚠️ Rédige d'abord ton plan et des idées au brouillon.");
+        }
+
+        // If a single change inserts more than 20 characters at once (context-menu paste, autofill, etc.)
+        if (newText.length - prevText.length > 20) {
+            setPasteAttemptCount((prev) => prev + 1);
+            showToast("⚠️ Copier-coller interdit.");
+            return;
+        }
+        setEssayText(newText);
+        // Truncate future history and push new state
+        const updated = history.slice(0, historyIdx + 1);
+        if (updated[updated.length - 1] !== newText) {
+            updated.push(newText);
+            if (updated.length > 60) updated.shift();
+            setHistory(updated);
+            setHistoryIdx(updated.length - 1);
+        }
+    };
+
+    const handleDraftChange = (e) => {
+        const newText = e.target.value;
+        if (newText.length - draftText.length > 20) {
+            setPasteAttemptCount((prev) => prev + 1);
+            showToast("⚠️ Copier-coller interdit.");
+            return;
+        }
+        setDraftText(newText);
+    };
+
+    const handleAiNotesChange = (e) => {
+        const newText = e.target.value;
+        if (newText.length - aiNotesText.length > 20) {
+            setPasteAttemptCount((prev) => prev + 1);
+            showToast("⚠️ Copier-coller interdit.");
+            return;
+        }
+        setAiNotesText(newText);
+    };
+
+    const handleKeyDown = (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+            e.preventDefault();
+            e.stopPropagation();
+            setPasteAttemptCount((prev) => prev + 1);
+            showToast("⚠️ Copier-coller interdit.");
+        }
+    };
+
+    const handleUndo = () => {
+        if (historyIdx > 0) {
+            const nextIdx = historyIdx - 1;
+            setHistoryIdx(nextIdx);
+            setEssayText(history[nextIdx]);
+        }
+    };
+
+    const handleRedo = () => {
+        if (historyIdx < history.length - 1) {
+            const nextIdx = historyIdx + 1;
+            setHistoryIdx(nextIdx);
+            setEssayText(history[nextIdx]);
+        }
+    };
+
+    // Block external paste on essay and draft
+    const handleBlockedPaste = () => (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setPasteAttemptCount((prev) => prev + 1);
+        showToast("⚠️ Copier-coller interdit.");
+    };
+
     // Helper to evaluate a substantial attempt (at least 20 lines or 150 words)
     const formatAttemptData = (num, text) => {
         const clean = String(text || '').trim();
