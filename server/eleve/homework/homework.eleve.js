@@ -1046,7 +1046,7 @@ router.post('/submit', async (req, res) => {
 
         // Base rules: Brouillon + 1er essai sérieux = socle garanti +0.5 pt
         let examBonusPoints = 0.5;
-        let studentMessage = "👏 Bravo, c'était fluide et facile pour toi ! Tu remportes +0.5 pt bonus pour ton prochain contrôle sur table. Tu n'as pas eu besoin de points supplémentaires, tu maîtrises déjà très bien ton sujet et tu auras une excellente note à l'examen !";
+        let studentMessage = "🏆 Bravo, ton travail maîtrise déjà les attendus de base (+0.5 pt bonus garanti pour ton prochain DS) ! Pour viser l'excellence supérieure (niveau Terminale/Université), va toujours plus loin : ajoute des anecdotes historiques méconnues, cite des auteurs et des chiffres précis pour transformer ta bonne copie en copie remarquable !";
         let teacherSummary = "Devoir réalisé en 1 seul jet direct avec brouillon initial. Bonne maîtrise immédiate (+0.5 pt bonus accordé).";
         let attemptsEvaluation = [
             { attemptNumber: 1, isSubstantial: normalizedHistory[0]?.isSubstantial || false, comment: "Premier essai rédigé avec brouillon initial." }
@@ -1092,13 +1092,18 @@ CONSIGNE D'ÉVALUATION ET D'INTÉGRITÉ PÉDAGOGIQUE DU BONUS :
 2. BONUS POUR LE PROCHAIN CONTRÔLE (si intégrité respectée) :
    - Socle de départ garanti : Brouillon initial + Essai 1 sérieux = +0.5 pt.
    - Bonus d'amélioration : accorde jusqu'à +2.5 pts selon la pertinence des conseils appliqués, le progrès entre les essais et la Fiche Mémo.
-3. Rédige un message stimulant pour l'élève ("studentMessage") et un résumé factuel pour le professeur ("teacherSummary").
+3. RÈGLE CRUCIALE POUR LE studentMessage :
+   - Explicite clairement au TOUT DÉBUT du message :
+     * Soit : "🏆 Niveau très solide (tu maîtrises déjà les attendus, pas de points bonus supplémentaires nécessaires pour ton DS) !"
+     * Soit : "📈 Marge de progression détectée (de précieux points bonus à aller chercher pour ton prochain contrôle) !"
+   - POUR LES COPIES EXCELLENTES : Ne laisse SURTOUT PAS l'élève perplexe avec un simple 'c'est bien'. Pousse-le activement vers l'excellence supérieure (niveau Terminale / Université) en lui donnant de vraies pistes d'approfondissement : des anecdotes historiques méconnues ou révélatrices, des chiffres et faits précis, des auteurs ou historiens de référence à mentionner, ou des perspectives conceptuelles pointues.
+4. Rédige un résumé factuel pour le professeur ("teacherSummary").
 
 Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 {
   "examBonusPoints": 1.5,
   "isAuthentic": true,
-  "studentMessage": "Ton message d'encouragement personnalisé pour l'élève",
+  "studentMessage": "Ton diagnostic explicite + tes pistes d'excellence ou d'amélioration personnalisées pour l'élève",
   "teacherSummary": "Résumé concis pour le prof sur les versions, l'authenticité de la discussion et les conseils appliqués",
   "attemptsEvaluation": [
     { "attemptNumber": 1, "isSubstantial": true, "comment": "Premier jet sérieux avec plan." }

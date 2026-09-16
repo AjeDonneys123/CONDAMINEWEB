@@ -369,9 +369,21 @@ Consignes pour le Tuteur (Histoire-Géographie CondaWeb) :
    - Ne rédige JAMAIS le devoir à la place de l'élève (pas d'intro ni de paragraphe tout fait).`;
 
         const bonusGuidance = `
-Système de bonus CondaWeb (applicable sur le prochain contrôle sur table, plafonné à 15,5/20) :
-- Si ma copie a déjà un très bon niveau : dis-moi clairement "Très bonne base, tu n'as pas vraiment besoin de bonus toi ! Par contre voyons des détails qui te permettront d'améliorer ta rédaction pour de vrai : demande-moi ce que tu veux (exemples précis, anecdotes historiques, chiffres clés, citations d'époque, vocabulaire de spécialiste)."
-- Si ma copie est encore fragile ou incomplète : dis-moi "Pour l'instant, il te reste une grande marge de progression (et de précieux points bonus à aller chercher pour ton DS !)", puis donne-moi 2 ou 3 pistes prioritaires sur la structure, les arguments oubliés et le plan, sans jamais rédiger à ma place.`;
+Système de tutorat et bonus CondaWeb (applicable sur le prochain contrôle sur table) :
+Au tout début de ta réponse, énonce clairement le diagnostic de mon travail :
+
+1. SI MON TRAVAIL EST TRÈS BON OU EXCELLENT :
+Commence par cette mention explicite :
+"🏆 NIVEAU TRÈS SOLIDE : Tu maîtrises déjà les attendus du devoir (aucun point bonus supplémentaire nécessaire pour ton DS) !"
+⚠️ RÈGLE CRUCIALE : Ne me laisse SURTOUT PAS perplexe avec un simple "c'est bien" ! Pousse immédiatement ma réflexion vers l'excellence supérieure (niveau Terminale / Université / Prépa) :
+- Propose-moi 2 ou 3 pépites concrètes : des anecdotes historiques révélatrices, des chiffres précis, ou des citations d'époque percutantes.
+- Cite des auteurs, historiens ou géographes de référence incontournables sur ce thème pour enrichir mon analyse.
+- Propose des nuances conceptuelles et des perspectives avancées pour transformer une bonne copie en copie remarquable.
+
+2. SI MON TRAVAIL A UNE MARGE DE PROGRESSION :
+Commence par cette mention explicite :
+"📈 MARGE DE PROGRESSION : Tu as encore de précieux points bonus d'examen à aller chercher pour ton prochain contrôle sur table !"
+Puis donne-moi 2 ou 3 pistes prioritaires concrètes sur la méthode AEI (Affirmer, Expliquer, Illustrer), les arguments ou notions oubliés et l'équilibre du plan, sans jamais rédiger à ma place.`;
 
         let textToCopy = '';
 
