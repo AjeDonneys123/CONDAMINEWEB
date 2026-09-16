@@ -906,6 +906,82 @@ router.post('/submit', async (req, res) => {
         }
     }
 
+    let learningEfficiency = null;
+    if (hw?.mode === 'redaction' || hw?.assessmentKind === 'rqp' || hw?.assessmentKind === 'commentaire') {
+        const history = Array.isArray(attemptsHistory) && attemptsHistory.length > 0 
+            ? attemptsHistory 
+            : [{ attemptNumber: 1, text: userText }];
+
+        let substantialAttemptsCount = 0;
+        const normalizedHistory = history.map((att, idx) => {
+            const txt = String(att?.text || '').trim();
+            const words = txt.split(/\s+/).filter(Boolean).length;
+            const lines = Math.max(txt.split('\n').filter(l => l.trim().length > 0).length, Math.round(words / 9));
+            const isSubstantial = lines >= 20 || words >= 150;
+            if (isSubstantial) substantialAttemptsCount++;
+            return {
+                attemptNumber: att?.attemptNumber || (idx + 1),
+                text: txt,
+                wordsCount: words,
+                linesCount: lines,
+                isSubstantial
+            };
+        });
+
+        const attempt1Text = normalizedHistory[0]?.text || '';
+        let chatContainsAttempt1 = false;
+        if (attempt1Text && aiConversationLog) {
+            const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+            const cleanChat = norm(aiConversationLog).slice(0, 3000);
+            const cleanAttempt = norm(attempt1Text);
+            const words = cleanAttempt.split(' ').filter(w => w.length >= 3);
+            if (words.length < 6) {
+                chatContainsAttempt1 = cleanChat.includes(cleanAttempt);
+            } else {
+                for (let i = 0; i <= Math.min(10, words.length - 6); i++) {
+                    const phrase = words.slice(i, i + 6).join(' ');
+                    if (cleanChat.includes(phrase)) {
+                        chatContainsAttempt1 = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        const draftWords = String(draftContent || '').trim().split(/\s+/).filter(Boolean).length;
+        const aiNotesWords = String(aiNotes || '').trim().split(/\s+/).filter(Boolean).length;
+
+        const draftScore = draftWords >= 60 ? 25 : draftWords >= 30 ? 15 : draftWords >= 10 ? 8 : 0;
+        const aiNotesScore = aiNotesWords >= 30 ? 25 : aiNotesWords >= 15 ? 15 : aiNotesWords >= 5 ? 8 : 0;
+        const attemptsScore = substantialAttemptsCount >= 2 ? 25 : substantialAttemptsCount === 1 ? 15 : 0;
+        const chatMatchScore = chatContainsAttempt1 ? 25 : 0;
+
+        const totalScore = draftScore + aiNotesScore + attemptsScore + chatMatchScore;
+
+        learningEfficiency = {
+            score: totalScore,
+            scoreOutOf10: (totalScore / 10).toFixed(1),
+            substantialAttemptsCount,
+            attemptsHistory: normalizedHistory,
+            chatContainsAttempt1,
+            draftWordCount: draftWords,
+            aiNotesWordCount: aiNotesWords,
+            breakdown: {
+                draftScore,
+                aiNotesScore,
+                attemptsScore,
+                chatMatchScore
+            }
+        };
+
+        if (!chatContainsAttempt1 && aiConversationLog && aiConversationLog.trim().length > 10) {
+            antiCheatSnapshot.reasons.push("Alerte Démarche IA : le texte de l'essai 1 n'a pas été retrouvé au début de l'échange IA (demande directe de rédaction suspectée)");
+        }
+        if (substantialAttemptsCount === 0) {
+            antiCheatSnapshot.reasons.push("Aucune tentative substantielle (moins de 20 lignes)");
+        }
+    }
+
     await Submission.create({ 
         studentId: playerId,
         homeworkId,
@@ -917,6 +993,7 @@ router.post('/submit', async (req, res) => {
         aiConversationLog: String(aiConversationLog || ''),
         timeSpentSeconds: Number(timeSpentSeconds || 0),
         attemptsCount: Number(attemptsCount || 1),
+        learningEfficiency,
         feedback: cleanFeedback,
         grade: analysis.grade,
         antiCheat: antiCheatSnapshot
@@ -942,7 +1019,7 @@ router.post('/submit', async (req, res) => {
         });
     }
 
-    res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes });
+    res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes, learningEfficiency });
 });
 
 router.post('/submit-chat', async (req, res) => {

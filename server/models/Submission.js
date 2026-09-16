@@ -9,6 +9,15 @@ const SubmissionSchema = new mongoose.Schema({
     timeSpentSeconds: { type: Number, default: 0 },
     attemptsCount: { type: Number, default: 1 },
     mode: { type: String, default: 'docs' },
+    learningEfficiency: {
+        score: { type: Number, default: 0 },
+        substantialAttemptsCount: { type: Number, default: 0 },
+        attemptsHistory: { type: Array, default: [] },
+        chatContainsAttempt1: { type: Boolean, default: false },
+        draftWordCount: { type: Number, default: 0 },
+        aiNotesWordCount: { type: Number, default: 0 },
+        breakdown: { type: Object, default: {} }
+    },
     feedback: String,
     grade: String,
     antiCheat: { type: Object, default: {} },
