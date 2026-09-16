@@ -35,6 +35,59 @@ export const generateCopyKey = (studentId, homeworkId, copyNum) => {
     return `CW-${hex}-C${copyNum || 1}`;
 };
 
+export const injectParagraphZwnj = (text) => {
+    if (!text) return '';
+    const zwnj = '\u200C';
+    return text.split('\n').map(line => (line.trim() ? `${zwnj}${line}${zwnj}` : line)).join('\n');
+};
+
+export const analyzeZwnjText = (text) => {
+    if (!text) return { paragraphs: [], totalZwnj: 0, totalZws: 0, totalZwj: 0, condaCount: 0, externalCount: 0 };
+    const rawParagraphs = text.split(/\n+/).filter(p => p.trim().length > 0);
+    let totalZwnj = 0;
+    let totalZws = 0;
+    let totalZwj = 0;
+    let condaCount = 0;
+    let externalCount = 0;
+
+    const paragraphs = rawParagraphs.map((p, idx) => {
+        const zwnjMatches = p.match(/\u200C/g) || [];
+        const zwsMatches = p.match(/\u200B/g) || [];
+        const zwjMatches = p.match(/\u200D/g) || [];
+        
+        const zwnjCount = zwnjMatches.length;
+        const zwsCount = zwsMatches.length;
+        const zwjCount = zwjMatches.length;
+
+        totalZwnj += zwnjCount;
+        totalZws += zwsCount;
+        totalZwj += zwjCount;
+
+        const isConda = zwnjCount > 0 || zwsCount > 0 || zwjCount > 0;
+        if (isConda) condaCount++; else externalCount++;
+
+        return {
+            index: idx + 1,
+            text: p.replace(/[\u200B\u200C\u200D]/g, '').trim(),
+            rawLength: p.length,
+            visibleLength: p.replace(/[\u200B\u200C\u200D]/g, '').trim().length,
+            zwnjCount,
+            zwsCount,
+            zwjCount,
+            isConda
+        };
+    });
+
+    return {
+        paragraphs,
+        totalZwnj,
+        totalZws,
+        totalZwj,
+        condaCount,
+        externalCount
+    };
+};
+
 export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 1. Text & Undo/Redo State
     const [essayText, setEssayText] = useState('');
@@ -55,6 +108,8 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [finalPlanText, setFinalPlanText] = useState('');
     const [finalLessonsText, setFinalLessonsText] = useState('');
     const [registeredKeys, setRegisteredKeys] = useState([]);
+    const [showZwnjLabModal, setShowZwnjLabModal] = useState(false);
+    const [zwnjTestInput, setZwnjTestInput] = useState('');
     const copyCountRef = useRef(0);
 
     // Floating windows state (transportables, redimensionnables, rétractables)
@@ -393,10 +448,10 @@ Puis donne-moi 2 ou 3 pistes prioritaires concrètes sur la méthode AEI (Affirm
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON / PLAN INITIAL : ---
-${watermark}${cleanDraft}
+${watermark}${injectParagraphZwnj(cleanDraft)}
 
 --- MON 1ER ESSAI RÉDIGÉ (V1) : ---
-${watermark}${cleanEssay}
+${watermark}${injectParagraphZwnj(cleanEssay)}
 
 Consignes pour le tuteur :
 Analyse mon plan au brouillon et ma rédaction V1. Repère les points forts et 2 ou 3 axes majeurs d'approfondissement (arguments, méthode, nuances).
@@ -407,7 +462,7 @@ ${bonusGuidance}`;
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MON PLAN / BROUILLON RÉVISÉ (Essai n°${attemptsCount}) : ---
-${watermark}${cleanDraft}
+${watermark}${injectParagraphZwnj(cleanDraft)}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -422,7 +477,7 @@ ${bonusGuidance}`;
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MA NOUVELLE TENTATIVE RÉDIGÉE (Essai n°${attemptsCount}) : ---
-${watermark}${cleanEssay}
+${watermark}${injectParagraphZwnj(cleanEssay)}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -437,10 +492,10 @@ ${bonusGuidance}`;
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON & PLAN CONSOLIDÉ (Essai n°${attemptsCount}) : ---
-${watermark}${cleanDraft}
+${watermark}${injectParagraphZwnj(cleanDraft)}
 
 --- MA NOUVELLE TENTATIVE RÉDIGÉE : ---
-${watermark}${cleanEssay}
+${watermark}${injectParagraphZwnj(cleanEssay)}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -690,6 +745,15 @@ ${bonusGuidance}`;
                         <span>{formatTimer(sessionSeconds)}</span>
                         <span className="text-[10px] font-bold text-slate-400">/ min {minTimeMinutes}m</span>
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowZwnjLabModal(true)}
+                        className="text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-500/50 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        title="Ouvrir le laboratoire de test du caractère invisible \u200C"
+                    >
+                        <span>🔬</span>
+                        <span>Labo \u200C</span>
+                    </button>
                     <button type="button" className="conda-redaction-quit-btn" onClick={onQuit}>
                         Quitter
                     </button>
@@ -1433,6 +1497,144 @@ ${bonusGuidance}`;
                                     disabled={submitting}
                                 >
                                     {submitting ? 'Envoi en cours...' : 'Envoyer définitivement mon devoir'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* Laboratoire de Test Invisible \u200C */}
+            {showZwnjLabModal && (() => {
+                const analysis = analyzeZwnjText(zwnjTestInput);
+                return (
+                    <div className="conda-redaction-modal-overlay">
+                        <div className="bg-slate-900 border border-purple-500/60 rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 text-left max-h-[92vh] overflow-y-auto">
+                            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl">🔬</span>
+                                    <div>
+                                        <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                            <span>Laboratoire de Détection Invisible</span>
+                                            <span className="bg-purple-500/20 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded border border-purple-500/40">\u200C</span>
+                                        </h3>
+                                        <p className="text-xs text-slate-400 m-0">
+                                            Testez en direct si le caractère invisible \u200C survit aux collages et permet de distinguer les paragraphes CondaWeb de ceux d'une autre IA.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowZwnjLabModal(false)}
+                                    className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            {/* Quick actions & generator */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-purple-950/30 border border-purple-500/30 rounded-2xl">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-purple-300">Générer un extrait test :</span>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const sample = `\u200CCeci est un paragraphe test officiel généré depuis CondaWeb avec l'empreinte invisible U+200C.\u200C`;
+                                            await navigator.clipboard.writeText(sample);
+                                            showToast("📋 Paragraphe test CondaWeb (avec \\u200C) copié dans le presse-papier !");
+                                        }}
+                                        className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow"
+                                    >
+                                        <span>📋</span>
+                                        <span>Copier 1 paragraphe test avec \u200C</span>
+                                    </button>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setZwnjTestInput('')}
+                                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl font-medium transition"
+                                >
+                                    🧹 Vider la zone
+                                </button>
+                            </div>
+
+                            {/* Textarea for pasting */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                                    <span>Collez ici votre texte mixte (paragraphes CondaWeb et/ou paragraphes d'une autre IA) :</span>
+                                    <span className="text-[10px] text-purple-400 font-mono">Ctrl+V / Cmd+V autorisé</span>
+                                </label>
+                                <textarea
+                                    className="w-full h-32 p-3 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-purple-500 resize-y placeholder:text-slate-600"
+                                    placeholder="Collez ici du texte provenant de CondaWeb, Gemini, ChatGPT, etc. Le laboratoire va analyser chaque paragraphe en direct..."
+                                    value={zwnjTestInput}
+                                    onChange={(e) => setZwnjTestInput(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Live Analysis Counters */}
+                            {zwnjTestInput.trim() && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
+                                        <div className="text-[10px] uppercase font-bold text-slate-400">Total Paragraphes</div>
+                                        <div className="text-lg font-black text-white">{analysis.paragraphs.length}</div>
+                                    </div>
+                                    <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-center">
+                                        <div className="text-[10px] uppercase font-bold text-emerald-400">🟢 CondaWeb</div>
+                                        <div className="text-lg font-black text-emerald-300">{analysis.condaCount}</div>
+                                    </div>
+                                    <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 text-center">
+                                        <div className="text-[10px] uppercase font-bold text-rose-400">🔴 Autre IA / Externe</div>
+                                        <div className="text-lg font-black text-rose-300">{analysis.externalCount}</div>
+                                    </div>
+                                    <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 text-center">
+                                        <div className="text-[10px] uppercase font-bold text-purple-400">Total \u200C trouvés</div>
+                                        <div className="text-lg font-black text-purple-300">{analysis.totalZwnj}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Paragraph-by-paragraph breakdown */}
+                            {zwnjTestInput.trim() && (
+                                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                    <div className="text-xs font-bold text-slate-300 sticky top-0 bg-slate-900 py-1">
+                                        Analyse détaillée par bloc de texte :
+                                    </div>
+                                    {analysis.paragraphs.map((p) => (
+                                        <div
+                                            key={p.index}
+                                            className={`p-3 rounded-xl border text-xs space-y-1.5 transition ${
+                                                p.isConda
+                                                    ? 'bg-emerald-950/30 border-emerald-500/60 text-emerald-100'
+                                                    : 'bg-rose-950/30 border-rose-500/60 text-rose-100'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-base">{p.isConda ? '🟢' : '🔴'}</span>
+                                                    <span className="font-bold">
+                                                        Paragraphe {p.index} : {p.isConda ? 'Origine CondaWeb confirmée' : 'Origine Externe / Autre IA (Non marqué)'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700">
+                                                    \u200C: <strong className={p.zwnjCount > 0 ? 'text-emerald-400' : 'text-slate-500'}>{p.zwnjCount}</strong> | \u200B: {p.zwsCount} | \u200D: {p.zwjCount}
+                                                </div>
+                                            </div>
+                                            <p className="text-slate-300 font-mono text-[11px] bg-slate-950/70 p-2 rounded-lg border border-slate-800 m-0 break-words">
+                                                {p.text}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end pt-2 border-t border-slate-800">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowZwnjLabModal(false)}
+                                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition"
+                                >
+                                    Fermer le laboratoire
                                 </button>
                             </div>
                         </div>
