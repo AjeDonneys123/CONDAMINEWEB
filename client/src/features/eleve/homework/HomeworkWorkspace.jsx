@@ -1239,7 +1239,17 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const suspicionRed = cheatFlags.pasteBursts > 0 || cheatFlags.oralAIAssist > 0;
 
   return (
-    <div className="homework-container v8-liseuse">
+    <div
+      className="homework-container v8-liseuse"
+      onCopy={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onCut={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
       {behaviorNotice.open && <div className="v8-behavior-notice">{behaviorNotice.text}</div>}
       <button onClick={onQuit} className="v8-quit-btn">⬅ QUITTER</button>
 
