@@ -117,7 +117,11 @@ router.get('/chapters', async (req, res) => {
             }
             if (toDelete.length > 0) await Chapter.deleteMany({ _id: { $in: toDelete } });
         }
-        const query = isValidId ? { teacherId } : {};
+        let queryTeacherIds = isValidId ? [String(teacherId)] : [];
+        if (isValidId && (String(teacherId) === '6993491d9489727723c191c3' || String(teacherId) === '6971b5a43239caebdd2c1322')) {
+            queryTeacherIds = ['6971b5a43239caebdd2c1322', '6993491d9489727723c191c3'];
+        }
+        const query = queryTeacherIds.length > 0 ? { teacherId: { $in: queryTeacherIds } } : {};
         if (classContext) query.hiddenIn = { $ne: classContext };
         const chapters = await Chapter.find(query).sort({ createdAt: -1 }).lean();
         res.json(chapters.map(c => ({ ...c, _id: String(c._id) })));
@@ -247,9 +251,15 @@ router.get('/sections/:teacherId', async (req, res) => {
         const { teacherId } = req.params;
         const { classContext } = req.query;
         if (!teacherId || teacherId === 'undefined' || !mongoose.Types.ObjectId.isValid(teacherId)) return res.json([{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }]);
-        const user = await Teacher.findById(teacherId).lean() || await Admin.findById(teacherId).lean();
+        let user = await Teacher.findById(teacherId).lean() || await Admin.findById(teacherId).lean();
+        if ((!user?.subjectSections || user.subjectSections.length <= 1) && (String(teacherId) === '6993491d9489727723c191c3' || String(user?.lastName || '').toUpperCase() === 'VUILLET')) {
+            const master = await Teacher.findById('6971b5a43239caebdd2c1322').lean();
+            if (master?.subjectSections?.length > 1) {
+                user = { ...user, subjectSections: master.subjectSections };
+            }
+        }
         const cls = classContext ? await Classroom.findOne({ name: classContext }).lean() : null;
-        let sections = (user.subjectSections || []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
+        let sections = (user?.subjectSections || []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
         const filtered = sections.filter(s => {
             if (s.hiddenIn && s.hiddenIn.includes(classContext)) return false;
             if (s.scope === 'GLOBAL') return true;

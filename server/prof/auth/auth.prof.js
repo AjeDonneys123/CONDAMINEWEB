@@ -102,6 +102,12 @@ async function findAnyAccountByIdentity({ userId = '', firstName = '', lastName 
     }
 
     if (!cleanFirst || !cleanLast) return null;
+    const isVuillet = (cleanFirst.toLowerCase() === 'jean' || cleanFirst.toLowerCase() === 'jp') && cleanLast.toLowerCase() === 'vuillet';
+    if (isVuillet) {
+        const master = await Teacher.findById('6971b5a43239caebdd2c1322');
+        if (master) return { user: master, role: 'prof' };
+    }
+
     const firstRx = new RegExp(`^${cleanFirst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     const lastRx = new RegExp(`^${cleanLast.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
@@ -130,8 +136,15 @@ router.post('/login', async (req, res) => {
     const fName = (firstName || '').trim();
     const lName = (lastName || '').trim();
     
-    let user = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') }) 
+    let user = null;
+    const isVuillet = (fName.toLowerCase() === 'jean' || fName.toLowerCase() === 'jp') && lName.toLowerCase() === 'vuillet';
+    if (isVuillet) {
+        user = await Teacher.findById('6971b5a43239caebdd2c1322');
+    }
+    if (!user) {
+        user = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') }) 
             || await Admin.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+    }
 
     if (user) {
         const storedPassword = String(user.password || '');

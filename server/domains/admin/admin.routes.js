@@ -126,6 +126,15 @@ router.get('/teachers/:id', asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: "ID Invalide" }); 
     let user = await mongoose.model('Teacher').findById(req.params.id).lean() || await mongoose.model('Admin').findById(req.params.id).lean(); 
     if (!user) return res.status(404).json({ error: "Utilisateur introuvable" }); 
+    if ((String(req.params.id) === '6993491d9489727723c191c3' || isNamedJpVuillet(user)) && (!user.subjectSections || user.subjectSections.length <= 1)) {
+        const master = await mongoose.model('Teacher').findById('6971b5a43239caebdd2c1322').lean();
+        if (master) {
+            user.subjectSections = master.subjectSections;
+            user.assignedClasses = master.assignedClasses;
+            user.assignedClassesText = master.assignedClassesText;
+            user.taughtSubjectsText = master.taughtSubjectsText;
+        }
+    }
     user.isDeveloper = user.isDeveloper === true || isNamedJpVuillet(user);
     user.hasPersonalGeminiKey = Boolean(String(user.geminiApiKeyEncrypted || '').trim());
     user.isCentralAiAccount = isCentralAiAccount(user);
