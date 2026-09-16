@@ -862,8 +862,9 @@ router.post('/submit', async (req, res) => {
         attemptsCount,
         attemptsHistory,
         memoSheet,
-        sessionToken
-    } = req.body;
+        sessionToken,
+        draftDocMeta
+    } = req.body || {};
 
     const computeSessionToken = (studId, hwId, attNum) => {
         const raw = `${String(studId || '')}_${String(hwId || '')}`;
@@ -1116,6 +1117,7 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
                 if (memoSheet && memoSheet.trim().length >= 30) fallbackBonus += 0.5;
                 examBonusPoints = Math.min(2.5, fallbackBonus);
                 studentMessage = `🌟 Superbe persévérance ! Tu remportes +${examBonusPoints} pts bonus pour ton prochain contrôle grâce à tes ${substantialAttemptsCount} essais et tes retours d'apprentissage !`;
+            }
         }
 
         if (!watermarkVerified && chatString.length > 30) {

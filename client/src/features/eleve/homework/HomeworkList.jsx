@@ -79,9 +79,22 @@ export default function HomeworkList({
     const targetId = String(openItemId || '').trim();
     if (!targetId || selectedHw) return;
     const target = (homeworks || []).find((h) => String(h?._id || '') === targetId);
-    if (!target) return;
-    setSelectedHw(target);
-    if (onOpenHandled) onOpenHandled();
+    if (target) {
+      setSelectedHw(target);
+      if (onOpenHandled) onOpenHandled();
+      return;
+    }
+    let isMounted = true;
+    fetch(`/api/homework/${targetId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && isMounted) {
+          setSelectedHw(data);
+          if (onOpenHandled) onOpenHandled();
+        }
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
   }, [openItemId, homeworks, selectedHw, onOpenHandled]);
 
   const isRedactionHw = (hw) => {
