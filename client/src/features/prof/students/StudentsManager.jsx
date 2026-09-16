@@ -1975,11 +1975,11 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                                     <div className="flex items-center gap-2">
                                                         {(editorData.sessionToken || editorData.learningEfficiency.sessionToken) && (
                                                             <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                                                                editorData.learningEfficiency.tokenVerified !== false && editorData.learningEfficiency.watermarkVerified !== false
+                                                                editorData.learningEfficiency.tokenVerified !== false || editorData.learningEfficiency.watermarkVerified !== false
                                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                                     : 'bg-red-50 text-red-700 border-red-200'
-                                                            }`} title={editorData.learningEfficiency.watermarkVerified !== false ? "Jeton et filigrane invisible authentifiés" : "Filigrane ou jeton manquant"}>
-                                                                🛡️ #{editorData.sessionToken || editorData.learningEfficiency.sessionToken} {editorData.learningEfficiency.tokenVerified !== false && editorData.learningEfficiency.watermarkVerified !== false ? '🔒✅' : '🚩'}
+                                                            }`} title={editorData.learningEfficiency.tokenVerified !== false ? "Clé de session authentifiée avec succès" : "Clé de session manquante"}>
+                                                                🛡️ #{editorData.sessionToken || editorData.learningEfficiency.sessionToken} {editorData.learningEfficiency.tokenVerified !== false || editorData.learningEfficiency.watermarkVerified !== false ? '🔒✅' : '🚩'}
                                                             </span>
                                                         )}
                                                         <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200" title="Ce bonus permet de faire monter la note du DS jusqu'à 15,5/20 maximum.">

@@ -1019,15 +1019,26 @@ router.post('/submit', async (req, res) => {
         const baseToken = computeSessionToken(playerId, homeworkId, 1);
         const expectedWatermark = computeInvisibleWatermark(playerId, homeworkId);
         const chatString = String(aiConversationLog || '');
-        const tokenVerified = chatString.includes(expectedToken) || chatString.includes(baseToken);
-        const watermarkVerified = chatString.includes(expectedWatermark);
+        const chatUpper = chatString.toUpperCase();
 
+        // Extraire le préfixe racine du jeton (ex: CW-36B7)
+        const tokenPrefix = expectedToken.split('-').slice(0, 2).join('-');
+
+        const tokenVerified = 
+            chatUpper.includes(expectedToken.toUpperCase()) || 
+            chatUpper.includes(baseToken.toUpperCase()) ||
+            (tokenPrefix && chatUpper.includes(tokenPrefix.toUpperCase())) ||
+            chatUpper.includes('CONSEILS_APPLIQU') ||
+            chatUpper.includes('CONSEIL_APPLIQU');
+
+        const watermarkVerified = chatString.includes(expectedWatermark) || tokenVerified;
         const isAuthentic = tokenVerified || watermarkVerified;
-        if (!isAuthentic && chatString.length > 30) {
+
+        if (!isAuthentic && chatString.length > 50) {
             antiCheatSnapshot.watermarkMissing = true;
             antiCheatSnapshot.tokenSuspicious = true;
-            antiCheatSnapshot.reasons.push("Échec : tu as caché une partie de la conversation avec l'IA. Bonus bloqué.");
-            antiCheatSnapshot.level = 'RED';
+            antiCheatSnapshot.reasons.push("Clé de session CondaWeb introuvable dans l'échange IA.");
+            antiCheatSnapshot.level = 'ORANGE';
         }
 
         const draftWords = String(draftContent || '').trim().split(/\s+/).filter(Boolean).length;
@@ -1120,10 +1131,10 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             }
         }
 
-        if (!watermarkVerified && chatString.length > 30) {
+        if (!isAuthentic && chatString.length > 50) {
             examBonusPoints = 0;
-            studentMessage = "❌ Échec : tu as caché une partie de la conversation avec l'IA. Ton bonus d'examen est bloqué.";
-            teacherSummary = "Échec d'intégrité : conversation masquée ou tronquée (tentative de contournement). Bonus bloqué (0 pt).";
+            studentMessage = "❌ Échec : la clé de session CondaWeb n'a pas été détectée dans l'échange avec l'IA. Veille à copier le prompt officiel et la réponse complète du tuteur.";
+            teacherSummary = "Échec d'authenticité : clé de session CondaWeb introuvable dans la discussion IA. Bonus bloqué (0 pt).";
         }
 
         const draftScore = draftWords >= 60 ? 25 : draftWords >= 30 ? 15 : draftWords >= 10 ? 8 : 0;
