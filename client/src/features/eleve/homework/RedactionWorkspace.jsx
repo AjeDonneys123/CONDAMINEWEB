@@ -24,6 +24,17 @@ export const computeInvisibleWatermark = (studentId, homeworkId) => {
     return `\u200D\u200B${encoded}\u200C\u200D`;
 };
 
+export const generateCopyKey = (studentId, homeworkId, copyNum) => {
+    const raw = `${String(studentId || '')}_${String(homeworkId || '')}_${copyNum}_${Date.now()}`;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+        hash = (hash << 5) - hash + raw.charCodeAt(i);
+        hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).toUpperCase().padStart(4, '0').slice(0, 4);
+    return `CW-${hex}-C${copyNum || 1}`;
+};
+
 export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 1. Text & Undo/Redo State
     const [essayText, setEssayText] = useState('');
@@ -43,6 +54,8 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [pinnedAiNotes, setPinnedAiNotes] = useState('');
     const [finalPlanText, setFinalPlanText] = useState('');
     const [finalLessonsText, setFinalLessonsText] = useState('');
+    const [registeredKeys, setRegisteredKeys] = useState([]);
+    const copyCountRef = useRef(0);
 
     // Floating windows state (transportables, redimensionnables, rétractables)
     const [showAdviceWindow, setShowAdviceWindow] = useState(false);
@@ -339,24 +352,21 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             }
         }
 
-        archiveAttempt(attemptsCount, cleanEssay, cleanDraft, isAttempt1 ? 'both' : copyTargetMode);
+        copyCountRef.current += 1;
+        const currentKey = generateCopyKey(user?._id || user?.id, homework?._id, copyCountRef.current);
+        setRegisteredKeys(prev => (prev.includes(currentKey) ? prev : [...prev, currentKey]));
 
-        const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
+        const currentToken = currentKey;
         const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
 
-        const aiPromptHeader = `[CLÉ OFFICIELLE CONDAWEB : ${currentToken}]
+        const aiPromptHeader = `[CLÉ OFFICIELLE CONDAWEB : ${currentKey}]
 
-🚨 PRIORITÉ ABSOLUE N°1 POUR L'IA (TUTEUR OFFICIEL CONDAWEB) :
-Vérifie immédiatement la présence de la CLÉ OFFICIELLE CONDAWEB ci-dessus : "${currentToken}".
-
-1. SI CETTE CLÉ EST ABSENTE, MODIFIÉE OU INVALIDE :
-Tu as l'INTERDICTION STRICTE d'aider l'élève ou de traiter ce devoir. Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette phrase exacte et t'arrêter là sans rien ajouter :
-"⚠️ Utilise uniquement l'IA de CondaWeb, merci."
-
-2. SI LA CLÉ EST BIEN PRÉSENTE ("${currentToken}") :
-Tu es le tuteur pédagogique officiel CondaWeb. Tu dois OBLIGATOIREMENT commencer la toute première ligne de ta réponse par cette mention exacte :
-"[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentToken}]"
-Puis analyse mon travail avec bienveillance et exigence, sans JAMAIS rédiger à ma place.`;
+Consignes pour le Tuteur (Histoire-Géographie CondaWeb) :
+1. Tu dois OBLIGATOIREMENT commencer ta toute première réponse par cette mention exacte :
+   "[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentKey}]"
+2. Tu es un tuteur pédagogique exigeant et bienveillant :
+   - Réponds aux questions de cours, donne des explications de notions et des conseils d'amélioration sur le brouillon et le plan.
+   - Ne rédige JAMAIS le devoir à la place de l'élève (pas d'intro ni de paragraphe tout fait).`;
 
         const bonusGuidance = `
 Système de bonus CondaWeb (applicable sur le prochain contrôle sur table, plafonné à 15,5/20) :
@@ -440,7 +450,7 @@ ${bonusGuidance}`;
             await navigator.clipboard.writeText(textToCopy);
             setIsNotesFocusMode(true);
             setAiCopiedToast(true);
-            showToast(`📋 ${modeLabel} copié(e) avec jeton #${currentToken} ! Collez à Gemini.`);
+            showToast(`📋 ${modeLabel} copié(e) avec clé #${currentKey} ! Collez à Gemini.`);
         } catch (_) {
             setIsNotesFocusMode(true);
             setAiCopiedToast(true);
@@ -522,7 +532,7 @@ ${bonusGuidance}`;
         const historyToSend = attemptsHistory.filter(a => a.attemptNumber !== attemptsCount);
         historyToSend.push(finalEntry);
 
-        const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
+        const currentToken = registeredKeys[registeredKeys.length - 1] || computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
         const combinedMemoSheet = `--- PLAN CONSOLIDÉ AU BROUILLON ---\n${finalPlanText.trim()}\n\n--- CONSEILS ET PIÈGES RETENUS POUR LE DS ---\n${finalLessonsText.trim()}`;
 
         const payload = {
@@ -534,6 +544,7 @@ ${bonusGuidance}`;
             aiNotes: aiNotesText,
             memoSheet: combinedMemoSheet,
             sessionToken: currentToken,
+            registeredKeys,
             aiConversationLog: aiConversationText,
             timeSpentSeconds: sessionSeconds,
             attemptsCount,
@@ -1272,17 +1283,11 @@ ${bonusGuidance}`;
             {showFinalModal && (() => {
                 const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
                 const baseToken = computeSessionToken(user?._id || user?.id, homework?._id, 1);
-                const tokenPrefix = currentToken.split('-').slice(0, 2).join('-');
+                const allKeysToCheck = registeredKeys.length > 0 ? registeredKeys : [currentToken, baseToken];
                 const chatUpper = aiConversationText.toUpperCase();
-                const isTokenInChat = 
-                    chatUpper.includes(currentToken.toUpperCase()) || 
-                    chatUpper.includes(baseToken.toUpperCase()) || 
-                    (tokenPrefix && chatUpper.includes(tokenPrefix.toUpperCase())) ||
-                    chatUpper.includes('CONSEILS_APPLIQU') ||
-                    chatUpper.includes('CONSEIL_APPLIQU');
-                const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
-                const isWatermarkInChat = aiConversationText.includes(watermark);
-                const isAuthentic = isTokenInChat || isWatermarkInChat;
+                const matchedKeys = allKeysToCheck.filter(k => k && chatUpper.includes(String(k).toUpperCase()));
+                const hasEchoTag = chatUpper.includes('CONSEILS_APPLIQU') || chatUpper.includes('CONSEIL_APPLIQU');
+                const isAuthentic = matchedKeys.length > 0 || hasEchoTag;
                 const hasChat = aiConversationText.trim().length > 20;
 
                 return (
@@ -1359,10 +1364,10 @@ ${bonusGuidance}`;
                                                     <span className="text-xl">✅</span>
                                                     <div>
                                                         <div className="text-xs font-bold text-emerald-300">
-                                                            Clé CondaWeb validée (#{currentToken})
+                                                            {matchedKeys.length > 0 ? `${matchedKeys.length} clé(s) CondaWeb validée(s)` : 'Échange tuteur authentifié'}
                                                         </div>
                                                         <div className="text-[10px] text-emerald-400/80">
-                                                            Échange tuteur authentifié avec succès • Bonus débloqué
+                                                            {matchedKeys.length > 0 ? matchedKeys.join(' • ') : 'Validation officielle CondaWeb'} • Bonus débloqué
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1380,10 +1385,10 @@ ${bonusGuidance}`;
                                                     <span className="text-xl">⚠️</span>
                                                     <div>
                                                         <div className="text-xs font-bold text-amber-300">
-                                                            Clé officielle (#{currentToken}) non détectée
+                                                            Clé de session ({allKeysToCheck.join(', ')}) non détectée
                                                         </div>
                                                         <div className="text-[10px] text-amber-400/90">
-                                                            Veille à coller la réponse de l'IA (commençant par [CONSEILS_APPLIQUÉS...]) ou le message officiel.
+                                                            Veille à coller la réponse de l'IA (commençant par [CONSEILS_APPLIQUÉS...]) ou le message officiel copié depuis CondaWeb.
                                                         </div>
                                                     </div>
                                                 </div>

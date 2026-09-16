@@ -863,6 +863,7 @@ router.post('/submit', async (req, res) => {
         attemptsHistory,
         memoSheet,
         sessionToken,
+        registeredKeys,
         draftDocMeta
     } = req.body || {};
 
@@ -1021,15 +1022,14 @@ router.post('/submit', async (req, res) => {
         const chatString = String(aiConversationLog || '');
         const chatUpper = chatString.toUpperCase();
 
-        // Extraire le préfixe racine du jeton (ex: CW-36B7)
-        const tokenPrefix = expectedToken.split('-').slice(0, 2).join('-');
+        const keysToCheck = Array.isArray(registeredKeys) && registeredKeys.length > 0
+            ? registeredKeys
+            : [sessionToken, expectedToken, baseToken].filter(Boolean);
 
-        const tokenVerified = 
-            chatUpper.includes(expectedToken.toUpperCase()) || 
-            chatUpper.includes(baseToken.toUpperCase()) ||
-            (tokenPrefix && chatUpper.includes(tokenPrefix.toUpperCase())) ||
-            chatUpper.includes('CONSEILS_APPLIQU') ||
-            chatUpper.includes('CONSEIL_APPLIQU');
+        // Vérification de la présence des clés de collage dans le chat
+        const matchedKeys = keysToCheck.filter(k => k && chatUpper.includes(String(k).toUpperCase()));
+        const hasEchoTag = chatUpper.includes('CONSEILS_APPLIQU') || chatUpper.includes('CONSEIL_APPLIQU');
+        const tokenVerified = matchedKeys.length > 0 || hasEchoTag;
 
         const watermarkVerified = chatString.includes(expectedWatermark) || tokenVerified;
         const isAuthentic = tokenVerified || watermarkVerified;
@@ -1037,7 +1037,7 @@ router.post('/submit', async (req, res) => {
         if (!isAuthentic && chatString.length > 50) {
             antiCheatSnapshot.watermarkMissing = true;
             antiCheatSnapshot.tokenSuspicious = true;
-            antiCheatSnapshot.reasons.push("Clé de session CondaWeb introuvable dans l'échange IA.");
+            antiCheatSnapshot.reasons.push("Clés de session CondaWeb introuvables dans l'échange IA.");
             antiCheatSnapshot.level = 'ORANGE';
         }
 
@@ -1052,8 +1052,8 @@ router.post('/submit', async (req, res) => {
             { attemptNumber: 1, isSubstantial: normalizedHistory[0]?.isSubstantial || false, comment: "Premier essai rédigé avec brouillon initial." }
         ];
 
-        // If multiple attempts, call Gemini 2.0 Flash to evaluate advice integration and progression
-        if (normalizedHistory.length > 1) {
+        // Audit IA intelligent : appelé si plusieurs essais OU si une discussion avec l'IA est fournie
+        if (normalizedHistory.length > 1 || (aiConversationLog && aiConversationLog.trim().length > 30)) {
             try {
                 const topicPrompt = hw?.promptTopic || hw?.levels?.[0]?.instruction || hw?.title || 'Sujet de rédaction';
                 const attemptsSummary = normalizedHistory.map(a => `=== ESSAI N°${a.attemptNumber} (${a.wordsCount} mots, ~${a.linesCount} lignes) ===\n${a.text}`).join('\n\n');
@@ -1063,9 +1063,10 @@ router.post('/submit', async (req, res) => {
 SUJET DU DEVOIR :
 "${topicPrompt}"
 
-JETON DE SESSION UNIQUE :
-Attendu : "${expectedToken}"
-Statut d'authenticité : ${tokenVerified ? '✅ JETON AUTHENTIFIÉ DANS LA DISCUSSION' : '⚠️ JETON ABSENT OU INCORRECT (suspicion de faux dialogue Word ou de copie sur un camarade)'}
+CLÉS OFFICIELLES GÉNÉRÉES PAR CONDAWEB (à chaque collage de travail pour l'IA) :
+Attendues : [${keysToCheck.join(', ')}]
+Clés retrouvées dans la discussion collée : [${matchedKeys.join(', ')}]
+Statut d'authenticité : ${tokenVerified ? '✅ CLÉS OFFICIELLES AUTHENTIFIÉES DANS LA DISCUSSION' : '⚠️ AUCUNE CLÉ OFFICIELLE RETROUVÉE (suspicion de texte généré sur un chat externe sans passer par CondaWeb)'}
 
 BROUILLON / PLAN INITIAL DE L'ÉLÈVE :
 ${draftContent || '(Aucun brouillon)'}
@@ -1082,26 +1083,25 @@ ${attemptsSummary}
 ÉCHANGE COMPLET AVEC L'IA (collé par l'élève) :
 ${aiConversationLog || '(Aucun échange collé)'}
 
-CONSIGNE D'ATTRIBUTION DU BONUS POUR LE PROCHAIN CONTRÔLE :
-1. Socle de départ : Brouillon initial + Essai 1 sérieux = +0.5 pt garanti.
-2. Pour chaque nouvel essai (Essai 2, Essai 3...), vérifie :
-   - S'il est consistant (≥ 15-20 lignes).
-   - S'il a RÉELLEMENT pris en compte les conseils de l'IA (regarde si les erreurs pointées ont été corrigées, si de nouveaux arguments/notions ont été ajoutés, ou si le chat contient la formule '[CONSEILS_APPLIQUÉS : OUI]').
-   - Si la Fiche Mémo DS prouve une vraie assimilation de mémoire de la structure et des notions.
-   - Si le jeton de session est valide (pénalise si la discussion semble fabriquée ou externe).
-3. Accorde +0.5 pt de bonus par essai amélioré respectant les conseils et la démarche.
-4. Plafond maximum du bonus : +2.5 pts.
-5. Rédige un message chaleureux et stimulant pour l'élève ("studentMessage") détaillant ce qu'il a réussi et comment son travail acharné a payé.
-6. Rédige un résumé factuel pour le professeur ("teacherSummary").
+CONSIGNE D'ÉVALUATION ET D'INTÉGRITÉ PÉDAGOGIQUE DU BONUS :
+1. ANALYSE D'INTÉGRITÉ DE LA CONVERSATION :
+   - Fais la différence entre :
+     a) Une CONVERSATION LÉGITIME : l'élève pose des questions sur le cours, demande une explication, discute des arguments ou de son plan. Même si tous les messages n'ont pas de clé, tant que le point de départ contient une clé officielle CondaWeb (${keysToCheck.join(', ')}), cette démarche d'apprentissage est 100% LÉGITIME ET VALORISÉE.
+     b) Un MORCEAU DE DEVOIR EXTERNE FRAUDULEUX : l'élève a collé un bloc rédigé (introduction, paragraphe, développement) produit par une IA externe sans clé officielle, ou a demandé directement 'écris mon intro / rédige mon devoir'.
+   - Si tu détectes une fraude avérée ou un bloc externe sans clé officielle : bloque le bonus à 0 pt et explique-le avec bienveillance dans studentMessage et teacherSummary.
+2. BONUS POUR LE PROCHAIN CONTRÔLE (si intégrité respectée) :
+   - Socle de départ garanti : Brouillon initial + Essai 1 sérieux = +0.5 pt.
+   - Bonus d'amélioration : accorde jusqu'à +2.5 pts selon la pertinence des conseils appliqués, le progrès entre les essais et la Fiche Mémo.
+3. Rédige un message stimulant pour l'élève ("studentMessage") et un résumé factuel pour le professeur ("teacherSummary").
 
 Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 {
   "examBonusPoints": 1.5,
+  "isAuthentic": true,
   "studentMessage": "Ton message d'encouragement personnalisé pour l'élève",
-  "teacherSummary": "Résumé concis pour le prof sur les versions, la Fiche Mémo et les conseils appliqués",
+  "teacherSummary": "Résumé concis pour le prof sur les versions, l'authenticité de la discussion et les conseils appliqués",
   "attemptsEvaluation": [
-    { "attemptNumber": 1, "isSubstantial": true, "comment": "Premier jet sérieux avec plan." },
-    { "attemptNumber": 2, "isSubstantial": true, "tookAdviceIntoAccount": true, "adviceStatus": "OUI", "comment": "A bien approfondi le deuxième axe suggéré." }
+    { "attemptNumber": 1, "isSubstantial": true, "comment": "Premier jet sérieux avec plan." }
   ]
 }`;
 
@@ -1112,7 +1112,7 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
                 if (parsed && typeof parsed === 'object') {
                     const parsedBonus = Number(parsed.examBonusPoints);
                     if (!Number.isNaN(parsedBonus)) {
-                        examBonusPoints = Math.min(2.5, Math.max(0.5, Math.round(parsedBonus * 2) / 2));
+                        examBonusPoints = Math.min(2.5, Math.max(0, Math.round(parsedBonus * 2) / 2));
                     } else {
                         examBonusPoints = 1.0;
                     }
@@ -1150,7 +1150,9 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             examBonusPointsMaxCap: 15.5,
             studentMessage,
             teacherSummary,
-            sessionToken: expectedToken,
+            sessionToken: matchedKeys[0] || keysToCheck[0] || expectedToken,
+            matchedKeys,
+            generatedKeys: keysToCheck,
             tokenVerified,
             watermarkVerified,
             memoSheet: String(memoSheet || ''),
