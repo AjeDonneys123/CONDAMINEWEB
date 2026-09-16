@@ -38,6 +38,10 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [attemptsCount, setAttemptsCount] = useState(1);
     const [attemptsHistory, setAttemptsHistory] = useState([]);
     const [aiCopiedToast, setAiCopiedToast] = useState(false);
+    const [isNotesFocusMode, setIsNotesFocusMode] = useState(false);
+    const [pinnedAiNotes, setPinnedAiNotes] = useState('');
+    const [finalPlanText, setFinalPlanText] = useState('');
+    const [finalLessonsText, setFinalLessonsText] = useState('');
 
     // 3. Timing & Anti-Cheat Telemetry
     const [sessionSeconds, setSessionSeconds] = useState(0);
@@ -255,14 +259,30 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
 
         try {
             await navigator.clipboard.writeText(textToCopy);
-            setShowAiNotes(true);
+            setIsNotesFocusMode(true);
             setAiCopiedToast(true);
             showToast(`📋 Travail copié avec votre jeton #${currentToken} ! Collez-le à Gemini.`);
         } catch (_) {
-            setShowAiNotes(true);
+            setIsNotesFocusMode(true);
             setAiCopiedToast(true);
-            showToast(`ℹ️ Notez les conseils de l'IA (votre jeton : #${currentToken}).`);
+            showToast(`ℹ️ Collez votre travail à Gemini et notez ses conseils.`);
         }
+    };
+
+    // "J'ai fini de prendre mes notes" handler
+    const handleFinishNotes = () => {
+        const cleanNotes = aiNotesText.trim();
+        if (cleanNotes.length < 15) {
+            showToast("⚠️ Résumez au moins 2 ou 3 remarques clés du tuteur pour continuer.");
+            return;
+        }
+        setPinnedAiNotes(cleanNotes);
+        setIsNotesFocusMode(false);
+        setShowAiNotes(true);
+        if (attemptsCount === 1) {
+            setAttemptsCount(2);
+        }
+        showToast("📌 Conseils épinglés en haut ! Modifiez maintenant votre brouillon et votre travail.");
     };
 
     // "Nouvelle tentative" handler
@@ -302,12 +322,26 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
 
     // Final submission
     const handleFinalSubmit = async () => {
+        if (!finalPlanText.trim()) {
+            showToast("⚠️ Refaites d'abord votre plan consolidé au brouillon.");
+            return;
+        }
+        if (!finalLessonsText.trim()) {
+            showToast("⚠️ Formulez les 2 ou 3 conseils que vous avez appris de l'IA pour le DS.");
+            return;
+        }
+        if (!aiConversationText.trim()) {
+            showToast("⚠️ Collez votre échange avec l'IA pour finaliser l'envoi.");
+            return;
+        }
+
         setSubmitting(true);
         const finalEntry = formatAttemptData(attemptsCount, essayText);
         const historyToSend = attemptsHistory.filter(a => a.attemptNumber !== attemptsCount);
         historyToSend.push(finalEntry);
 
         const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
+        const combinedMemoSheet = `--- PLAN CONSOLIDÉ AU BROUILLON ---\n${finalPlanText.trim()}\n\n--- CONSEILS ET PIÈGES RETENUS POUR LE DS ---\n${finalLessonsText.trim()}`;
 
         const payload = {
             homeworkId: homework._id,
@@ -316,7 +350,7 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
             userText: essayText,
             draftContent: draftText,
             aiNotes: aiNotesText,
-            memoSheet: memoSheetText,
+            memoSheet: combinedMemoSheet,
             sessionToken: currentToken,
             aiConversationLog: aiConversationText,
             timeSpentSeconds: sessionSeconds,
@@ -466,7 +500,32 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                 <p className="conda-redaction-topic-text">{topicText}</p>
             </section>
 
-            {/* Main Area: Editor (Left) & Persistent Draft with AI Notes (Right) */}
+            {/* Pinned AI Notes Banner (Visible once notes have been taken) */}
+            {pinnedAiNotes.trim() && (
+                <div className="bg-gradient-to-r from-indigo-950/90 via-slate-900 to-indigo-950/90 border-b border-indigo-500/40 py-2.5 px-6 flex items-center justify-between gap-4 sticky top-[65px] z-30 shadow-md">
+                    <div className="flex items-start gap-3 min-w-0">
+                        <span className="text-lg flex-shrink-0">📌</span>
+                        <div className="min-w-0">
+                            <span className="text-[10px] font-black uppercase text-indigo-300 tracking-wider block">
+                                Conseils IA retenus pour cet essai :
+                            </span>
+                            <p className="text-xs text-slate-200 font-medium truncate m-0">
+                                {pinnedAiNotes}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsNotesFocusMode(true)}
+                        className="text-xs text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 px-3 py-1 rounded-lg flex-shrink-0 font-bold transition flex items-center gap-1.5"
+                    >
+                        <span>✏️</span>
+                        <span>Modifier mes notes</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Main Area: Editor (Left) & Persistent Draft (Right) */}
             <main className="conda-redaction-main">
                 {/* Writing Sheet */}
                 <div className="conda-redaction-editor-panel">
@@ -565,7 +624,7 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                     </div>
 
                     <p className="text-[11px] text-slate-400 m-0 leading-relaxed">
-                        Posez ici vos idées, votre plan et vos mots-clés. Ce brouillon est conservé tout au long de vos tentatives.
+                        Posez ici vos idées, votre plan et vos mots-clés. Ce brouillon reste modifiable tout au long de vos tentatives et s'ajuste selon les conseils de l'IA.
                     </p>
 
                     <textarea
@@ -577,61 +636,82 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                         onPaste={handleBlockedPaste('le brouillon')}
                         onDrop={handleBlockedPaste('le brouillon')}
                     />
+                </aside>
+            </main>
 
-                    {/* Section Conseils de l'IA */}
-                    {showAiNotes && (
-                        <div className="conda-ai-notes-box">
-                            <div className="conda-ai-notes-title">
-                                <span>🤖</span>
-                                <span>Conseils & pistes de l'IA</span>
+            {/* FOCUS MODE: Prise de Notes IA Dédiée */}
+            {isNotesFocusMode && (
+                <div className="conda-redaction-modal-overlay">
+                    <div className="bg-slate-900 border-2 border-indigo-500 rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl space-y-5 text-left">
+                        <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-2xl">🤖</span>
+                                <div>
+                                    <h3 className="text-base font-black text-white uppercase tracking-wider">
+                                        Phase de Consultation & Prise de Notes IA
+                                    </h3>
+                                    <span className="text-[11px] font-bold text-indigo-400">
+                                        Tentative n°{attemptsCount}
+                                    </span>
+                                </div>
                             </div>
-                            <p className="conda-ai-notes-hint">
-                                Collez votre travail dans le volet <strong>Demander à Gemini</strong> (à droite). Résumez ici ses remarques méthodologiques et les points à améliorer pour votre prochaine tentative.
+                            <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded border border-amber-500/30">
+                                Jeton : #{computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount)}
+                            </span>
+                        </div>
+
+                        <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-2xl p-3.5 text-xs text-indigo-200/90 leading-relaxed space-y-1.5">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                                <span>📋</span>
+                                <span>Consigne de travail :</span>
+                            </div>
+                            <p className="m-0">
+                                1. Votre texte a été copié dans votre presse-papier. Collez-le (Ctrl+V) dans le volet <strong>Demander à Gemini</strong> à droite.
                             </p>
+                            <p className="m-0">
+                                2. Lisez attentivement les remarques du tuteur.
+                            </p>
+                            <p className="m-0 font-semibold text-amber-300">
+                                💡 Important pour votre bonus : Résumez ci-dessous avec vos propres mots les erreurs signalées et les axes d'amélioration. À la fin du devoir, pour valider l'étape, vous devrez refaire votre plan et citer ce que vous avez retenu !
+                            </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-300 block">
+                                Mes notes sur les conseils du tuteur (obligatoire) :
+                            </label>
                             <textarea
-                                className="conda-ai-notes-textarea"
-                                placeholder="Notes obligatoires sur les conseils de l'IA : points forts, faiblesses signalées, vocabulaire à enrichir..."
+                                className="w-full h-40 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                placeholder="Résumez ici :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de vocabulaire ou de structure signalées&#10;- Ce que vous devez ajouter ou modifier dans votre prochain essai..."
                                 value={aiNotesText}
                                 onChange={handleAiNotesChange}
                                 onKeyDown={handleKeyDown}
                                 onPaste={handleBlockedPaste('les notes')}
                                 onDrop={handleBlockedPaste('les notes')}
+                                autoFocus
                             />
                         </div>
-                    )}
 
-                    {/* Section Fiche Mémo DS : s'affiche dès qu'il y a eu un retour IA ou tentative >= 2 */}
-                    {(showAiNotes || attemptsCount >= 2) && (
-                        <div className="mt-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-left space-y-2">
-                            <div className="flex items-center justify-between">
-                                <div className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
-                                    <span>🧠</span>
-                                    <span>Fiche Mémo Contrôle sur table</span>
-                                </div>
-                                <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30">
-                                    Bonus Max (+2.5 pts)
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-amber-200/80 leading-relaxed">
-                                Prouvez que vous avez assimilé le travail sans dépendre de l'IA :
-                                <br />
-                                <strong>1. Votre plan final structuré</strong> (Partie I, Partie II...)
-                                <br />
-                                <strong>2. Les notions et pièges clés</strong> à ne pas oublier le jour du DS.
-                            </p>
-                            <textarea
-                                className="w-full h-28 p-2.5 rounded-xl border border-amber-500/30 bg-slate-900 text-slate-100 text-xs font-mono outline-none focus:border-amber-400 resize-y placeholder:text-slate-600"
-                                placeholder="1. Mon plan final consolidé (I. ..., II. ...)&#10;2. Les 2-3 notions ou pièges retenus pour le DS..."
-                                value={memoSheetText}
-                                onChange={(e) => setMemoSheetText(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                onPaste={handleBlockedPaste('la fiche mémo')}
-                                onDrop={handleBlockedPaste('la fiche mémo')}
-                            />
+                        <div className="flex items-center justify-between pt-2">
+                            <button
+                                type="button"
+                                className="text-xs text-slate-400 hover:text-slate-200"
+                                onClick={() => setIsNotesFocusMode(false)}
+                            >
+                                Revenir au brouillon
+                            </button>
+                            <button
+                                type="button"
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-3 rounded-xl shadow-lg transition flex items-center gap-2"
+                                onClick={handleFinishNotes}
+                            >
+                                <span>✅</span>
+                                <span>J'ai fini de prendre mes notes ➔ Améliorer mon devoir</span>
+                            </button>
                         </div>
-                    )}
-                </aside>
-            </main>
+                    </div>
+                </div>
+            )}
 
             {/* Warning Modal: Short Working Time */}
             {showShortWarning && (
@@ -664,65 +744,131 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                 </div>
             )}
 
-            {/* Final Submission Modal: Paste AI Conversation with Token Check */}
+            {/* Final Submission Modal: Assimilation Step + Collapsible Chat Paste */}
             {showFinalModal && (() => {
                 const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
                 const baseToken = computeSessionToken(user?._id || user?.id, homework?._id, 1);
                 const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
                 const isTokenInChat = aiConversationText.includes(currentToken) || aiConversationText.includes(baseToken);
                 const isWatermarkInChat = aiConversationText.includes(watermark);
+                const hasChat = aiConversationText.trim().length > 20;
 
                 return (
                     <div className="conda-redaction-modal-overlay">
-                        <div className="conda-redaction-modal">
-                            <div className="text-3xl mb-2">📋</div>
-                            <h3 className="conda-redaction-modal-title">Clôture du devoir & Échange avec l'IA</h3>
-                            <p className="conda-redaction-modal-text">
-                                Pour finaliser votre envoi, veuillez <strong>copier-coller ci-dessous l'intégralité de votre conversation avec Gemini / l'IA</strong>.
-                                Elle sera transmise à votre professeur pour valider votre démarche et authentifier votre jeton de session :
-                            </p>
-
-                            <div className="mb-3 p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-slate-400">Jeton requis :</span>
-                                        <code className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 font-mono font-bold">#{currentToken}</code>
-                                    </div>
-                                    <div>
-                                        {aiConversationText.trim().length > 15 ? (
-                                            isTokenInChat ? (
-                                                <span className="text-emerald-400 font-bold flex items-center gap-1">✅ Jeton authentifié</span>
-                                            ) : (
-                                                <span className="text-amber-400 font-bold flex items-center gap-1">⚠️ Jeton non détecté</span>
-                                            )
-                                        ) : (
-                                            <span className="text-slate-500 text-[11px]">En attente...</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800">
-                                    <span className="text-slate-400">Intégrité de l'échange :</span>
-                                    <div>
-                                        {aiConversationText.trim().length > 15 ? (
-                                            isWatermarkInChat ? (
-                                                <span className="text-emerald-400 font-semibold">✅ Échange complet validé</span>
-                                            ) : (
-                                                <span className="text-rose-400 font-bold">❌ Échec : tu as caché une partie de la conversation. Bonus bloqué.</span>
-                                            )
-                                        ) : (
-                                            <span className="text-slate-500">Non vérifié</span>
-                                        )}
-                                    </div>
+                        <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 sm:p-7 max-w-2xl w-full shadow-2xl space-y-4 text-left max-h-[92vh] overflow-y-auto">
+                            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                                <span className="text-2xl">🧠</span>
+                                <div>
+                                    <h3 className="text-base font-black text-white uppercase tracking-wider">
+                                        Validation Finale & Fiche Mémo DS
+                                    </h3>
+                                    <p className="text-xs text-slate-400 m-0">
+                                        Prouvez ce que vous avez appris pour débloquer votre bonus de <strong>+2.5 pts</strong> au prochain contrôle !
+                                    </p>
                                 </div>
                             </div>
 
-                            <textarea
-                                className="w-full h-40 p-3 rounded-xl border border-slate-600 bg-slate-900 text-slate-100 text-xs font-mono mb-4 outline-none focus:border-indigo-500 resize-y"
-                                placeholder="Collez ici votre conversation avec Gemini (Ctrl+V / Cmd+V autorisé)..."
-                                value={aiConversationText}
-                                onChange={(e) => setAiConversationText(e.target.value)}
-                            />
-                            <div className="conda-redaction-modal-actions">
+                            {/* Section 1: Refaire le plan au brouillon */}
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-200">
+                                        1. Refais ton plan au brouillon (Plan consolidé) :
+                                    </label>
+                                    <span className="text-[10px] text-amber-400 font-bold">Obligatoire</span>
+                                </div>
+                                <textarea
+                                    className="w-full h-20 p-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                    placeholder="I. Une démocratie directe (Ecclésia, magistrats)...&#10;II. Les limites réelles (exclusion femmes, métèques, esclaves)..."
+                                    value={finalPlanText}
+                                    onChange={(e) => setFinalPlanText(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    onPaste={handleBlockedPaste('le plan')}
+                                    onDrop={handleBlockedPaste('le plan')}
+                                />
+                            </div>
+
+                            {/* Section 2: Conseils & pièges retenus */}
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-200">
+                                        2. Les 2 ou 3 conseils majeurs que tu as appris de l'IA pour le DS :
+                                    </label>
+                                    <span className="text-[10px] text-amber-400 font-bold">Obligatoire</span>
+                                </div>
+                                <textarea
+                                    className="w-full h-18 p-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                    placeholder="1. Bien définir la Misthophorie dès le début&#10;2. Soigner la transition entre fonctionnement et limites..."
+                                    value={finalLessonsText}
+                                    onChange={(e) => setFinalLessonsText(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    onPaste={handleBlockedPaste('les conseils')}
+                                    onDrop={handleBlockedPaste('les conseils')}
+                                />
+                            </div>
+
+                            {/* Section 3: Échange avec l'IA (collapsible dès collage) */}
+                            <div className="space-y-1 pt-1 border-t border-slate-800">
+                                <label className="text-xs font-bold text-slate-200 block">
+                                    3. Échange avec l'IA (Tutorat) :
+                                </label>
+
+                                {!hasChat ? (
+                                    <textarea
+                                        className="w-full h-24 p-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                        placeholder="Collez ici votre conversation complète avec Gemini (Ctrl+V / Cmd+V autorisé)..."
+                                        value={aiConversationText}
+                                        onChange={(e) => setAiConversationText(e.target.value)}
+                                    />
+                                ) : (
+                                    <div>
+                                        {isWatermarkInChat ? (
+                                            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-between">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="text-xl">✅</span>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-emerald-300">
+                                                            Conversation avec l'IA bien reçue
+                                                        </div>
+                                                        <div className="text-[10px] text-emerald-400/80">
+                                                            Échange authentifié avec succès
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAiConversationText('')}
+                                                    className="text-xs text-slate-400 hover:text-white underline font-medium"
+                                                >
+                                                    Recoller
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/60 flex items-center justify-between">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="text-xl">❌</span>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-rose-300">
+                                                            Échec : tu as caché une partie de la conversation
+                                                        </div>
+                                                        <div className="text-[10px] text-rose-400/80">
+                                                            Bonus bloqué
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAiConversationText('')}
+                                                    className="text-xs text-slate-400 hover:text-white underline font-medium"
+                                                >
+                                                    Recoller
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="conda-redaction-modal-actions pt-2 border-t border-slate-800">
                                 <button
                                     type="button"
                                     className="conda-modal-btn-cancel"
