@@ -837,6 +837,18 @@ router.post('/submit', async (req, res) => {
         return `CW-${hex}-T${attNum || 1}`;
     };
 
+    const computeInvisibleWatermark = (studId, hwId) => {
+        const raw = `${String(studId || '')}_${String(hwId || '')}`;
+        let hash = 0;
+        for (let i = 0; i < raw.length; i++) {
+            hash = (hash << 5) - hash + raw.charCodeAt(i);
+            hash |= 0;
+        }
+        const binary = (Math.abs(hash) & 0xFFFF).toString(2).padStart(16, '0');
+        const encoded = binary.split('').map(b => (b === '1' ? '\u200C' : '\u200B')).join('');
+        return `\u200D\u200B${encoded}\u200C\u200D`;
+    };
+
     const Homework = mongoose.model('Homework');
     const Submission = mongoose.model('Submission');
     const Student = mongoose.model('Student');
@@ -965,12 +977,20 @@ router.post('/submit', async (req, res) => {
 
         const expectedToken = computeSessionToken(playerId, homeworkId, attemptsCount);
         const baseToken = computeSessionToken(playerId, homeworkId, 1);
+        const expectedWatermark = computeInvisibleWatermark(playerId, homeworkId);
         const chatString = String(aiConversationLog || '');
         const tokenVerified = chatString.includes(expectedToken) || chatString.includes(baseToken);
+        const watermarkVerified = chatString.includes(expectedWatermark);
 
         if (!tokenVerified && chatString.length > 30) {
             antiCheatSnapshot.tokenSuspicious = true;
             antiCheatSnapshot.reasons.push(`Jeton de session non trouvé dans l'échange IA (${expectedToken}) - risque d'échange copié ou fabriqué`);
+            if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
+        }
+
+        if (!watermarkVerified && chatString.length > 50) {
+            antiCheatSnapshot.watermarkMissing = true;
+            antiCheatSnapshot.reasons.push(`Filigrane invisible absent : la discussion n'a pas été initiée avec le bouton officiel CondaWeb`);
             if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
         }
 
@@ -1079,6 +1099,7 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             teacherSummary,
             sessionToken: expectedToken,
             tokenVerified,
+            watermarkVerified,
             memoSheet: String(memoSheet || ''),
             substantialAttemptsCount,
             attemptsHistory: normalizedHistory,

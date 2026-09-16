@@ -12,6 +12,18 @@ export const computeSessionToken = (studentId, homeworkId, attemptNum) => {
     return `CW-${hex}-T${attemptNum || 1}`;
 };
 
+export const computeInvisibleWatermark = (studentId, homeworkId) => {
+    const raw = `${String(studentId || '')}_${String(homeworkId || '')}`;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+        hash = (hash << 5) - hash + raw.charCodeAt(i);
+        hash |= 0;
+    }
+    const binary = (Math.abs(hash) & 0xFFFF).toString(2).padStart(16, '0');
+    const encoded = binary.split('').map(b => (b === '1' ? '\u200C' : '\u200B')).join('');
+    return `\u200D\u200B${encoded}\u200C\u200D`;
+};
+
 export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 1. Text & Undo/Redo State
     const [essayText, setEssayText] = useState('');
@@ -124,6 +136,22 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             setPasteAttemptCount((prev) => prev + 1);
             showToast("⚠️ Copier-coller interdit.");
         }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showToast("⚠️ Utilisez le bouton '📋 Copier mon travail pour l'IA' pour exporter votre devoir.");
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showToast("⚠️ Couper interdit. Utilisez la touche Suppr.");
+        }
+    };
+
+    const handleBlockedCopy = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showToast("⚠️ Utilisez le bouton '📋 Copier mon travail pour l'IA' pour exporter votre devoir.");
     };
 
     const handleUndo = () => {
@@ -192,10 +220,11 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         archiveAttempt(attemptsCount, essayText);
 
         const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
+        const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
 
         let textToCopy = '';
         if (attemptsCount === 1) {
-            textToCopy = `[SUJET DU DEVOIR : "${topicText}"]
+            textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON / PLAN INITIAL : ---
 ${draftText.trim() || "(Plan en cours d'élaboration)"}
@@ -209,7 +238,7 @@ Tu dois OBLIGATOIREMENT commencer le tout premier mot de ta réponse par cette m
 "[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentToken}]"
 puis donne-moi 2 ou 3 pistes précises d'amélioration sur le fond, le vocabulaire historique/géographique et la structure.`;
         } else {
-            textToCopy = `[SUJET DU DEVOIR : "${topicText}"]
+            textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MA NOUVELLE TENTATIVE (Essai n°${attemptsCount}) : ---
 ${cleanEssay}
@@ -472,6 +501,8 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                                 showToast("⚠️ Rédige d'abord ton plan et des idées au brouillon.");
                             }
                         }}
+                        onCopy={handleBlockedCopy}
+                        onCut={handleBlockedCopy}
                         onPaste={handleBlockedPaste()}
                         onDrop={handleBlockedPaste()}
                     />
@@ -625,7 +656,9 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
             {showFinalModal && (() => {
                 const currentToken = computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
                 const baseToken = computeSessionToken(user?._id || user?.id, homework?._id, 1);
+                const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
                 const isTokenInChat = aiConversationText.includes(currentToken) || aiConversationText.includes(baseToken);
+                const isWatermarkInChat = aiConversationText.includes(watermark);
 
                 return (
                     <div className="conda-redaction-modal-overlay">
@@ -637,21 +670,37 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                                 Elle sera transmise à votre professeur pour valider votre démarche et authentifier votre jeton de session :
                             </p>
 
-                            <div className="mb-3 p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-slate-400">Jeton requis :</span>
-                                    <code className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 font-mono font-bold">#{currentToken}</code>
-                                </div>
-                                <div>
-                                    {aiConversationText.trim().length > 15 ? (
-                                        isTokenInChat ? (
-                                            <span className="text-emerald-400 font-bold flex items-center gap-1">✅ Jeton authentifié</span>
+                            <div className="mb-3 p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-slate-400">Jeton requis :</span>
+                                        <code className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 font-mono font-bold">#{currentToken}</code>
+                                    </div>
+                                    <div>
+                                        {aiConversationText.trim().length > 15 ? (
+                                            isTokenInChat ? (
+                                                <span className="text-emerald-400 font-bold flex items-center gap-1">✅ Jeton authentifié</span>
+                                            ) : (
+                                                <span className="text-amber-400 font-bold flex items-center gap-1">⚠️ Jeton non détecté</span>
+                                            )
                                         ) : (
-                                            <span className="text-amber-400 font-bold flex items-center gap-1">⚠️ Jeton non détecté dans le texte</span>
-                                        )
-                                    ) : (
-                                        <span className="text-slate-500 text-[11px]">Collez l'échange pour vérifier...</span>
-                                    )}
+                                            <span className="text-slate-500 text-[11px]">En attente...</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800">
+                                    <span className="text-slate-400">Filigrane de sécurité :</span>
+                                    <div>
+                                        {aiConversationText.trim().length > 15 ? (
+                                            isWatermarkInChat ? (
+                                                <span className="text-emerald-400 font-semibold">🔒 Empreinte CondaWeb validée</span>
+                                            ) : (
+                                                <span className="text-amber-400 font-semibold">🚩 Empreinte absente (export bouton requis)</span>
+                                            )
+                                        ) : (
+                                            <span className="text-slate-500">Non vérifié</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
