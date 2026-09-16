@@ -54,14 +54,23 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         }, 3200);
     };
 
+    const draftWarnedRef = useRef(false);
+
     // Text edition with Undo/Redo tracking & burst paste protection
     const handleTextChange = (e) => {
         const newText = e.target.value;
         const prevText = essayText;
+
+        // If starting to write while draft is empty, remind student
+        if (!draftText.trim() && newText.trim().length > 0 && !draftWarnedRef.current) {
+            draftWarnedRef.current = true;
+            showToast("⚠️ Rédige d'abord ton plan et des idées au brouillon.");
+        }
+
         // If a single change inserts more than 20 characters at once (context-menu paste, autofill, etc.)
         if (newText.length - prevText.length > 20) {
             setPasteAttemptCount((prev) => prev + 1);
-            showToast("⚠️ Le copier-coller est strictement désactivé sur votre copie. Rédigez avec vos propres mots.");
+            showToast("⚠️ Copier-coller interdit.");
             return;
         }
         setEssayText(newText);
@@ -80,7 +89,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         const newText = e.target.value;
         if (newText.length - draftText.length > 20) {
             setPasteAttemptCount((prev) => prev + 1);
-            showToast("⚠️ Le copier-coller est désactivé sur le brouillon. Rédigez vos notes au clavier.");
+            showToast("⚠️ Copier-coller interdit.");
             return;
         }
         setDraftText(newText);
@@ -90,7 +99,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         const newText = e.target.value;
         if (newText.length - aiNotesText.length > 20) {
             setPasteAttemptCount((prev) => prev + 1);
-            showToast("⚠️ Notez les conseils au clavier pour bien vous les approprier.");
+            showToast("⚠️ Copier-coller interdit.");
             return;
         }
         setAiNotesText(newText);
@@ -101,7 +110,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             e.preventDefault();
             e.stopPropagation();
             setPasteAttemptCount((prev) => prev + 1);
-            showToast("⚠️ Le raccourci Coller (Ctrl+V / Cmd+V) est désactivé.");
+            showToast("⚠️ Copier-coller interdit.");
         }
     };
 
@@ -122,11 +131,11 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     };
 
     // Block external paste on essay and draft
-    const handleBlockedPaste = (targetName = 'la copie') => (e) => {
+    const handleBlockedPaste = () => (e) => {
         e.preventDefault();
         e.stopPropagation();
         setPasteAttemptCount((prev) => prev + 1);
-        showToast(`⚠️ Le copier-coller est désactivé sur ${targetName}. Rédigez avec vos propres mots.`);
+        showToast("⚠️ Copier-coller interdit.");
     };
 
     // "Copier pour l'IA" handler
@@ -321,8 +330,14 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                         value={essayText}
                         onChange={handleTextChange}
                         onKeyDown={handleKeyDown}
-                        onPaste={handleBlockedPaste('votre copie')}
-                        onDrop={handleBlockedPaste('votre copie')}
+                        onFocus={() => {
+                            if (!draftText.trim() && !essayText.trim() && !draftWarnedRef.current) {
+                                draftWarnedRef.current = true;
+                                showToast("⚠️ Rédige d'abord ton plan et des idées au brouillon.");
+                            }
+                        }}
+                        onPaste={handleBlockedPaste()}
+                        onDrop={handleBlockedPaste()}
                     />
 
                     <div className="conda-redaction-actions-bar">
