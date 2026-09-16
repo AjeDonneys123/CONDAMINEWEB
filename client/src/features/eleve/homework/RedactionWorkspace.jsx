@@ -274,10 +274,10 @@ Système de bonus CondaWeb (applicable sur le prochain contrôle sur table, plaf
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON / PLAN INITIAL : ---
-${cleanDraft}
+${watermark}${cleanDraft}
 
 --- MON 1ER ESSAI RÉDIGÉ (V1) : ---
-${cleanEssay}
+${watermark}${cleanEssay}
 
 Consigne OBLIGATOIRE de contrôle CondaWeb (Jeton : #${currentToken}) :
 Tu agis comme tuteur pédagogique exigeant et bienveillant. Analyse mon travail sans JAMAIS rédiger à ma place.
@@ -288,7 +288,7 @@ ${bonusGuidance}`;
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MON PLAN / BROUILLON RÉVISÉ (Essai n°${attemptsCount}) : ---
-${cleanDraft}
+${watermark}${cleanDraft}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -305,7 +305,7 @@ ${bonusGuidance}`;
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MA NOUVELLE TENTATIVE RÉDIGÉE (Essai n°${attemptsCount}) : ---
-${cleanEssay}
+${watermark}${cleanEssay}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -322,10 +322,10 @@ ${bonusGuidance}`;
             textToCopy = `${watermark}[SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON & PLAN CONSOLIDÉ (Essai n°${attemptsCount}) : ---
-${cleanDraft}
+${watermark}${cleanDraft}
 
 --- MA NOUVELLE TENTATIVE RÉDIGÉE : ---
-${cleanEssay}
+${watermark}${cleanEssay}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
