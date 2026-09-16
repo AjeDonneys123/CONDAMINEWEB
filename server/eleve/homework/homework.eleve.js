@@ -988,10 +988,10 @@ router.post('/submit', async (req, res) => {
             if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
         }
 
-        if (!watermarkVerified && chatString.length > 50) {
+        if (!watermarkVerified && chatString.length > 30) {
             antiCheatSnapshot.watermarkMissing = true;
-            antiCheatSnapshot.reasons.push(`Filigrane invisible absent : la discussion n'a pas été initiée avec le bouton officiel CondaWeb`);
-            if (antiCheatSnapshot.level === 'GREEN') antiCheatSnapshot.level = 'ORANGE';
+            antiCheatSnapshot.reasons.push("Échec : tu as caché une partie de la conversation avec l'IA. Bonus bloqué.");
+            antiCheatSnapshot.level = 'RED';
         }
 
         const draftWords = String(draftContent || '').trim().split(/\s+/).filter(Boolean).length;
@@ -1081,8 +1081,12 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
                 if (memoSheet && memoSheet.trim().length >= 30) fallbackBonus += 0.5;
                 examBonusPoints = Math.min(2.5, fallbackBonus);
                 studentMessage = `🌟 Superbe persévérance ! Tu remportes +${examBonusPoints} pts bonus pour ton prochain contrôle grâce à tes ${substantialAttemptsCount} essais et tes retours d'apprentissage !`;
-                teacherSummary = `Audit heuristique : ${substantialAttemptsCount} tentative(s) consistante(s), ${aiNotesWords} mots de notes IA. Bonus attribué : +${examBonusPoints} pt(s).`;
-            }
+        }
+
+        if (!watermarkVerified && chatString.length > 30) {
+            examBonusPoints = 0;
+            studentMessage = "❌ Échec : tu as caché une partie de la conversation avec l'IA. Ton bonus d'examen est bloqué.";
+            teacherSummary = "Échec d'intégrité : conversation masquée ou tronquée (tentative de contournement). Bonus bloqué (0 pt).";
         }
 
         const draftScore = draftWords >= 60 ? 25 : draftWords >= 30 ? 15 : draftWords >= 10 ? 8 : 0;

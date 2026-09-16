@@ -363,16 +363,28 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                         <h2 className="text-2xl font-black text-white uppercase tracking-wider">Devoir Terminé & Transmis !</h2>
                     </div>
 
-                    {/* Gold Bonus Banner */}
-                    <div className="bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border-2 border-amber-400/60 rounded-2xl p-6 text-center shadow-lg relative overflow-hidden">
-                        <div className="text-xs font-black uppercase tracking-widest text-amber-300">Bonus pour le Prochain Contrôle sur Table</div>
-                        <div className="text-5xl font-black text-amber-300 my-2 drop-shadow-md">
-                            +{bonus} <span className="text-2xl font-bold text-amber-200">pt{bonus > 1 ? 's' : ''}</span>
+                    {/* Gold Bonus Banner or Blocked Banner */}
+                    {bonus > 0 ? (
+                        <div className="bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border-2 border-amber-400/60 rounded-2xl p-6 text-center shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-black uppercase tracking-widest text-amber-300">Bonus pour le Prochain Contrôle sur Table</div>
+                            <div className="text-5xl font-black text-amber-300 my-2 drop-shadow-md">
+                                +{bonus} <span className="text-2xl font-bold text-amber-200">pt{bonus > 1 ? 's' : ''}</span>
+                            </div>
+                            <p className="text-xs text-amber-100/90 font-medium max-w-lg mx-auto">
+                                Ce bonus sera ajouté directement par votre professeur à votre note du prochain devoir surveillé sur table !
+                            </p>
                         </div>
-                        <p className="text-xs text-amber-100/90 font-medium max-w-lg mx-auto">
-                            Ce bonus sera ajouté directement par votre professeur à votre note du prochain devoir surveillé sur table !
-                        </p>
-                    </div>
+                    ) : (
+                        <div className="bg-rose-950/40 border-2 border-rose-500/60 rounded-2xl p-6 text-center shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-black uppercase tracking-widest text-rose-400">Bonus Bloqué</div>
+                            <div className="text-4xl font-black text-rose-300 my-2">
+                                0 pt
+                            </div>
+                            <p className="text-xs text-rose-200 font-bold max-w-lg mx-auto">
+                                ❌ Échec : tu as caché une partie de la conversation avec l'IA. Ton bonus d'examen est bloqué pour cette session.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Personal Encouragement / Feedback */}
                     <div className="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 text-left space-y-3">
@@ -689,13 +701,13 @@ suivi d'une courte phrase expliquant si cette nouvelle version a bien pris en co
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800">
-                                    <span className="text-slate-400">Filigrane de sécurité :</span>
+                                    <span className="text-slate-400">Intégrité de l'échange :</span>
                                     <div>
                                         {aiConversationText.trim().length > 15 ? (
                                             isWatermarkInChat ? (
-                                                <span className="text-emerald-400 font-semibold">🔒 Empreinte CondaWeb validée</span>
+                                                <span className="text-emerald-400 font-semibold">✅ Échange complet validé</span>
                                             ) : (
-                                                <span className="text-amber-400 font-semibold">🚩 Empreinte absente (export bouton requis)</span>
+                                                <span className="text-rose-400 font-bold">❌ Échec : tu as caché une partie de la conversation. Bonus bloqué.</span>
                                             )
                                         ) : (
                                             <span className="text-slate-500">Non vérifié</span>
