@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.36';
+  const BRIDGE_VERSION = '1.0.39';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -2087,12 +2087,20 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 6px 10px; background: #ffffff !important; color: #000000 !important; border: 3px solid #94a3b8; border-radius: 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);`;
                             
                 const sName = document.createElement('strong');
+                sName.className = 'conda-plan-student-name';
                 sName.style.cssText = 'display: block; font-size: clamp(16px, 2.2vw, 32px); font-weight: 950; line-height: 1.15; color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;';
+                sName.style.setProperty('color', '#000000', 'important');
+                sName.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+                sName.style.setProperty('opacity', '1', 'important');
                 sName.textContent = String(s.nickname || s.firstName || '').trim();
                 card.appendChild(sName);
 
                 const initial = document.createElement('span');
+                initial.className = 'conda-plan-student-initial';
                 initial.style.cssText = 'display: block; font-size: clamp(12px, 1.2vw, 18px); color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; font-weight: 900; margin-top: 2px;';
+                initial.style.setProperty('color', '#000000', 'important');
+                initial.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+                initial.style.setProperty('opacity', '1', 'important');
                 initial.textContent = `${String(s.lastName || '').slice(0, 1)}.`;
                 card.appendChild(initial);
 

@@ -1050,18 +1050,11 @@
 
 /* Google Slides applique des styles très prioritaires aux textes de son canevas.
    Le plan injecté doit toujours conserver des noms noirs sur ses cartes blanches. */
-.conda-class-plan-modal div strong,
-.conda-class-plan-modal div span,
-.conda-class-plan-modal div small,
-.conda-class-plan-modal div b {
+.conda-class-plan-modal .conda-plan-student-name,
+.conda-class-plan-modal .conda-plan-student-initial {
     color: #000000 !important;
     -webkit-text-fill-color: #000000 !important;
     opacity: 1 !important;
-    text-shadow: none !important;
-}
-.conda-class-plan-modal [style*="color: #000000"],
-.conda-class-plan-modal strong,
-.conda-class-plan-modal span {
     text-shadow: none !important;
 }
 
