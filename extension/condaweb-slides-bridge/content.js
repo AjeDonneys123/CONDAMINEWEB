@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.39';
+  const BRIDGE_VERSION = '1.0.40';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -220,12 +220,12 @@ function showPresentationUnlinkedBadge() {
         console.info('[CondaWeb Bridge] classe réparée pour le tableau', { previousId, activeClassId, activeClassName });
     }
 
-    async function fetchClassroomState({ manual = false } = {}) {
+    async function fetchClassroomState({ manual = false, forcePlan = false } = {}) {
         if (!activeClassId) throw new Error('Aucune classe associée');
         const marker = manual ? `manual=${Date.now()}` : `live=${Date.now()}`;
         const name = String(activeClassName || '').trim();
         const suffix = name ? `&className=${encodeURIComponent(name)}` : '';
-        const wantsPlan = currentClassroomState?.classPlanVisible === true;
+        const wantsPlan = forcePlan || currentClassroomState?.classPlanVisible === true;
         const planSuffix = wantsPlan ? '&includePlan=1' : '';
         const data = await callCondaApi(`/api/classroom/bridge-state/${encodeURIComponent(activeClassId)}?${marker}${suffix}${planSuffix}`);
         storeResolvedClass(data);
@@ -569,19 +569,28 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
     }
 
     async function togglePlanFromSlides() {
-        if (!activeClassId) return;
-        const visible = currentClassroomState?.classPlanVisible !== true;
-        try {
-            await callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/bridge-plan`, {
-                method: 'PUT', body: { visible }
-            });
-            // Fetch immediately after opening so the complete grid is ready
-            // before the next regular live poll.
-            currentClassroomState = await fetchClassroomState({ manual: true });
-            console.info('[CondaWeb Bridge plan] visibilité modifiée depuis Slides', { visible });
-            renderAllOverlays();
-        } catch (error) {
-            console.error('[CondaWeb Bridge plan] modification impossible', error?.message || String(error));
+        const nextVisible = currentClassroomState?.classPlanVisible !== true;
+        console.info('[CondaWeb Bridge plan] Clic bouton Plan depuis Slides', { nextVisible, activeClassId });
+
+        // 1. Mise à jour immédiate optimiste de l'interface locale
+        if (currentClassroomState) {
+            currentClassroomState.classPlanVisible = nextVisible;
+        } else {
+            currentClassroomState = { classPlanVisible: nextVisible };
+        }
+        renderAllOverlays();
+
+        // 2. Synchronisation serveur
+        if (activeClassId) {
+            try {
+                await callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/bridge-plan`, {
+                    method: 'PUT', body: { visible: nextVisible }
+                });
+                currentClassroomState = await fetchClassroomState({ manual: true, forcePlan: nextVisible });
+                renderAllOverlays();
+            } catch (error) {
+                console.error('[CondaWeb Bridge plan] modification impossible', error?.message || String(error));
+            }
         }
     }
 
@@ -838,9 +847,9 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         if (!planButton) {
             planButton = document.createElement('button');
             planButton.type = 'button';
-            planButton.onclick = () => { void togglePlanFromSlides(); };
             dock.appendChild(planButton);
         }
+        planButton.onclick = () => { void togglePlanFromSlides(); };
         planButton.className = `conda-slide-plan-toggle ${currentClassroomState?.classPlanVisible === true ? 'active' : ''}`;
         planButton.textContent = currentClassroomState?.classPlanVisible === true ? '📍 PLAN ON' : '📍 PLAN';
 
@@ -2044,11 +2053,17 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         closeBtn.onmouseover = () => { closeBtn.style.background = '#b91c1c'; closeBtn.style.transform = 'scale(1.03)'; };
         closeBtn.onmouseout = () => { closeBtn.style.background = '#dc2626'; closeBtn.style.transform = 'none'; };
         closeBtn.onclick = () => {
+            if (currentClassroomState) {
+                currentClassroomState.classPlanVisible = false;
+            }
             modal.remove();
-            callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/bridge-plan`, {
-                method: 'PUT',
-                body: { visible: false }
-            }).catch(() => {});
+            renderAllOverlays();
+            if (activeClassId) {
+                callCondaApi(`/api/classroom/${encodeURIComponent(activeClassId)}/bridge-plan`, {
+                    method: 'PUT',
+                    body: { visible: false }
+                }).catch(() => {});
+            }
         };
         header.appendChild(closeBtn);
         modal.appendChild(header);
@@ -2067,45 +2082,57 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         modal.appendChild(grid);
 
         if (activeClassId) {
-            const students = planStudents;
             while (grid.firstChild) grid.removeChild(grid.firstChild);
-            // Render every physical desk first. CSS Grid otherwise collapses
-            // empty positions into dark gaps, making the seating plan look
-            // different from the teacher's real five/six-column layout.
+
+            // Indexer les élèves par position (seatX, seatY)
+            const studentBySeat = new Map();
+            planStudents.forEach((student) => {
+                if (student?.seatX !== null && student?.seatY !== null
+                    && Number.isFinite(Number(student.seatX)) && Number.isFinite(Number(student.seatY))) {
+                    const sx = Math.max(0, Math.min(cols - 1, Number(student.seatX)));
+                    const sy = Math.max(0, Math.min(rows - 1, Number(student.seatY)));
+                    studentBySeat.set(`${sx},${sy}`, student);
+                }
+            });
+
+            // Remplissage physique : 1 seul élément par case, SANS SUPERPOSITION
             for (let seatY = 0; seatY < rows; seatY += 1) {
                 for (let seatX = 0; seatX < cols; seatX += 1) {
-                    const emptySeat = document.createElement('div');
-                    emptySeat.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; background: #ffffff; border: 2px dashed #94a3b8; border-radius: 14px; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); opacity: 0.95;`;
-                    grid.appendChild(emptySeat);
+                    const student = studentBySeat.get(`${seatX},${seatY}`);
+                    if (student) {
+                        // Carte élève : fond blanc éclatant, texte noir net et contrasté
+                        const card = document.createElement('div');
+                        card.className = 'conda-plan-student-card';
+                        card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 6px 10px; background: #ffffff !important; color: #000000 !important; border: 3px solid #0284c7 !important; border-radius: 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);`;
+                                    
+                        const sName = document.createElement('strong');
+                        sName.className = 'conda-plan-student-name';
+                        sName.style.cssText = 'display: block; font-size: clamp(16px, 2.2vw, 32px); font-weight: 950; line-height: 1.15; color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;';
+                        sName.style.setProperty('color', '#000000', 'important');
+                        sName.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+                        sName.style.setProperty('opacity', '1', 'important');
+                        sName.textContent = String(student.nickname || student.firstName || '').trim();
+                        card.appendChild(sName);
+
+                        const initial = document.createElement('span');
+                        initial.className = 'conda-plan-student-initial';
+                        initial.style.cssText = 'display: block; font-size: clamp(12px, 1.2vw, 18px); color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; font-weight: 900; margin-top: 2px;';
+                        initial.style.setProperty('color', '#000000', 'important');
+                        initial.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+                        initial.style.setProperty('opacity', '1', 'important');
+                        initial.textContent = `${String(student.lastName || '').slice(0, 1)}.`;
+                        card.appendChild(initial);
+
+                        grid.appendChild(card);
+                    } else {
+                        // Place vide : bordure en tirets grise/bleutée, fond sombre translucide
+                        const emptySeat = document.createElement('div');
+                        emptySeat.className = 'conda-plan-empty-seat';
+                        emptySeat.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; background: rgba(30, 41, 59, 0.45); border: 2px dashed rgba(148, 163, 184, 0.4); border-radius: 14px; min-width: 0; height: 100%; box-sizing: border-box;`;
+                        grid.appendChild(emptySeat);
+                    }
                 }
             }
-            students.filter((student) => student?.seatX !== null && student?.seatY !== null
-                && Number.isFinite(Number(student.seatX)) && Number.isFinite(Number(student.seatY))).forEach(s => {
-                const card = document.createElement('div');
-                const seatX = Math.max(0, Math.min(cols - 1, Number(s.seatX)));
-                const seatY = Math.max(0, Math.min(rows - 1, Number(s.seatY)));
-                card.style.cssText = `grid-column: ${cols - seatX}; grid-row: ${rows - seatY}; padding: 6px 10px; background: #ffffff !important; color: #000000 !important; border: 3px solid #94a3b8; border-radius: 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; height: 100%; box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);`;
-                            
-                const sName = document.createElement('strong');
-                sName.className = 'conda-plan-student-name';
-                sName.style.cssText = 'display: block; font-size: clamp(16px, 2.2vw, 32px); font-weight: 950; line-height: 1.15; color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;';
-                sName.style.setProperty('color', '#000000', 'important');
-                sName.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
-                sName.style.setProperty('opacity', '1', 'important');
-                sName.textContent = String(s.nickname || s.firstName || '').trim();
-                card.appendChild(sName);
-
-                const initial = document.createElement('span');
-                initial.className = 'conda-plan-student-initial';
-                initial.style.cssText = 'display: block; font-size: clamp(12px, 1.2vw, 18px); color: #000000 !important; -webkit-text-fill-color: #000000 !important; opacity: 1 !important; text-shadow: none !important; font-weight: 900; margin-top: 2px;';
-                initial.style.setProperty('color', '#000000', 'important');
-                initial.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
-                initial.style.setProperty('opacity', '1', 'important');
-                initial.textContent = `${String(s.lastName || '').slice(0, 1)}.`;
-                card.appendChild(initial);
-
-                grid.appendChild(card);
-            });
         }
     }
 
