@@ -23,6 +23,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const [googleReady, setGoogleReady] = useState(false);
   const [devFinderEnabled, setDevFinderEnabled] = useState(false);
   const googleBtnRef = useRef(null);
+  const passwordInputRef = useRef(null);
   const devKeysRef = useRef(new Set());
   const devTimerRef = useRef(null);
   const clean = (str) => (str || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -58,9 +59,22 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
       if (devFinderEnabled) return;
       if (DEV_KEYS.every((key) => keys.has(key)) && !devTimerRef.current) {
         devTimerRef.current = setTimeout(() => {
-          setDevFinderEnabled(true);
+          const teacher = allUsersData.find((profile) =>
+            profile.type === 'teacher'
+            && clean(profile.lastName) === 'vuillet'
+            && ['jp', 'jean pierre', 'jean-pierre'].includes(clean(profile.firstName))
+          );
+          if (teacher) {
+            setSelectedProfile(teacher);
+            setInputLast(teacher.lastName || 'VUILLET');
+            setInputFirst(teacher.firstName || 'JP');
+            setInputClass('');
+            setPassword('');
+            setSuggestions([]);
+            window.setTimeout(() => passwordInputRef.current?.focus(), 0);
+          }
           devTimerRef.current = null;
-        }, 1500);
+        }, 3000);
       }
     };
     const onKeyDown = (event) => {
@@ -88,7 +102,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
       window.removeEventListener('blur', onBlur);
       clearDevTimer();
     };
-  }, [devFinderEnabled]);
+  }, [devFinderEnabled, allUsersData]);
 
   useEffect(() => {
     const clientId = String(googleClientId || '').trim();
@@ -375,6 +389,11 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const isTestStudentProfile = isStudentProfile && clean(selectedProfile?.lastName) === 'test';
   const hasStudentPassword = selectedProfile?.hasStudentPassword === true;
   const visitorIdentity = clean(inputLast) === 'prof' && !clean(inputFirst);
+  const typedTeacherProfile = !selectedProfile
+    ? allUsersData.find((profile) => profile.type === 'teacher'
+      && clean(profile.firstName) === clean(inputFirst)
+      && clean(profile.lastName) === clean(inputLast))
+    : null;
   const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
     ? (isTestStudentProfile || devFinderEnabled || password.trim().length > 0)
@@ -466,13 +485,23 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
             </div>
 
             {!selectedProfile && (
-              <input
-                className="login-field"
-                placeholder="Date de naissance (JJ/MM/AAAA)"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                autoComplete="bday"
-              />
+              <div>
+                <input
+                  ref={typedTeacherProfile ? passwordInputRef : null}
+                  type={typedTeacherProfile ? (showPassword ? 'text' : 'password') : 'text'}
+                  className="login-field"
+                  placeholder={typedTeacherProfile ? 'Mot de passe professeur' : 'Date de naissance (JJ/MM/AAAA)'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete={typedTeacherProfile ? 'current-password' : 'bday'}
+                />
+                {typedTeacherProfile && (
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-600">
+                    <input type="checkbox" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />
+                    Voir mon mot de passe
+                  </label>
+                )}
+              </div>
             )}
 
             {devFinderEnabled && !isTeacherProfile && suggestions.length > 0 && (
@@ -493,6 +522,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
           {(isTeacherProfile || (isStudentProfile && !devFinderEnabled)) && (
             <div>
               <input
+                ref={passwordInputRef}
                 type={showPassword ? "text" : "password"}
                 className="login-field"
                 placeholder={isStudentProfile
