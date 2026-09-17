@@ -18,7 +18,7 @@ export function initStarshipGame(root, api, onExit) {
         ship: frameUrl(playerActor, ['IDLE', 'FLY', 'VOLER']),
         boss: frameUrl(enemyActor, ['IDLE', 'FLY', 'VOLER'])
     };
-    const STARSHIP_FALL_SPEED_MULTIPLIER = 0.5; // Demande UX: diviser par 2 la descente.
+    const STARSHIP_FALL_SPEED_MULTIPLIER = 0.3; // 40 % plus lent que la vitesse précédente (0,5).
     const fitTextInBox = (el, {
         maxFont = 22,
         minFont = 10,
@@ -91,6 +91,7 @@ export function initStarshipGame(root, api, onExit) {
     let frameId;
     let lastUpdateTime = performance.now();
     let lastRenderedAt = performance.now();
+    let lastCorrectLane = -1;
     
     root.innerHTML = `
         <div class="s-game-wrapper">
@@ -251,12 +252,26 @@ export function initStarshipGame(root, api, onExit) {
         const qData = questionsList[currentQIndex];
         const opts = Array.isArray(qData?.options) ? qData.options : [];
         const laneCount = Math.max(1, opts.length);
+        const optionIndexes = opts.map((_, index) => index);
+        for (let index = optionIndexes.length - 1; index > 0; index--) {
+            const swapIndex = Math.floor(Math.random() * (index + 1));
+            [optionIndexes[index], optionIndexes[swapIndex]] = [optionIndexes[swapIndex], optionIndexes[index]];
+        }
+        if (laneCount > 1) {
+            const correctLane = optionIndexes.indexOf(Number(qData.a));
+            if (correctLane === lastCorrectLane) {
+                const swapLane = (correctLane + 1 + Math.floor(Math.random() * (laneCount - 1))) % laneCount;
+                [optionIndexes[correctLane], optionIndexes[swapLane]] = [optionIndexes[swapLane], optionIndexes[correctLane]];
+            }
+            lastCorrectLane = optionIndexes.indexOf(Number(qData.a));
+        }
         // La question doit d'abord être lisible : les quatre réponses apparaissent
         // ensemble, chacune dans son couloir, deux secondes plus tard.
         invaderStartTimeout = setTimeout(() => {
             if (isPaused || currentQ !== qData) return;
-            opts.forEach((option, laneIndex) => {
-                const isCorrect = laneIndex === qData.a;
+            optionIndexes.forEach((optionIndex, laneIndex) => {
+                const option = opts[optionIndex];
+                const isCorrect = optionIndex === Number(qData.a);
                 const el = document.createElement('div');
                 el.className = isCorrect ? 's-enemy s-correct-target' : 's-enemy';
                 const fullLabel = String(option || '');

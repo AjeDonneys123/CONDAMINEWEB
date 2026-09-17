@@ -1021,7 +1021,11 @@ router.post('/progress', async (req, res) => {
                 mergedTimes[k] = Math.max(Number(prevTimes[k] || 0), Number(patch.sheetTimesMs[k] || 0));
             });
             patch.sheetTimesMs = mergedTimes;
-            if (patch.validatedStepIndexes.length === 0 && Array.isArray(base?.validatedStepIndexes)) patch.validatedStepIndexes = base.validatedStepIndexes;
+            patch.validatedStepIndexes = [...new Set([
+                ...(Array.isArray(base?.validatedStepIndexes) ? base.validatedStepIndexes : []),
+                ...patch.validatedStepIndexes
+            ].map(Number).filter((value) => Number.isInteger(value) && value >= 0 && value < (row.steps || []).length))];
+            if (completed && patch.validatedStepIndexes.length >= visibleStepsLength) patch.completedAt = now;
             next[idx] = { ...base, ...patch };
         }
         else next.push(patch);

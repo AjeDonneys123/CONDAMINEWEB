@@ -1164,8 +1164,10 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (studentGptValidated) return;
         setStudentGptValidated(true);
         setStudentGptStatus('Fiche apprise. Validation reçue par le tuteur vocal.');
+        const next = new Set([...validated, stepIndex]);
+        setValidated(next);
         try {
-            await saveProgress({ currentStep: steps.length, completed: true });
+            await saveProgress({ currentStep: steps.length, completed: true, validatedStepIndexes: [...next] });
         } catch (_) {
             setGateHint("Fiche apprise localement, mais la sauvegarde serveur a échoué.");
         }
@@ -2113,14 +2115,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         setSaving(true);
         try {
             if (isLast) {
-                await saveProgress({ currentStep: steps.length, completed: true });
+                await saveProgress({ currentStep: steps.length, completed: true, validatedStepIndexes: [...next] });
                 speakAiText('Bravo, tu as terminé cette séquence.');
                 alert('Apprentissage validé ✅');
                 onQuit();
                 return;
             }
             const nextStep = stepIndex + 1;
-            await saveProgress({ currentStep: nextStep, completed: false });
+            await saveProgress({ currentStep: nextStep, completed: false, validatedStepIndexes: [...next] });
             setStepIndex(nextStep);
         } catch (e) {
             console.error("Learning progress save error", e);
@@ -2279,14 +2281,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         setSaving(true);
         try {
             if (isLast) {
-                await saveProgress({ currentStep: steps.length, completed: true });
+                await saveProgress({ currentStep: steps.length, completed: true, validatedStepIndexes: [...next] });
                 speakAiText('Bravo, tu as terminé cette séquence.');
                 alert('Apprentissage validé ✅');
                 onQuit();
                 return;
             }
             const nextStep = stepIndex + 1;
-            await saveProgress({ currentStep: nextStep, completed: false });
+            await saveProgress({ currentStep: nextStep, completed: false, validatedStepIndexes: [...next] });
             setStepIndex(nextStep);
         } catch (e) {
             console.error("Learning progress save error", e);
@@ -2489,14 +2491,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         setSaving(true);
         try {
             if (isLast) {
-                await saveProgress({ currentStep: steps.length, completed: true });
+                await saveProgress({ currentStep: steps.length, completed: true, validatedStepIndexes: [...next] });
                 speakAiText('Bravo, tu as terminé cette séquence.');
                 alert('Apprentissage validé ✅');
                 onQuit();
                 return;
             }
             const nextStep = stepIndex + 1;
-            await saveProgress({ currentStep: nextStep, completed: false });
+            await saveProgress({ currentStep: nextStep, completed: false, validatedStepIndexes: [...next] });
             setStepIndex(nextStep);
         } catch (e) {
             console.error("Learning progress save error", e);
