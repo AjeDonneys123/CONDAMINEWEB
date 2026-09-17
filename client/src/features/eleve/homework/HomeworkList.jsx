@@ -127,8 +127,12 @@ export default function HomeworkList({
 
   return (
       <div className="flex flex-col gap-4">
-          <div className="flex justify-end px-4">
-              <button onClick={loadData} className="text-[10px] font-black text-blue-500 bg-white px-3 py-1 rounded-xl border border-blue-100">
+          <div className="mx-4 flex items-center justify-between gap-3 rounded-2xl bg-amber-50/90 border border-amber-200/80 px-4 py-2.5 shadow-sm">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-amber-900">
+                  <span>📈</span>
+                  <span>Tu es évalué sur ta progression, pas sur ton devoir.</span>
+              </div>
+              <button onClick={loadData} className="text-[10px] font-black text-amber-700 bg-white hover:bg-amber-100 px-3 py-1 rounded-xl border border-amber-200 shadow-sm transition">
                   {loading ? '...' : '🔄 ACTUALISER'}
               </button>
           </div>

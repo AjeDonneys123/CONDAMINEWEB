@@ -444,11 +444,7 @@ const buildChatRequest = async ({ student, message, history, mode = '' }) => {
             : isShortQuestion
                 ? needsMemory
                     ? { numPredict: 160, temperature: 0.1 }
-                    : {
-                    model: String(process.env.OLLAMA_API_FAST_MODEL || 'llama3.2:3b').trim(),
-                    numPredict: 80,
-                    temperature: 0.1
-                }
+                    : { numPredict: 80, temperature: 0.1 }
             : { numPredict: 220, temperature: 0.2 }
     };
 };
@@ -484,49 +480,6 @@ router.get('/diagnostic/stream', async (_req, res) => {
         elapsedMs: Date.now() - startedAt
     });
     res.end(`${JSON.stringify({ done: true, elapsedMs: Date.now() - startedAt })}\n`);
-});
-
-router.post('/diagnostic/ollama-stream', async (_req, res) => {
-    const startedAt = Date.now();
-    try {
-        openNdjsonStream(res);
-        writeNdjson(res, {
-            type: 'server',
-            label: 'ollama_request_start',
-            text: 'Demande envoyee a Ollama...',
-            elapsedMs: Date.now() - startedAt
-        });
-        let chunks = 0;
-        const answer = await AIEngine.askOllamaServerStream(
-            'Reponds exactement en francais: test streaming OK.',
-            'Tu es un test de streaming. Reponds tres court, sans introduction.',
-            (text) => {
-                chunks += 1;
-                writeNdjson(res, {
-                    type: 'ai',
-                    label: 'ollama_chunk',
-                    text,
-                    chunkIndex: chunks,
-                    elapsedMs: Date.now() - startedAt
-                });
-            },
-            { numPredict: 30, temperature: 0 }
-        );
-        res.end(`${JSON.stringify({
-            done: true,
-            answerLength: String(answer || '').length,
-            chunks,
-            elapsedMs: Date.now() - startedAt
-        })}\n`);
-    } catch (error) {
-        console.error('Student chat diagnostic error:', error.message);
-        if (!res.headersSent) return res.status(503).json({ error: "Diagnostic streaming indisponible." });
-        res.end(`${JSON.stringify({
-            error: error.message || 'Diagnostic streaming indisponible.',
-            done: true,
-            elapsedMs: Date.now() - startedAt
-        })}\n`);
-    }
 });
 
 router.get('/gpt-context', async (req, res) => {
@@ -768,12 +721,10 @@ router.get('/status', (_req, res) => {
     res.json({
         ok: true,
         provider,
-        label: isAlbert ? 'Albert API' : (isGemini ? 'Gemini' : 'Ollama'),
+        label: isAlbert ? 'Albert API' : 'Gemini',
         model: isGemini
             ? String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim()
-            : isAlbert
-                ? String(process.env.ALBERT_MODEL || 'modele auto').trim()
-            : String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '').trim()
+            : String(process.env.ALBERT_MODEL || 'modele auto').trim()
     });
 });
 
@@ -1030,7 +981,7 @@ router.post('/message/stream', async (req, res) => {
             if (answer && answer !== '[]' && answer !== 'ERROR_KEY') {
                 res.write(`${JSON.stringify({ text: answer, provider: 'gemini', model })}\n`);
             }
-        } else if (provider === 'albert') {
+        } else {
             answer = String(await AIEngine.askAlbert(prompt, system, {
                 ...aiOptions,
                 route: '/api/eleve/chat/message/stream',
@@ -1048,26 +999,13 @@ router.post('/message/stream', async (req, res) => {
             if (answer && answer !== '[]' && answer !== 'ERROR_KEY') {
                 res.write(`${JSON.stringify({ text: answer, provider: 'albert' })}\n`);
             }
-        } else {
-            answer = await AIEngine.askOllamaServerStream(prompt, system, (text) => {
-                res.write(`${JSON.stringify({ text })}\n`);
-            }, {
-                ...aiOptions,
-                onStatus: (status) => writeNdjson(res, {
-                    status: status.message || 'Connexion au modele local...',
-                    model: status.model,
-                    previousModel: status.previousModel,
-                    phase: status.phase,
-                    elapsedMs: Date.now() - startedAt
-                })
-            });
         }
         if (!answer && !streamPreamble) throw new Error('EMPTY_AI_RESPONSE');
         res.end(`${JSON.stringify({ done: true })}\n`);
     } catch (error) {
         console.error('Student chat stream error:', error.message);
-        if (!res.headersSent) return res.status(503).json({ error: "L'IA locale est momentanement indisponible." });
-        res.end(`${JSON.stringify({ error: "L'IA locale est momentanement indisponible.", done: true })}\n`);
+        if (!res.headersSent) return res.status(503).json({ error: "L'IA est momentanément indisponible." });
+        res.end(`${JSON.stringify({ error: "L'IA est momentanément indisponible.", done: true })}\n`);
     }
 });
 

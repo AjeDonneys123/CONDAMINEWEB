@@ -1,35 +1,25 @@
 # CONDAMINEWEB
 
-## IA locale avec Ollama
+Plateforme pédagogique d'Histoire-Géographie & Éducation Civique (CondaWeb).
 
-Le projet peut utiliser un serveur Ollama indépendant pour éviter les coûts d’API IA.
+## Moteur d'Intelligence Artificielle
 
-Le serveur indépendant est dans :
+Le projet utilise **Google Gemini** (Gemini 2.0 Flash) comme moteur IA principal pour le tutorat méthodologique et la correction des devoirs d'entraînement DNB.
 
-```txt
-ollama-api-server/
-```
-
-Sur le serveur Condamine, ajoute dans `.env` :
+### Configuration (`.env`)
 
 ```env
-OLLAMA_API_SERVER_URL=http://IP_DE_TON_ORDI_FIXE:8787
-OLLAMA_API_KEY=la-meme-cle-que-dans-ollama-api-server
-OLLAMA_API_MODEL=llama3.1:8b
-```
-
-Avec cette configuration, Condamine utilise automatiquement le serveur Ollama local en priorité.
-
-Tu peux forcer explicitement le fournisseur avec :
-
-```env
-AI_PROVIDER=ollama_server
-```
-
-Pour revenir à Gemini :
-
-```env
+GEMINI_API_KEY=votre_cle_gemini
+GEMINI_MODEL=gemini-2.0-flash
 AI_PROVIDER=gemini
 ```
 
-Si `OLLAMA_API_SERVER_URL` n’est pas défini, le comportement actuel reste inchangé.
+## Démarrage
+
+```bash
+# Développement complet (serveur + client)
+npm run dev
+
+# Tests d'intégrité
+npm test
+```

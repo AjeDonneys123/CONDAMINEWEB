@@ -542,8 +542,8 @@ export default function AdminDashboard({ user, onRefresh }) {
                             <div className="flex items-center justify-between gap-4 mb-4">
                                 <div>
                                     <div className="text-[10px] font-black uppercase text-cyan-300 tracking-widest">Diagnostic IA</div>
-                                    <div className="text-sm font-black uppercase">Ollama + Gemini + JSON correction</div>
-                                    <div className="text-[11px] text-slate-400 font-bold mt-1">Teste séparément les moteurs, sans afficher les clés secrètes.</div>
+                                    <div className="text-sm font-black uppercase">Gemini + JSON correction</div>
+                                    <div className="text-[11px] text-slate-400 font-bold mt-1">Teste le moteur Gemini et la structure JSON sans afficher les clés secrètes.</div>
                                 </div>
                                 <button
                                     type="button"
@@ -569,9 +569,8 @@ export default function AdminDashboard({ user, onRefresh }) {
                                                 <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed bg-red-950/50 border border-red-500/20 text-red-100 rounded-xl p-3">{step.error}</pre>
                                             )}
                                             {step.provider && (
-                                                <div className="grid md:grid-cols-3 gap-2 text-[11px] text-slate-200">
+                                                <div className="grid md:grid-cols-2 gap-2 text-[11px] text-slate-200">
                                                     <div className="bg-slate-900 rounded-xl p-3"><b>Actif</b><br />{step.provider}</div>
-                                                    <div className="bg-slate-900 rounded-xl p-3"><b>Ollama</b><br />{step.ollama?.url || '—'}<br />clé: {step.ollama?.key?.present ? `présente (${step.ollama.key.length})` : 'absente'}<br />modèle: {step.ollama?.model || '—'}</div>
                                                     <div className="bg-slate-900 rounded-xl p-3"><b>Gemini</b><br />clé: {step.gemini?.key?.present ? `présente (${step.gemini.key.length})` : 'absente'}<br />modèle: {step.gemini?.model || '—'}</div>
                                                 </div>
                                             )}

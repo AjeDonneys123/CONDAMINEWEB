@@ -127,70 +127,16 @@ app.get('/api/system/apply-status', async (req, res) => {
 });
 
 app.get('/api/system/ai-status', async (req, res) => {
-    const configuredProvider = String(process.env.AI_PROVIDER || '').toLowerCase().trim();
-    const ollamaServerUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
-    const provider = configuredProvider || (ollamaServerUrl ? 'ollama_server' : 'gemini');
-    const isOllamaServer = ['ollama_server', 'ollama-api', 'ollama_api', 'remote_ollama'].includes(provider);
-    const maskUrl = (url) => {
-        if (!url) return '';
-        try {
-            const u = new URL(url);
-            return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`;
-        } catch (_) {
-            return url.replace(/(https?:\/\/)([^/@]+@)?/i, '$1');
-        }
-    };
-
-    if (!isOllamaServer) {
-        return res.json({
-            ok: true,
-            status: 'OK',
-            provider,
-            localAi: false,
-            message: provider === 'gemini' ? 'IA Gemini active.' : `Fournisseur IA actif: ${provider}.`
-        });
-    }
-
-    if (!ollamaServerUrl) {
-        return res.json({
-            ok: false,
-            status: 'ERROR',
-            provider,
-            localAi: true,
-            message: 'AI_PROVIDER demande le serveur Ollama, mais OLLAMA_API_SERVER_URL est absent.'
-        });
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    try {
-        const response = await fetch(`${ollamaServerUrl}/health`, { signal: controller.signal });
-        const data = response.ok ? await response.json().catch(() => ({})) : {};
-        return res.json({
-            ok: response.ok,
-            status: response.ok ? 'OK' : 'ERROR',
-            provider,
-            localAi: true,
-            url: maskUrl(ollamaServerUrl),
-            defaultModel: data?.defaultModel || process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '',
-            models: Array.isArray(data?.models) ? data.models.slice(0, 12) : [],
-            elapsedMs: data?.elapsedMs,
-            message: response.ok
-                ? 'Serveur Ollama local joignable.'
-                : `Serveur Ollama non joignable (${response.status}).`
-        });
-    } catch (e) {
-        return res.json({
-            ok: false,
-            status: 'ERROR',
-            provider,
-            localAi: true,
-            url: maskUrl(ollamaServerUrl),
-            message: `Serveur Ollama non joignable: ${e.message}`
-        });
-    } finally {
-        clearTimeout(timeout);
-    }
+    const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+    const model = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+    return res.json({
+        ok: true,
+        status: 'OK',
+        provider,
+        localAi: false,
+        model,
+        message: provider === 'gemini' ? 'IA Gemini active.' : `Fournisseur IA actif: ${provider}.`
+    });
 });
 
 app.post('/api/system/ai-diagnostic', async (req, res) => {
@@ -230,9 +176,6 @@ app.post('/api/system/ai-diagnostic', async (req, res) => {
     };
 
     const provider = String(process.env.AI_PROVIDER || '').toLowerCase().trim() || 'gemini';
-    const ollamaUrl = String(process.env.OLLAMA_API_SERVER_URL || '').trim().replace(/\/$/, '');
-    const ollamaKey = String(process.env.OLLAMA_API_KEY || '').trim();
-    const ollamaModel = String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || 'llama3.1:8b').trim();
     const geminiKey = String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY || '').trim();
     const geminiModel = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
     const correctionPrompt = [
@@ -249,66 +192,11 @@ app.post('/api/system/ai-diagnostic', async (req, res) => {
     const steps = [];
     steps.push(await runStep('Configuration serveur', async () => ({
         provider,
-        ollama: {
-            url: maskUrl(ollamaUrl),
-            key: maskSecret(ollamaKey),
-            model: ollamaModel
-        },
         gemini: {
             key: maskSecret(geminiKey),
             model: geminiModel
         }
     })));
-
-    steps.push(await runStep('Ollama health', async () => {
-        if (!ollamaUrl) throw new Error('OLLAMA_API_SERVER_URL absent');
-        const timer = timeoutSignal(7000);
-        try {
-            const response = await fetch(`${ollamaUrl}/health`, { signal: timer.signal });
-            const text = await response.text();
-            let json = null;
-            try { json = JSON.parse(text); } catch (_) {}
-            if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);
-            return { status: response.status, body: json || text.slice(0, 500) };
-        } finally {
-            timer.clear();
-        }
-    }));
-
-    steps.push(await runStep('Ollama JSON correction', async () => {
-        if (!ollamaUrl) throw new Error('OLLAMA_API_SERVER_URL absent');
-        if (!ollamaKey) throw new Error('OLLAMA_API_KEY absent');
-        const timer = timeoutSignal(35000);
-        try {
-            const response = await fetch(`${ollamaUrl}/chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-api-key': ollamaKey },
-                signal: timer.signal,
-                body: JSON.stringify({
-                    model: ollamaModel,
-                    messages: [
-                        { role: 'system', content: 'Tu es un correcteur DNB. Tu réponds uniquement en JSON strict.' },
-                        { role: 'user', content: correctionPrompt }
-                    ],
-                    options: { temperature: 0, num_predict: 650 }
-                })
-            });
-            const text = await response.text();
-            if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 800)}`);
-            let payload = {};
-            try { payload = JSON.parse(text); } catch (_) {}
-            const raw = String(payload?.message?.content || text || '').trim();
-            const parsed = AIEngine.sanitizeJSON(raw);
-            return {
-                model: ollamaModel,
-                rawPreview: raw.slice(0, 900),
-                parsedOk: !!parsed,
-                parsed
-            };
-        } finally {
-            timer.clear();
-        }
-    }));
 
     steps.push(await runStep('Gemini JSON correction', async () => {
         if (!geminiKey) throw new Error('GEMINI_API_KEY / GOOGLE_API_KEY absent');

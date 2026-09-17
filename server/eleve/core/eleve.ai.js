@@ -20,9 +20,7 @@ const EleveAI = {
 
     _askJSON: async (prompt, system, fallback, options = {}) => {
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
-        const model = provider === 'ollama_server'
-            ? String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '').trim()
-            : String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+        const model = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
         const startedAt = Date.now();
         const attachDebug = (payload, extra = {}) => ({
             ...payload,
@@ -215,9 +213,7 @@ const EleveAI = {
     correctDnbSimple: async ({ userText = '', instruction = '', aiHints = '', studentClass = '', context = {} } = {}) => {
         const startedAt = Date.now();
         const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
-        const model = provider === 'ollama_server'
-            ? String(process.env.OLLAMA_API_MODEL || process.env.OLLAMA_MODEL || '').trim()
-            : String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
+        const model = String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
         const maxPoints = Number(context?.maxPoints || 20);
         const prompt = [
             "Tu corriges un entraînement DNB. Réponds uniquement en JSON strict court.",
