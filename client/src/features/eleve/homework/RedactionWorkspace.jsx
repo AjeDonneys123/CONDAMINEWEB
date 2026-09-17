@@ -815,7 +815,10 @@ Consignes pour le Tuteur (Histoire-Géographie CondaWeb) :
    b) SI LE TRAVAIL EST TRÈS BON OU DÉJÀ SOLIDE :
       Commence par cette phrase exacte :
       "Excellente base, tu n'as pas besoin de points bonus ! Par contre, je vais t'aider à avoir de vrais points en plus en rendant ton travail excellent."
-      Puis propose 1 ou 2 pistes d'approfondissement d'un meilleur niveau (niveau universitaire / prépa si nécessaire : nuances conceptuelles avancées, auteurs ou historiens de référence, faits et chiffres précis) pour transformer une bonne copie en copie remarquable, toujours sans rédiger à sa place.`;
+      Puis propose 1 ou 2 pistes d'approfondissement d'un meilleur niveau (niveau universitaire / prépa si nécessaire : nuances conceptuelles avancées, auteurs ou historiens de référence, faits et chiffres précis) pour transformer une bonne copie en copie remarquable, toujours sans rédiger à sa place.
+
+   c) RÈGLE ABSOLUE D'EXIGENCE CONTINUE :
+      ⛔ INTERDICTION FORMELLE : Ne dis JAMAIS "c'est parfait", "il n'y a rien à redire", "tu n'as plus rien à ajouter" ou "ton travail est terminé". En Histoire-Géographie, il existe TOUJOURS une marge de progression, une nuance historiographique, un débat d'auteurs ou un fait historique précis à creuser pour progresser. Tout élève sans exception doit avoir une piste d'amélioration concrète à travailler.`;
 
         const preparedDraft = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanDraft)));
         const preparedEssay = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanEssay)));

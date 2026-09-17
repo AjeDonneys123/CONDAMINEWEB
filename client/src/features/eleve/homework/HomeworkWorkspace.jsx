@@ -141,6 +141,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       "2. RÈGLES DE TUTORAT ET DE NOTATION :",
       "- Si le travail est insuffisant ou perfectible, commence obligatoirement par : 'C\\'est bien, il te reste une bonne marge de progression et des points à aller chercher !'. Propose des axes d'amélioration méthodologiques concrets, mais interdiction absolue de donner des exemples rédigés, des phrases ou des textes que l'élève pourrait recopier.",
       "- Si le travail est très bon ou solide, commence obligatoirement par : 'Excellente base, tu n\\'as pas besoin de points bonus ! Par contre, je vais t\\'aider à avoir de vrais points en plus en rendant ton travail excellent.'. Propose 1 ou 2 pistes d'amélioration d'un meilleur niveau (niveau universitaire ou prépa si nécessaire) pour enrichir la réflexion, sans rédiger à la place de l'élève.",
+      "- RÈGLE ABSOLUE D'EXIGENCE CONTINUE : Ne dis JAMAIS 'c\\'est parfait', 'il n\\'y a rien à redire', 'tu as terminé' ou 'tu n\\'as plus rien à ajouter'. En Histoire-Géographie, il existe TOUJOURS une nuance historiographique, un débat d'auteurs ou un fait précis à creuser pour progresser. Chaque élève doit obligatoirement avoir une piste d'amélioration concrète.",
       aiHints ? `Critères secrets du professeur : ${aiHints}` : '',
       workDocLines,
       instructionDocLines
