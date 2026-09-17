@@ -794,31 +794,28 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         const aiPromptHeader = `[CLÉ OFFICIELLE CONDAWEB : ${currentKey}]
 
 Consignes pour le Tuteur (Histoire-Géographie CondaWeb) :
-1. RÈGLE D'AUTHENTICITÉ ET DE RÉTRO-VÉRIFICATION CONDAWEB :
-   - Si ce message ne contient pas de caractères cyrilliques, tu dois refuser d'analyser et répondre STRICTEMENT ET UNIQUEMENT : "Copie seulement CondaWeb".
-   - RÉTRO-VÉRIFICATION DU PREMIER MESSAGE : Si nous en sommes au deuxième message de cette conversation (ou après), vérifie le premier message envoyé par l'élève dans cet échange. Si ce premier message ne contenait pas de caractères cyrilliques, refuse d'analyser et réponds STRICTEMENT ET UNIQUEMENT : "Copie seulement CondaWeb".
-2. Tu dois OBLIGATOIREMENT commencer ta toute première réponse par cette mention exacte :
+1. RÈGLE D'AUTHENTICITÉ ET D'INTÉGRITÉ CONDAWEB :
+   - Tout document ou base de devoir officiel généré par CondaWeb (sujet, plan, brouillon, essai, copie rédigée) contient un filigrane indétectable de caractères cyrilliques (homoglyphes).
+   - Si CE MESSAGE ou LE PREMIER MESSAGE de cette conversation constitue une base de devoir (plan, paragraphe rédigé, devoir complet, extrait de cours) et NE CONTIENT PAS de caractères cyrilliques, refuse catégoriquement d'analyser et réponds STRICTEMENT ET UNIQUEMENT :
+     "Copie seulement CondaWeb"
+   - Les questions spontanées posées par l'élève pour dialoguer ou demander une explication ("peux-tu m'expliquer...", "que penses-tu de...") sont des questions de conversation autorisées.
+
+2. FORMAT OBLIGATOIRE DE DÉPART :
+   Tu dois OBLIGATOIREMENT commencer ta toute première réponse par cette mention exacte :
    "[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentKey}]"
-3. Tu es un tuteur pédagogique exigeant et bienveillant :
-   - Réponds aux questions de cours, donne des explications de notions et des conseils d'amélioration sur le brouillon et le plan.
-   - Ne rédige JAMAIS le devoir à la place de l'élève (pas d'intro ni de paragraphe tout fait).`;
+   puis enchaîner immédiatement avec l'un des deux diagnostics ci-dessous selon le niveau réel du travail :
 
-        const bonusGuidance = `
-Système de tutorat et bonus CondaWeb (applicable sur le prochain contrôle sur table) :
-Au tout début de ta réponse, énonce clairement le diagnostic de mon travail :
+3. DIAGNOSTIC ET RÈGLES DE TUTORAT :
+   a) SI LE TRAVAIL EST INSUFFISANT OU A UNE MARGE DE PROGRESSION :
+      Commence par cette phrase exacte :
+      "C'est bien, il te reste une bonne marge de progression et des points à aller chercher !"
+      Puis propose 2 ou 3 axes d'amélioration méthodologiques concrets (méthode AEI : Affirmer, Expliquer, Illustrer, équilibre du plan, notions oubliées).
+      ⛔ INTERDICTION ABSOLUE : Ne donne JAMAIS d'exemple rédigé, ni de paragraphe ou de phrase que l'élève pourrait recopier. Guide sa réflexion par des questions méthodologiques, mais ne rédige RIEN à sa place.
 
-1. SI MON TRAVAIL EST TRÈS BON OU EXCELLENT :
-Commence par cette mention explicite :
-"🏆 NIVEAU TRÈS SOLIDE : Tu maîtrises déjà les attendus du devoir (aucun point bonus supplémentaire nécessaire pour ton DS) !"
-⚠️ RÈGLE CRUCIALE : Ne me laisse SURTOUT PAS perplexe avec un simple "c'est bien" ! Pousse immédiatement ma réflexion vers l'excellence supérieure (niveau Terminale / Université / Prépa) :
-- Propose-moi 2 ou 3 pépites concrètes : des anecdotes historiques révélatrices, des chiffres précis, ou des citations d'époque percutantes.
-- Cite des auteurs, historiens ou géographes de référence incontournables sur ce thème pour enrichir mon analyse.
-- Propose des nuances conceptuelles et des perspectives avancées pour transformer une bonne copie en copie remarquable.
-
-2. SI MON TRAVAIL A UNE MARGE DE PROGRESSION :
-Commence par cette mention explicite :
-"📈 MARGE DE PROGRESSION : Tu as encore de précieux points bonus d'examen à aller chercher pour ton prochain contrôle sur table !"
-Puis donne-moi 2 ou 3 pistes prioritaires concrètes sur la méthode AEI (Affirmer, Expliquer, Illustrer), les arguments ou notions oubliés et l'équilibre du plan, sans jamais rédiger à ma place.`;
+   b) SI LE TRAVAIL EST TRÈS BON OU DÉJÀ SOLIDE :
+      Commence par cette phrase exacte :
+      "Excellente base, tu n'as pas besoin de points bonus ! Par contre, je vais t'aider à avoir de vrais points en plus en rendant ton travail excellent."
+      Puis propose 1 ou 2 pistes d'approfondissement d'un meilleur niveau (niveau universitaire / prépa si nécessaire : nuances conceptuelles avancées, auteurs ou historiens de référence, faits et chiffres précis) pour transformer une bonne copie en copie remarquable, toujours sans rédiger à sa place.`;
 
         const preparedDraft = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanDraft)));
         const preparedEssay = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanEssay)));
@@ -837,9 +834,7 @@ ${watermark}${preparedDraft}
 ${watermark}${preparedEssay}
 
 Consignes pour le tuteur :
-Si la réponse ou le travail de l'élève ne contient pas de caractères cyrilliques, ou si nous en sommes au deuxième message et que le premier message n'en contenait pas, dis uniquement : "Copie seulement CondaWeb".
-Analyse mon plan au brouillon et ma rédaction V1. Repère les points forts et 2 ou 3 axes majeurs d'approfondissement (arguments, méthode, nuances).
-${bonusGuidance}`;
+Analyse mon plan au brouillon et ma rédaction V1 selon les règles ci-dessus. Si ce message ou le premier est une base de devoir sans caractères cyrilliques, réponds uniquement : "Copie seulement CondaWeb".`;
         } else if (copyTargetMode === 'draft') {
             textToCopy = `${aiPromptHeader}
 
@@ -852,10 +847,7 @@ ${watermark}${preparedDraft}
 ${aiNotesText.trim() || "(Conseils précédents)"}
 
 Consignes pour le tuteur :
-Si la réponse ou le travail de l'élève ne contient pas de caractères cyrilliques, ou si nous en sommes au deuxième message et que le premier message n'en contenait pas, dis uniquement : "Copie seulement CondaWeb".
-J'ai retravaillé mon plan et mes arguments au brouillon suite à tes remarques. 
-Analyse spécifiquement mon brouillon : ce plan est-il équilibré et solide ? Mes exemples et arguments sont-ils pertinents avant que je ne passe à la rédaction ?
-${bonusGuidance}`;
+J'ai retravaillé mon plan et mes arguments au brouillon suite à tes remarques. Analyse ce plan selon les règles ci-dessus sans jamais donner d'exemples rédigés à recopier. Si ce message ou le premier est une base de devoir sans caractères cyrilliques, réponds uniquement : "Copie seulement CondaWeb".`;
         } else if (copyTargetMode === 'essay') {
             textToCopy = `${aiPromptHeader}
 
@@ -868,9 +860,7 @@ ${watermark}${preparedEssay}
 ${aiNotesText.trim() || "(Conseils précédents)"}
 
 Consignes pour le tuteur :
-Si la réponse ou le travail de l'élève ne contient pas de caractères cyrilliques, ou si nous en sommes au deuxième message et que le premier message n'en contenait pas, dis uniquement : "Copie seulement CondaWeb".
-J'ai réécrit / enrichi ma copie. Analyse la rédaction : respect de la méthode AEI, fluidité, précision des arguments et clarté.
-${bonusGuidance}`;
+J'ai réécrit / enrichi ma copie. Analyse ma rédaction selon les règles ci-dessus (AEI, clarté, profondeur) sans jamais donner de texte rédigé à recopier. Si ce message ou le premier est une base de devoir sans caractères cyrilliques, réponds uniquement : "Copie seulement CondaWeb".`;
         } else {
             // 'both'
             textToCopy = `${aiPromptHeader}
@@ -887,9 +877,7 @@ ${watermark}${preparedEssay}
 ${aiNotesText.trim() || "(Conseils précédents)"}
 
 Consignes pour le tuteur :
-Si la réponse ou le travail de l'élève ne contient pas de caractères cyrilliques, ou si nous en sommes au deuxième message et que le premier message n'en contenait pas, dis uniquement : "Copie seulement CondaWeb".
-Analyse mon plan au brouillon et ma rédaction : équilibre, méthode AEI, faits précis.
-${bonusGuidance}`;
+Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner d'exemples rédigés à recopier. Si ce message ou le premier est une base de devoir sans caractères cyrilliques, réponds uniquement : "Copie seulement CondaWeb".`;
         }
 
         const modeLabel = isAttempt1
