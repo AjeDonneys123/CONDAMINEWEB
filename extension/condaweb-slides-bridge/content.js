@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.40';
+  const BRIDGE_VERSION = '1.0.42';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -870,13 +870,17 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             timerButton.type = 'button';
             timerButton.className = 'conda-slide-timer-toggle';
             timerButton.title = 'Minuteur 7 minutes modulable';
-            timerButton.onclick = () => {
-                timerWidgetOpen = !timerWidgetOpen;
-                renderTimerWidget(root);
-                updateTimerDockButton(timerButton);
-            };
             dock.appendChild(timerButton);
         }
+        // Toujours remplacer le handler : lors d'une mise à jour à chaud,
+        // le bouton DOM peut survivre avec la fermeture de l'ancien script.
+        // Deux états `timerWidgetOpen` concurrents faisaient alors clignoter
+        // le panneau (ou le refermaient au prochain polling).
+        timerButton.onclick = () => {
+            timerWidgetOpen = !timerWidgetOpen;
+            renderTimerWidget(root);
+            updateTimerDockButton(timerButton);
+        };
         updateTimerDockButton(timerButton);
 
         let notesButton = dock.querySelector('.conda-slide-notes-toggle');
@@ -1311,6 +1315,14 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             widget.classList.add('minimized');
         } else {
             widget.classList.remove('minimized');
+        }
+
+        // La synchronisation CondaWeb passe toutes les secondes. Ne jamais
+        // reconstruire le minuteur déjà monté : cela détruisait l'input actif,
+        // faisait clignoter son focus et empêchait la saisie des minutes.
+        if (!isNew) {
+            updateTimerDisplay();
+            return;
         }
 
         while (widget.firstChild) widget.removeChild(widget.firstChild);
@@ -2029,11 +2041,27 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             return;
         }
 
+        const planStudents = Array.isArray(currentClassroomState?.planStudents) ? currentClassroomState.planStudents : [];
+        const planRenderSignature = JSON.stringify({
+            classId: String(currentClassroomState?._id || activeClassId || ''),
+            cols: Number(currentClassroomState?.layout?.cols || 6),
+            rows: Number(currentClassroomState?.layout?.rows || 5),
+            students: planStudents.map((student) => [
+                String(student?._id || student?.id || ''),
+                Number(student?.seatX),
+                Number(student?.seatY),
+                String(student?.nickname || student?.firstName || ''),
+                String(student?.lastName || '')
+            ])
+        });
+        if (modal?.dataset?.renderSignature === planRenderSignature) return;
+
         if (!modal) {
             modal = document.createElement('div');
             modal.className = 'conda-class-plan-modal';
             root.appendChild(modal);
         }
+        modal.dataset.renderSignature = planRenderSignature;
 
         while (modal.firstChild) {
             modal.removeChild(modal.firstChild);
@@ -2074,7 +2102,6 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         modal.appendChild(boardBar);
 
         const cols = Math.max(1, Number(currentClassroomState?.layout?.cols || 6));
-        const planStudents = Array.isArray(currentClassroomState?.planStudents) ? currentClassroomState.planStudents : [];
         const highestSeatRow = planStudents.reduce((max, student) => Math.max(max, Number(student?.seatY) + 1 || 0), 0);
         const rows = Math.max(1, Number(currentClassroomState?.layout?.rows || 5), highestSeatRow);
         const grid = document.createElement('div');

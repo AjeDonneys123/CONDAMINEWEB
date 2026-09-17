@@ -145,9 +145,13 @@ router.get('/', async (req, res) => {
         ]);
         const sectionById = new Map(sections.map((section) => [String(section._id), section]));
         const visibleRows = rows.filter((course) => {
+            const courseLevel = academicLevel(course.targetLevel || course.targetClassroomName);
+            // An explicit level is authoritative, even when a stale/wrong
+            // classroom id was previously saved on the course.
+            if (courseLevel && selectedLevel && courseLevel !== selectedLevel) return false;
             if (String(course.targetClassroomId || '') === classId) return true;
             if (String(course.targetScope || 'LEVEL').toUpperCase() !== 'LEVEL') return false;
-            return Boolean(selectedLevel) && academicLevel(course.targetLevel || course.targetClassroomName) === selectedLevel;
+            return Boolean(selectedLevel) && courseLevel === selectedLevel;
         });
         const childrenBySource = new Map();
         visibleRows.forEach((course) => {
