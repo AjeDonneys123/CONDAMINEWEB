@@ -1026,13 +1026,19 @@ router.post('/submit', async (req, res) => {
             ? registeredKeys
             : [sessionToken, expectedToken, baseToken].filter(Boolean);
 
+        const cyrillicMatches = (chatString.match(/[\u0400-\u04FF]/g) || []).length;
+        const hasCyrillicWatermark = cyrillicMatches >= 2;
+
         // Vérification de la présence des clés de collage dans le chat
         const matchedKeys = keysToCheck.filter(k => k && chatUpper.includes(String(k).toUpperCase()));
         const hasEchoTag = chatUpper.includes('CONSEILS_APPLIQU') || chatUpper.includes('CONSEIL_APPLIQU');
         const tokenVerified = matchedKeys.length > 0 || hasEchoTag;
 
-        const watermarkVerified = chatString.includes(expectedWatermark) || tokenVerified;
+        const watermarkVerified = chatString.includes(expectedWatermark) || hasCyrillicWatermark || tokenVerified;
         const isAuthentic = tokenVerified || watermarkVerified;
+
+        antiCheatSnapshot.cyrillicHomoglyphCount = cyrillicMatches;
+        antiCheatSnapshot.hasCyrillicWatermark = hasCyrillicWatermark;
 
         if (!isAuthentic && chatString.length > 50) {
             antiCheatSnapshot.watermarkMissing = true;
@@ -1063,10 +1069,18 @@ router.post('/submit', async (req, res) => {
 SUJET DU DEVOIR :
 "${topicPrompt}"
 
+FILIGRANE INVISIBLE CONDAWEB (HOMOGLYPHES CYRILLIQUES e, a, o, c, p) :
+- Caractères cyrilliques détectés dans le texte collé : ${cyrillicMatches}
+- Principe du filigrane : Tout document ou consigne généré par CondaWeb pour être collé à l'IA intègre un filigrane indétectable pour l'élève constitué d'homoglyphes cyrilliques (lettres russes visuellement identiques : e, a, o, c, p).
+- Analyse de copier-coller extérieur :
+  * Tout texte généré et copié depuis CondaWeb possède obligatoirement ces caractères cyrilliques.
+  * Si l'élève a collé un texte rédigé provenant d'une source externe (ex: un paragraphe complet écrit par ChatGPT sur une autre fenêtre, un extrait de site web, etc.), ce paragraphe externe sera en alphabet purement latin et sera dépourvu de ce filigrane.
+  * Les questions et interactions libres écrites manuellement par l'élève ("peux-tu m'expliquer...", "que penses-tu de...") sont en caractères latins normaux et sont 100% autorisées et encouragées.
+
 CLÉS OFFICIELLES GÉNÉRÉES PAR CONDAWEB (à chaque collage de travail pour l'IA) :
 Attendues : [${keysToCheck.join(', ')}]
 Clés retrouvées dans la discussion collée : [${matchedKeys.join(', ')}]
-Statut d'authenticité : ${tokenVerified ? '✅ CLÉS OFFICIELLES AUTHENTIFIÉES DANS LA DISCUSSION' : '⚠️ AUCUNE CLÉ OFFICIELLE RETROUVÉE (suspicion de texte généré sur un chat externe sans passer par CondaWeb)'}
+Statut d'authenticité : ${isAuthentic ? '✅ DOCUMENT CONDAWEB AUTHENTIFIÉ DANS LA DISCUSSION' : '⚠️ AUCUNE CLÉ NI FILIGRANE RETROUVÉS (suspicion de texte généré sur un chat externe sans passer par CondaWeb)'}
 
 BROUILLON / PLAN INITIAL DE L'ÉLÈVE :
 ${draftContent || '(Aucun brouillon)'}
@@ -1077,27 +1091,31 @@ ${memoSheet || '(Non complétée)'}
 NOTES PRISES PAR L'ÉLÈVE SUR LES RETOURS DE L'IA (tuteur) :
 ${aiNotes || '(Aucune note)'}
 
-DIFFÉRENTES VERSIONS / ESSAIS DE L'ÉLÈVE :
+DIFFÉRENTES VERSIONS / ESSAIS DE L'ÉLÈVE (Progression chronologique) :
 ${attemptsSummary}
 
 ÉCHANGE COMPLET AVEC L'IA (collé par l'élève) :
 ${aiConversationLog || '(Aucun échange collé)'}
 
 CONSIGNE D'ÉVALUATION ET D'INTÉGRITÉ PÉDAGOGIQUE DU BONUS :
-1. ANALYSE D'INTÉGRITÉ DE LA CONVERSATION :
+1. ÉVALUATION DE LA PROGRESSION DE L'ÉLÈVE AU FUR ET À MESURE DES VERSIONS :
+   - Analyse minutieusement l'évolution entre les versions de l'élève (Essai 1, Essai 2, etc.) et son brouillon.
+   - A-t-il tenu compte des retours et conseils donnés par le tuteur IA ?
+   - Observe la progression sur la méthode AEI (Affirmer, Expliquer, Illustrer), la clarté de la structure et l'enrichissement des arguments.
+2. DÉTECTION D'UN COPIER-COLLER EXTÉRIEUR FRAUDULEUX :
    - Fais la différence entre :
-     a) Une CONVERSATION LÉGITIME : l'élève pose des questions sur le cours, demande une explication, discute des arguments ou de son plan. Même si tous les messages n'ont pas de clé, tant que le point de départ contient une clé officielle CondaWeb (${keysToCheck.join(', ')}), cette démarche d'apprentissage est 100% LÉGITIME ET VALORISÉE.
-     b) Un MORCEAU DE DEVOIR EXTERNE FRAUDULEUX : l'élève a collé un bloc rédigé (introduction, paragraphe, développement) produit par une IA externe sans clé officielle, ou a demandé directement 'écris mon intro / rédige mon devoir'.
-   - Si tu détectes une fraude avérée ou un bloc externe sans clé officielle : bloque le bonus à 0 pt et explique-le avec bienveillance dans studentMessage et teacherSummary.
-2. BONUS POUR LE PROCHAIN CONTRÔLE (si intégrité respectée) :
+     a) Une CONVERSATION LÉGITIME : l'élève discute de son travail généré sur CondaWeb (présence du filigrane cyrillique et/ou des clés officielles), ou pose des questions spontanées pour mieux comprendre. Cette démarche d'apprentissage est 100% LÉGITIME ET VALORISÉE.
+     b) Un COPIER-COLLER EXTÉRIEUR : un bloc rédigé complet (paragraphe de devoir, développement prêt à l'emploi) provenant d'une IA externe ou du web sans le filigrane CondaWeb.
+   - Si tu détectes une fraude avérée ou un bloc rédigé copié de l'extérieur sans passer par le travail CondaWeb : bloque le bonus à 0 pt et explique-le avec bienveillance dans studentMessage et teacherSummary.
+3. BONUS POUR LE PROCHAIN CONTRÔLE (si intégrité respectée) :
    - Socle de départ garanti : Brouillon initial + Essai 1 sérieux = +0.5 pt.
-   - Bonus d'amélioration : accorde jusqu'à +2.5 pts selon la pertinence des conseils appliqués, le progrès entre les essais et la Fiche Mémo.
-3. RÈGLE CRUCIALE POUR LE studentMessage :
+   - Bonus d'amélioration : accorde jusqu'à +2.5 pts selon la pertinence des conseils appliqués, le progrès réel entre les essais et la qualité de la Fiche Mémo.
+4. RÈGLE CRUCIALE POUR LE studentMessage :
    - Explicite clairement au TOUT DÉBUT du message :
      * Soit : "🏆 Niveau très solide (tu maîtrises déjà les attendus, pas de points bonus supplémentaires nécessaires pour ton DS) !"
      * Soit : "📈 Marge de progression détectée (de précieux points bonus à aller chercher pour ton prochain contrôle) !"
    - POUR LES COPIES EXCELLENTES : Ne laisse SURTOUT PAS l'élève perplexe avec un simple 'c'est bien'. Pousse-le activement vers l'excellence supérieure (niveau Terminale / Université) en lui donnant de vraies pistes d'approfondissement : des anecdotes historiques méconnues ou révélatrices, des chiffres et faits précis, des auteurs ou historiens de référence à mentionner, ou des perspectives conceptuelles pointues.
-4. Rédige un résumé factuel pour le professeur ("teacherSummary").
+5. Rédige un résumé factuel pour le professeur ("teacherSummary").
 
 Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 {
@@ -1160,6 +1178,8 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             generatedKeys: keysToCheck,
             tokenVerified,
             watermarkVerified,
+            cyrillicHomoglyphCount: cyrillicMatches,
+            hasCyrillicWatermark,
             memoSheet: String(memoSheet || ''),
             substantialAttemptsCount,
             attemptsHistory: normalizedHistory,

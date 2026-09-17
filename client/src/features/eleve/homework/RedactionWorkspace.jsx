@@ -35,6 +35,371 @@ export const generateCopyKey = (studentId, homeworkId, copyNum) => {
     return `CW-${hex}-C${copyNum || 1}`;
 };
 
+export const HOMOGLYPH_PAIRS = [
+    { latin: 'e', cyrillic: '\u0435', name: 'e Cyrillique (U+0435)' },
+    { latin: 'a', cyrillic: '\u0430', name: 'a Cyrillique (U+0430)' },
+    { latin: 'o', cyrillic: '\u043E', name: 'o Cyrillique (U+043E)' },
+    { latin: 'c', cyrillic: '\u0441', name: 'c Cyrillique (U+0441)' },
+    { latin: 'p', cyrillic: '\u0440', name: 'p Cyrillique (U+0440)' }
+];
+
+export const injectHomoglyphs = (text, frequency = 2) => {
+    if (!text) return '';
+    let eCount = 0;
+    let aCount = 0;
+    let oCount = 0;
+    let cCount = 0;
+    let pCount = 0;
+
+    return text.split('').map((char) => {
+        if (char === 'e') {
+            eCount++;
+            if (eCount % frequency === 0) return '\u0435'; // Cyrillic small e
+        } else if (char === 'E') {
+            eCount++;
+            if (eCount % frequency === 0) return '\u0415'; // Cyrillic capital E
+        } else if (char === 'a') {
+            aCount++;
+            if (aCount % frequency === 0) return '\u0430'; // Cyrillic small a
+        } else if (char === 'A') {
+            aCount++;
+            if (aCount % frequency === 0) return '\u0410'; // Cyrillic capital A
+        } else if (char === 'o') {
+            oCount++;
+            if (oCount % frequency === 0) return '\u043E'; // Cyrillic small o
+        } else if (char === 'O') {
+            oCount++;
+            if (oCount % frequency === 0) return '\u041E'; // Cyrillic capital O
+        } else if (char === 'c') {
+            cCount++;
+            if (cCount % frequency === 0) return '\u0441'; // Cyrillic small c
+        } else if (char === 'C') {
+            cCount++;
+            if (cCount % frequency === 0) return '\u0421'; // Cyrillic capital C
+        } else if (char === 'p') {
+            pCount++;
+            if (pCount % frequency === 0) return '\u0440'; // Cyrillic small p
+        } else if (char === 'P') {
+            pCount++;
+            if (pCount % frequency === 0) return '\u0420'; // Cyrillic capital P
+        }
+        return char;
+    }).join('');
+};
+
+export const SAMPLE_HOMOGLYPH_TEXT = injectHomoglyphs(
+    `La Première Guerre mondiale est une guerre totale qui bouleverse profondément les sociétés européennes. Les civils et l'économie nationale sont entièrement mobilisés pour soutenir l'effort de guerre. Dans les tranchées, les soldats endurent des souffrances physiques et psychologiques extrêmes. L'historien George Mosse démontre que cette violence de masse provoque une brutalisation durable des esprits. En 1917, face à l'enlisement du conflit, des mutineries et des grèves éclatent tant sur le front qu'à l'arrière.`,
+    2
+);
+
+export const analyzeHomoglyphs = (text) => {
+    if (!text) return { totalHomoglyphs: 0, matches: [], isAuthenticCondaWeb: false, breakdown: { e_cyrillic: 0, a_cyrillic: 0, o_cyrillic: 0, c_cyrillic: 0, p_cyrillic: 0, other_cyrillic: 0 } };
+    
+    const matches = [];
+    const breakdown = {
+        e_cyrillic: 0,
+        a_cyrillic: 0,
+        o_cyrillic: 0,
+        c_cyrillic: 0,
+        p_cyrillic: 0,
+        other_cyrillic: 0
+    };
+
+    const words = text.split(/\s+/);
+    words.forEach((word, wIdx) => {
+        let hasCyrillic = false;
+        const charsInWord = [];
+        for (let i = 0; i < word.length; i++) {
+            const code = word.charCodeAt(i);
+            const ch = word[i];
+            if (code >= 0x0400 && code <= 0x04FF) {
+                hasCyrillic = true;
+                let glyphName = `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
+                if (ch === '\u0435' || ch === '\u0415') { breakdown.e_cyrillic++; glyphName = 'e/E cyrillique'; }
+                else if (ch === '\u0430' || ch === '\u0410') { breakdown.a_cyrillic++; glyphName = 'a/A cyrillique'; }
+                else if (ch === '\u043E' || ch === '\u041E') { breakdown.o_cyrillic++; glyphName = 'o/O cyrillique'; }
+                else if (ch === '\u0441' || ch === '\u0421') { breakdown.c_cyrillic++; glyphName = 'c/C cyrillique'; }
+                else if (ch === '\u0440' || ch === '\u0420') { breakdown.p_cyrillic++; glyphName = 'p/P cyrillique'; }
+                else { breakdown.other_cyrillic++; }
+
+                charsInWord.push({ char: ch, codeHex: `\\u${code.toString(16).padStart(4, '0')}`, name: glyphName, position: i });
+            }
+        }
+        if (hasCyrillic) {
+            matches.push({
+                wordIndex: wIdx + 1,
+                word,
+                chars: charsInWord
+            });
+        }
+    });
+
+    const totalHomoglyphs = breakdown.e_cyrillic + breakdown.a_cyrillic + breakdown.o_cyrillic + breakdown.c_cyrillic + breakdown.p_cyrillic + breakdown.other_cyrillic;
+    const isAuthenticCondaWeb = totalHomoglyphs >= 2;
+
+    return {
+        totalHomoglyphs,
+        matches,
+        breakdown,
+        isAuthenticCondaWeb
+    };
+};
+
+const samplePromptRaw = `[CLÉ OFFICIELLE CONDAWEB : CW-38B2-C1]
+[SUJET DU DEVOIR : "La Première Guerre mondiale : une guerre totale"]
+
+--- MON BROUILLON / PLAN INITIAL : ---
+I. La mobilisation de toute la société (usines, femmes, civils)
+II. L'expérience traumatisante des tranchées et la brutalisation
+III. Les crises de 1917 et les mutineries
+
+--- MON 1ER ESSAI RÉDIGÉ (V1) : ---
+La Première Guerre mondiale est une guerre totale qui bouleverse profondément les sociétés européennes. Les civils et l'économie nationale sont entièrement mobilisés pour soutenir l'effort de guerre. Dans les tranchées, les soldats endurent des souffrances physiques et psychologiques extrêmes. L'historien George Mosse démontre que cette violence de masse provoque une brutalisation durable des esprits. En 1917, face à l'enlisement du conflit, des mutineries et des grèves éclatent tant sur le front qu'à l'arrière.
+
+Consignes pour le tuteur :
+Analyse mon plan au brouillon et ma rédaction V1. Repère les points forts et les axes d'amélioration selon la règle AEI sans jamais rédiger à ma place.`;
+
+export const SAMPLE_CONVERSATION_TEXT = `Vous avez dit :
+${injectHomoglyphs(samplePromptRaw, 2)}
+
+Gemini a dit :
+[CONSEILS_APPLIQUÉS : OUI | RÉF: CW-38B2-C1]
+Bonjour ! Ton travail est très solide. Tu as bien cerné la notion de guerre totale et la méthode AEI commence à être visible dans tes paragraphes.
+Pour enrichir ton devoir et viser un niveau supérieur :
+1. Développe davantage le concept de brutalisation formulé par George Mosse dans ta deuxième sous-partie.
+2. N'oublie pas de mentionner les mutineries de 1917 pour illustrer l'usure morale des combattants.
+
+Vous avez dit :
+Comment puis-je mieux expliquer le concept de brutalisation de George Mosse sans faire de hors-sujet ?
+
+Gemini a dit :
+Pour expliquer la brutalisation selon George Mosse :
+Rappelle que la violence extrême et continue des tranchées a habitué les soldats à la mort de masse. Cette violence ne s'arrête pas avec l'armistice de 1918 : elle imprègne durablement les mentalités et la vie politique d'après-guerre.`;
+
+export const parseConversationBlocks = (text) => {
+    if (!text || !text.trim()) return [];
+
+    let clean = text.trim();
+    // Nettoie les en-têtes d'accessibilité de Gemini web s'ils ont été sélectionnés
+    clean = clean.replace(/^[\s\S]*?Passer au dernier résultat Gemini\s*/i, '');
+    // Nettoie le disclaimer de bas de page de Gemini s'il est présent
+    clean = clean.replace(/\n*Gemini est une IA et peut se tromper\.[\s\S]*$/i, '');
+
+    // Séparateurs de tours de parole :
+    // 1. Rôles explicites ("Vous avez dit :", "Gemini a dit :", "User:", "Model:")
+    // 2. Boutons d'interface de Gemini ("Afficher le raisonnement", "Masquer le raisonnement", "Modifier la requête")
+    // 3. Marqueurs de protocole CondaWeb ("[CONSEILS_APPLIQUÉS", "[CLÉ OFFICIELLE", "[SUJET DU DEVOIR")
+    const splitRegex = /(?:^|\n)(Vous avez dit\s*:?|Gemini a dit\s*:?|User\s*:?|Model\s*:?|Assistant\s*:?|ChatGPT(?: a dit)?\s*:?|Moi\s*:?|Afficher le raisonnement|Masquer le raisonnement|Modifier la requête|\[CONSEILS_APPLIQU[Ée]S[^\]]*\])(?:\n|$)/gi;
+
+    let rawSegments = [];
+    const matches = [];
+    let match;
+
+    while ((match = splitRegex.exec(clean)) !== null) {
+        matches.push({
+            delimiter: match[1].trim(),
+            startIndex: match.index,
+            headerLength: match[0].length,
+            contentStartIndex: match.index + match[0].length
+        });
+    }
+
+    if (matches.length > 0) {
+        // Contenu avant le tout premier séparateur (ex: prompt initial de l'élève)
+        if (matches[0].startIndex > 0) {
+            const initialContent = clean.slice(0, matches[0].startIndex).trim();
+            if (initialContent) {
+                rawSegments.push({
+                    header: 'Message initial',
+                    content: initialContent
+                });
+            }
+        }
+
+        for (let i = 0; i < matches.length; i++) {
+            const current = matches[i];
+            const nextStart = (i + 1 < matches.length) ? matches[i + 1].startIndex : clean.length;
+            const content = clean.slice(current.contentStartIndex, nextStart).trim();
+            if (content) {
+                rawSegments.push({
+                    header: current.delimiter,
+                    content
+                });
+            }
+        }
+    } else {
+        // Fallback si aucun séparateur d'interface n'est présent : recherche de la frontière consigne -> réponse
+        const promptEndMarker = /(?:sans jamais rédiger à ma place\.|Consignes pour le tuteur\s*:?[^\n]*)/i;
+        const promptMatch = promptEndMarker.exec(clean);
+
+        if (promptMatch) {
+            const splitPos = promptMatch.index + promptMatch[0].length;
+            const promptContent = clean.slice(0, splitPos).trim();
+            const restContent = clean.slice(splitPos).trim();
+
+            if (promptContent) {
+                rawSegments.push({
+                    header: 'Message Élève (Prompt CondaWeb)',
+                    content: promptContent
+                });
+            }
+            if (restContent) {
+                rawSegments.push({
+                    header: 'Réponse Tuteur IA',
+                    content: restContent
+                });
+            }
+        } else {
+            rawSegments.push({
+                header: 'Contenu collé',
+                content: clean
+            });
+        }
+    }
+
+    // Classification précise de chaque bloc
+    return rawSegments.map((seg, idx) => {
+        const content = seg.content;
+        const words = content.split(/\s+/).filter(Boolean).length;
+        const homoglyphRes = analyzeHomoglyphs(content);
+        const hasCondaTags = content.includes('[SUJET DU DEVOIR') || content.includes('--- MON BROUILLON') || content.includes('--- MON 1ER ESSAI') || content.includes('CW-');
+        const isAiHeader = /^(Gemini|Model|Assistant|ChatGPT|Afficher le raisonnement|Masquer le raisonnement|\[CONSEILS_APPLIQU)/i.test(seg.header);
+        const isUserHeader = /^(Vous|User|Moi|Modifier la requête)/i.test(seg.header);
+
+        let type = 'unknown';
+        let title = '';
+        let badge = '';
+        let badgeColor = '';
+        let description = '';
+
+        // RÈGLE 1 : Si présence d'homoglyphes (>= 2) ou balises officielles -> C'est le PROMPT CONDAWEB !
+        if (homoglyphRes.isAuthenticCondaWeb || hasCondaTags) {
+            type = 'conda_prompt';
+            title = 'Prompt Devoir CondaWeb';
+            badge = '🛡️ Authentifié CondaWeb';
+            badgeColor = 'emerald';
+            description = `Dépôt officiel du travail avec brouillon/copie (${homoglyphRes.totalHomoglyphs} homoglyphes invisibles certifiés).`;
+        } 
+        // RÈGLE 2 : Si en-tête IA ou amorce d'évaluation -> C'est la RÉPONSE DU TUTEUR IA !
+        else if (isAiHeader || content.includes('[CONSEILS_APPLIQU') || content.startsWith('Ce retour d\'évaluation') || content.includes('Voici mon analyse') || content.includes('règle AEI')) {
+            type = 'ai_response';
+            title = 'Réponse du Tuteur IA';
+            badge = '🤖 Conseil IA';
+            badgeColor = 'purple';
+            description = 'Conseils méthodologiques et évaluation rédigés par l\'IA.';
+        } 
+        // RÈGLE 3 : Question ou interaction spontanée de l'élève
+        else if (isUserHeader || words < 70 || content.includes('?') || /^(comment|pourquoi|peux-tu|est-ce que|aide-moi)/i.test(content.trim())) {
+            type = 'student_interaction';
+            title = 'Interaction & Question libre de l\'élève';
+            badge = '💬 Question Autorisée';
+            badgeColor = 'indigo';
+            description = 'Question spontanée pour dialoguer avec l\'IA. 100% autorisée sans besoin de clé.';
+        } 
+        // RÈGLE 4 : Long texte rédigé non signé -> Suspicion de triche externe
+        else {
+            type = 'suspicious_external';
+            title = 'Bloc Rédigé Externe Non Signé';
+            badge = '🚨 Suspicion Triche';
+            badgeColor = 'rose';
+            description = `Bloc rédigé de ${words} mots sans homoglyphes et sans balises CondaWeb. Possible copie d'un devoir externe.`;
+        }
+
+        return {
+            index: idx + 1,
+            rawHeader: seg.header,
+            type,
+            title,
+            badge,
+            badgeColor,
+            description,
+            wordsCount: words,
+            homoglyphsCount: homoglyphRes.totalHomoglyphs,
+            content
+        };
+    });
+};
+
+export const TARGET_WATERMARK_SENTENCES = [1, 3, 8];
+
+export const SAMPLE_WATERMARK_TEXT = `La Première Guerre mondiale est une guerre totale qui bouleverse les sociétés.  Les civils et l'économie sont entièrement mobilisés pour l'effort de guerre. Les tranchées deviennent le symbole des souffrances extrêmes endurées par les soldats.  En 1917, le moral faiblit et des mutineries éclatent sur le front. La propagande et la censure s'intensifient pour maintenir la cohésion nationale. Les femmes jouent un rôle clé dans les usines d'armement et les travaux agricoles. Les pertes humaines et les traumatismes physiques ou psychologiques sont sans précédent. L'historien George Mosse théorise ainsi le concept de brutalisation des sociétés européennes.  L'armistice du 11 novembre 1918 laisse un continent profondément meurtri.`;
+
+export const injectSentenceSpacing = (text, targetIndices = TARGET_WATERMARK_SENTENCES) => {
+    if (!text) return '';
+    let sentenceCount = 0;
+    return text.replace(/([.!?])([ \t\r\n]+|$)/g, (match, punct, spaces) => {
+        sentenceCount++;
+        const isTarget = targetIndices.includes(sentenceCount);
+        if (spaces.includes('\n')) {
+            return isTarget ? `${punct}  \n` : `${punct}\n`;
+        }
+        return isTarget ? `${punct}  ` : `${punct} `;
+    });
+};
+
+export const analyzeSentenceSpacing = (text, expectedIndices = TARGET_WATERMARK_SENTENCES) => {
+    if (!text) {
+        return {
+            sentences: [],
+            totalSentences: 0,
+            markedIndices: [],
+            applicableExpected: [],
+            matchedExpected: [],
+            missingExpected: [],
+            isValidSignature: false
+        };
+    }
+
+    const sentences = [];
+    let sentenceCount = 0;
+    const regex = /([^.!?]+[.!?])([ \t\r\n]*)/g;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+        sentenceCount++;
+        const sentenceText = match[1].trim();
+        const trailing = match[2];
+        const spaceCount = (trailing.match(/ /g) || []).length;
+        const hasDoubleSpace = trailing.startsWith('  ') || trailing.includes('  ') || (trailing.startsWith(' \n') && spaceCount >= 1);
+        const isExpected = expectedIndices.includes(sentenceCount);
+
+        let status = 'NORMAL';
+        if (hasDoubleSpace && isExpected) {
+            status = 'MATCH';
+        } else if (hasDoubleSpace && !isExpected) {
+            status = 'UNEXPECTED_DOUBLE';
+        } else if (!hasDoubleSpace && isExpected) {
+            status = 'MISSING_MARK';
+        }
+
+        sentences.push({
+            index: sentenceCount,
+            text: sentenceText,
+            trailingRaw: trailing,
+            spaceCount,
+            hasDoubleSpace,
+            isExpected,
+            status
+        });
+    }
+
+    const markedIndices = sentences.filter(s => s.hasDoubleSpace).map(s => s.index);
+    const applicableExpected = expectedIndices.filter(exp => exp <= sentences.length);
+    const matchedExpected = applicableExpected.filter(exp => markedIndices.includes(exp));
+    const missingExpected = applicableExpected.filter(exp => !markedIndices.includes(exp));
+    const isValidSignature = applicableExpected.length > 0 && applicableExpected.length === matchedExpected.length;
+
+    return {
+        sentences,
+        totalSentences: sentences.length,
+        markedIndices,
+        applicableExpected,
+        matchedExpected,
+        missingExpected,
+        isValidSignature
+    };
+};
+
 export const injectParagraphZwnj = (text) => {
     if (!text) return '';
     const zwnj = '\u200C';
@@ -110,6 +475,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [registeredKeys, setRegisteredKeys] = useState([]);
     const [showZwnjLabModal, setShowZwnjLabModal] = useState(false);
     const [zwnjTestInput, setZwnjTestInput] = useState('');
+    const [labActiveTab, setLabActiveTab] = useState('conversation'); // 'conversation' | 'homoglyph' | 'spacing' | 'zwnj'
     const copyCountRef = useRef(0);
 
     // Floating windows state (transportables, redimensionnables, rétractables)
@@ -296,7 +662,19 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         setAiNotesText(e.target.value);
     };
 
-    // Keyboard handlers: Ctrl+V is fully authorized, Ctrl+C / Ctrl+X are strictly blocked
+    const handleBlockedPaste = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showToast("⚠️ Le copier-coller est interdit. La rédaction doit être tapée au clavier pour valider votre bonus d'examen !");
+    };
+
+    const handleBlockedCopy = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showToast("⚠️ Le copier-coller sortant (Ctrl+C) est bloqué. Utilisez le bouton '📋 Copier pour l'IA' pour exporter votre travail.");
+    };
+
+    // Keyboard handlers: strictly block Ctrl+C, Ctrl+X and Ctrl+V
     const handleKeyDown = (e) => {
         if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
             e.preventDefault();
@@ -308,12 +686,11 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             e.stopPropagation();
             showToast("⚠️ Couper interdit. Utilisez la touche Suppr.");
         }
-    };
-
-    const handleBlockedCopy = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showToast("⚠️ Le copier-coller sortant (Ctrl+C) est bloqué. Utilisez le bouton '📋 Copier pour l'IA' pour exporter votre travail.");
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showToast("⚠️ Le copier-coller est interdit. La rédaction doit être tapée au clavier pour valider votre bonus d'examen !");
+        }
     };
 
     const handleUndo = () => {
@@ -440,6 +817,9 @@ Commence par cette mention explicite :
 "📈 MARGE DE PROGRESSION : Tu as encore de précieux points bonus d'examen à aller chercher pour ton prochain contrôle sur table !"
 Puis donne-moi 2 ou 3 pistes prioritaires concrètes sur la méthode AEI (Affirmer, Expliquer, Illustrer), les arguments ou notions oubliés et l'équilibre du plan, sans jamais rédiger à ma place.`;
 
+        const preparedDraft = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanDraft)));
+        const preparedEssay = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanEssay)));
+
         let textToCopy = '';
 
         if (isAttempt1) {
@@ -448,10 +828,10 @@ Puis donne-moi 2 ou 3 pistes prioritaires concrètes sur la méthode AEI (Affirm
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON / PLAN INITIAL : ---
-${watermark}${injectParagraphZwnj(cleanDraft)}
+${watermark}${preparedDraft}
 
 --- MON 1ER ESSAI RÉDIGÉ (V1) : ---
-${watermark}${injectParagraphZwnj(cleanEssay)}
+${watermark}${preparedEssay}
 
 Consignes pour le tuteur :
 Analyse mon plan au brouillon et ma rédaction V1. Repère les points forts et 2 ou 3 axes majeurs d'approfondissement (arguments, méthode, nuances).
@@ -462,7 +842,7 @@ ${bonusGuidance}`;
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MON PLAN / BROUILLON RÉVISÉ (Essai n°${attemptsCount}) : ---
-${watermark}${injectParagraphZwnj(cleanDraft)}
+${watermark}${preparedDraft}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -477,7 +857,7 @@ ${bonusGuidance}`;
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MA NOUVELLE TENTATIVE RÉDIGÉE (Essai n°${attemptsCount}) : ---
-${watermark}${injectParagraphZwnj(cleanEssay)}
+${watermark}${preparedEssay}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -492,10 +872,10 @@ ${bonusGuidance}`;
 [SUJET DU DEVOIR : "${topicText}"]
 
 --- MON BROUILLON & PLAN CONSOLIDÉ (Essai n°${attemptsCount}) : ---
-${watermark}${injectParagraphZwnj(cleanDraft)}
+${watermark}${preparedDraft}
 
 --- MA NOUVELLE TENTATIVE RÉDIGÉE : ---
-${watermark}${injectParagraphZwnj(cleanEssay)}
+${watermark}${preparedEssay}
 
 --- MES DERNIÈRES NOTES DE TES CONSEILS : ---
 ${aiNotesText.trim() || "(Conseils précédents)"}
@@ -512,6 +892,9 @@ ${bonusGuidance}`;
             : copyTargetMode === 'essay'
             ? 'Devoir rédigé'
             : 'Brouillon + Devoir';
+
+        // Injecte les homoglyphes invisibles sur l'ENSEMBLE du texte copié (en-têtes, consignes, sujet, brouillon, devoir)
+        textToCopy = injectHomoglyphs(textToCopy, 2);
 
         try {
             await navigator.clipboard.writeText(textToCopy);
@@ -745,15 +1128,6 @@ ${bonusGuidance}`;
                         <span>{formatTimer(sessionSeconds)}</span>
                         <span className="text-[10px] font-bold text-slate-400">/ min {minTimeMinutes}m</span>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setShowZwnjLabModal(true)}
-                        className="text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-500/50 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
-                        title="Ouvrir le laboratoire de test du caractère invisible \u200C"
-                    >
-                        <span>🔬</span>
-                        <span>Labo \u200C</span>
-                    </button>
                     <button type="button" className="conda-redaction-quit-btn" onClick={onQuit}>
                         Quitter
                     </button>
@@ -967,6 +1341,7 @@ ${bonusGuidance}`;
                                 onKeyDown={handleKeyDown}
                                 onCopy={handleBlockedCopy}
                                 onCut={handleBlockedCopy}
+                                onPaste={handleBlockedPaste}
                             />
                         </div>
                         <div className="v8-win-resize n" onMouseDown={(e) => startWindowResize(e, 'draft', 'n')} />
@@ -1017,6 +1392,7 @@ ${bonusGuidance}`;
                                 onKeyDown={handleKeyDown}
                                 onCopy={handleBlockedCopy}
                                 onCut={handleBlockedCopy}
+                                onPaste={handleBlockedPaste}
                             />
                         </div>
                         <div className="v8-win-resize n" onMouseDown={(e) => startWindowResize(e, 'response', 'n')} />
@@ -1080,6 +1456,7 @@ ${bonusGuidance}`;
                         }}
                         onCopy={handleBlockedCopy}
                         onCut={handleBlockedCopy}
+                        onPaste={handleBlockedPaste}
                     />
 
                     <div className="conda-redaction-actions-bar">
@@ -1246,6 +1623,7 @@ ${bonusGuidance}`;
                         onKeyDown={handleKeyDown}
                         onCopy={handleBlockedCopy}
                         onCut={handleBlockedCopy}
+                        onPaste={handleBlockedPaste}
                     />
                 </aside>
             </main>
@@ -1299,6 +1677,7 @@ ${bonusGuidance}`;
                                 onKeyDown={handleKeyDown}
                                 onCopy={handleBlockedCopy}
                                 onCut={handleBlockedCopy}
+                                onPaste={handleBlockedPaste}
                                 autoFocus
                             />
                         </div>
@@ -1397,6 +1776,7 @@ ${bonusGuidance}`;
                                     onKeyDown={handleKeyDown}
                                     onCopy={handleBlockedCopy}
                                     onCut={handleBlockedCopy}
+                                    onPaste={handleBlockedPaste}
                                 />
                             </div>
 
@@ -1416,6 +1796,7 @@ ${bonusGuidance}`;
                                     onKeyDown={handleKeyDown}
                                     onCopy={handleBlockedCopy}
                                     onCut={handleBlockedCopy}
+                                    onPaste={handleBlockedPaste}
                                 />
                             </div>
 
@@ -1504,127 +1885,593 @@ ${bonusGuidance}`;
                 );
             })()}
 
-            {/* Laboratoire de Test Invisible \u200C */}
+            {/* Laboratoire Expérimental Anti-Triche */}
             {showZwnjLabModal && (() => {
-                const analysis = analyzeZwnjText(zwnjTestInput);
+                const conversationBlocks = parseConversationBlocks(zwnjTestInput);
+                const homoglyphAnalysis = analyzeHomoglyphs(zwnjTestInput);
+                const spacingAnalysis = analyzeSentenceSpacing(zwnjTestInput, TARGET_WATERMARK_SENTENCES);
+                const zwnjAnalysis = analyzeZwnjText(zwnjTestInput);
+
+                const promptBlocksCount = conversationBlocks.filter(b => b.type === 'conda_prompt').length;
+                const aiBlocksCount = conversationBlocks.filter(b => b.type === 'ai_response').length;
+                const interactionBlocksCount = conversationBlocks.filter(b => b.type === 'student_interaction').length;
+                const suspiciousBlocksCount = conversationBlocks.filter(b => b.type === 'suspicious_external').length;
+
                 return (
                     <div className="conda-redaction-modal-overlay">
-                        <div className="bg-slate-900 border border-purple-500/60 rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 text-left max-h-[92vh] overflow-y-auto">
+                        <div className="bg-slate-900 border border-blue-500/60 rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 text-left max-h-[92vh] overflow-y-auto">
+                            {/* Header */}
                             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                                 <div className="flex items-center gap-3">
                                     <span className="text-3xl">🔬</span>
                                     <div>
                                         <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-                                            <span>Laboratoire de Détection Invisible</span>
-                                            <span className="bg-purple-500/20 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded border border-purple-500/40">\u200C</span>
+                                            <span>Laboratoire Expérimental Anti-Triche</span>
                                         </h3>
                                         <p className="text-xs text-slate-400 m-0">
-                                            Testez en direct si le caractère invisible \u200C survit aux collages et permet de distinguer les paragraphes CondaWeb de ceux d'une autre IA.
+                                            Découpez et qualifiez chaque message : Prompts CondaWeb, Réponses de l'IA et Questions libres de l'élève.
                                         </p>
                                     </div>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setShowZwnjLabModal(false)}
-                                    className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg"
+                                    className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg cursor-pointer"
                                 >
                                     ✕
                                 </button>
                             </div>
 
-                            {/* Quick actions & generator */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-purple-950/30 border border-purple-500/30 rounded-2xl">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-purple-300">Générer un extrait test :</span>
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            const sample = `\u200CCeci est un paragraphe test officiel généré depuis CondaWeb avec l'empreinte invisible U+200C.\u200C`;
-                                            await navigator.clipboard.writeText(sample);
-                                            showToast("📋 Paragraphe test CondaWeb (avec \\u200C) copié dans le presse-papier !");
-                                        }}
-                                        className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow"
-                                    >
-                                        <span>📋</span>
-                                        <span>Copier 1 paragraphe test avec \u200C</span>
-                                    </button>
-                                </div>
+                            {/* Mode Tabs */}
+                            <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 overflow-x-auto">
                                 <button
                                     type="button"
-                                    onClick={() => setZwnjTestInput('')}
-                                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl font-medium transition"
+                                    onClick={() => setLabActiveTab('conversation')}
+                                    className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                                        labActiveTab === 'conversation'
+                                            ? 'bg-blue-600 text-white shadow-md'
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
                                 >
-                                    🧹 Vider la zone
+                                    <span>💬</span>
+                                    <span>Découpeur Conversation (Nouveau)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setLabActiveTab('homoglyph')}
+                                    className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                                        labActiveTab === 'homoglyph'
+                                            ? 'bg-emerald-600 text-white shadow-md'
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <span>🛡️</span>
+                                    <span>Homoglyphes Invisibles</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setLabActiveTab('spacing')}
+                                    className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                                        labActiveTab === 'spacing'
+                                            ? 'bg-indigo-600 text-white shadow-md'
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <span>📐</span>
+                                    <span>Espaces (1, 3, 8)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setLabActiveTab('zwnj')}
+                                    className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                                        labActiveTab === 'zwnj'
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <span>👻</span>
+                                    <span>Code \u200C</span>
                                 </button>
                             </div>
 
-                            {/* Textarea for pasting */}
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
-                                    <span>Collez ici votre texte mixte (paragraphes CondaWeb et/ou paragraphes d'une autre IA) :</span>
-                                    <span className="text-[10px] text-purple-400 font-mono">Ctrl+V / Cmd+V autorisé</span>
-                                </label>
-                                <textarea
-                                    className="w-full h-32 p-3 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-purple-500 resize-y placeholder:text-slate-600"
-                                    placeholder="Collez ici du texte provenant de CondaWeb, Gemini, ChatGPT, etc. Le laboratoire va analyser chaque paragraphe en direct..."
-                                    value={zwnjTestInput}
-                                    onChange={(e) => setZwnjTestInput(e.target.value)}
-                                />
-                            </div>
+                            {/* TAB: Découpeur de Conversation */}
+                            {labActiveTab === 'conversation' && (
+                                <div className="space-y-3">
+                                    {/* Action bar */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-blue-950/30 border border-blue-500/30 rounded-2xl">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-blue-300">Générateur test :</span>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    await navigator.clipboard.writeText(SAMPLE_CONVERSATION_TEXT);
+                                                    showToast("📋 Conversation test complète copiée (Prompt + Réponse Gemini + Question élève) !");
+                                                }}
+                                                className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow cursor-pointer"
+                                            >
+                                                <span>📋</span>
+                                                <span>Copier 1 conversation complète test (Prompt + Réponse + Question)</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setZwnjTestInput('')}
+                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl font-medium transition cursor-pointer"
+                                        >
+                                            🧹 Vider la zone
+                                        </button>
+                                    </div>
 
-                            {/* Live Analysis Counters */}
-                            {zwnjTestInput.trim() && (
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                    <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Total Paragraphes</div>
-                                        <div className="text-lg font-black text-white">{analysis.paragraphs.length}</div>
+                                    {/* Explanation note */}
+                                    <p className="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-2xl border border-slate-800 m-0 leading-relaxed">
+                                        💡 <strong>Règle pédagogique :</strong> L'élève a le droit de poser toutes ses questions à l'IA (<span className="text-indigo-300 font-bold">💬 Dialogue Pédagogique libre</span>). 
+                                        Seul le bloc de dépôt du travail (<span className="text-emerald-300 font-bold">🟦 Prompt Devoir</span>) doit être authentifié par CondaWeb. Si un bloc rédigé externe arrive sans signature (<span className="text-rose-400 font-bold">🚨 Fraude</span>), il est immédiatement isolé !
+                                    </p>
+
+                                    {/* Input zone */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                                            <span>Collez ici l'échange complet avec l'IA (sélectionné depuis Gemini ou ChatGPT) :</span>
+                                            <span className="text-[10px] text-blue-400 font-mono">Segmentation automatique</span>
+                                        </label>
+                                        <textarea
+                                            className="w-full h-32 p-3 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-blue-500 resize-y placeholder:text-slate-600"
+                                            placeholder="Collez ici l'échange complet de discussion avec l'IA. Le système va automatiquement segmenter et classifier chaque message..."
+                                            value={zwnjTestInput}
+                                            onChange={(e) => setZwnjTestInput(e.target.value)}
+                                        />
                                     </div>
-                                    <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-center">
-                                        <div className="text-[10px] uppercase font-bold text-emerald-400">🟢 CondaWeb</div>
-                                        <div className="text-lg font-black text-emerald-300">{analysis.condaCount}</div>
-                                    </div>
-                                    <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 text-center">
-                                        <div className="text-[10px] uppercase font-bold text-rose-400">🔴 Autre IA / Externe</div>
-                                        <div className="text-lg font-black text-rose-300">{analysis.externalCount}</div>
-                                    </div>
-                                    <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 text-center">
-                                        <div className="text-[10px] uppercase font-bold text-purple-400">Total \u200C trouvés</div>
-                                        <div className="text-lg font-black text-purple-300">{analysis.totalZwnj}</div>
-                                    </div>
+
+                                    {/* Live breakdown counters */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-slate-400">Total Blocs</div>
+                                                <div className="text-lg font-black text-white">{conversationBlocks.length}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-teal-950/40 border border-teal-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-teal-400">🛡️ Homoglyphes</div>
+                                                <div className="text-lg font-black text-teal-300">{homoglyphAnalysis.totalHomoglyphs}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-emerald-400">🟦 Prompts Conda</div>
+                                                <div className="text-lg font-black text-emerald-300">{promptBlocksCount}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-purple-400">🟪 Réponses IA</div>
+                                                <div className="text-lg font-black text-purple-300">{aiBlocksCount}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400">🟩 Questions Élève</div>
+                                                <div className="text-lg font-black text-indigo-300">{interactionBlocksCount}</div>
+                                            </div>
+                                            <div className={`p-2.5 rounded-xl border text-center ${
+                                                suspiciousBlocksCount === 0
+                                                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+                                                    : 'bg-rose-950/50 border-rose-500 text-rose-300'
+                                            }`}>
+                                                <div className="text-[10px] uppercase font-bold">🚨 Blocs Suspects</div>
+                                                <div className="text-lg font-black">{suspiciousBlocksCount}</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Block-by-block visual rendering */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                                            <div className="text-xs font-bold text-slate-300 sticky top-0 bg-slate-900 py-1">
+                                                Décomposition chronologique de la conversation :
+                                            </div>
+                                            {conversationBlocks.map((b) => (
+                                                <div
+                                                    key={b.index}
+                                                    className={`p-3 rounded-2xl border text-xs space-y-1.5 transition ${
+                                                        b.type === 'conda_prompt'
+                                                            ? 'bg-emerald-950/30 border-emerald-500/60'
+                                                            : b.type === 'ai_response'
+                                                            ? 'bg-purple-950/30 border-purple-500/60'
+                                                            : b.type === 'student_interaction'
+                                                            ? 'bg-indigo-950/30 border-indigo-500/60'
+                                                            : 'bg-rose-950/40 border-rose-500'
+                                                    }`}
+                                                >
+                                                    <div className="flex flex-wrap items-center justify-between gap-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-black text-sm">
+                                                                {b.type === 'conda_prompt' && '🟦'}
+                                                                {b.type === 'ai_response' && '🟪'}
+                                                                {b.type === 'student_interaction' && '🟩'}
+                                                                {b.type === 'suspicious_external' && '🚨'}
+                                                                {' '}Message #{b.index} : {b.title}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {b.homoglyphsCount > 0 && (
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                                                                    🛡️ {b.homoglyphsCount} homoglyphes
+                                                                </span>
+                                                            )}
+                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                                                b.badgeColor === 'emerald'
+                                                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                                                    : b.badgeColor === 'purple'
+                                                                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                                                                    : b.badgeColor === 'indigo'
+                                                                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                                                                    : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                                            }`}>
+                                                                {b.badge}
+                                                            </span>
+                                                            <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                                                {b.wordsCount} mots
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <p className="text-[11px] text-slate-300 m-0">
+                                                        {b.description}
+                                                    </p>
+
+                                                    <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-[11px] font-mono text-slate-200 max-h-36 overflow-y-auto whitespace-pre-wrap break-words">
+                                                        {b.content}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
-                            {/* Paragraph-by-paragraph breakdown */}
-                            {zwnjTestInput.trim() && (
-                                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                                    <div className="text-xs font-bold text-slate-300 sticky top-0 bg-slate-900 py-1">
-                                        Analyse détaillée par bloc de texte :
-                                    </div>
-                                    {analysis.paragraphs.map((p) => (
-                                        <div
-                                            key={p.index}
-                                            className={`p-3 rounded-xl border text-xs space-y-1.5 transition ${
-                                                p.isConda
-                                                    ? 'bg-emerald-950/30 border-emerald-500/60 text-emerald-100'
-                                                    : 'bg-rose-950/30 border-rose-500/60 text-rose-100'
-                                            }`}
+                            {/* TAB 0: Homoglyphes Invisibles (Cyrillique) */}
+                            {labActiveTab === 'homoglyph' && (
+                                <div className="space-y-3">
+                                    {/* Action bar */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-emerald-300">Générateur test :</span>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    await navigator.clipboard.writeText(SAMPLE_HOMOGLYPH_TEXT);
+                                                    showToast("📋 Texte test avec Homoglyphes invisibles (Cyrillique) copié dans le presse-papier !");
+                                                }}
+                                                className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow cursor-pointer"
+                                            >
+                                                <span>📋</span>
+                                                <span>Copier 1 extrait test avec Homoglyphes invisibles</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setZwnjTestInput('')}
+                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl font-medium transition cursor-pointer"
                                         >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-base">{p.isConda ? '🟢' : '🔴'}</span>
-                                                    <span className="font-bold">
-                                                        Paragraphe {p.index} : {p.isConda ? 'Origine CondaWeb confirmée' : 'Origine Externe / Autre IA (Non marqué)'}
-                                                    </span>
-                                                </div>
-                                                <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700">
-                                                    \u200C: <strong className={p.zwnjCount > 0 ? 'text-emerald-400' : 'text-slate-500'}>{p.zwnjCount}</strong> | \u200B: {p.zwsCount} | \u200D: {p.zwjCount}
+                                            🧹 Vider la zone
+                                        </button>
+                                    </div>
+
+                                    {/* Explanation note */}
+                                    <p className="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-2xl border border-slate-800 m-0 leading-relaxed">
+                                        💡 <strong>Principe :</strong> Certaines lettres 'e' et 'a' sont remplacées par leur jumeau cyrillique (U+0435, U+0430). 
+                                        Visuellement à l'écran, c'est <strong>strictement indiscernable</strong> pour l'élève. Mais comme ce sont de vraies lettres de l'alphabet, aucun navigateur ni presse-papier ne peut les effacer !
+                                    </p>
+
+                                    {/* Input zone */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                                            <span>Collez ici le texte copié depuis CondaWeb, ou revenant de Gemini / ChatGPT :</span>
+                                            <span className="text-[10px] text-emerald-400 font-mono">Scan Unicode temps réel</span>
+                                        </label>
+                                        <textarea
+                                            className="w-full h-28 p-3 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-emerald-500 resize-y placeholder:text-slate-600"
+                                            placeholder="Collez ici le texte à tester. Le laboratoire va scanner chaque caractère à la recherche de lettres homoglyphes..."
+                                            value={zwnjTestInput}
+                                            onChange={(e) => setZwnjTestInput(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {/* Live homoglyph counters */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-slate-400">Total Mots Scannés</div>
+                                                <div className="text-lg font-black text-white">{zwnjTestInput.trim().split(/\s+/).length}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-emerald-400">Homoglyphes Trouvés</div>
+                                                <div className="text-lg font-black text-emerald-300">{homoglyphAnalysis.totalHomoglyphs}</div>
+                                                <div className="text-[9px] text-emerald-400 font-mono">
+                                                    е: {homoglyphAnalysis.breakdown.e_cyrillic} | а: {homoglyphAnalysis.breakdown.a_cyrillic} | о: {homoglyphAnalysis.breakdown.o_cyrillic}
                                                 </div>
                                             </div>
-                                            <p className="text-slate-300 font-mono text-[11px] bg-slate-950/70 p-2 rounded-lg border border-slate-800 m-0 break-words">
-                                                {p.text}
-                                            </p>
+                                            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-purple-400">Mots Signés</div>
+                                                <div className="text-lg font-black text-purple-300">{homoglyphAnalysis.matches.length}</div>
+                                            </div>
+                                            <div className={`p-2.5 rounded-xl border text-center ${
+                                                homoglyphAnalysis.isAuthenticCondaWeb
+                                                    ? 'bg-emerald-950/50 border-emerald-500 text-emerald-300'
+                                                    : 'bg-rose-950/50 border-rose-500 text-rose-300'
+                                            }`}>
+                                                <div className="text-[10px] uppercase font-bold">Authentification</div>
+                                                <div className="text-xs font-black mt-1">
+                                                    {homoglyphAnalysis.isAuthenticCondaWeb
+                                                        ? '🟢 AUTHENTIFIÉ CONDAWEB'
+                                                        : '🔴 NON SIGNÉ / EXTERNE'}
+                                                </div>
+                                            </div>
                                         </div>
-                                    ))}
+                                    )}
+
+                                    {/* Breakdown of detected words */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                            <div className="text-xs font-bold text-slate-300 sticky top-0 bg-slate-900 py-1">
+                                                Détail des mots contenant l'empreinte invisible :
+                                            </div>
+                                            {homoglyphAnalysis.matches.length > 0 ? (
+                                                homoglyphAnalysis.matches.map((m, idx) => (
+                                                    <div key={idx} className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/50 text-xs flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-emerald-400 font-bold">Mot n°{m.wordIndex} :</span>
+                                                            <span className="font-mono text-white bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                                                                {m.word}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {m.chars.map((c, cIdx) => (
+                                                                <span key={cIdx} className="text-[10px] font-mono bg-emerald-900/60 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/40">
+                                                                    Lettre: <strong>{c.char}</strong> ({c.name} {c.codeHex})
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/40 text-rose-300 text-xs text-center">
+                                                    ❌ Aucun homoglyphe cyrillique détecté dans ce texte. Ce texte utilise 100% de caractères latins ordinaires (soit il provient directement d'une autre IA sans passer par CondaWeb, soit l'échange complet n'a pas été collé).
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* TAB 1: Code Espaces (Phrases 1, 3, 8) */}
+                            {labActiveTab === 'spacing' && (
+                                <div className="space-y-3">
+                                    {/* Action bar */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-indigo-950/30 border border-indigo-500/30 rounded-2xl">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-indigo-300">Générateur test :</span>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    await navigator.clipboard.writeText(SAMPLE_WATERMARK_TEXT);
+                                                    showToast("📋 Texte test officiel (8 phrases avec double-espace sur 1, 3 et 8) copié !");
+                                                }}
+                                                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow cursor-pointer"
+                                            >
+                                                <span>📋</span>
+                                                <span>Copier 1 extrait test officiel (Phrases 1, 3, 8)</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setZwnjTestInput('')}
+                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl font-medium transition cursor-pointer"
+                                        >
+                                            🧹 Vider la zone
+                                        </button>
+                                    </div>
+
+                                    {/* Input zone */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                                            <span>Collez ici le texte copié depuis CondaWeb, ou revenant de Gemini / ChatGPT :</span>
+                                            <span className="text-[10px] text-indigo-400 font-mono">Détection temps réel</span>
+                                        </label>
+                                        <textarea
+                                            className="w-full h-28 p-3 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                            placeholder="Collez ici le texte à tester. Le laboratoire va analyser le nombre d'espaces après chaque point..."
+                                            value={zwnjTestInput}
+                                            onChange={(e) => setZwnjTestInput(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {/* Live spacing diagnostic counters */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-slate-400">Total Phrases</div>
+                                                <div className="text-lg font-black text-white">{spacingAnalysis.totalSentences}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400">Doubles Espaces</div>
+                                                <div className="text-lg font-black text-indigo-300">{spacingAnalysis.markedIndices.length}</div>
+                                                <div className="text-[9px] text-indigo-400 font-mono">Phrases : {spacingAnalysis.markedIndices.join(', ') || 'Aucune'}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-amber-400">Cibles 1, 3, 8 Détectées</div>
+                                                <div className="text-lg font-black text-amber-300">
+                                                    {spacingAnalysis.matchedExpected.length} / {spacingAnalysis.applicableExpected.length}
+                                                </div>
+                                                <div className="text-[9px] text-amber-400 font-mono">Attendues : {spacingAnalysis.applicableExpected.join(', ') || '1, 3, 8'}</div>
+                                            </div>
+                                            <div className={`p-2.5 rounded-xl border text-center ${
+                                                spacingAnalysis.isValidSignature
+                                                    ? 'bg-emerald-950/50 border-emerald-500 text-emerald-300'
+                                                    : spacingAnalysis.matchedExpected.length > 0
+                                                    ? 'bg-amber-950/50 border-amber-500 text-amber-300'
+                                                    : 'bg-rose-950/50 border-rose-500 text-rose-300'
+                                            }`}>
+                                                <div className="text-[10px] uppercase font-bold">Diagnostic</div>
+                                                <div className="text-xs font-black mt-1">
+                                                    {spacingAnalysis.isValidSignature
+                                                        ? '🟢 SIGNATURE 1, 3, 8 VALIDÉE !'
+                                                        : spacingAnalysis.matchedExpected.length > 0
+                                                        ? '🟡 PARTIELLEMENT PRÉSERVÉ'
+                                                        : '🔴 ÉCHEC : ESPACES EFFACÉS'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Sentence-by-sentence breakdown */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                            <div className="text-xs font-bold text-slate-300 sticky top-0 bg-slate-900 py-1">
+                                                Analyse détaillée phrase par phrase :
+                                            </div>
+                                            {spacingAnalysis.sentences.map((s) => (
+                                                <div
+                                                    key={s.index}
+                                                    className={`p-2.5 rounded-xl border text-xs space-y-1.5 transition ${
+                                                        s.status === 'MATCH'
+                                                            ? 'bg-emerald-950/30 border-emerald-500/60 text-emerald-100'
+                                                            : s.status === 'MISSING_MARK'
+                                                            ? 'bg-rose-950/30 border-rose-500/60 text-rose-100'
+                                                            : s.status === 'UNEXPECTED_DOUBLE'
+                                                            ? 'bg-amber-950/30 border-amber-500/60 text-amber-100'
+                                                            : 'bg-slate-950/40 border-slate-800 text-slate-300'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold">
+                                                                {s.status === 'MATCH' && '🟢'}
+                                                                {s.status === 'MISSING_MARK' && '🔴'}
+                                                                {s.status === 'UNEXPECTED_DOUBLE' && '🟡'}
+                                                                {s.status === 'NORMAL' && '⚪'}
+                                                                {' '}Phrase n°{s.index}
+                                                                {s.isExpected && <span className="ml-1 text-[10px] uppercase font-bold text-indigo-300 bg-indigo-950/80 px-1.5 py-0.5 rounded border border-indigo-800">Cible officielle</span>}
+                                                            </span>
+                                                            <span className="text-[11px] font-medium">
+                                                                {s.status === 'MATCH' && 'Double espace PRÉSERVÉ après le point (.  )'}
+                                                                {s.status === 'MISSING_MARK' && 'ÉCHEC : L\'espace supplémentaire a été EFFACÉ (1 seul espace trouvé)'}
+                                                                {s.status === 'NORMAL' && 'Standard (1 seul espace après le point)'}
+                                                                {s.status === 'UNEXPECTED_DOUBLE' && `Double espace inattendu (${s.spaceCount} espaces)`}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700">
+                                                            Espaces après le point : <strong className={s.hasDoubleSpace ? 'text-emerald-400' : 'text-slate-400'}>{s.spaceCount}</strong>
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-slate-300 font-mono text-[11px] bg-slate-950/80 p-2 rounded-lg border border-slate-800/80 m-0 break-words">
+                                                        {s.text}
+                                                        <span className={`ml-1 font-bold px-1.5 py-0.2 rounded text-[10px] ${
+                                                            s.hasDoubleSpace
+                                                                ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
+                                                                : 'bg-slate-800 text-slate-400'
+                                                        }`}>
+                                                            [{s.spaceCount} {s.spaceCount > 1 ? 'espaces' : 'espace'}]
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* TAB 2: Invisible ZWNJ (\u200C) */}
+                            {labActiveTab === 'zwnj' && (
+                                <div className="space-y-3">
+                                    {/* Action bar */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-purple-950/30 border border-purple-500/30 rounded-2xl">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-purple-300">Générer un extrait test :</span>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    const sample = `\u200CCeci est un paragraphe test officiel généré depuis CondaWeb avec l'empreinte invisible U+200C.\u200C`;
+                                                    await navigator.clipboard.writeText(sample);
+                                                    showToast("📋 Paragraphe test CondaWeb (avec \\u200C) copié dans le presse-papier !");
+                                                }}
+                                                className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow cursor-pointer"
+                                            >
+                                                <span>📋</span>
+                                                <span>Copier 1 paragraphe test avec \u200C</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setZwnjTestInput('')}
+                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl font-medium transition cursor-pointer"
+                                        >
+                                            🧹 Vider la zone
+                                        </button>
+                                    </div>
+
+                                    {/* Textarea for pasting */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                                            <span>Collez ici votre texte mixte (paragraphes CondaWeb et/ou paragraphes d'une autre IA) :</span>
+                                            <span className="text-[10px] text-purple-400 font-mono">Ctrl+V / Cmd+V autorisé</span>
+                                        </label>
+                                        <textarea
+                                            className="w-full h-28 p-3 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-purple-500 resize-y placeholder:text-slate-600"
+                                            placeholder="Collez ici du texte provenant de CondaWeb, Gemini, ChatGPT, etc. Le laboratoire va analyser chaque paragraphe en direct..."
+                                            value={zwnjTestInput}
+                                            onChange={(e) => setZwnjTestInput(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {/* Live Analysis Counters */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-slate-400">Total Paragraphes</div>
+                                                <div className="text-lg font-black text-white">{zwnjAnalysis.paragraphs.length}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-emerald-400">🟢 CondaWeb</div>
+                                                <div className="text-lg font-black text-emerald-300">{zwnjAnalysis.condaCount}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-rose-400">🔴 Autre IA / Externe</div>
+                                                <div className="text-lg font-black text-rose-300">{zwnjAnalysis.externalCount}</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 text-center">
+                                                <div className="text-[10px] uppercase font-bold text-purple-400">Total \u200C trouvés</div>
+                                                <div className="text-lg font-black text-purple-300">{zwnjAnalysis.totalZwnj}</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Paragraph-by-paragraph breakdown */}
+                                    {zwnjTestInput.trim() && (
+                                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                            <div className="text-xs font-bold text-slate-300 sticky top-0 bg-slate-900 py-1">
+                                                Analyse détaillée par bloc de texte :
+                                            </div>
+                                            {zwnjAnalysis.paragraphs.map((p) => (
+                                                <div
+                                                    key={p.index}
+                                                    className={`p-3 rounded-xl border text-xs space-y-1.5 transition ${
+                                                        p.isConda
+                                                            ? 'bg-emerald-950/30 border-emerald-500/60 text-emerald-100'
+                                                            : 'bg-rose-950/30 border-rose-500/60 text-rose-100'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-base">{p.isConda ? '🟢' : '🔴'}</span>
+                                                            <span className="font-bold">
+                                                                Paragraphe {p.index} : {p.isConda ? 'Origine CondaWeb confirmée' : 'Origine Externe / Autre IA (Non marqué)'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700">
+                                                            \u200C: <strong className={p.zwnjCount > 0 ? 'text-emerald-400' : 'text-slate-500'}>{p.zwnjCount}</strong> | \u200B: {p.zwsCount} | \u200D: {p.zwjCount}
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-slate-300 font-mono text-[11px] bg-slate-950/70 p-2 rounded-lg border border-slate-800 m-0 break-words">
+                                                        {p.text}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1632,7 +2479,7 @@ ${bonusGuidance}`;
                                 <button
                                     type="button"
                                     onClick={() => setShowZwnjLabModal(false)}
-                                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition"
+                                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer"
                                 >
                                     Fermer le laboratoire
                                 </button>
