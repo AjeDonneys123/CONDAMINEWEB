@@ -671,7 +671,34 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     updateWritingTrace('draft', newValue, draftText);
     setDraftText(newValue);
   };
-  const handlePaste = () => {};
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage('');
+    }, 3500);
+  };
+
+  const handleBlockedPaste = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCheatFlags((prev) => ({ ...prev, pasteBursts: prev.pasteBursts + 1 }));
+    showToast("⚠️ Le copier-coller est interdit. La réponse doit être tapée au clavier pour valider votre travail !");
+  };
+
+  const handleKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setCheatFlags((prev) => ({ ...prev, pasteBursts: prev.pasteBursts + 1 }));
+      showToast("⚠️ Le copier-coller est interdit. La réponse doit être tapée au clavier pour valider votre travail !");
+    }
+  };
+
+  const handlePaste = handleBlockedPaste;
 
   useEffect(() => {
     if (!fillDrag) return undefined;
@@ -1328,7 +1355,14 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   <textarea className="answer-input fill-hidden-answer" value={fillBoxesToAnswer()} readOnly />
                 </div>
               ) : (
-                <textarea className="answer-input" value={answer} onChange={handleInputCheck} placeholder="Votre réponse ici..." />
+                <textarea
+                  className="answer-input"
+                  value={answer}
+                  onChange={handleInputCheck}
+                  onPaste={handleBlockedPaste}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Votre réponse ici..."
+                />
               )}
               <div className="v8-footer-actions">
                   <div className="v8-footer-left">
@@ -1407,7 +1441,14 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       {draftDoc.loading && <div className="v8-draft-loading">Création du brouillon Google...</div>}
                       {!draftDoc.loading && (
                         <div className="v8-draft-fallback">
-                          <textarea className="v8-draft-input" placeholder="Écris ton brouillon ici..." value={draftText} onChange={handleDraftChange} />
+                          <textarea
+                            className="v8-draft-input"
+                            placeholder="Écris ton brouillon ici..."
+                            value={draftText}
+                            onChange={handleDraftChange}
+                            onPaste={handleBlockedPaste}
+                            onKeyDown={handleKeyDown}
+                          />
                         </div>
                       )}
                       {draftDoc.error && <div className="v8-draft-error">{draftDoc.error}</div>}
@@ -1429,7 +1470,14 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       <button onClick={() => setShowResponseModal(false)} onMouseDown={(e) => e.stopPropagation()}>✕</button>
                   </div>
                   <div className="v8-layer-body">
-                      <textarea className="v8-response-input" placeholder="Rédige ta réponse ici..." value={answer} onChange={handleInputCheck} />
+                      <textarea
+                        className="v8-response-input"
+                        placeholder="Rédige ta réponse ici..."
+                        value={answer}
+                        onChange={handleInputCheck}
+                        onPaste={handleBlockedPaste}
+                        onKeyDown={handleKeyDown}
+                      />
                   </div>
                   <div className="v8-win-resize n" onMouseDown={(e) => startWindowResize(e, 'response', 'n')} />
                   <div className="v8-win-resize s" onMouseDown={(e) => startWindowResize(e, 'response', 's')} />
@@ -1567,6 +1615,25 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   {verifyState.error && <div className="v8-verify-error">{verifyState.error}</div>}
               </div>
           </div>
+      )}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          backgroundColor: '#0f172a',
+          color: '#f8fafc',
+          padding: '12px 20px',
+          borderRadius: 12,
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+          border: '1px solid #f59e0b',
+          zIndex: 99999,
+          fontWeight: 'bold',
+          fontSize: 14,
+          maxWidth: 420
+        }}>
+          {toastMessage}
+        </div>
       )}
     </div>
   );
