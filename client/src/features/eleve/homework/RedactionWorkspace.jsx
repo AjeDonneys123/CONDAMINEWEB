@@ -520,6 +520,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [aiConversationText, setAiConversationText] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [submittedResult, setSubmittedResult] = useState(null);
+    const [showProgressionGuide, setShowProgressionGuide] = useState(true);
 
     // Homework configuration
     const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
@@ -1140,6 +1141,76 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                 </div>
                 <p className="conda-redaction-topic-text">{topicText}</p>
             </section>
+
+            {/* Div d'explication avant le début de l'épreuve : Évaluation sur la progression */}
+            {showProgressionGuide ? (
+                <div className="conda-redaction-guide-banner">
+                    <div className="conda-redaction-guide-content">
+                        <div className="conda-redaction-guide-header">
+                            <div className="flex items-center gap-2">
+                                <span className="conda-redaction-guide-icon">🎯</span>
+                                <strong className="conda-redaction-guide-title">
+                                    Consignes de travail · Seule votre progression sera évaluée
+                                </strong>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowProgressionGuide(false)}
+                                className="conda-redaction-guide-close"
+                                title="Masquer les consignes"
+                            >
+                                ✕ Masquer
+                            </button>
+                        </div>
+
+                        <p className="conda-redaction-guide-main-text">
+                            Durant ce travail, vous devrez réaliser plusieurs versions de votre devoir. <strong>Seule votre progression sera évaluée.</strong>
+                        </p>
+
+                        <div className="conda-redaction-steps-pipeline">
+                            <div className="conda-redaction-step-item">
+                                <span className="conda-redaction-step-num">1</span>
+                                <span className="conda-redaction-step-desc">✍️ Réalisez une version</span>
+                            </div>
+                            <span className="conda-redaction-step-arrow">➔</span>
+                            <div className="conda-redaction-step-item">
+                                <span className="conda-redaction-step-num">2</span>
+                                <span className="conda-redaction-step-desc">📋 Copiez grâce au bouton</span>
+                            </div>
+                            <span className="conda-redaction-step-arrow">➔</span>
+                            <div className="conda-redaction-step-item">
+                                <span className="conda-redaction-step-num">3</span>
+                                <span className="conda-redaction-step-desc">🤖 Collez dans l'agent IA (demandez à Gemini)</span>
+                            </div>
+                            <span className="conda-redaction-step-arrow">➔</span>
+                            <div className="conda-redaction-step-item">
+                                <span className="conda-redaction-step-num">4</span>
+                                <span className="conda-redaction-step-desc">📝 Prenez des notes sur ses conseils</span>
+                            </div>
+                            <span className="conda-redaction-step-arrow">➔</span>
+                            <div className="conda-redaction-step-item highlight">
+                                <span className="conda-redaction-step-num">5</span>
+                                <span className="conda-redaction-step-desc">🔄 Recommencez</span>
+                            </div>
+                        </div>
+
+                        <p className="conda-redaction-guide-footer-text">
+                            💡 <strong>Objectif :</strong> Réaliser plusieurs versions et avoir une <strong>forte progression</strong> entre la première et la dernière version. L'IA vous aidera toujours à vous améliorer.
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div className="conda-redaction-guide-collapsed">
+                    <button
+                        type="button"
+                        onClick={() => setShowProgressionGuide(true)}
+                        className="conda-redaction-guide-reopen-btn"
+                    >
+                        <span>💡 Rappel des consignes (Évaluation sur votre progression)</span>
+                        <span className="font-mono text-xs">Afficher ▼</span>
+                    </button>
+                </div>
+            )}
 
             {/* Pinned AI Notes Status Strip (with quick button to open floating window) */}
             {pinnedAiNotes.trim() && (
