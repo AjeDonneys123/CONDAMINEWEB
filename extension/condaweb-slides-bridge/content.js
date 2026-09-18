@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.45';
+  const BRIDGE_VERSION = '1.0.46';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -110,8 +110,10 @@ function isPresentationAssociationMissingError(error) {
 function showPresentationUnlinkedBadge() {
   const text = 'Présentation non liée — ouvre-la depuis Cours';
   isConnected = false;
-  const currentLabel = document.getElementById('conda-bridge-badge-label')?.textContent;
-  if (presentationAssociationBadgeShown && currentLabel === text) return;
+  isWaitingForClass = false;
+  currentCourseId = '';
+  const currentLabel = document.querySelector('#conda-bridge-badge .conda-bridge-label')?.textContent;
+  if (presentationAssociationBadgeShown && currentLabel === `⚡ ${text}`) return;
   presentationAssociationBadgeShown = true;
   renderBadge(false, text);
 }
@@ -851,12 +853,16 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
         checkCurrentSlide();
 
+        if (presentationAssociationMissing) {
+            showPresentationUnlinkedBadge();
+            return;
+        }
+
         if (!activeClassId) {
-            isWaitingForClass = true;
-            const displayCourse = currentCourseTitle ? (currentCourseTitle.length > 18 ? currentCourseTitle.slice(0, 16) + '…' : currentCourseTitle) : '';
-            const label = displayCourse ? `${displayCourse} (Choisir classe)` : 'Choisir une classe…';
-            renderBadge(false, label);
-            renderAllOverlays();
+            if (currentCourseId) {
+                isWaitingForClass = true;
+                renderAllOverlays();
+            }
             return;
         }
         isWaitingForClass = false;
@@ -929,8 +935,10 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
     // 6. Rendu des calques visuels sans innerHTML (conforme Trusted Types de Google Docs)
     function renderAllOverlays() {
         const root = ensureOverlayRoot();
+        const isWaiting = Boolean(currentCourseId && !activeClassId && !presentationAssociationMissing);
+        isWaitingForClass = isWaiting;
         const displayCourse = currentCourseTitle ? (currentCourseTitle.length > 20 ? currentCourseTitle.slice(0, 18) + '…' : currentCourseTitle) : '';
-        const badgeText = isWaitingForClass
+        const badgeText = isWaiting
             ? (displayCourse ? `${displayCourse} (Choisir classe)` : 'Choisir une classe…')
             : (displayCourse ? `${displayCourse} (${activeClassName || 'Actif'})` : (activeClassName || 'CondaWeb Connecté'));
         if (presentationAssociationMissing) {
@@ -1869,19 +1877,29 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 label.textContent = `⚡ ${text}`;
             }
         }
-        const shouldDock = Boolean(connected || isWaitingForClass);
+        const isWaiting = Boolean(currentCourseId && !activeClassId && !presentationAssociationMissing);
+        isWaitingForClass = isWaiting;
+        const shouldDock = Boolean(connected || isWaiting);
         badge.classList.toggle('is-connected', shouldDock);
-        badge.classList.toggle('is-waiting-class', Boolean(isWaitingForClass));
-        if (isWaitingForClass) {
+        badge.classList.toggle('is-waiting-class', isWaiting);
+        if (isWaiting) {
             badge.title = 'Présentation connectée · Cliquer pour sélectionner la classe';
         } else if (connected) {
             badge.title = `Classe : ${activeClassName || 'Active'} · Cliquer pour changer de classe`;
         } else {
             badge.title = 'Non connecté · Cliquer pour reconnecter et synchroniser';
         }
-        // A failed reconnection must put the badge back in the floating area.
-        // appendChild moves the existing node without creating a duplicate.
-        if (!shouldDock && badge.parentElement !== root) root.appendChild(badge);
+
+        if (shouldDock) {
+            const dock = root.querySelector('.conda-slide-control-dock');
+            if (dock && badge.parentElement !== dock) {
+                dock.appendChild(badge);
+            }
+        } else {
+            if (badge.parentElement !== root) {
+                root.appendChild(badge);
+            }
+        }
     }
 
     // Alertes élèves (sans innerHTML)
