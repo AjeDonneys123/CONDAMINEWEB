@@ -568,6 +568,21 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   }, [pageIdx, homework?._id, user?._id, user?.id]);
 
   useEffect(() => {
+    let isMounted = true;
+    const sid = user?._id || user?.id;
+    if (!homework?._id || !sid) return;
+    fetch(`/api/eleve/homework/submission/${encodeURIComponent(homework._id)}/${encodeURIComponent(sid)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((sub) => {
+        if (!isMounted || !sub) return;
+        if (sub.content) setAnswer((prev) => prev || sub.content);
+        if (sub.draftContent) setDraftText((prev) => prev || sub.draftContent);
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, [homework?._id, user?._id, user?.id]);
+
+  useEffect(() => {
     if (!showDraft) return;
     if (!draftDoc?.docUrl) return;
     if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);

@@ -523,9 +523,80 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [showProgressionGuide, setShowProgressionGuide] = useState(true);
     const [showPreFinalWarning, setShowPreFinalWarning] = useState(false);
 
+    // 5. Reopening & Continuous Perfection State
+    const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+    const [lastSubmittedBonus, setLastSubmittedBonus] = useState(null);
+    const [initialLoading, setInitialLoading] = useState(true);
+
     // Homework configuration
     const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
     const topicText = String(homework?.promptTopic || homework?.levels?.[0]?.instruction || homework?.title || 'Sujet de rédaction');
+
+    // Fetch previous submission if student reopens an already-submitted homework to continue perfecting it
+    useEffect(() => {
+        let isMounted = true;
+        const sid = String(user?._id || user?.id || '');
+        const hwId = String(homework?._id || '');
+        if (!sid || !hwId) {
+            setInitialLoading(false);
+            return;
+        }
+
+        fetch(`/api/eleve/homework/submission/${hwId}/${sid}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((sub) => {
+                if (!isMounted || !sub) {
+                    setInitialLoading(false);
+                    return;
+                }
+                setAlreadySubmitted(true);
+                const bonus = sub.examBonusPoints ?? sub.learningEfficiency?.examBonusPoints ?? null;
+                setLastSubmittedBonus(bonus);
+
+                if (sub.content) {
+                    setEssayText(sub.content);
+                    setHistory([sub.content]);
+                    setHistoryIdx(0);
+                }
+                if (sub.draftContent) setDraftText(sub.draftContent);
+                if (sub.aiNotes) {
+                    setAiNotesText(sub.aiNotes);
+                    setPinnedAiNotes(sub.aiNotes);
+                    setShowAiNotes(true);
+                }
+                if (sub.aiConversationLog) setAiConversationText(sub.aiConversationLog);
+                if (sub.memoSheet) {
+                    setMemoSheetText(sub.memoSheet);
+                    const parts = sub.memoSheet.split('--- CONSEILS ET PIÈGES RETENUS POUR LE DS ---');
+                    if (parts[0]) setFinalPlanText(parts[0].replace('--- PLAN CONSOLIDÉ AU BROUILLON ---', '').trim());
+                    if (parts[1]) setFinalLessonsText(parts[1].trim());
+                }
+                if (sub.attemptsCount) {
+                    setAttemptsCount(Math.max(1, Number(sub.attemptsCount)));
+                }
+                if (Array.isArray(sub.learningEfficiency?.attemptsHistory) && sub.learningEfficiency.attemptsHistory.length > 0) {
+                    setAttemptsHistory(sub.learningEfficiency.attemptsHistory);
+                }
+                if (Array.isArray(sub.learningEfficiency?.generatedKeys) && sub.learningEfficiency.generatedKeys.length > 0) {
+                    setRegisteredKeys(sub.learningEfficiency.generatedKeys);
+                } else if (sub.sessionToken) {
+                    setRegisteredKeys([sub.sessionToken]);
+                }
+                if (sub.timeSpentSeconds) {
+                    setSessionSeconds(Number(sub.timeSpentSeconds));
+                }
+
+                // Devoir déjà rendu : on ne bloque pas avec le modal d'introduction
+                setShowProgressionGuide(false);
+                setInitialLoading(false);
+            })
+            .catch((err) => {
+                console.warn('[Redaction] Erreur chargement copie précédente:', err);
+                if (isMounted) setInitialLoading(false);
+            });
+
+        return () => { isMounted = false; };
+    }, [homework?._id, user?._id, user?.id]);
 
     // Live timer (ticks every 1s)
     useEffect(() => {
@@ -1095,11 +1166,24 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                     <div className="inline-block bg-slate-800 border border-slate-700 px-6 py-2.5 rounded-2xl text-slate-400 font-semibold text-xs">
                         ✍️ Copie enregistrée • Pas de note chiffrée automatique • Votre professeur validera votre bonus lors du prochain DS
                     </div>
-                    <div>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAlreadySubmitted(true);
+                                setLastSubmittedBonus(bonus);
+                                setSubmittedResult(null);
+                                showToast("✨ Devoir réouvert ! Tu peux continuer à perfectionner ta rédaction avec l'IA.");
+                            }}
+                            className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm px-6 py-3.5 rounded-xl shadow-xl transition flex items-center justify-center gap-2 cursor-pointer transform hover:-translate-y-0.5"
+                        >
+                            <span>✨</span>
+                            <span>Continuer à perfectionner mon devoir avec l'IA</span>
+                        </button>
                         <button
                             type="button"
                             onClick={onQuit}
-                            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm px-8 py-3.5 rounded-xl shadow-lg transition"
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-sm px-6 py-3.5 rounded-xl transition cursor-pointer"
                         >
                             Retour à la liste des devoirs
                         </button>
@@ -1116,6 +1200,12 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                 <div className="conda-redaction-header-left">
                     <span className="conda-redaction-badge">✍️ Rédaction</span>
                     <h1 className="conda-redaction-title">{homework.title || 'Devoir Rédaction'}</h1>
+                    {alreadySubmitted && (
+                        <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                            <span>✨</span>
+                            <span>Perfectionnement IA</span>
+                        </span>
+                    )}
                 </div>
                 <div className="conda-redaction-header-right">
                     <span className="text-[11px] font-mono text-amber-300 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/30 hidden sm:inline-flex items-center gap-1.5" title="Jeton de session authentifiant vos échanges avec l'IA">
@@ -1143,7 +1233,7 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
             </header>
 
             {/* Modal d'explication DEVANT l'épreuve : Règles du jeu & Évaluation sur la progression */}
-            {showProgressionGuide && (
+            {showProgressionGuide && !alreadySubmitted && (
                 <div className="conda-rules-modal-overlay" onClick={() => setShowProgressionGuide(false)}>
                     <div className="conda-rules-modal-card" onClick={(e) => e.stopPropagation()}>
                         <button
@@ -1215,6 +1305,40 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                 </div>
                 <p className="conda-redaction-topic-text">{topicText}</p>
             </section>
+
+            {/* Continuous AI Perfection Banner (Displayed if previously submitted) */}
+            {alreadySubmitted && (
+                <section className="conda-perfectionnement-banner">
+                    <div className="conda-perfectionnement-left">
+                        <span className="conda-perfectionnement-icon">🏆</span>
+                        <div className="conda-perfectionnement-info">
+                            <div className="conda-perfectionnement-tags">
+                                <span className="conda-tag-rendered">✅ Devoir déjà rendu définitivement</span>
+                                {lastSubmittedBonus !== null && (
+                                    <span className="conda-tag-bonus">
+                                        +{lastSubmittedBonus} pt{lastSubmittedBonus > 1 ? 's' : ''} bonus
+                                    </span>
+                                )}
+                                <span className="conda-tag-mode">🚀 Mode Perfectionnement IA</span>
+                            </div>
+                            <p className="conda-perfectionnement-desc">
+                                Tu peux continuer à perfectionner ce devoir sans aucune limite ! Crée une nouvelle version, demande de nouveaux conseils à l'IA et soumets à nouveau pour enregistrer tes progrès.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="conda-perfectionnement-actions">
+                        <button
+                            type="button"
+                            onClick={handleNewAttempt}
+                            className="conda-perfectionnement-btn"
+                            title="Créer une nouvelle version pour poursuivre le perfectionnement"
+                        >
+                            <span>🔄</span>
+                            <span>Nouvelle version ({attemptsCount + 1})</span>
+                        </button>
+                    </div>
+                </section>
+            )}
 
             {/* Pinned AI Notes Status Strip (with quick button to open floating window) */}
             {pinnedAiNotes.trim() && (
@@ -1507,8 +1631,29 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                                 <span>Rétablir</span>
                             </button>
                             <span className="text-[11px] font-bold text-slate-500 ml-2">
-                                Tentative {attemptsCount}
+                                Version {attemptsCount}
                             </span>
+                            {attemptsHistory && attemptsHistory.length > 0 && (
+                                <div className="flex items-center gap-1 ml-2 overflow-x-auto">
+                                    {attemptsHistory.map((att) => (
+                                        <button
+                                            key={att.attemptNumber}
+                                            type="button"
+                                            onClick={() => {
+                                                if (att.text && window.confirm(`Charger le texte de la version ${att.attemptNumber} dans votre éditeur ?`)) {
+                                                    setEssayText(att.text);
+                                                    if (att.draft) setDraftText(att.draft);
+                                                    showToast(`Version ${att.attemptNumber} chargée !`);
+                                                }
+                                            }}
+                                            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+                                            title={`Charger la version ${att.attemptNumber} (${att.wordsCount || 0} mots)`}
+                                        >
+                                            V{att.attemptNumber}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="conda-redaction-words-counter">
                             {wordsCount} mot{wordsCount > 1 ? 's' : ''}
@@ -1534,7 +1679,7 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
 
                     <div className="conda-redaction-actions-bar">
                         <div className="flex flex-wrap items-center gap-3">
-                            {attemptsCount === 1 && !showAiNotes ? (
+                            {attemptsCount === 1 && !showAiNotes && !alreadySubmitted ? (
                                 <button
                                     type="button"
                                     className="conda-btn-ia-copy"
@@ -1650,7 +1795,7 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                                 </button>
                             </div>
 
-                            {showAiNotes && (
+                            {(showAiNotes || alreadySubmitted || attemptsCount > 1) && (
                                 <button
                                     type="button"
                                     className="conda-redaction-tool-btn border-indigo-500/50 bg-indigo-950/40 text-indigo-300"
@@ -2016,7 +2161,7 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                                     onClick={handleFinalSubmit}
                                     disabled={submitting}
                                 >
-                                    {submitting ? 'Envoi en cours...' : 'Envoyer définitivement mon devoir'}
+                                    {submitting ? 'Envoi en cours...' : alreadySubmitted ? 'Transmettre ma nouvelle version perfectionnée' : 'Envoyer définitivement mon devoir'}
                                 </button>
                             </div>
                         </div>

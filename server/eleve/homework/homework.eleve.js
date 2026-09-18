@@ -428,6 +428,25 @@ router.get('/submissions/:studentId', async (req, res) => {
     }
 });
 
+router.get('/submission/:homeworkId/:studentId', async (req, res) => {
+    try {
+        const Submission = mongoose.model('Submission');
+        const { homeworkId, studentId } = req.params;
+        if (!homeworkId || !studentId) return res.status(400).json({ error: "Paramètres manquants" });
+        if (!mongoose.Types.ObjectId.isValid(studentId) || !mongoose.Types.ObjectId.isValid(homeworkId)) {
+            return res.json(null);
+        }
+        const sub = await Submission.findOne({
+            studentId,
+            homeworkId
+        }).sort({ createdAt: -1 }).lean();
+        res.json(sub || null);
+    } catch (e) {
+        console.error("❌ [ELEVE HW SUBMISSION] error=%s", e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/learned/:studentId', async (req, res) => {
     try {
         const Submission = mongoose.model('Submission');
@@ -1205,25 +1224,45 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 
     const finalBonus = learningEfficiency?.examBonusPoints ?? 0;
 
-    await Submission.create({ 
-        studentId: playerId,
-        homeworkId,
-        levelIndex: levelIndex || 0,
-        mode: hw?.mode || 'docs',
-        content: userText,
-        draftContent: String(draftContent || ''),
-        aiNotes: String(aiNotes || ''),
-        aiConversationLog: String(aiConversationLog || ''),
-        memoSheet: String(memoSheet || ''),
-        sessionToken: String(sessionToken || ''),
-        timeSpentSeconds: Number(timeSpentSeconds || 0),
-        attemptsCount: Number(attemptsCount || 1),
-        examBonusPoints: finalBonus,
-        learningEfficiency,
-        feedback: cleanFeedback,
-        grade: analysis.grade,
-        antiCheat: antiCheatSnapshot
-    });
+    const existingSub = await Submission.findOne({ studentId: playerId, homeworkId });
+    if (existingSub) {
+        existingSub.levelIndex = levelIndex || 0;
+        existingSub.mode = hw?.mode || 'docs';
+        existingSub.content = userText;
+        existingSub.draftContent = String(draftContent || '');
+        existingSub.aiNotes = String(aiNotes || '');
+        existingSub.aiConversationLog = String(aiConversationLog || '');
+        existingSub.memoSheet = String(memoSheet || '');
+        existingSub.sessionToken = String(sessionToken || '');
+        existingSub.timeSpentSeconds = (Number(existingSub.timeSpentSeconds) || 0) + Number(timeSpentSeconds || 0);
+        existingSub.attemptsCount = Math.max(Number(existingSub.attemptsCount) || 1, Number(attemptsCount) || 1);
+        existingSub.examBonusPoints = Math.max(Number(existingSub.examBonusPoints) || 0, finalBonus);
+        existingSub.learningEfficiency = learningEfficiency;
+        existingSub.feedback = cleanFeedback;
+        existingSub.grade = analysis.grade;
+        existingSub.antiCheat = antiCheatSnapshot;
+        await existingSub.save();
+    } else {
+        await Submission.create({ 
+            studentId: playerId,
+            homeworkId,
+            levelIndex: levelIndex || 0,
+            mode: hw?.mode || 'docs',
+            content: userText,
+            draftContent: String(draftContent || ''),
+            aiNotes: String(aiNotes || ''),
+            aiConversationLog: String(aiConversationLog || ''),
+            memoSheet: String(memoSheet || ''),
+            sessionToken: String(sessionToken || ''),
+            timeSpentSeconds: Number(timeSpentSeconds || 0),
+            attemptsCount: Number(attemptsCount || 1),
+            examBonusPoints: finalBonus,
+            learningEfficiency,
+            feedback: cleanFeedback,
+            grade: analysis.grade,
+            antiCheat: antiCheatSnapshot
+        });
+    }
     await MistakeService.recordForStudent({
         studentId: playerId,
         mistakes: spellingMistakes,
