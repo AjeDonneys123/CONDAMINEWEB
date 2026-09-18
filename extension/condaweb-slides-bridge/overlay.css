@@ -79,9 +79,10 @@
 }
 .conda-bridge-dismiss:hover { background: #ef4444 !important; }
 
-/* Dès que la classe est connectée, le badge est replacé dans la barre du bas
-   et devient un bouton compact normal, sans poignée ni croix. */
-.conda-bridge-badge.is-connected {
+/* Dès que la classe est connectée ou en attente de sélection de classe,
+   le badge est placé dans la barre du bas avec les autres boutons. */
+.conda-bridge-badge.is-connected,
+.conda-bridge-badge.is-waiting-class {
     position: static !important;
     top: auto !important;
     left: auto !important;
@@ -89,8 +90,17 @@
     max-width: min(300px, 36vw) !important;
 }
 .conda-bridge-badge.is-connected .conda-bridge-drag-handle,
-.conda-bridge-badge.is-connected .conda-bridge-dismiss { display: none !important; }
-.conda-bridge-badge.is-connected:hover { transform: none !important; }
+.conda-bridge-badge.is-connected .conda-bridge-dismiss,
+.conda-bridge-badge.is-waiting-class .conda-bridge-drag-handle,
+.conda-bridge-badge.is-waiting-class .conda-bridge-dismiss { display: none !important; }
+.conda-bridge-badge.is-connected:hover,
+.conda-bridge-badge.is-waiting-class:hover { transform: none !important; }
+
+.conda-bridge-badge.is-waiting-class {
+    border-color: #f59e0b !important;
+    background: rgba(15, 23, 42, 0.94) !important;
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35) !important;
+}
 
 .conda-bridge-badge:hover {
     background: #1e1b4b !important;

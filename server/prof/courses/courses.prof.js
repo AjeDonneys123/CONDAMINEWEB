@@ -695,10 +695,23 @@ router.post('/presentation-remote/auto-connect', async (req, res) => {
         }
         const classroom = explicitlySelectedClassroom || await resolveCourseClassroom(course, classHint);
         if (!classroom?._id) {
-            return res.status(409).json({
-                ok: false,
-                error: `Classe introuvable pour le cours « ${course.title} »`,
-                code: 'COURSE_CLASSROOM_MISSING'
+            console.info('[CondaWeb Bridge] cours trouvé mais en attente d’attribution de classe', {
+                courseId: String(course._id), title: course.title
+            });
+            course.presentationRemote = {
+                active: true,
+                classId: '',
+                className: '',
+                slideIndex: Number.isInteger(req.body?.slideIndex) ? slideIndex : Number(course.presentationRemote?.slideIndex || 0)
+            };
+            await course.save();
+            return res.json({
+                ok: true,
+                courseId: String(course._id),
+                title: course.title,
+                classId: '',
+                className: '',
+                waitingForClass: true
             });
         }
         const targetClassId = String(classroom._id);
