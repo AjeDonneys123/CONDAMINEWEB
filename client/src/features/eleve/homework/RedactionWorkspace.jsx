@@ -521,6 +521,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [submitting, setSubmitting] = useState(false);
     const [submittedResult, setSubmittedResult] = useState(null);
     const [showProgressionGuide, setShowProgressionGuide] = useState(true);
+    const [showPreFinalWarning, setShowPreFinalWarning] = useState(false);
 
     // Homework configuration
     const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
@@ -937,7 +938,6 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
         showToast(`🔄 Tentative ${attemptsCount + 1} démarrée. Gardez vos notes de l'IA sous les yeux !`);
     };
 
-    // Validation trigger
     const handleValidateClick = () => {
         if (!draftText.trim()) {
             alert("⚠️ Brouillon obligatoire : vous devez d'abord poser votre plan et vos idées dans le brouillon pour valider (+0.5 pt bonus de base garanti).");
@@ -952,13 +952,13 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
             setShowShortWarning(true);
             return;
         }
-        setShowFinalModal(true);
+        setShowPreFinalWarning(true);
     };
 
     const handleConfirmValidateAnyway = () => {
         setToShortWarned(true);
         setShowShortWarning(false);
-        setShowFinalModal(true);
+        setShowPreFinalWarning(true);
     };
 
     // Final submission
@@ -1801,6 +1801,72 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                                 onClick={handleConfirmValidateAnyway}
                             >
                                 ⚠️ Valider quand même (signalé au professeur)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Pré-Validation : Avertissement sur la récitation du brouillon et des conseils */}
+            {showPreFinalWarning && (
+                <div className="conda-rules-modal-overlay" onClick={() => setShowPreFinalWarning(false)}>
+                    <div className="conda-prefinal-modal-card" onClick={(e) => e.stopPropagation()}>
+                        <button
+                            type="button"
+                            onClick={() => setShowPreFinalWarning(false)}
+                            className="conda-rules-modal-close"
+                            title="Fermer (✕)"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="conda-rules-badge">
+                            <span>⚠️</span>
+                            <span>Dernière étape · Épreuve de restitution</span>
+                        </div>
+
+                        <h2 className="conda-rules-title">
+                            Attention avant de passer à la suite !
+                        </h2>
+
+                        <p className="conda-rules-main-desc">
+                            À la prochaine étape, tu devras <strong>réciter ton brouillon</strong> et <strong>résumer les conseils principaux que tu as reçus pour progresser</strong>.
+                        </p>
+
+                        <div className="conda-rules-steps-grid">
+                            <div className="conda-rules-step-row">
+                                <span className="conda-rules-step-badge">1</span>
+                                <span>📝 <strong>Réciter ton brouillon :</strong> tu devras réécrire la structure de ton plan au propre de mémoire (copier-coller désactivé).</span>
+                            </div>
+                            <div className="conda-rules-step-row">
+                                <span className="conda-rules-step-badge">2</span>
+                                <span>🤖 <strong>Résumer les conseils reçus :</strong> tu devras formuler les 2 ou 3 conseils clés que l'IA t'a donnés pour progresser.</span>
+                            </div>
+                        </div>
+
+                        <div className="conda-rules-goal-card" style={{ borderLeftColor: '#f59e0b' }}>
+                            👀 <strong>Regarde-les bien maintenant</strong> sur ton écran avant de passer à la suite pour ne rien oublier !
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowPreFinalWarning(false)}
+                                className="conda-prefinal-btn-review flex-1"
+                            >
+                                <span>👀</span>
+                                <span>Regarder mon brouillon & mes conseils</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowPreFinalWarning(false);
+                                    setShowFinalModal(true);
+                                }}
+                                className="conda-prefinal-btn-start flex-1"
+                            >
+                                <span>🚀</span>
+                                <span>Je suis prêt, passer à la suite</span>
                             </button>
                         </div>
                     </div>
