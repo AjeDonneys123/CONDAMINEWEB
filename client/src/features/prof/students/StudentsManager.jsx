@@ -43,6 +43,15 @@ const formatMs = (ms = 0) => {
 const gradeToNumber = (raw = '') => {
   const txt = String(raw || '').trim().toUpperCase();
   if (!txt) return 0;
+  if (txt.includes('-')) {
+    const parts = txt.split('-');
+    const lastPart = parts[parts.length - 1];
+    const m = lastPart.match(/(\d+(?:[.,]\d+)?)/);
+    if (m) {
+      const n = Number(String(m[1]).replace(',', '.'));
+      if (Number.isFinite(n)) return Math.max(0, Math.min(20, n));
+    }
+  }
   const m = txt.match(/(\d+(?:[.,]\d+)?)/);
   if (m) {
     const n = Number(String(m[1]).replace(',', '.'));

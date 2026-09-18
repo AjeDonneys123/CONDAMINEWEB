@@ -27,6 +27,8 @@ const SubmissionSchema = new mongoose.Schema({
     },
     feedback: String,
     grade: String,
+    initialGrade: { type: String, default: '' },
+    revisedGrade: { type: String, default: '' },
     antiCheat: { type: Object, default: {} },
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'submissions' });

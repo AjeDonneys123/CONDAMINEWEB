@@ -107,7 +107,7 @@ export default function DashboardFolder({ items, type, onSelect, onDelete }) {
                 <div className="card-footer">
                     {isDone ? (
                         <div className="status-badge status-done">
-                            <span>✅</span> <span>{item.teacherValidated === true ? 'VALIDÉ' : 'FAIT'}</span>
+                            <span>✅</span> <span>{item.teacherValidated === true ? (item.grade ? `VALIDÉ (${item.grade})` : 'VALIDÉ') : (item.grade ? item.grade : 'FAIT')}</span>
                         </div>
                     ) : (
                         <div className="status-badge status-todo">

@@ -32,7 +32,7 @@ export default function HomeworkList({
         if (!hwRes.ok) throw new Error("404");
         const data = await hwRes.json();
         const subs = subRes.ok ? await subRes.json() : [];
-        const submittedByHomeworkId = new Set((subs || []).map(s => String(s.homeworkId)));
+        const subByHomeworkId = new Map((subs || []).map(s => [String(s.homeworkId), s]));
 
         const allowedKinds = Array.isArray(assessmentKinds)
           ? new Set(assessmentKinds.map((x) => String(x || '').trim()))
@@ -56,10 +56,14 @@ export default function HomeworkList({
               .filter(Boolean)
           : filteredByKind;
 
-        setHomeworks(filtered.map(hw => ({
-          ...hw,
-          status: submittedByHomeworkId.has(String(hw._id)) ? 'done' : 'todo'
-        })));
+        setHomeworks(filtered.map(hw => {
+          const s = subByHomeworkId.get(String(hw._id));
+          return {
+            ...hw,
+            status: s ? 'done' : 'todo',
+            grade: s?.grade || ''
+          };
+        }));
     } catch(e) { console.error("Err loading HW", e); }
     setLoading(false);
   };
@@ -157,7 +161,7 @@ export default function HomeworkList({
                       {titleOverride || hw.title}
                     </span>
                     <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase ${hw.status === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {hw.status === 'done' ? 'Fait' : 'À faire'}
+                      {hw.status === 'done' ? (hw.grade ? `Fait (${hw.grade})` : 'Fait') : 'À faire'}
                     </span>
                     <span className="text-sm font-black text-violet-400">›</span>
                   </div>

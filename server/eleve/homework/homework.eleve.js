@@ -867,6 +867,43 @@ router.post('/submit-local-dnb-paragraph', async (req, res) => {
     }
 });
 
+function formatProgressiveGrade(existingSub, newScore) {
+    const newGradeStr = String(newScore);
+    if (!existingSub) {
+        return {
+            initialGrade: newGradeStr,
+            revisedGrade: '',
+            grade: newGradeStr
+        };
+    }
+    let init = String(existingSub.initialGrade || '').trim();
+    if (!init) {
+        const existingGrade = String(existingSub.grade || '').trim();
+        if (existingGrade.includes('-')) {
+            init = existingGrade.split('-')[0].trim();
+        } else if (existingGrade) {
+            init = existingGrade;
+        } else {
+            init = newGradeStr;
+        }
+    }
+
+    if (init === newGradeStr && !existingSub.revisedGrade) {
+        return {
+            initialGrade: init,
+            revisedGrade: '',
+            grade: init
+        };
+    }
+
+    const revised = newGradeStr;
+    return {
+        initialGrade: init,
+        revisedGrade: revised,
+        grade: `${init}-${revised}`
+    };
+}
+
 router.post('/submit', async (req, res) => {
     const {
         userText,
@@ -1135,9 +1172,13 @@ CONSIGNE D'ÉVALUATION ET D'INTÉGRITÉ PÉDAGOGIQUE DU BONUS :
      * Soit : "📈 Marge de progression détectée (de précieux points bonus à aller chercher pour ton prochain contrôle) !"
    - POUR LES COPIES EXCELLENTES : Ne laisse SURTOUT PAS l'élève perplexe avec un simple 'c'est bien'. Pousse-le activement vers l'excellence supérieure (niveau Terminale / Université) en lui donnant de vraies pistes d'approfondissement : des anecdotes historiques méconnues ou révélatrices, des chiffres et faits précis, des auteurs ou historiens de référence à mentionner, ou des perspectives conceptuelles pointues.
 5. Rédige un résumé factuel pour le professeur ("teacherSummary").
+6. NOTE GLOBALE SUR 20 DE LA VERSION ACTUELLE ("gradeOutOf20") :
+   - Évalue la version actuelle du devoir rédigé sur 20 selon les critères académiques scolaires (structure du plan, solidité des arguments, méthode AEI, faits et notions précises).
+   - Indique un entier ou demi-point (ex: 12, 14, 15, 16, 17).
 
 Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 {
+  "gradeOutOf20": 15,
   "examBonusPoints": 1.5,
   "isAuthentic": true,
   "studentMessage": "Ton diagnostic explicite + tes pistes d'excellence ou d'amélioration personnalisées pour l'élève",
@@ -1157,6 +1198,9 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
                         examBonusPoints = Math.min(2.5, Math.max(0, Math.round(parsedBonus * 2) / 2));
                     } else {
                         examBonusPoints = 1.0;
+                    }
+                    if (Number.isFinite(Number(parsed.gradeOutOf20))) {
+                        analysis.grade = Math.min(20, Math.max(0, Math.round(Number(parsed.gradeOutOf20))));
                     }
                     if (parsed.studentMessage) studentMessage = String(parsed.studentMessage).trim();
                     if (parsed.teacherSummary) teacherSummary = String(parsed.teacherSummary).trim();
@@ -1224,7 +1268,21 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
 
     const finalBonus = learningEfficiency?.examBonusPoints ?? 0;
 
+    let scoreForGrade = 14;
+    if (hw?.mode === 'redaction' || hw?.assessmentKind === 'rqp' || hw?.assessmentKind === 'commentaire') {
+        scoreForGrade = Number.isFinite(Number(analysis.grade))
+            ? Number(analysis.grade)
+            : Math.min(20, Math.max(10, 12 + Math.round(finalBonus * 2)));
+    } else {
+        scoreForGrade = Number.isFinite(Number(analysis.score))
+            ? Math.round(Number(analysis.score))
+            : (analysis.grade || 14);
+    }
+
     const existingSub = await Submission.findOne({ studentId: playerId, homeworkId });
+    const progressive = formatProgressiveGrade(existingSub, scoreForGrade);
+    const finalGrade = progressive.grade;
+
     if (existingSub) {
         existingSub.levelIndex = levelIndex || 0;
         existingSub.mode = hw?.mode || 'docs';
@@ -1239,7 +1297,9 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
         existingSub.examBonusPoints = Math.max(Number(existingSub.examBonusPoints) || 0, finalBonus);
         existingSub.learningEfficiency = learningEfficiency;
         existingSub.feedback = cleanFeedback;
-        existingSub.grade = analysis.grade;
+        existingSub.initialGrade = progressive.initialGrade;
+        existingSub.revisedGrade = progressive.revisedGrade;
+        existingSub.grade = finalGrade;
         existingSub.antiCheat = antiCheatSnapshot;
         await existingSub.save();
     } else {
@@ -1259,7 +1319,9 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
             examBonusPoints: finalBonus,
             learningEfficiency,
             feedback: cleanFeedback,
-            grade: analysis.grade,
+            initialGrade: progressive.initialGrade,
+            revisedGrade: progressive.revisedGrade,
+            grade: finalGrade,
             antiCheat: antiCheatSnapshot
         });
     }
@@ -1284,7 +1346,157 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
         });
     }
 
-    res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes, learningEfficiency, examBonusPoints: finalBonus });
+    res.json({
+        ...analysis,
+        feedback_fond: cleanFeedback,
+        spellingMistakes,
+        learningEfficiency,
+        examBonusPoints: finalBonus,
+        grade: finalGrade,
+        initialGrade: progressive.initialGrade,
+        revisedGrade: progressive.revisedGrade
+    });
+});
+
+router.post('/reevaluate', async (req, res) => {
+    try {
+        const {
+            homeworkId,
+            playerId,
+            levelIndex = 0,
+            userText = '',
+            draftContent = '',
+            aiNotes = '',
+            aiConversationLog = '',
+            memoSheet = '',
+            attemptsCount = 1,
+            attemptsHistory = []
+        } = req.body || {};
+
+        if (!homeworkId || !playerId) {
+            return res.status(400).json({ error: "Identifiants requis" });
+        }
+
+        const Homework = mongoose.model('Homework');
+        const Submission = mongoose.model('Submission');
+        const Student = mongoose.model('Student');
+
+        const hw = await Homework.findById(homeworkId);
+        const lvl = (hw?.levels && hw.levels[levelIndex]) || { instruction: hw?.promptTopic || '' };
+        const instructionText = hw?.mode === 'redaction'
+            ? (hw.promptTopic || lvl?.instruction || 'Rédaction')
+            : (lvl?.instruction || '');
+
+        let evaluatedGrade = 15;
+        let studentMessage = "Belle révision ! Continuez à affiner vos arguments.";
+        let teacherSummary = "Réévaluation IA effectuée sur la version révisée.";
+        let examBonusPoints = 0.5;
+
+        const prompt = `Tu es un évaluateur pédagogique bienveillant et exigeant en Histoire-Géographie.
+L'élève demande une RÉÉVALUATION de son travail après avoir perfectionné son devoir avec l'IA.
+
+SUJET :
+${instructionText}
+
+BROUILLON / PLAN :
+${draftContent || '(aucun)'}
+
+NOTES PRISES SUR L'IA :
+${aiNotes || '(aucune)'}
+
+VERSION ACTUELLE DU DEVOIR (Essai ${attemptsCount}) :
+${userText || '(vide)'}
+
+ÉCHANGE AVEC L'IA (tuteur) :
+${aiConversationLog ? aiConversationLog.slice(-2000) : '(aucun)'}
+
+CONSIGNES D'ÉVALUATION :
+1. Attribue une note globale sur 20 à la version actuelle du devoir rédigé selon les exigences scolaires (qualité du plan, méthode AEI, faits précis, clarté).
+2. Fournis un diagnostic clair et 2 conseils clés pour la suite.
+3. Attribue un bonus d'apprentissage (entre 0.5 et 2.5 pts).
+
+Réponds STRICTEMENT par un objet JSON valide suivant ce format :
+{
+  "gradeOutOf20": 16,
+  "examBonusPoints": 1.5,
+  "studentMessage": "Ton commentaire pédagogique bienveillant et tes conseils",
+  "teacherSummary": "Résumé concis pour le prof"
+}`;
+
+        try {
+            const raw = await AIEngine.ask(prompt, "Tu es un professeur évaluateur. Réponds exclusivement en JSON valide.", { temperature: 0.2 });
+            const clean = String(raw || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(clean);
+            if (parsed && typeof parsed === 'object') {
+                if (Number.isFinite(Number(parsed.gradeOutOf20))) {
+                    evaluatedGrade = Math.min(20, Math.max(0, Math.round(Number(parsed.gradeOutOf20))));
+                }
+                if (parsed.studentMessage) studentMessage = String(parsed.studentMessage);
+                if (parsed.teacherSummary) teacherSummary = String(parsed.teacherSummary);
+                if (Number.isFinite(Number(parsed.examBonusPoints))) {
+                    examBonusPoints = Math.min(2.5, Math.max(0, Math.round(Number(parsed.examBonusPoints) * 2) / 2));
+                }
+            }
+        } catch (aiErr) {
+            console.warn('[Reevaluate] Fallback notation IA:', aiErr?.message || aiErr);
+            evaluatedGrade = 15;
+        }
+
+        let existingSub = await Submission.findOne({ studentId: playerId, homeworkId });
+        const progressive = formatProgressiveGrade(existingSub, evaluatedGrade);
+
+        if (existingSub) {
+            existingSub.initialGrade = progressive.initialGrade;
+            existingSub.revisedGrade = progressive.revisedGrade;
+            existingSub.grade = progressive.grade;
+            existingSub.content = userText;
+            existingSub.draftContent = String(draftContent || '');
+            existingSub.aiNotes = String(aiNotes || '');
+            existingSub.aiConversationLog = String(aiConversationLog || '');
+            existingSub.memoSheet = String(memoSheet || '');
+            existingSub.attemptsCount = Math.max(Number(existingSub.attemptsCount) || 1, Number(attemptsCount) || 1);
+            existingSub.examBonusPoints = Math.max(Number(existingSub.examBonusPoints) || 0, examBonusPoints);
+            existingSub.feedback = studentMessage;
+            if (existingSub.learningEfficiency) {
+                existingSub.learningEfficiency.studentMessage = studentMessage;
+                existingSub.learningEfficiency.teacherSummary = teacherSummary;
+                existingSub.learningEfficiency.examBonusPoints = existingSub.examBonusPoints;
+            }
+            await existingSub.save();
+        } else {
+            existingSub = await Submission.create({
+                studentId: playerId,
+                homeworkId,
+                levelIndex,
+                mode: hw?.mode || 'docs',
+                content: userText,
+                draftContent: String(draftContent || ''),
+                aiNotes: String(aiNotes || ''),
+                aiConversationLog: String(aiConversationLog || ''),
+                memoSheet: String(memoSheet || ''),
+                attemptsCount: Number(attemptsCount || 1),
+                examBonusPoints,
+                initialGrade: progressive.initialGrade,
+                revisedGrade: progressive.revisedGrade,
+                grade: progressive.grade,
+                feedback: studentMessage
+            });
+        }
+
+        res.json({
+            ok: true,
+            gradeOutOf20: evaluatedGrade,
+            initialGrade: progressive.initialGrade,
+            revisedGrade: progressive.revisedGrade,
+            grade: progressive.grade,
+            examBonusPoints: existingSub.examBonusPoints,
+            studentMessage,
+            teacherSummary
+        });
+    } catch (err) {
+        console.error("❌ [ELEVE HW REEVALUATE] error=", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/submit-chat', async (req, res) => {

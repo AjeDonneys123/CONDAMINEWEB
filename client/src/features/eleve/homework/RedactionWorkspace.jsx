@@ -526,6 +526,11 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 5. Reopening & Continuous Perfection State
     const [alreadySubmitted, setAlreadySubmitted] = useState(false);
     const [lastSubmittedBonus, setLastSubmittedBonus] = useState(null);
+    const [currentGrade, setCurrentGrade] = useState('');
+    const [initialGrade, setInitialGrade] = useState('');
+    const [revisedGrade, setRevisedGrade] = useState('');
+    const [reevaluating, setReevaluating] = useState(false);
+    const [reevaluationFeedback, setReevaluationFeedback] = useState(null);
     const [initialLoading, setInitialLoading] = useState(true);
 
     // Homework configuration
@@ -552,6 +557,9 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                 setAlreadySubmitted(true);
                 const bonus = sub.examBonusPoints ?? sub.learningEfficiency?.examBonusPoints ?? null;
                 setLastSubmittedBonus(bonus);
+                if (sub.grade) setCurrentGrade(sub.grade);
+                if (sub.initialGrade) setInitialGrade(sub.initialGrade);
+                if (sub.revisedGrade) setRevisedGrade(sub.revisedGrade);
 
                 if (sub.content) {
                     setEssayText(sub.content);
@@ -1084,11 +1092,51 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                 alert(`Erreur: ${data.error}`);
                 return;
             }
+            if (data.grade) setCurrentGrade(data.grade);
+            if (data.initialGrade) setInitialGrade(data.initialGrade);
+            if (data.revisedGrade) setRevisedGrade(data.revisedGrade);
             setSubmittedResult(data);
         } catch (err) {
             setSubmitting(false);
             setShowFinalModal(false);
             alert(`Erreur réseau: ${err.message}`);
+        }
+    };
+
+    // AI Re-evaluation handler
+    const handleReevaluateWork = async () => {
+        if (!essayText.trim()) {
+            showToast("⚠️ Votre devoir est vide. Rédigez votre texte avant de demander une réévaluation.");
+            return;
+        }
+        setReevaluating(true);
+        try {
+            const res = await fetch('/api/eleve/homework/reevaluate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    homeworkId: homework._id,
+                    playerId: user._id || user.id,
+                    userText: essayText,
+                    draftContent: draftText,
+                    attemptsCount: attemptsCount
+                })
+            });
+            const data = await res.json();
+            setReevaluating(false);
+            if (!res.ok || !data.ok) {
+                alert(`Erreur réévaluation : ${data.error || 'Erreur inconnue'}`);
+                return;
+            }
+            if (data.grade) setCurrentGrade(data.grade);
+            if (data.initialGrade) setInitialGrade(data.initialGrade);
+            if (data.revisedGrade) setRevisedGrade(data.revisedGrade);
+            setAlreadySubmitted(true);
+            setReevaluationFeedback(data);
+            showToast(`🎯 Note IA actualisée : ${data.grade} / 20 !`);
+        } catch (err) {
+            setReevaluating(false);
+            alert(`Erreur réseau lors de la réévaluation: ${err.message}`);
         }
     };
 
@@ -1163,8 +1211,29 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                         )}
                     </div>
 
-                    <div className="inline-block bg-slate-800 border border-slate-700 px-6 py-2.5 rounded-2xl text-slate-400 font-semibold text-xs">
-                        ✍️ Copie enregistrée • Pas de note chiffrée automatique • Votre professeur validera votre bonus lors du prochain DS
+                    {/* Note Progressive IA */}
+                    {(submittedResult.grade || currentGrade) && (
+                        <div className="bg-gradient-to-r from-indigo-950/60 via-slate-900 to-indigo-950/60 border-2 border-indigo-500/50 rounded-2xl p-5 text-center shadow-lg">
+                            <div className="text-xs font-black uppercase tracking-widest text-indigo-300">
+                                🎯 Note d'Évaluation Progressive IA
+                            </div>
+                            <div className="text-4xl font-black text-indigo-200 my-1 drop-shadow-md">
+                                {submittedResult.grade || currentGrade} <span className="text-xl font-bold text-indigo-400">/ 20</span>
+                            </div>
+                            {(submittedResult.initialGrade || initialGrade) && (submittedResult.revisedGrade || revisedGrade) ? (
+                                <p className="text-xs text-indigo-200/90 font-medium max-w-lg mx-auto mt-1">
+                                    🌱 Note initiale : <strong>{submittedResult.initialGrade || initialGrade}/20</strong> ➔ 🚀 Note après révision : <strong>{submittedResult.revisedGrade || revisedGrade}/20</strong>
+                                </p>
+                            ) : (
+                                <p className="text-xs text-indigo-200/90 font-medium max-w-lg mx-auto mt-1">
+                                    Première note fixée à <strong>{submittedResult.grade || currentGrade}/20</strong>. Perfectionne ton devoir pour voir ta deuxième note s'ajouter (ex: 15-16) !
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="inline-block bg-slate-800 border border-slate-700 px-6 py-2.5 rounded-2xl text-slate-300 font-semibold text-xs">
+                        ✍️ Copie enregistrée • Note progressive actualisée et transmise au professeur
                     </div>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                         <button
@@ -1314,6 +1383,11 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                         <div className="conda-perfectionnement-info">
                             <div className="conda-perfectionnement-tags">
                                 <span className="conda-tag-rendered">✅ Devoir déjà rendu définitivement</span>
+                                {currentGrade && (
+                                    <span className="conda-tag-grade">
+                                        🎯 Note IA : {currentGrade}/20
+                                    </span>
+                                )}
                                 {lastSubmittedBonus !== null && (
                                     <span className="conda-tag-bonus">
                                         +{lastSubmittedBonus} pt{lastSubmittedBonus > 1 ? 's' : ''} bonus
@@ -1327,6 +1401,16 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                         </div>
                     </div>
                     <div className="conda-perfectionnement-actions">
+                        <button
+                            type="button"
+                            onClick={handleReevaluateWork}
+                            disabled={reevaluating || !essayText.trim()}
+                            className="conda-perfectionnement-reeval-btn"
+                            title="Faire réévaluer la copie actuelle par l'IA pour actualiser votre 2ème note (ex: 15-16)"
+                        >
+                            <span>{reevaluating ? '⏳' : '🎯'}</span>
+                            <span>{reevaluating ? 'Réévaluation en cours...' : "Réévaluer par l'IA"}</span>
+                        </button>
                         <button
                             type="button"
                             onClick={handleNewAttempt}
@@ -1806,6 +1890,26 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                                     <span>Nouvelle tentative ({attemptsCount + 1})</span>
                                 </button>
                             )}
+
+                            <button
+                                type="button"
+                                className="conda-btn-reevaluate"
+                                onClick={handleReevaluateWork}
+                                disabled={reevaluating || !essayText.trim()}
+                                title="Faire réévaluer votre texte actuel par l'IA (met à jour la 2ème note, ex: 15-16)"
+                            >
+                                {reevaluating ? (
+                                    <>
+                                        <span className="animate-spin">⏳</span>
+                                        <span>Réévaluation...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>🎯</span>
+                                        <span>Réévaluer par l'IA {currentGrade ? `(${currentGrade})` : ''}</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
 
                         <button
@@ -2168,6 +2272,76 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                     </div>
                 );
             })()}
+
+            {/* Modal de Résultat de Réévaluation IA */}
+            {reevaluationFeedback && (
+                <div className="conda-redaction-modal-overlay" onClick={() => setReevaluationFeedback(null)}>
+                    <div className="bg-slate-900 border border-indigo-500/60 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 text-left max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <div className="flex items-center gap-3">
+                                <span className="text-3xl">🎯</span>
+                                <div>
+                                    <h3 className="text-base font-black text-white uppercase tracking-wider">
+                                        Réévaluation IA Terminée !
+                                    </h3>
+                                    <span className="text-[11px] text-indigo-300 font-medium">
+                                        Nouvelle note progressive enregistrée
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setReevaluationFeedback(null)}
+                                className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg transition"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Grade Card */}
+                        <div className="bg-gradient-to-r from-indigo-950/80 via-slate-900 to-indigo-950/80 border-2 border-indigo-400/60 rounded-2xl p-5 text-center shadow-lg">
+                            <div className="text-[11px] font-black uppercase tracking-widest text-indigo-300">
+                                Note Progressive Compte Élève & Professeur
+                            </div>
+                            <div className="text-4xl font-black text-indigo-200 my-1 drop-shadow-md">
+                                {reevaluationFeedback.grade || currentGrade} <span className="text-xl font-bold text-indigo-400">/ 20</span>
+                            </div>
+                            {reevaluationFeedback.initialGrade && reevaluationFeedback.revisedGrade ? (
+                                <p className="text-xs text-indigo-200 font-medium mt-1">
+                                    🌱 Note initiale : <strong>{reevaluationFeedback.initialGrade}/20</strong> ➔ 🚀 Nouvelle note après révision : <strong>{reevaluationFeedback.revisedGrade}/20</strong>
+                                </p>
+                            ) : (
+                                <p className="text-xs text-indigo-200 font-medium mt-1">
+                                    Note actuelle : <strong>{reevaluationFeedback.grade}/20</strong>
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Feedback message */}
+                        {reevaluationFeedback.studentMessage && (
+                            <div className="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 text-xs text-slate-200 space-y-2 leading-relaxed">
+                                <div className="font-bold text-indigo-300 flex items-center gap-1.5 uppercase text-[10px] tracking-wider">
+                                    <span>🤖</span>
+                                    <span>Retour pédagogique de l'IA</span>
+                                </div>
+                                <p className="m-0 whitespace-pre-line">
+                                    {reevaluationFeedback.studentMessage}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setReevaluationFeedback(null)}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg transition cursor-pointer"
+                            >
+                                Continuer à travailler
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Laboratoire Expérimental Anti-Triche */}
             {showZwnjLabModal && (() => {
