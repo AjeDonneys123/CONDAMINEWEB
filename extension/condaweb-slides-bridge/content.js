@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.47';
+  const BRIDGE_VERSION = '1.0.48';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -411,12 +411,16 @@ function showPresentationUnlinkedBadge() {
         const slideObjectId = hashMatch ? hashMatch[1] : '';
 
         const query = new URLSearchParams(window.location.search);
+        let manualClassId = '';
+        try {
+            manualClassId = sessionStorage.getItem('condaManualClassId') || '';
+        } catch (_) {}
         return {
             presentationId,
             title,
             slideObjectId,
             bridgeCourseId: String(query.get('condaCourseId') || '').trim(),
-            bridgeClassId: String(query.get('condaClassId') || '').trim()
+            bridgeClassId: manualClassId || String(query.get('condaClassId') || '').trim()
         };
     }
 
@@ -639,10 +643,17 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         activeClassName = newClassName;
 
         try {
+            sessionStorage.setItem('condaManualClassId', newClassId);
+            sessionStorage.setItem('condaManualClassName', newClassName);
             if (typeof chrome !== 'undefined' && chrome.storage?.local) {
                 chrome.storage.local.set({ activeClassId: newClassId, activeClassName: newClassName });
             }
         } catch (_) {}
+
+        // Feedback visuel IMMÉDIAT du badge
+        const displayTitle = currentCourseTitle ? (currentCourseTitle.length > 20 ? currentCourseTitle.slice(0, 18) + '…' : currentCourseTitle) : 'Connecté';
+        renderBadge(true, `${displayTitle} (${activeClassName})`);
+        renderAllOverlays();
 
         const { presentationId, title } = getSlideInfo();
         try {
@@ -662,6 +673,8 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 if (data?.ok) {
                     if (data.courseId) currentCourseId = data.courseId;
                     if (data.title) currentCourseTitle = data.title;
+                    if (data.classId) activeClassId = String(data.classId);
+                    if (data.className) activeClassName = String(data.className);
                 }
             }
 
@@ -673,8 +686,8 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             hasSuccessfulClassSync = true;
             consecutiveSyncFailures = 0;
 
-            const displayTitle = currentCourseTitle ? (currentCourseTitle.length > 20 ? currentCourseTitle.slice(0, 18) + '…' : currentCourseTitle) : 'Connecté';
-            renderBadge(true, `${displayTitle} (${activeClassName})`);
+            const finalTitle = currentCourseTitle ? (currentCourseTitle.length > 20 ? currentCourseTitle.slice(0, 18) + '…' : currentCourseTitle) : 'Connecté';
+            renderBadge(true, `${finalTitle} (${activeClassName})`);
             renderAllOverlays();
             console.info('[CondaWeb Bridge] Bascule réussie vers :', activeClassName);
         } catch (error) {
@@ -1067,31 +1080,51 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 classMenu.className = 'conda-slide-class-menu';
                 dock.appendChild(classMenu);
             }
-            while (classMenu.firstChild) classMenu.removeChild(classMenu.firstChild);
 
-            const title = document.createElement('div');
-            title.className = 'conda-slide-class-menu-title';
-            title.textContent = 'Sélectionner une classe :';
-            classMenu.appendChild(title);
+            if (!classMenu.dataset.clickBound) {
+                classMenu.dataset.clickBound = '1';
+                const onClassChoice = (e) => {
+                    const btn = e.target instanceof Element ? e.target.closest('.conda-class-choice-btn') : null;
+                    if (!btn) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    const targetId = btn.getAttribute('data-class-id') || '';
+                    const targetName = btn.getAttribute('data-class-name') || '';
+                    const cls = classMenuRows.find(c => String(c._id || c.id) === targetId) || { _id: targetId, name: targetName };
+                    void selectAnotherClass(cls);
+                };
+                classMenu.addEventListener('click', onClassChoice, true);
+                classMenu.addEventListener('pointerdown', (e) => e.stopPropagation(), true);
+            }
 
-            if (!classMenuRows.length) {
-                const empty = document.createElement('span');
-                empty.className = 'conda-slide-class-menu-empty';
-                empty.textContent = 'Aucune classe trouvée';
-                classMenu.appendChild(empty);
-            } else {
-                classMenuRows.forEach((cls) => {
-                    const choice = document.createElement('button');
-                    choice.type = 'button';
-                    const isSelected = String(cls._id || cls.id) === String(activeClassId);
-                    choice.className = `conda-class-choice-btn ${isSelected ? 'is-active' : ''}`;
-                    choice.textContent = `${cls.name || cls.title || 'Classe'}${isSelected ? ' ✓' : ''}`;
-                    choice.onclick = (e) => {
-                        e.stopPropagation();
-                        void selectAnotherClass(cls);
-                    };
-                    classMenu.appendChild(choice);
-                });
+            const currentRenderKey = `${activeClassId}:${classMenuRows.map(c => c._id || c.id).join(',')}`;
+            if (classMenu.dataset.renderKey !== currentRenderKey) {
+                classMenu.dataset.renderKey = currentRenderKey;
+                while (classMenu.firstChild) classMenu.removeChild(classMenu.firstChild);
+
+                const title = document.createElement('div');
+                title.className = 'conda-slide-class-menu-title';
+                title.textContent = 'Sélectionner une classe :';
+                classMenu.appendChild(title);
+
+                if (!classMenuRows.length) {
+                    const empty = document.createElement('span');
+                    empty.className = 'conda-slide-class-menu-empty';
+                    empty.textContent = 'Aucune classe trouvée';
+                    classMenu.appendChild(empty);
+                } else {
+                    classMenuRows.forEach((cls) => {
+                        const choice = document.createElement('button');
+                        choice.type = 'button';
+                        const isSelected = String(cls._id || cls.id) === String(activeClassId);
+                        choice.className = `conda-class-choice-btn ${isSelected ? 'is-active' : ''}`;
+                        choice.textContent = `${cls.name || cls.title || 'Classe'}${isSelected ? ' ✓' : ''}`;
+                        choice.setAttribute('data-class-id', String(cls._id || cls.id || ''));
+                        choice.setAttribute('data-class-name', String(cls.name || cls.title || ''));
+                        classMenu.appendChild(choice);
+                    });
+                }
             }
         } else if (classMenu) {
             classMenu.remove();
@@ -2360,6 +2393,12 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
     // Démarrage immédiat
     function init() {
         console.log('[CondaWeb Bridge] ⚡ init() appelé...');
+        try {
+            const manualId = sessionStorage.getItem('condaManualClassId');
+            const manualName = sessionStorage.getItem('condaManualClassName');
+            if (manualId) activeClassId = manualId;
+            if (manualName) activeClassName = manualName;
+        } catch (_) {}
         ensureOverlayRoot();
         renderBadge(false, 'Connexion à CondaWeb…');
         renderAllOverlays();

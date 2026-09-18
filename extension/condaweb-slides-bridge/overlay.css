@@ -651,7 +651,9 @@
     border-radius: 14px;
     background: rgba(15, 23, 42, .98);
     box-shadow: 0 16px 40px rgba(0, 0, 0, .6);
-    z-index: 2147483647;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    user-select: none !important;
 }
 .conda-slide-class-menu-title {
     font-size: 11px;
@@ -684,6 +686,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    pointer-events: auto !important;
+    user-select: none !important;
 }
 .conda-class-choice-btn:hover {
     background: #a7f3d0;
