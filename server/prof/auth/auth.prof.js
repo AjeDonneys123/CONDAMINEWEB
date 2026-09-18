@@ -233,6 +233,17 @@ router.post('/toggle-test-mode', async (req, res) => {
 });
 
 router.get('/config', async (req, res) => {
+    try {
+        const teacher = await Teacher.findOne({ lastName: /vuillet/i }).populate('assignedClasses').lean();
+        if (teacher && Array.isArray(teacher.assignedClasses) && teacher.assignedClasses.length > 0) {
+            const list = teacher.assignedClasses
+                .filter(Boolean)
+                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+            return res.json({ classrooms: list });
+        }
+    } catch (e) {
+        console.warn('[auth/config] fallback classes', e?.message);
+    }
     res.json({ classrooms: await Classroom.find({}).sort({name:1}).lean() });
 });
 

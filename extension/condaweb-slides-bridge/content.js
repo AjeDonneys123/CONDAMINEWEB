@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.46';
+  const BRIDGE_VERSION = '1.0.47';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -615,9 +615,12 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         try {
             const config = await callCondaApi('/api/auth/config');
             const classes = Array.isArray(config) ? config : (config?.classrooms || []);
-            classMenuRows = Array.isArray(classes) ? classes : [];
+            // Filtrer pour ne conserver que les classes de JP Vuillet
+            const jpPatterns = [/2\s*a/i, /2\s*b/i, /5\s*a/i, /5\s*d/i, /3.*dnl/i, /3\s*e/i];
+            const filtered = classes.filter(c => jpPatterns.some(p => p.test(String(c?.name || c?.title || ''))));
+            classMenuRows = filtered.length ? filtered : classes;
             classMenuOpen = true;
-            console.info('[CondaWeb Bridge classe] menu ouvert', { count: classMenuRows.length, current: activeClassName });
+            console.info('[CondaWeb Bridge classe] menu ouvert (classes JP Vuillet)', { count: classMenuRows.length, current: activeClassName });
             renderAllOverlays();
         } catch (error) {
             console.error('[CondaWeb Bridge classe] chargement impossible', error?.message || String(error));

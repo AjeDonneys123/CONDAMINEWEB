@@ -77,7 +77,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const res = await fetch(`${currentServer}/api/auth/config`);
             if (res.ok) {
                 const payload = await res.json();
-                const classes = Array.isArray(payload) ? payload : (payload.classrooms || []);
+                const rawClasses = Array.isArray(payload) ? payload : (payload.classrooms || []);
+                const jpPatterns = [/2\s*a/i, /2\s*b/i, /5\s*a/i, /5\s*d/i, /3.*dnl/i, /3\s*e/i];
+                const filtered = rawClasses.filter(c => jpPatterns.some(p => p.test(String(c?.name || c?.title || ''))));
+                const classes = filtered.length ? filtered : rawClasses;
                 while (classSelect.firstChild) classSelect.removeChild(classSelect.firstChild);
                 if (Array.isArray(classes) && classes.length > 0) {
                     classes.forEach(c => {
