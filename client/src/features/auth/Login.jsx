@@ -221,8 +221,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
       const teacherMatch = allUsersData.find(p =>
         p.type === 'teacher' &&
         clean(p.firstName) === typedFirst &&
-        clean(p.lastName) === typedLast &&
-        (clean(p.lastName) !== 'vuillet' || secretTeacherUnlocked)
+        clean(p.lastName) === typedLast
       );
       if (teacherMatch) {
         setLoading(true);
@@ -395,8 +394,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const typedTeacherProfile = !selectedProfile
     ? allUsersData.find((profile) => profile.type === 'teacher'
       && clean(profile.firstName) === clean(inputFirst)
-      && clean(profile.lastName) === clean(inputLast)
-      && (clean(profile.lastName) !== 'vuillet' || secretTeacherUnlocked))
+      && clean(profile.lastName) === clean(inputLast))
     : null;
   const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
