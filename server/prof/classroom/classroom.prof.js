@@ -116,6 +116,20 @@ function buildBridgePlanStudents(classroom, students = []) {
     return { cols, rows, students: projected };
 }
 
+function getBridgeStudentScore(student) {
+    const values = (Array.isArray(student?.behaviorRecords) ? student.behaviorRecords : [])
+        .map((record) => {
+            const scores = Array.isArray(record?.scores) ? record.scores : [];
+            const selected = scores.find((score) => String(score?.id || score?._id || '') === String(record?.selectedScoreId || ''))
+                || scores[scores.length - 1];
+            if (selected && Number.isFinite(Number(selected.value))) return Number(selected.value);
+            const legacy = Number(record?.baseScore ?? 15) + (Number(record?.bonuses || 0) * 0.5) - Number(record?.crosses || 0);
+            return Number.isFinite(legacy) ? Math.max(0, Math.min(20, legacy)) : null;
+        })
+        .filter(Number.isFinite);
+    return values.length ? Math.max(...values) : null;
+}
+
 function buildBridgePersistentDebts(students = []) {
     return students.map((student) => {
         const records = Array.isArray(student?.behaviorRecords) ? student.behaviorRecords : [];
@@ -390,6 +404,7 @@ router.get('/bridge-state/:classId', async (req, res) => {
                 firstName: student.firstName || '',
                 nickname: student.nickname || '',
                 lastName: student.lastName || '',
+                score: getBridgeStudentScore(student),
                 seatX: student.seatX !== null && student.seatX !== undefined && Number.isFinite(Number(student.seatX)) ? Number(student.seatX) : null,
                 seatY: student.seatY !== null && student.seatY !== undefined && Number.isFinite(Number(student.seatY)) ? Number(student.seatY) : null
             }))

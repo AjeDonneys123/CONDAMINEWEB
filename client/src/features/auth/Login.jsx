@@ -22,6 +22,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleReady, setGoogleReady] = useState(false);
   const [devFinderEnabled, setDevFinderEnabled] = useState(false);
+  const [secretTeacherUnlocked, setSecretTeacherUnlocked] = useState(false);
   const googleBtnRef = useRef(null);
   const passwordInputRef = useRef(null);
   const devKeysRef = useRef(new Set());
@@ -65,6 +66,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
             && ['jp', 'jean pierre', 'jean-pierre'].includes(clean(profile.firstName))
           );
           if (teacher) {
+            setSecretTeacherUnlocked(true);
             setSelectedProfile(teacher);
             setInputLast(teacher.lastName || 'VUILLET');
             setInputFirst(teacher.firstName || 'JP');
@@ -219,7 +221,8 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
       const teacherMatch = allUsersData.find(p =>
         p.type === 'teacher' &&
         clean(p.firstName) === typedFirst &&
-        clean(p.lastName) === typedLast
+        clean(p.lastName) === typedLast &&
+        (clean(p.lastName) !== 'vuillet' || secretTeacherUnlocked)
       );
       if (teacherMatch) {
         setLoading(true);
@@ -392,7 +395,8 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const typedTeacherProfile = !selectedProfile
     ? allUsersData.find((profile) => profile.type === 'teacher'
       && clean(profile.firstName) === clean(inputFirst)
-      && clean(profile.lastName) === clean(inputLast))
+      && clean(profile.lastName) === clean(inputLast)
+      && (clean(profile.lastName) !== 'vuillet' || secretTeacherUnlocked))
     : null;
   const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
