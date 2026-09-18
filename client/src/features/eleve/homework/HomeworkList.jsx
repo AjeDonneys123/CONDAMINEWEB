@@ -58,9 +58,10 @@ export default function HomeworkList({
 
         setHomeworks(filtered.map(hw => {
           const s = subByHomeworkId.get(String(hw._id));
+          const isRealDone = Boolean(s && (s.grade || (s.feedback && s.feedback !== 'Brouillon sauvegardé automatiquement.')));
           return {
             ...hw,
-            status: s ? 'done' : 'todo',
+            status: isRealDone ? 'done' : 'todo',
             grade: s?.grade || ''
           };
         }));

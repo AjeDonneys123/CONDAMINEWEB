@@ -540,7 +540,60 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
     const topicText = String(homework?.promptTopic || homework?.levels?.[0]?.instruction || homework?.title || 'Sujet de rédaction');
 
-    // Fetch previous submission if student reopens an already-submitted homework to continue perfecting it
+    const getStorageKey = () => {
+        const sid = String(user?._id || user?.id || '');
+        const hwId = String(homework?._id || '');
+        return (sid && hwId) ? `conda_hw_draft_${hwId}_${sid}` : null;
+    };
+
+    const saveToLocalStorage = (data = {}) => {
+        try {
+            const key = getStorageKey();
+            if (!key) return;
+            const payload = {
+                essayText: data.essayText !== undefined ? data.essayText : essayText,
+                draftText: data.draftText !== undefined ? data.draftText : draftText,
+                aiNotesText: data.aiNotesText !== undefined ? data.aiNotesText : aiNotesText,
+                aiConversationText: data.aiConversationText !== undefined ? data.aiConversationText : aiConversationText,
+                sessionSeconds: data.sessionSeconds !== undefined ? data.sessionSeconds : sessionSeconds,
+                attemptsCount: data.attemptsCount !== undefined ? data.attemptsCount : attemptsCount,
+                savedAt: Date.now()
+            };
+            localStorage.setItem(key, JSON.stringify(payload));
+        } catch (_) {}
+    };
+
+    // Mutable ref to always have latest state without triggering re-renders/timer resets
+    const latestDataRef = useRef({
+        essayText,
+        draftText,
+        aiNotesText,
+        aiConversationText,
+        sessionSeconds,
+        attemptsCount,
+        attemptsHistory
+    });
+
+    useEffect(() => {
+        latestDataRef.current = {
+            essayText,
+            draftText,
+            aiNotesText,
+            aiConversationText,
+            sessionSeconds,
+            attemptsCount,
+            attemptsHistory
+        };
+    });
+
+    // Sauvegarde locale immédiate à chaque frappe dans le brouillon ou la copie
+    useEffect(() => {
+        if (!initialLoading) {
+            saveToLocalStorage({ essayText, draftText, aiNotesText, aiConversationText, sessionSeconds, attemptsCount });
+        }
+    }, [essayText, draftText, aiNotesText, aiConversationText]);
+
+    // Fetch previous submission if student reopens an already-submitted homework or draft
     useEffect(() => {
         let isMounted = true;
         const sid = String(user?._id || user?.id || '');
@@ -550,32 +603,68 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             return;
         }
 
+        // Check local storage backup first
+        let localBackup = null;
+        try {
+            const key = `conda_hw_draft_${hwId}_${sid}`;
+            const raw = localStorage.getItem(key);
+            if (raw) localBackup = JSON.parse(raw);
+        } catch (_) {}
+
         fetch(`/api/eleve/homework/submission/${hwId}/${sid}`)
             .then((res) => (res.ok ? res.json() : null))
             .then((sub) => {
-                if (!isMounted || !sub) {
+                if (!isMounted) return;
+                
+                if (!sub) {
+                    // No server submission yet, check if we can restore from local backup
+                    if (localBackup && (localBackup.essayText || localBackup.draftText)) {
+                        if (localBackup.essayText) {
+                            setEssayText(localBackup.essayText);
+                            setHistory([localBackup.essayText]);
+                            setHistoryIdx(0);
+                        }
+                        if (localBackup.draftText) setDraftText(localBackup.draftText);
+                        if (localBackup.aiNotesText) {
+                            setAiNotesText(localBackup.aiNotesText);
+                            setPinnedAiNotes(localBackup.aiNotesText);
+                        }
+                        if (localBackup.aiConversationText) setAiConversationText(localBackup.aiConversationText);
+                        if (localBackup.attemptsCount) setAttemptsCount(localBackup.attemptsCount);
+                        showToast("💾 Votre travail précédent a été restauré depuis ce navigateur !");
+                    }
                     setInitialLoading(false);
                     return;
                 }
-                setAlreadySubmitted(true);
+
+                const isRealFinalSubmission = Boolean(sub.grade || (sub.feedback && sub.feedback !== 'Brouillon sauvegardé automatiquement.'));
+                setAlreadySubmitted(isRealFinalSubmission);
+
                 const bonus = sub.examBonusPoints ?? sub.learningEfficiency?.examBonusPoints ?? null;
                 setLastSubmittedBonus(bonus);
                 if (sub.grade) setCurrentGrade(sub.grade);
                 if (sub.initialGrade) setInitialGrade(sub.initialGrade);
                 if (sub.revisedGrade) setRevisedGrade(sub.revisedGrade);
 
-                if (sub.content) {
-                    setEssayText(sub.content);
-                    setHistory([sub.content]);
+                // Recover best content (prefer server if populated, fallback to local backup)
+                const resolvedEssay = sub.content || localBackup?.essayText || '';
+                const resolvedDraft = sub.draftContent || localBackup?.draftText || '';
+                const resolvedNotes = sub.aiNotes || localBackup?.aiNotesText || '';
+                const resolvedChat = sub.aiConversationLog || localBackup?.aiConversationText || '';
+
+                if (resolvedEssay) {
+                    setEssayText(resolvedEssay);
+                    setHistory([resolvedEssay]);
                     setHistoryIdx(0);
                 }
-                if (sub.draftContent) setDraftText(sub.draftContent);
-                if (sub.aiNotes) {
-                    setAiNotesText(sub.aiNotes);
-                    setPinnedAiNotes(sub.aiNotes);
-                    setShowAiNotes(true);
+                if (resolvedDraft) setDraftText(resolvedDraft);
+                if (resolvedNotes) {
+                    setAiNotesText(resolvedNotes);
+                    setPinnedAiNotes(resolvedNotes);
+                    if (isRealFinalSubmission) setShowAiNotes(true);
                 }
-                if (sub.aiConversationLog) setAiConversationText(sub.aiConversationLog);
+                if (resolvedChat) setAiConversationText(resolvedChat);
+
                 if (sub.memoSheet) {
                     setMemoSheetText(sub.memoSheet);
                     const parts = sub.memoSheet.split('--- CONSEILS ET PIÈGES RETENUS POUR LE DS ---');
@@ -584,7 +673,10 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                 }
                 if (sub.attemptsCount) {
                     setAttemptsCount(Math.max(1, Number(sub.attemptsCount)));
+                } else if (localBackup?.attemptsCount) {
+                    setAttemptsCount(Math.max(1, Number(localBackup.attemptsCount)));
                 }
+
                 if (Array.isArray(sub.learningEfficiency?.attemptsHistory) && sub.learningEfficiency.attemptsHistory.length > 0) {
                     setAttemptsHistory(sub.learningEfficiency.attemptsHistory);
                 }
@@ -597,12 +689,19 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                     setSessionSeconds(Number(sub.timeSpentSeconds));
                 }
 
-                // Devoir déjà rendu : on ne bloque pas avec le modal d'introduction
-                setShowProgressionGuide(false);
+                if (isRealFinalSubmission) {
+                    setShowProgressionGuide(false);
+                }
                 setInitialLoading(false);
             })
             .catch(() => {
-                if (isMounted) setInitialLoading(false);
+                if (isMounted) {
+                    if (localBackup && (localBackup.essayText || localBackup.draftText)) {
+                        if (localBackup.essayText) setEssayText(localBackup.essayText);
+                        if (localBackup.draftText) setDraftText(localBackup.draftText);
+                    }
+                    setInitialLoading(false);
+                }
             });
 
         return () => { isMounted = false; };
@@ -616,60 +715,94 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         return () => clearInterval(interval);
     }, []);
 
-    // Sauvegarde automatique toutes les 3 minutes (180 000 ms) pour ne jamais perdre le travail
-    const triggerAutoSave = async () => {
-        const cleanDraft = (draftText || '').trim();
-        const cleanEssay = (essayText || '').trim();
-        const cleanNotes = (aiNotesText || '').trim();
-        const cleanChat = (aiConversationText || '').trim();
+    // Sauvegarde automatique et résiliente (Local + Serveur)
+    const triggerAutoSave = async (isManual = false) => {
+        const cur = latestDataRef.current;
+        const cleanDraft = (cur.draftText || '').trim();
+        const cleanEssay = (cur.essayText || '').trim();
+        const cleanNotes = (cur.aiNotesText || '').trim();
+        const cleanChat = (cur.aiConversationText || '').trim();
         const hwId = homework?._id;
         const sid = user?._id || user?.id;
         if (!hwId || !sid) return;
         if (!cleanDraft && !cleanEssay && !cleanNotes && !cleanChat) return;
+
+        // Sauvegarde immédiate en localStorage
+        saveToLocalStorage(cur);
 
         try {
             setIsAutoSaving(true);
             const res = await fetch('/api/eleve/homework/autosave', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
                 body: JSON.stringify({
                     homeworkId: hwId,
                     playerId: sid,
-                    userText: cleanEssay,
-                    draftContent: cleanDraft,
-                    aiNotes: cleanNotes,
-                    aiConversationLog: cleanChat,
-                    timeSpentSeconds: sessionSeconds,
-                    attemptsCount,
-                    attemptsHistory
+                    userText: cur.essayText || '',
+                    draftContent: cur.draftText || '',
+                    aiNotes: cur.aiNotesText || '',
+                    aiConversationLog: cur.aiConversationText || '',
+                    timeSpentSeconds: cur.sessionSeconds || 0,
+                    attemptsCount: cur.attemptsCount || 1,
+                    attemptsHistory: cur.attemptsHistory || []
                 })
             });
             const data = await res.json();
             setIsAutoSaving(false);
             if (data?.ok && data.savedAt) {
                 setLastAutoSavedAt(data.savedAt);
+                if (isManual) {
+                    showToast(`✅ Brouillon sauvegardé à ${data.savedAt}`);
+                }
             }
         } catch (e) {
             setIsAutoSaving(false);
-            console.warn('Autosave warning:', e);
+            console.warn('Autosave server warning:', e);
+            if (isManual) {
+                showToast(`💾 Sauvegardé en mémoire sur ce navigateur`);
+            }
         }
     };
 
+    // Sauvegarde serveur périodique toutes les 30 secondes (timer stable)
     useEffect(() => {
-        const THREE_MINUTES = 3 * 60 * 1000;
+        const THIRTY_SECONDS = 30 * 1000;
         const timer = setInterval(() => {
-            triggerAutoSave();
-        }, THREE_MINUTES);
+            triggerAutoSave(false);
+        }, THIRTY_SECONDS);
         return () => clearInterval(timer);
-    }, [essayText, draftText, aiNotesText, aiConversationText, sessionSeconds, attemptsCount, attemptsHistory, homework?._id, user?._id]);
+    }, [homework?._id, user?._id, user?.id]);
 
+    // Sauvegarde debouncée 4 secondes après une pause d'écriture
     useEffect(() => {
-        const handleBeforeUnload = () => {
-            triggerAutoSave();
+        const cleanDraft = (draftText || '').trim();
+        const cleanEssay = (essayText || '').trim();
+        if (!cleanDraft && !cleanEssay) return;
+
+        const timer = setTimeout(() => {
+            triggerAutoSave(false);
+        }, 4000);
+        return () => clearTimeout(timer);
+    }, [draftText, essayText]);
+
+    // Sauvegarde au changement d'onglet ou fermeture de fenêtre
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                triggerAutoSave(false);
+            }
         };
+        const handleBeforeUnload = () => {
+            triggerAutoSave(false);
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [essayText, draftText, aiNotesText, aiConversationText, sessionSeconds, attemptsCount]);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, []);
 
     const formatTimer = (totalSec) => {
         const m = Math.floor(totalSec / 60);
@@ -927,6 +1060,7 @@ Consignes pour le Tuteur (Histoire-Géographie CondaWeb) :
         const preparedDraft = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanDraft)));
         const preparedEssay = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanEssay)));
 
+        const isAttempt1 = attemptsCount === 1;
         let textToCopy = '';
 
         if (isAttempt1) {
@@ -998,15 +1132,41 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
         // Injecte les homoglyphes invisibles sur l'ENSEMBLE du texte copié (en-têtes, consignes, sujet, brouillon, devoir)
         textToCopy = injectHomoglyphs(textToCopy, 2);
 
+        let copiedOk = false;
         try {
-            await navigator.clipboard.writeText(textToCopy);
-            setIsNotesFocusMode(true);
-            setAiCopiedToast(true);
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(textToCopy);
+                copiedOk = true;
+            }
+        } catch (clipErr) {
+            console.warn('navigator.clipboard direct write failed, trying fallback execCommand:', clipErr);
+        }
+
+        if (!copiedOk) {
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = textToCopy;
+                textArea.style.position = 'fixed';
+                textArea.style.top = '-9999px';
+                textArea.style.left = '-9999px';
+                textArea.setAttribute('readonly', '');
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                copiedOk = document.execCommand('copy');
+                document.body.removeChild(textArea);
+            } catch (fallbackErr) {
+                console.error('Fallback execCommand copy failed:', fallbackErr);
+            }
+        }
+
+        setIsNotesFocusMode(true);
+        setAiCopiedToast(true);
+        if (copiedOk) {
             showToast(`📋 ${modeLabel} copié(e) avec clé #${currentKey} ! Collez à Gemini.`);
-        } catch (_) {
-            setIsNotesFocusMode(true);
-            setAiCopiedToast(true);
-            showToast(`ℹ️ Collez votre ${modeLabel} à Gemini et notez ses conseils.`);
+        } else {
+            showToast(`ℹ️ ${modeLabel} prêt. Collez à Gemini et notez ses conseils.`);
         }
     };
 
@@ -1312,6 +1472,30 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                         <span>{formatTimer(sessionSeconds)}</span>
                         <span className="text-[10px] font-bold text-slate-400">/ min {minTimeMinutes}m</span>
                     </div>
+
+                    <div className="flex items-center gap-1.5">
+                        {isAutoSaving ? (
+                            <span className="text-[11px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1.5 animate-pulse" title="Sauvegarde en cours sur le serveur">
+                                <span>💾</span>
+                                <span>Sauvegarde...</span>
+                            </span>
+                        ) : lastAutoSavedAt ? (
+                            <span className="text-[11px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-xl hidden md:flex items-center gap-1.5" title="Dernière sauvegarde réussie (local + serveur)">
+                                <span>☁️</span>
+                                <span>Sauvegardé {lastAutoSavedAt}</span>
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            onClick={() => triggerAutoSave(true)}
+                            className="text-[11px] font-bold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700 active:scale-95 px-2.5 py-1 rounded-xl border border-slate-700/80 flex items-center gap-1 transition shadow-sm"
+                            title="Forcer la sauvegarde immédiate de votre travail"
+                        >
+                            <span>💾</span>
+                            <span>Sauvegarder</span>
+                        </button>
+                    </div>
+
                     <button
                         type="button"
                         className="conda-rules-header-btn"
@@ -1789,7 +1973,7 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
 
                     <div className="conda-redaction-actions-bar">
                         <div className="flex flex-wrap items-center gap-3">
-                            {attemptsCount === 1 && !showAiNotes && !alreadySubmitted ? (
+                            {attemptsCount === 1 && !alreadySubmitted ? (
                                 <button
                                     type="button"
                                     className="conda-btn-ia-copy"

@@ -658,10 +658,16 @@ router.get('/plan/:classId', async (req, res) => {
                 if (isAssigned) {
                     homeworkAssigned += 1;
                     const sub = subs.find(sub => String(sub.studentId) === sId && String(sub.homeworkId) === String(hw._id));
-                    const note = sub ? gradeToNumber(sub.grade) : 0;
-                    hwNotes.push(note);
-                    if (!sub) indicators.push({ type: 'hw', status: 'todo' });
-                    else indicators.push({ type: 'hw', status: 'grade-' + (sub.grade || "B").replace('+', 'plus') });
+                    const isRealSub = sub && (sub.grade || (sub.feedback && sub.feedback !== 'Brouillon sauvegardé automatiquement.'));
+                    if (isRealSub) {
+                        const note = gradeToNumber(sub.grade);
+                        hwNotes.push(note);
+                        indicators.push({ type: 'hw', status: 'grade-' + (sub.grade || "B").replace('+', 'plus') });
+                    } else if (sub) {
+                        indicators.push({ type: 'hw', status: 'started' });
+                    } else {
+                        indicators.push({ type: 'hw', status: 'todo' });
+                    }
                 }
             });
             games.forEach(g => {

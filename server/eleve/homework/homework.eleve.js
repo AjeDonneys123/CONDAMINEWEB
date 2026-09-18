@@ -420,7 +420,7 @@ router.get('/submissions/:studentId', async (req, res) => {
         if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json([]);
         const subs = await Submission.find(
             { studentId },
-            'homeworkId grade createdAt updatedAt'
+            'homeworkId grade createdAt updatedAt feedback'
         ).sort({ createdAt: -1 }).lean();
         res.json(subs);
     } catch (e) {
