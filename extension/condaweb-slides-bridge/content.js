@@ -1005,6 +1005,23 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             dock.appendChild(addButton);
         }
 
+        let notesButton = dock.querySelector('.conda-slide-notes-toggle');
+        if (!notesButton) {
+            notesButton = document.createElement('button');
+            notesButton.type = 'button';
+            notesButton.className = 'conda-slide-notes-toggle';
+            notesButton.onclick = () => {
+                scoreAlertsVisible = !scoreAlertsVisible;
+                try {
+                    localStorage.setItem('condaSlideScoreAlertsVisible', scoreAlertsVisible ? 'true' : 'false');
+                } catch (_) {}
+                updateNotesDockButton(notesButton);
+                renderAlerts(root);
+            };
+            dock.appendChild(notesButton);
+        }
+        updateNotesDockButton(notesButton);
+
         let timerButton = dock.querySelector('.conda-slide-timer-toggle');
         if (!timerButton) {
             timerButton = document.createElement('button');
@@ -1024,22 +1041,12 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         };
         updateTimerDockButton(timerButton);
 
-        let notesButton = dock.querySelector('.conda-slide-notes-toggle');
-        if (!notesButton) {
-            notesButton = document.createElement('button');
-            notesButton.type = 'button';
-            notesButton.className = 'conda-slide-notes-toggle';
-            notesButton.onclick = () => {
-                scoreAlertsVisible = !scoreAlertsVisible;
-                try {
-                    localStorage.setItem('condaSlideScoreAlertsVisible', scoreAlertsVisible ? 'true' : 'false');
-                } catch (_) {}
-                updateNotesDockButton(notesButton);
-                renderAlerts(root);
-            };
-            dock.appendChild(notesButton);
+        // Garantir que le bouton NOTES est toujours positionné DEVANT le minuteur dans la barre
+        if (notesButton && timerButton && timerButton.parentElement === dock && notesButton.parentElement === dock) {
+            if (notesButton.compareDocumentPosition(timerButton) & Node.DOCUMENT_POSITION_PRECEDING) {
+                dock.insertBefore(notesButton, timerButton);
+            }
         }
-        updateNotesDockButton(notesButton);
 
         const connectionBadge = root.querySelector('#conda-bridge-badge');
         const shouldDock = Boolean(isConnected || isWaitingForClass);
@@ -1944,6 +1951,10 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         if (!stack) {
             stack = document.createElement('div');
             stack.className = 'conda-alerts-stack';
+            root.appendChild(stack);
+        }
+        // Toujours garantir que les alertes de notes sont au tout premier plan (devant le minuteur)
+        if (root.lastElementChild !== stack) {
             root.appendChild(stack);
         }
         if (!scoreAlertsVisible) {

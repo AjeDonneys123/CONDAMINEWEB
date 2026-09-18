@@ -232,7 +232,7 @@
 /* Div flottante pour le Minuteur (déplaçable et redimensionnable) */
 .conda-slide-timer-widget {
     position: fixed !important;
-    z-index: 2147483647 !important;
+    z-index: 2147483640 !important;
     width: 310px;
     max-width: 94vw;
     min-width: 180px;
@@ -858,7 +858,7 @@
 
 /* 2. Pile des alertes et avertissements élèves */
 .conda-alerts-stack {
-    position: absolute;
+    position: fixed !important;
     top: 64px;
     right: 32px;
     display: flex;
@@ -866,10 +866,9 @@
     align-items: flex-end;
     gap: 16px;
     pointer-events: auto;
-    /* Le plan miroir est une grande fenêtre. Les notes et avertissements
-       restent volontairement au-dessus : ce sont les informations urgentes
-       que la classe doit voir, y compris plan ouvert. */
-    z-index: 30;
+    /* Les notes et avertissements restent impérativement au tout premier plan (devant le timer) :
+       ce sont les informations urgentes que la classe doit voir immédiatement. */
+    z-index: 2147483647 !important;
 }
 
 .conda-alert-toast {

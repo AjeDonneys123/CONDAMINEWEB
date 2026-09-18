@@ -144,7 +144,7 @@ export default function ProfHeader({ user, onLogout }) {
           </div>
           <div className="flex gap-3">
             <a
-              href="/condaweb-slides-bridge.zip?v=1.0.40"
+              href="/condaweb-slides-bridge.zip?v=1.0.49"
               download="condaweb-slides-bridge.zip"
               title="Télécharger l’extension Chrome CondaWeb pour Google Slides"
               className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"
