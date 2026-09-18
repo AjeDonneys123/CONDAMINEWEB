@@ -1358,9 +1358,71 @@ Réponds STRICTEMENT par un objet JSON valide suivant ce format :
     });
 });
 
-router.post('/reevaluate', async (req, res) => {
+router.post('/autosave', async (req, res) => {
     try {
         const {
+            homeworkId,
+            playerId,
+            userText = '',
+            draftContent = '',
+            aiNotes = '',
+            aiConversationLog = '',
+            timeSpentSeconds = 0,
+            attemptsCount = 1,
+            attemptsHistory = []
+        } = req.body || {};
+
+        if (!homeworkId || !playerId) {
+            return res.status(400).json({ error: "Identifiants requis" });
+        }
+
+        const Homework = mongoose.model('Homework');
+        const Submission = mongoose.model('Submission');
+
+        let existingSub = await Submission.findOne({ studentId: playerId, homeworkId });
+        const effectiveContent = userText || (existingSub && existingSub.content) || draftContent || '';
+
+        if (existingSub) {
+            if (userText) existingSub.content = userText;
+            existingSub.draftContent = String(draftContent || existingSub.draftContent || '');
+            existingSub.aiNotes = String(aiNotes || existingSub.aiNotes || '');
+            if (aiConversationLog) existingSub.aiConversationLog = String(aiConversationLog);
+            existingSub.timeSpentSeconds = Math.max(Number(existingSub.timeSpentSeconds || 0), Number(timeSpentSeconds || 0));
+            existingSub.attemptsCount = Math.max(Number(existingSub.attemptsCount || 1), Number(attemptsCount || 1));
+            if (Array.isArray(attemptsHistory) && attemptsHistory.length > 0) {
+                if (!existingSub.learningEfficiency) existingSub.learningEfficiency = {};
+                existingSub.learningEfficiency.attemptsHistory = attemptsHistory;
+            }
+            await existingSub.save();
+        } else {
+            const hw = await Homework.findById(homeworkId).lean();
+            existingSub = await Submission.create({
+                studentId: playerId,
+                homeworkId,
+                mode: hw?.mode || 'redaction',
+                content: effectiveContent,
+                draftContent: String(draftContent || ''),
+                aiNotes: String(aiNotes || ''),
+                aiConversationLog: String(aiConversationLog || ''),
+                timeSpentSeconds: Number(timeSpentSeconds || 0),
+                attemptsCount: Number(attemptsCount || 1),
+                grade: '',
+                feedback: 'Brouillon sauvegardé automatiquement.'
+            });
+        }
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        res.json({ ok: true, savedAt: timeStr });
+    } catch (err) {
+        console.error("❌ [AUTOSAVE ERROR]", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/reevaluate', async (req, res) => {
+    try {
+        let {
             homeworkId,
             playerId,
             levelIndex = 0,
@@ -1372,6 +1434,10 @@ router.post('/reevaluate', async (req, res) => {
             attemptsCount = 1,
             attemptsHistory = []
         } = req.body || {};
+
+        if (!userText && draftContent) {
+            userText = draftContent;
+        }
 
         if (!homeworkId || !playerId) {
             return res.status(400).json({ error: "Identifiants requis" });

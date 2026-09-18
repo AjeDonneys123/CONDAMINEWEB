@@ -531,7 +531,10 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [revisedGrade, setRevisedGrade] = useState('');
     const [reevaluating, setReevaluating] = useState(false);
     const [reevaluationFeedback, setReevaluationFeedback] = useState(null);
+    const [showIntermediateEvalModal, setShowIntermediateEvalModal] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
+    const [lastAutoSavedAt, setLastAutoSavedAt] = useState('');
+    const [isAutoSaving, setIsAutoSaving] = useState(false);
 
     // Homework configuration
     const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
@@ -598,8 +601,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                 setShowProgressionGuide(false);
                 setInitialLoading(false);
             })
-            .catch((err) => {
-                console.warn('[Redaction] Erreur chargement copie précédente:', err);
+            .catch(() => {
                 if (isMounted) setInitialLoading(false);
             });
 
@@ -613,6 +615,61 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         }, 1000);
         return () => clearInterval(interval);
     }, []);
+
+    // Sauvegarde automatique toutes les 3 minutes (180 000 ms) pour ne jamais perdre le travail
+    const triggerAutoSave = async () => {
+        const cleanDraft = (draftText || '').trim();
+        const cleanEssay = (essayText || '').trim();
+        const cleanNotes = (aiNotesText || '').trim();
+        const cleanChat = (aiConversationText || '').trim();
+        const hwId = homework?._id;
+        const sid = user?._id || user?.id;
+        if (!hwId || !sid) return;
+        if (!cleanDraft && !cleanEssay && !cleanNotes && !cleanChat) return;
+
+        try {
+            setIsAutoSaving(true);
+            const res = await fetch('/api/eleve/homework/autosave', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    homeworkId: hwId,
+                    playerId: sid,
+                    userText: cleanEssay,
+                    draftContent: cleanDraft,
+                    aiNotes: cleanNotes,
+                    aiConversationLog: cleanChat,
+                    timeSpentSeconds: sessionSeconds,
+                    attemptsCount,
+                    attemptsHistory
+                })
+            });
+            const data = await res.json();
+            setIsAutoSaving(false);
+            if (data?.ok && data.savedAt) {
+                setLastAutoSavedAt(data.savedAt);
+            }
+        } catch (e) {
+            setIsAutoSaving(false);
+            console.warn('Autosave warning:', e);
+        }
+    };
+
+    useEffect(() => {
+        const THREE_MINUTES = 3 * 60 * 1000;
+        const timer = setInterval(() => {
+            triggerAutoSave();
+        }, THREE_MINUTES);
+        return () => clearInterval(timer);
+    }, [essayText, draftText, aiNotesText, aiConversationText, sessionSeconds, attemptsCount, attemptsHistory, homework?._id, user?._id]);
+
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            triggerAutoSave();
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [essayText, draftText, aiNotesText, aiConversationText, sessionSeconds, attemptsCount]);
 
     const formatTimer = (totalSec) => {
         const m = Math.floor(totalSec / 60);
@@ -673,57 +730,69 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
     useEffect(() => {
         if (!windowAction) return;
-        const minW = 320;
-        const minH = 140;
 
-        const onMove = (e) => {
+        const onMouseMove = (e) => {
             const dx = e.clientX - windowAction.startX;
             const dy = e.clientY - windowAction.startY;
-            const start = windowAction.startRect;
-            let next = { ...start };
+            const rect = windowAction.startRect;
 
             if (windowAction.type === 'move') {
-                next.x = Math.max(0, Math.min(window.innerWidth - start.w, start.x + dx));
-                next.y = Math.max(0, Math.min(window.innerHeight - (windowAction.name === 'advice' && adviceCollapsed ? 45 : start.h), start.y + dy));
+                const nextX = Math.max(10, Math.min(window.innerWidth - 120, rect.x + dx));
+                const nextY = Math.max(70, Math.min(window.innerHeight - 80, rect.y + dy));
+                setWindows((prev) => ({
+                    ...prev,
+                    [windowAction.name]: { ...prev[windowAction.name], x: nextX, y: nextY }
+                }));
             } else if (windowAction.type === 'resize') {
-                const dir = windowAction.dir;
-                if (dir.includes('e')) next.w = Math.max(minW, Math.min(window.innerWidth - start.x, start.w + dx));
-                if (dir.includes('s')) next.h = Math.max(minH, Math.min(window.innerHeight - start.y, start.h + dy));
-                if (dir.includes('w')) {
-                    const rawX = start.x + dx;
-                    const maxX = start.x + start.w - minW;
-                    next.x = Math.max(0, Math.min(maxX, rawX));
-                    next.w = start.w - (next.x - start.x);
+                const minW = 280;
+                const minH = 160;
+                const maxW = Math.min(1100, window.innerWidth - 30);
+                const maxH = Math.min(900, window.innerHeight - 80);
+
+                let nextW = rect.w;
+                let nextH = rect.h;
+                let nextX = rect.x;
+                let nextY = rect.y;
+
+                if (windowAction.dir.includes('e')) nextW = Math.min(maxW, Math.max(minW, rect.w + dx));
+                if (windowAction.dir.includes('s')) nextH = Math.min(maxH, Math.max(minH, rect.h + dy));
+                if (windowAction.dir.includes('w')) {
+                    const proposedW = rect.w - dx;
+                    if (proposedW >= minW && proposedW <= maxW) {
+                        nextW = proposedW;
+                        nextX = rect.x + dx;
+                    }
                 }
-                if (dir.includes('n')) {
-                    const rawY = start.y + dy;
-                    const maxY = start.y + start.h - minH;
-                    next.y = Math.max(0, Math.min(maxY, rawY));
-                    next.h = start.h - (next.y - start.y);
+                if (windowAction.dir.includes('n')) {
+                    const proposedH = rect.h - dy;
+                    if (proposedH >= minH && proposedH <= maxH) {
+                        nextH = proposedH;
+                        nextY = rect.y + dy;
+                    }
                 }
+
+                setWindows((prev) => ({
+                    ...prev,
+                    [windowAction.name]: { x: nextX, y: nextY, w: nextW, h: nextH }
+                }));
             }
-            setWindows((prev) => ({ ...prev, [windowAction.name]: next }));
         };
 
-        const onUp = () => setWindowAction(null);
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
+        const onMouseUp = () => {
+            setWindowAction(null);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
         return () => {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
         };
-    }, [windowAction, adviceCollapsed]);
+    }, [windowAction]);
 
-    // Text edition with Undo/Redo tracking (Ctrl+V paste is ALLOWED)
+    // Text edition with Undo/Redo tracking
     const handleTextChange = (e) => {
         const newText = e.target.value;
-
-        // If starting to write while draft is empty, remind student
-        if (!draftText.trim() && newText.trim().length > 0 && !draftWarnedRef.current) {
-            draftWarnedRef.current = true;
-            showToast("⚠️ Rédige d'abord ton plan et des idées au brouillon.");
-        }
-
         setEssayText(newText);
         // Truncate future history and push new state
         const updated = history.slice(0, historyIdx + 1);
@@ -743,35 +812,18 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         setAiNotesText(e.target.value);
     };
 
+    // Copier-coller autorisé pour faciliter les échanges avec l'IA
     const handleBlockedPaste = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showToast("⚠️ Le copier-coller est interdit. La rédaction doit être tapée au clavier pour valider votre bonus d'examen !");
+        // Le copier-coller est désormais autorisé
     };
 
     const handleBlockedCopy = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showToast("⚠️ Le copier-coller sortant (Ctrl+C) est bloqué. Utilisez le bouton '📋 Copier pour l'IA' pour exporter votre travail.");
+        // Le copier-coller est désormais autorisé
     };
 
-    // Keyboard handlers: strictly block Ctrl+C, Ctrl+X and Ctrl+V
+    // Raccourcis clavier (Ctrl+C, Ctrl+V, Ctrl+X) entièrement autorisés
     const handleKeyDown = (e) => {
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
-            e.preventDefault();
-            e.stopPropagation();
-            showToast("⚠️ Utilisez le bouton '📋 Copier mon travail pour l'IA' pour exporter votre devoir.");
-        }
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
-            e.preventDefault();
-            e.stopPropagation();
-            showToast("⚠️ Couper interdit. Utilisez la touche Suppr.");
-        }
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
-            e.preventDefault();
-            e.stopPropagation();
-            showToast("⚠️ Le copier-coller est interdit. La rédaction doit être tapée au clavier pour valider votre bonus d'examen !");
-        }
+        // Événements clavier normaux préservés
     };
 
     const handleUndo = () => {
@@ -827,42 +879,13 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
     // "Copier pour l'IA" handler with smart instruction prompt & unique session token
     const handleCopyForAI = async () => {
-        const cleanDraft = draftText.trim();
-        const cleanEssay = essayText.trim();
-        const isAttempt1 = attemptsCount === 1;
+        const cleanDraft = (draftText || '').trim();
+        const cleanEssay = (essayText || '').trim();
 
-        // Validation rules based on attempt number and selected mode
-        if (isAttempt1) {
-            if (!cleanDraft || cleanDraft.length < 15) {
-                showToast("⚠️ Sas d'engagement : posez d'abord vos idées et votre plan dans le brouillon.");
-                return;
-            }
-            if (!cleanEssay || cleanEssay.length < 25) {
-                showToast("⚠️ Sas d'engagement : rédigez votre 1er essai de devoir (V1) avant de solliciter l'IA.");
-                return;
-            }
-        } else {
-            if (copyTargetMode === 'draft') {
-                if (!cleanDraft || cleanDraft.length < 15) {
-                    showToast("⚠️ Votre brouillon est vide. Posez ou ajustez votre plan avant de le copier pour l'IA.");
-                    return;
-                }
-            } else if (copyTargetMode === 'essay') {
-                if (!cleanEssay || cleanEssay.length < 25) {
-                    showToast("⚠️ Votre devoir rédigé est vide ou trop court.");
-                    return;
-                }
-            } else {
-                // 'both'
-                if (!cleanDraft || cleanDraft.length < 15) {
-                    showToast("⚠️ Votre brouillon est vide.");
-                    return;
-                }
-                if (!cleanEssay || cleanEssay.length < 25) {
-                    showToast("⚠️ Votre devoir rédigé est trop court.");
-                    return;
-                }
-            }
+        // Validation souple : du texte dans au moins une des cases suffit
+        if (!cleanDraft && !cleanEssay) {
+            showToast("⚠️ Saisissez du texte dans votre devoir ou votre brouillon avant de copier pour l'IA.");
+            return;
         }
 
         copyCountRef.current += 1;
@@ -1018,12 +1041,10 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
     };
 
     const handleValidateClick = () => {
-        if (!draftText.trim()) {
-            alert("⚠️ Brouillon obligatoire : vous devez d'abord poser votre plan et vos idées dans le brouillon pour valider (+0.5 pt bonus de base garanti).");
-            return;
-        }
-        if (!essayText.trim()) {
-            alert("⚠️ Veuillez rédiger votre travail avant de valider.");
+        const cleanDraft = draftText.trim();
+        const cleanEssay = essayText.trim();
+        if (!cleanDraft && !cleanEssay) {
+            alert("⚠️ Veuillez saisir du texte dans votre devoir ou votre brouillon avant de valider.");
             return;
         }
         const minTimeSec = minTimeMinutes * 60;
@@ -1042,33 +1063,31 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
 
     // Final submission
     const handleFinalSubmit = async () => {
-        if (!finalPlanText.trim()) {
-            showToast("⚠️ Refaites d'abord votre plan consolidé au brouillon.");
-            return;
-        }
-        if (!finalLessonsText.trim()) {
-            showToast("⚠️ Formulez les 2 ou 3 conseils que vous avez appris de l'IA pour le DS.");
-            return;
-        }
-        if (!aiConversationText.trim()) {
-            showToast("⚠️ Collez votre échange avec l'IA pour finaliser l'envoi.");
+        const cleanDraft = draftText.trim();
+        const cleanEssay = essayText.trim();
+        if (!cleanDraft && !cleanEssay) {
+            showToast("⚠️ Veuillez saisir du texte dans votre devoir ou votre brouillon avant de valider.");
             return;
         }
 
         setSubmitting(true);
-        const finalEntry = formatAttemptData(attemptsCount, essayText, draftText, copyTargetMode);
+        const finalEntry = formatAttemptData(attemptsCount, cleanEssay || cleanDraft, cleanDraft, copyTargetMode);
         const historyToSend = attemptsHistory.filter(a => a.attemptNumber !== attemptsCount);
         historyToSend.push(finalEntry);
 
         const currentToken = registeredKeys[registeredKeys.length - 1] || computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount);
-        const combinedMemoSheet = `--- PLAN CONSOLIDÉ AU BROUILLON ---\n${finalPlanText.trim()}\n\n--- CONSEILS ET PIÈGES RETENUS POUR LE DS ---\n${finalLessonsText.trim()}`;
+        const planText = finalPlanText.trim() || cleanDraft;
+        const lessonsText = finalLessonsText.trim();
+        const combinedMemoSheet = (planText || lessonsText)
+            ? `--- PLAN CONSOLIDÉ AU BROUILLON ---\n${planText}\n\n--- CONSEILS ET PIÈGES RETENUS POUR LE DS ---\n${lessonsText}`
+            : '';
 
         const payload = {
             homeworkId: homework._id,
             levelIndex: 0,
             playerId: user._id || user.id,
-            userText: essayText,
-            draftContent: draftText,
+            userText: cleanEssay || cleanDraft,
+            draftContent: cleanDraft,
             aiNotes: aiNotesText,
             memoSheet: combinedMemoSheet,
             sessionToken: currentToken,
@@ -1103,13 +1122,18 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
         }
     };
 
-    // AI Re-evaluation handler
-    const handleReevaluateWork = async () => {
-        if (!essayText.trim()) {
-            showToast("⚠️ Votre devoir est vide. Rédigez votre texte avant de demander une réévaluation.");
+    // AI Re-evaluation handler (conçu pour progresser sur plusieurs séances)
+    const handleReevaluateWork = async (customChat) => {
+        const cleanDraft = draftText.trim();
+        const cleanEssay = essayText.trim();
+        const chatToSave = typeof customChat === 'string' ? customChat : aiConversationText;
+
+        if (!cleanDraft && !cleanEssay) {
+            showToast("⚠️ Votre devoir est vide. Écrivez du texte dans au moins une des cases pour le faire corriger.");
             return;
         }
         setReevaluating(true);
+        setShowIntermediateEvalModal(false);
         try {
             const res = await fetch('/api/eleve/homework/reevaluate', {
                 method: 'POST',
@@ -1117,8 +1141,10 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                 body: JSON.stringify({
                     homeworkId: homework._id,
                     playerId: user._id || user.id,
-                    userText: essayText,
-                    draftContent: draftText,
+                    userText: cleanEssay || cleanDraft,
+                    draftContent: cleanDraft,
+                    aiNotes: aiNotesText,
+                    aiConversationLog: chatToSave,
                     attemptsCount: attemptsCount
                 })
             });
@@ -1403,13 +1429,13 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                     <div className="conda-perfectionnement-actions">
                         <button
                             type="button"
-                            onClick={handleReevaluateWork}
-                            disabled={reevaluating || !essayText.trim()}
+                            onClick={() => setShowIntermediateEvalModal(true)}
+                            disabled={reevaluating || (!essayText.trim() && !draftText.trim())}
                             className="conda-perfectionnement-reeval-btn"
-                            title="Faire réévaluer la copie actuelle par l'IA pour actualiser votre 2ème note (ex: 15-16)"
+                            title="Faire corriger la copie actuelle par l'IA pour actualiser votre note (ex: 15-16). Sauvegarde l'état actuel de votre chat avec l'IA."
                         >
                             <span>{reevaluating ? '⏳' : '🎯'}</span>
-                            <span>{reevaluating ? 'Réévaluation en cours...' : "Réévaluer par l'IA"}</span>
+                            <span>{reevaluating ? 'Correction en cours...' : "⚡ Corriger / Évaluer par l'IA"}</span>
                         </button>
                         <button
                             type="button"
@@ -1893,20 +1919,30 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
 
                             <button
                                 type="button"
+                                className="conda-redaction-tool-btn border-indigo-500/40 bg-indigo-950/40 text-indigo-300 hover:text-white"
+                                onClick={() => setShowIntermediateEvalModal(true)}
+                                title="Afficher ou coller l'état actuel de votre échange avec l'IA"
+                            >
+                                <span>💬</span>
+                                <span>Chat IA {aiConversationText.trim().length > 10 ? '✅' : ''}</span>
+                            </button>
+
+                            <button
+                                type="button"
                                 className="conda-btn-reevaluate"
-                                onClick={handleReevaluateWork}
-                                disabled={reevaluating || !essayText.trim()}
-                                title="Faire réévaluer votre texte actuel par l'IA (met à jour la 2ème note, ex: 15-16)"
+                                onClick={() => setShowIntermediateEvalModal(true)}
+                                disabled={reevaluating || (!essayText.trim() && !draftText.trim())}
+                                title="Faire corriger votre texte par l'IA : sauvegarde l'état actuel de votre chat avec l'IA et met à jour votre note (ex: 15-16)"
                             >
                                 {reevaluating ? (
                                     <>
                                         <span className="animate-spin">⏳</span>
-                                        <span>Réévaluation...</span>
+                                        <span>Correction en cours...</span>
                                     </>
                                 ) : (
                                     <>
                                         <span>🎯</span>
-                                        <span>Réévaluer par l'IA {currentGrade ? `(${currentGrade})` : ''}</span>
+                                        <span>Corriger / Évaluer par l'IA {currentGrade ? `(Note : ${currentGrade}/20)` : ''}</span>
                                     </>
                                 )}
                             </button>
@@ -2272,6 +2308,99 @@ Analyse mon plan et ma rédaction selon les règles ci-dessus sans jamais donner
                     </div>
                 );
             })()}
+
+            {/* Modal d'Évaluation Intermédiaire avec Sauvegarde de l'état actuel du Chat IA */}
+            {showIntermediateEvalModal && (
+                <div className="conda-redaction-modal-overlay" onClick={() => setShowIntermediateEvalModal(false)}>
+                    <div
+                        className="bg-slate-900 border-2 border-indigo-500/70 rounded-3xl p-6 sm:p-7 max-w-xl w-full shadow-2xl space-y-4 text-left max-h-[92vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <div className="flex items-center gap-3">
+                                <span className="text-3xl">🎯</span>
+                                <div>
+                                    <h3 className="text-base font-black text-white uppercase tracking-wider">
+                                        Évaluation Intermédiaire par l'IA
+                                    </h3>
+                                    <span className="text-[11px] text-indigo-300 font-medium">
+                                        {currentGrade ? `Note actuelle : ${currentGrade}/20 (peut évoluer)` : 'Première évaluation de votre travail'}
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowIntermediateEvalModal(false)}
+                                className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg transition"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-3.5 text-xs text-indigo-200/90 leading-relaxed space-y-1.5">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                                <span>💬</span>
+                                <span>Sauvegarde de l'état actuel de votre échange avec l'IA :</span>
+                            </div>
+                            <p className="m-0">
+                                Pour évaluer précisément vos progrès et prendre en compte les conseils reçus, collez ci-dessous l'état actuel de votre conversation avec le tuteur IA.
+                            </p>
+                            <p className="m-0 text-[11px] text-amber-300 font-medium">
+                                💡 Ce devoir est conçu pour progresser sur plusieurs séances : votre texte et votre échange sont enregistrés pour faire évoluer votre note à chaque étape !
+                            </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                                <span>État actuel de la conversation avec l'IA :</span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                    {aiConversationText.trim().length > 0 ? `${aiConversationText.trim().length} car.` : 'Optionnel mais vivement conseillé'}
+                                </span>
+                            </label>
+                            <textarea
+                                className="w-full h-36 p-3 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                placeholder="Collez ici l'échange récent avec l'IA (Ctrl+V)..."
+                                value={aiConversationText}
+                                onChange={(e) => setAiConversationText(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                            <span>✍️ Devoir rédigé : <strong>{wordsCount} mots</strong></span>
+                            <span>📝 Brouillon : <strong>{draftText.trim().length > 0 ? 'Renseigné' : 'Libre'}</strong></span>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setShowIntermediateEvalModal(false)}
+                                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 transition"
+                            >
+                                Revenir à la rédaction
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleReevaluateWork(aiConversationText)}
+                                disabled={reevaluating || (!essayText.trim() && !draftText.trim())}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {reevaluating ? (
+                                    <>
+                                        <span className="animate-spin">⏳</span>
+                                        <span>Correction en cours...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>🎯</span>
+                                        <span>Lancer la correction & sauvegarder</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Résultat de Réévaluation IA */}
             {reevaluationFeedback && (

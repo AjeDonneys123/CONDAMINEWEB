@@ -699,22 +699,16 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   };
 
   const handleBlockedPaste = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCheatFlags((prev) => ({ ...prev, pasteBursts: prev.pasteBursts + 1 }));
-    showToast("⚠️ Le copier-coller est interdit. La réponse doit être tapée au clavier pour valider votre travail !");
+    // Le copier-coller est désormais autorisé
   };
 
   const handleKeyDown = (e) => {
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
-      e.preventDefault();
-      e.stopPropagation();
-      setCheatFlags((prev) => ({ ...prev, pasteBursts: prev.pasteBursts + 1 }));
-      showToast("⚠️ Le copier-coller est interdit. La réponse doit être tapée au clavier pour valider votre travail !");
-    }
+    // Le raccourci Ctrl+V / Cmd+V est désormais autorisé
   };
 
-  const handlePaste = handleBlockedPaste;
+  const handlePaste = (e) => {
+    // Permis
+  };
 
   useEffect(() => {
     if (!fillDrag) return undefined;
@@ -991,7 +985,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     if (docConsult.spentDocsMs < docConsult.minDocsMs * 0.7) { risk += 2; reasons.push("temps de consultation des documents insuffisant"); }
     if (pageElapsed < minPageMs * 0.35 && answerLen >= 120) { risk += 2; reasons.push("temps total question trop court"); }
     if (actualGlobalElapsed < expectedElapsedToCurrent * 0.3 && pageIdx >= 0) { risk += 1; reasons.push("temps global devoir trop court"); }
-    if (cheatFlags.pasteBursts > 0) { risk = Math.max(risk, 10); reasons.push("copier-coller détecté (zone rouge)"); }
+    // copier-coller autorisé
     if (cheatFlags.oralAIAssist > 0) { risk = Math.max(risk, 8); reasons.push("suspicion d'assistance IA à l'oral"); }
     if (Number(cheatFlags.fullscreenExits || 0) > 0) { risk += 2; reasons.push("sortie du mode plein écran détectée"); }
 
