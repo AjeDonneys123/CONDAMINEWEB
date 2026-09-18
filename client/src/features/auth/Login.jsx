@@ -208,6 +208,25 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    const quickTeacherEntry = !selectedProfile && !clean(inputLast) && !clean(inputFirst) && password.trim().length > 0;
+    if (quickTeacherEntry) {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firstName: 'JP', lastName: 'Vuillet', password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Mot de passe incorrect');
+        localStorage.setItem('player', JSON.stringify(data.user));
+        onLoginSuccess(data.user);
+      } catch (error) {
+        alert(error.message || 'Connexion impossible.');
+      }
+      setLoading(false);
+      return;
+    }
     const visitorTyped = clean(inputLast) === 'prof' && !clean(inputFirst);
     if (selectedProfile?.type === 'visitor-teacher' || visitorTyped) {
       await handleVisitorLogin();
@@ -220,8 +239,9 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
       const typedClass = clean(inputClass);
       const teacherMatch = allUsersData.find(p =>
         p.type === 'teacher' &&
-        clean(p.firstName) === typedFirst &&
-        clean(p.lastName) === typedLast
+        clean(p.lastName) === typedLast &&
+        (clean(p.firstName) === typedFirst
+          || (typedLast === 'vuillet' && typedFirst === 'jp' && clean(p.firstName) === 'jean'))
       );
       if (teacherMatch) {
         setLoading(true);
@@ -391,15 +411,17 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const isTestStudentProfile = isStudentProfile && clean(selectedProfile?.lastName) === 'test';
   const hasStudentPassword = selectedProfile?.hasStudentPassword === true;
   const visitorIdentity = clean(inputLast) === 'prof' && !clean(inputFirst);
+  const isQuickTeacherEntry = !selectedProfile && !clean(inputLast) && !clean(inputFirst);
   const typedTeacherProfile = !selectedProfile
     ? allUsersData.find((profile) => profile.type === 'teacher'
-      && clean(profile.firstName) === clean(inputFirst)
-      && clean(profile.lastName) === clean(inputLast))
+      && clean(profile.lastName) === clean(inputLast)
+      && (clean(profile.firstName) === clean(inputFirst)
+        || (clean(inputLast) === 'vuillet' && clean(inputFirst) === 'jp' && clean(profile.firstName) === 'jean')))
     : null;
   const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
     ? (isTestStudentProfile || devFinderEnabled || password.trim().length > 0)
-    : (visitorIdentity || (hasTypedIdentity && password.trim().length > 0));
+    : (visitorIdentity || (isQuickTeacherEntry && password.trim().length > 0) || (hasTypedIdentity && password.trim().length > 0));
 
   const handleStudentPasswordSetup = async () => {
     if (!selectedProfile?.id) return;
@@ -489,15 +511,15 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
             {!selectedProfile && (
               <div>
                 <input
-                  ref={typedTeacherProfile ? passwordInputRef : null}
-                  type={typedTeacherProfile ? (showPassword ? 'text' : 'password') : 'text'}
+                  ref={(typedTeacherProfile || isQuickTeacherEntry) ? passwordInputRef : null}
+                  type={(typedTeacherProfile || isQuickTeacherEntry) ? (showPassword ? 'text' : 'password') : 'text'}
                   className="login-field"
-                  placeholder={typedTeacherProfile ? 'Mot de passe professeur' : 'Date de naissance (JJ/MM/AAAA)'}
+                  placeholder={(typedTeacherProfile || isQuickTeacherEntry) ? 'Mot de passe professeur' : 'Date de naissance (JJ/MM/AAAA)'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  autoComplete={typedTeacherProfile ? 'current-password' : 'bday'}
+                  autoComplete={(typedTeacherProfile || isQuickTeacherEntry) ? 'current-password' : 'bday'}
                 />
-                {typedTeacherProfile && (
+                {(typedTeacherProfile || isQuickTeacherEntry) && (
                   <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-600">
                     <input type="checkbox" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />
                     Voir mon mot de passe
