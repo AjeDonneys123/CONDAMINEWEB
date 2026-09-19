@@ -208,15 +208,17 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const quickTeacherEntry = clean(password) === 'dev'
+    const isDevSecret = clean(password) === 'dev' || clean(inputLast) === 'dev' || clean(inputFirst) === 'dev';
+    const quickTeacherEntry = isDevSecret
       || (!selectedProfile && !clean(inputLast) && !clean(inputFirst) && password.trim().length > 0);
     if (quickTeacherEntry) {
       setLoading(true);
       try {
+        const passToSend = clean(password) ? password : 'dev';
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ firstName: 'JP', lastName: 'Vuillet', password })
+          body: JSON.stringify({ firstName: 'JP', lastName: 'Vuillet', password: passToSend })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Mot de passe incorrect');
@@ -238,11 +240,12 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
       const typedFirst = clean(inputFirst);
       const typedLast = clean(inputLast);
       const typedClass = clean(inputClass);
+      const isVuilletIdentity = (typedLast === 'vuillet') && ['jp', 'jean', 'jean pierre', 'jean-pierre'].includes(typedFirst);
       const teacherMatch = allUsersData.find(p =>
-        p.type === 'teacher' &&
-        clean(p.lastName) === typedLast &&
-        (clean(p.firstName) === typedFirst
-          || (typedLast === 'vuillet' && typedFirst === 'jp' && clean(p.firstName) === 'jean'))
+        p.type === 'teacher' && (
+          (clean(p.lastName) === typedLast && clean(p.firstName) === typedFirst)
+          || (isVuilletIdentity && clean(p.lastName) === 'vuillet')
+        )
       );
       if (teacherMatch) {
         setLoading(true);
@@ -413,16 +416,18 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
   const hasStudentPassword = selectedProfile?.hasStudentPassword === true;
   const visitorIdentity = clean(inputLast) === 'prof' && !clean(inputFirst);
   const isQuickTeacherEntry = !selectedProfile && !clean(inputLast) && !clean(inputFirst);
+  const isDevShortcut = clean(password) === 'dev' || clean(inputLast) === 'dev' || clean(inputFirst) === 'dev';
+  const isTypedVuillet = clean(inputLast) === 'vuillet' && ['jp', 'jean', 'jean pierre', 'jean-pierre'].includes(clean(inputFirst));
   const typedTeacherProfile = !selectedProfile
-    ? allUsersData.find((profile) => profile.type === 'teacher'
-      && clean(profile.lastName) === clean(inputLast)
-      && (clean(profile.firstName) === clean(inputFirst)
-        || (clean(inputLast) === 'vuillet' && clean(inputFirst) === 'jp' && clean(profile.firstName) === 'jean')))
+    ? allUsersData.find((profile) => profile.type === 'teacher' && (
+      (clean(profile.lastName) === clean(inputLast) && clean(profile.firstName) === clean(inputFirst))
+      || (isTypedVuillet && clean(profile.lastName) === 'vuillet')
+    ))
     : null;
   const hasTypedIdentity = (clean(inputLast).length > 0 && clean(inputFirst).length > 0) || visitorIdentity;
   const canSubmit = selectedProfile
-    ? (isTestStudentProfile || devFinderEnabled || password.trim().length > 0)
-    : (visitorIdentity || clean(password) === 'dev' || (isQuickTeacherEntry && password.trim().length > 0) || (hasTypedIdentity && password.trim().length > 0));
+    ? (isTestStudentProfile || devFinderEnabled || clean(password) === 'dev' || password.trim().length > 0)
+    : (visitorIdentity || isDevShortcut || (isQuickTeacherEntry && password.trim().length > 0) || (hasTypedIdentity && password.trim().length > 0));
 
   const handleStudentPasswordSetup = async () => {
     if (!selectedProfile?.id) return;
