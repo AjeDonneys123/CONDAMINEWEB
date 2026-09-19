@@ -1489,11 +1489,12 @@
 
 /* Modal Gallery Card */
 .conda-scan-gallery-card {
+    position: relative;
     background: #ffffff;
     color: #1e293b;
     width: 100%;
-    max-width: 960px;
-    max-height: 90vh;
+    max-width: 980px;
+    max-height: 92vh;
     border-radius: 24px;
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
     display: flex;
@@ -1501,27 +1502,72 @@
     overflow: hidden;
 }
 
+/* Bouton fermeture toujours visible (desktop et mobile) */
+.conda-scan-sticky-close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #f8fafc;
+    color: #0f172a;
+    border: 2px solid #cbd5e1;
+    font-size: 1.35rem;
+    font-weight: 900;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    transition: all 0.15s ease;
+}
+
+.conda-scan-sticky-close-btn:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #dc2626;
+    transform: scale(1.08);
+}
+
+.conda-scan-sticky-close-btn:active {
+    transform: scale(0.92);
+}
+
 /* En-tête modal */
 .conda-scan-modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 16px 68px 16px 20px;
     border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+    position: sticky;
+    top: 0;
+    background: #ffffff;
+    z-index: 40;
 }
 
 .conda-scan-capture-card .conda-scan-modal-header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: #0f172a;
 }
 
 .conda-scan-title-group {
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
+}
+
+.conda-scan-title-text {
+    min-width: 0;
 }
 
 .conda-scan-header-icon {
     font-size: 1.6rem;
+    flex-shrink: 0;
 }
 
 .conda-scan-modal-title {
@@ -1529,6 +1575,9 @@
     font-size: 1.05rem;
     font-weight: 900;
     letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .conda-scan-modal-subtitle {
@@ -1546,6 +1595,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .conda-scan-tool-btn {
@@ -1558,6 +1608,7 @@
     font-weight: 800;
     cursor: pointer;
     transition: all 0.15s;
+    white-space: nowrap;
 }
 
 .conda-scan-capture-card .conda-scan-tool-btn {
@@ -1581,28 +1632,36 @@
 }
 
 .conda-scan-modal-close {
-    background: transparent;
-    border: none;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
     font-size: 1.3rem;
     cursor: pointer;
-    padding: 6px 10px;
-    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
     line-height: 1;
-    color: #64748b;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.15s;
+    flex-shrink: 0;
 }
 
 .conda-scan-capture-card .conda-scan-modal-close {
-    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
 }
 
 .conda-scan-modal-close:hover {
-    background: rgba(0, 0, 0, 0.08);
-    color: #0f172a;
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #dc2626;
 }
 
 .conda-scan-capture-card .conda-scan-modal-close:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: #ef4444;
     color: #ffffff;
 }
 
@@ -1998,32 +2057,212 @@
     margin-bottom: 8px;
 }
 
-.conda-scan-cards-grid {
+/* ==============================================================
+   📁 DOSSIERS DEVOIRS GROUPÉS PAR SESSION
+   ============================================================== */
+
+.conda-devoirs-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.conda-devoir-folder-card {
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s ease;
+}
+
+.conda-devoir-folder-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.devoir-folder-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 1px solid #e2e8f0;
+    cursor: pointer;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.devoir-folder-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.devoir-folder-icon {
+    font-size: 1.6rem;
+    flex-shrink: 0;
+}
+
+.devoir-folder-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.devoir-folder-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.devoir-folder-title {
+    font-size: 1.05rem;
+    font-weight: 950;
+    color: #1e293b;
+}
+
+.devoir-pages-count {
+    background: #e0e7ff;
+    color: #4338ca;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.devoir-student-chip {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.devoir-folder-date {
+    font-size: 0.72rem;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.devoir-folder-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Bouton copier tout le devoir pour l'IA */
+.btn-devoir-copy-ai {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 950;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.3);
+    transition: all 0.15s ease;
+}
+
+.btn-devoir-copy-ai:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 14px rgba(16, 185, 129, 0.4);
+}
+
+.devoir-btn-icon {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.15s;
+}
+
+.devoir-btn-icon:hover {
+    background: #e2e8f0;
+    transform: scale(1.05);
+}
+
+.devoir-btn-icon.delete:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+}
+
+.devoir-btn-toggle {
+    background: transparent;
+    border: none;
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: #64748b;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.devoir-btn-toggle:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.devoir-folder-body {
+    padding: 16px;
+    background: #ffffff;
+}
+
+.devoir-pages-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 16px;
 }
 
-.conda-scan-card {
+/* Carte Page individuelle */
+.page-card {
     position: relative;
     background: #ffffff;
     border: 2px solid #e2e8f0;
-    border-radius: 16px;
+    border-radius: 14px;
     overflow: hidden;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
-.conda-scan-card:hover {
+.page-card:hover {
     transform: translateY(-2px);
     border-color: #6366f1;
-    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.15);
 }
 
-.conda-scan-card.selected {
+.page-card.selected {
     border-color: #4f46e5;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25);
+}
+
+.page-badge-chip {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 900;
+    padding: 2px 8px;
+    border-radius: 6px;
+    backdrop-filter: blur(4px);
+    z-index: 5;
 }
 
 .card-select-checkbox {
@@ -2066,7 +2305,7 @@
     transition: transform 0.25s ease;
 }
 
-.conda-scan-card:hover .card-image-wrap img {
+.page-card:hover .card-image-wrap img {
     transform: scale(1.04);
 }
 
@@ -2084,12 +2323,12 @@
     transition: opacity 0.2s;
 }
 
-.conda-scan-card:hover .card-zoom-hint {
+.page-card:hover .card-zoom-hint {
     opacity: 1;
 }
 
 .card-meta-bar {
-    padding: 10px 12px;
+    padding: 8px 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2097,26 +2336,10 @@
     border-top: 1px solid #f1f5f9;
 }
 
-.card-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    overflow: hidden;
-}
-
-.card-student-tag {
-    font-size: 0.74rem;
-    font-weight: 900;
-    color: #1e293b;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .card-date-tag {
-    font-size: 0.68rem;
-    color: #64748b;
-    font-weight: 700;
+    font-size: 0.72rem;
+    color: #475569;
+    font-weight: 800;
 }
 
 .card-quick-actions {
@@ -2127,14 +2350,14 @@
 .card-quick-btn {
     background: #f1f5f9;
     border: none;
-    border-radius: 8px;
-    width: 30px;
-    height: 30px;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     transition: all 0.15s;
 }
 
@@ -2165,11 +2388,40 @@
     animation: fadeIn 0.2s ease-out;
 }
 
+.fs-sticky-close-btn {
+    position: absolute;
+    top: max(12px, env(safe-area-inset-top, 12px));
+    right: 14px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.85);
+    color: #ffffff;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    font-size: 1.35rem;
+    font-weight: 900;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1500;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    transition: all 0.15s ease;
+}
+
+.fs-sticky-close-btn:hover {
+    background: #dc2626;
+    border-color: #ef4444;
+    transform: scale(1.08);
+}
+
 .conda-scan-fullscreen-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px;
+    padding: 14px 70px 14px 20px;
     background: rgba(15, 23, 42, 0.85);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     color: #ffffff;
@@ -2215,10 +2467,6 @@
 
 .fs-icon-btn.delete:hover {
     background: #dc2626;
-}
-
-.fs-icon-btn.close {
-    font-size: 1.3rem;
 }
 
 .conda-scan-fullscreen-view {
@@ -2267,11 +2515,82 @@
 .fs-nav-btn.prev { left: 24px; }
 .fs-nav-btn.next { right: 24px; }
 
+/* ==============================================================
+   📱 ADAPTATION SMARTPHONE (MOBILE FRIENDLY)
+   ============================================================== */
 @media (max-width: 640px) {
-    .conda-scan-cards-grid {
+    .conda-scan-modal-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .conda-scan-gallery-card {
+        max-width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    .conda-scan-capture-card {
+        max-width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    .conda-scan-modal-header {
+        padding: max(12px, env(safe-area-inset-top, 12px)) 64px 12px 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .conda-scan-sticky-close-btn {
+        top: max(10px, env(safe-area-inset-top, 10px));
+        right: 12px;
+        width: 44px;
+        height: 44px;
+        background: #ffffff;
+        border-color: #94a3b8;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .conda-scan-title-group {
+        max-width: 100%;
+    }
+
+    .conda-scan-header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .conda-scan-grid-wrapper {
+        padding: 12px;
+    }
+
+    .devoir-folder-header {
+        padding: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .devoir-folder-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .btn-devoir-copy-ai {
+        flex: 1;
+        justify-content: center;
+        font-size: 0.74rem;
+        padding: 8px 10px;
+    }
+
+    .devoir-pages-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
+
     .fs-nav-btn {
         width: 40px;
         height: 40px;
@@ -2279,5 +2598,10 @@
     }
     .fs-nav-btn.prev { left: 8px; }
     .fs-nav-btn.next { right: 8px; }
+
+    .conda-scan-fullscreen-topbar {
+        padding: max(10px, env(safe-area-inset-top, 10px)) 64px 10px 12px;
+    }
 }
+
 

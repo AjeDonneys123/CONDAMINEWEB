@@ -520,6 +520,25 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
 
         const studentId = String(req.body.studentId || '').trim();
         const classId = String(req.body.classId || '').trim();
+        const sessionId = String(req.body.sessionId || '').trim() || `session_${Date.now()}`;
+        const pageIndex = Math.max(1, Number(req.body.pageIndex) || 1);
+
+        // Déterminer le numéro du devoir (par session ou incrémentiel)
+        let homeworkNumber = Number(req.body.homeworkNumber) || 0;
+        if (!homeworkNumber) {
+            const existingInSession = await ClassroomScan.findOne({ sessionId, homeworkNumber: { $gt: 0 } }).lean();
+            if (existingInSession?.homeworkNumber) {
+                homeworkNumber = existingInSession.homeworkNumber;
+            } else if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+                const highest = await ClassroomScan.findOne({ studentId }).sort({ homeworkNumber: -1 }).lean();
+                homeworkNumber = (highest?.homeworkNumber || 0) + 1;
+            } else if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+                const highest = await ClassroomScan.findOne({ classId }).sort({ homeworkNumber: -1 }).lean();
+                homeworkNumber = (highest?.homeworkNumber || 0) + 1;
+            } else {
+                homeworkNumber = 1;
+            }
+        }
 
         const scan = await ClassroomScan.create({
             studentId: studentId && mongoose.Types.ObjectId.isValid(studentId) ? studentId : null,
@@ -528,7 +547,10 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
             className: String(req.body.className || '').trim(),
             teacherId: String(req.body.teacherId || '').trim(),
             imageUrl,
-            title: String(req.body.title || '').trim(),
+            title: String(req.body.title || `Page ${pageIndex}`).trim(),
+            sessionId,
+            homeworkNumber,
+            pageIndex,
             createdAt: new Date()
         });
 
@@ -543,7 +565,7 @@ router.get('/scans', async (req, res) => {
     try {
         const studentId = String(req.query.studentId || '').trim();
         const classId = String(req.query.classId || '').trim();
-        const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 60));
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
 
         const query = {};
         if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
@@ -554,6 +576,24 @@ router.get('/scans', async (req, res) => {
 
         const scans = await ClassroomScan.find(query).sort({ createdAt: -1 }).limit(limit).lean();
         res.json({ ok: true, scans });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/scans/session/:sessionId', async (req, res) => {
+    try {
+        const sessionId = String(req.params.sessionId || '').trim();
+        if (!sessionId) return res.status(400).json({ error: "sessionId manquant" });
+        const scans = await ClassroomScan.find({ sessionId }).lean();
+        scans.forEach((scan) => {
+            if (scan?.imageUrl && scan.imageUrl.startsWith('/uploads/scans/')) {
+                const filePath = path.join(process.cwd(), 'public', scan.imageUrl);
+                try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+            }
+        });
+        await ClassroomScan.deleteMany({ sessionId });
+        res.json({ ok: true, deletedCount: scans.length });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

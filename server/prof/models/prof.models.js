@@ -710,6 +710,9 @@ const Models = {
         imageUrl: { type: String, required: true },
         driveFileId: { type: String, default: '' },
         title: { type: String, default: '' },
+        sessionId: { type: String, default: '', index: true },
+        homeworkNumber: { type: Number, default: 0, index: true },
+        pageIndex: { type: Number, default: 1 },
         createdAt: { type: Date, default: Date.now, index: true }
     }),
 

@@ -19,6 +19,7 @@ export default function ScanCaptureModal({
     const [currentDeviceId, setCurrentDeviceId] = useState('');
     const [facingMode, setFacingMode] = useState('environment'); // 'environment' (back) or 'user' (front)
 
+    const sessionIdRef = useRef('');
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -52,6 +53,10 @@ export default function ScanCaptureModal({
             stopStream();
             return;
         }
+
+        // Nouvelle session de devoir pour ce regroupement d'images
+        sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        setSessionCaptures([]);
 
         let isCancelled = false;
 
@@ -164,6 +169,8 @@ export default function ScanCaptureModal({
             // Envoi au serveur
             const formData = new FormData();
             formData.append('file', blob, `capture_${Date.now()}.jpg`);
+            formData.append('sessionId', sessionIdRef.current);
+            formData.append('pageIndex', String(sessionCaptures.length + 1));
             if (student?._id) {
                 formData.append('studentId', student._id);
                 formData.append('studentName', `${student.firstName || ''} ${student.lastName || ''}`.trim());
@@ -219,6 +226,8 @@ export default function ScanCaptureModal({
 
             const formData = new FormData();
             formData.append('file', file, file.name || `import_${Date.now()}.jpg`);
+            formData.append('sessionId', sessionIdRef.current);
+            formData.append('pageIndex', String(sessionCaptures.length + 1));
             if (student?._id) {
                 formData.append('studentId', student._id);
                 formData.append('studentName', `${student.firstName || ''} ${student.lastName || ''}`.trim());
