@@ -1010,14 +1010,14 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             notesButton = document.createElement('button');
             notesButton.type = 'button';
             notesButton.className = 'conda-slide-notes-toggle';
-            notesButton.onclick = () => {
-                scoreAlertsVisible = !scoreAlertsVisible;
-                try {
-                    localStorage.setItem('condaSlideScoreAlertsVisible', scoreAlertsVisible ? 'true' : 'false');
-                } catch (_) {}
+            notesButton.onclick = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                persistScoreAlertsVisible(!readScoreAlertsVisible());
                 updateNotesDockButton(notesButton);
                 renderAlerts(root);
             };
+            notesButton.onpointerdown = (event) => event.stopPropagation();
             dock.appendChild(notesButton);
         }
         updateNotesDockButton(notesButton);
@@ -1157,12 +1157,28 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             scoreAlertsVisible = savedAlertsVisible === 'true';
         }
     } catch (_) {}
+
+    function readScoreAlertsVisible() {
+        try {
+            const saved = localStorage.getItem('condaSlideScoreAlertsVisible');
+            if (saved !== null) return saved === 'true';
+        } catch (_) {}
+        return scoreAlertsVisible;
+    }
+
+    function persistScoreAlertsVisible(visible) {
+        scoreAlertsVisible = Boolean(visible);
+        try {
+            localStorage.setItem('condaSlideScoreAlertsVisible', scoreAlertsVisible ? 'true' : 'false');
+        } catch (_) {}
+    }
     let timerAlarmPlaying = false;
     let timerAlarmIntervalId = null;
     let timerAudioCtx = null;
     let isEditingTimerMinutes = false;
 
     function updateNotesDockButton(btn) {
+        scoreAlertsVisible = readScoreAlertsVisible();
         if (!btn) {
             const root = overlayRoot;
             btn = root?.querySelector?.('.conda-slide-notes-toggle');
@@ -1947,6 +1963,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
     // Alertes élèves (sans innerHTML)
     function renderAlerts(root) {
+        scoreAlertsVisible = readScoreAlertsVisible();
         let stack = root.querySelector('.conda-alerts-stack');
         if (!stack) {
             stack = document.createElement('div');
