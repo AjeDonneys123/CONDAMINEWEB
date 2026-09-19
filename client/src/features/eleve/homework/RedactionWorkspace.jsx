@@ -239,6 +239,44 @@ export const parseAdviceBlocks = (text) => {
     }];
 };
 
+export const getVersionProgression = (vCount) => {
+    const count = Math.max(1, Number(vCount || 1));
+    if (count >= 7) {
+        return {
+            count,
+            mention: 'Très bien',
+            icon: '🥇',
+            badgeClass: 'conda-version-badge-very-good',
+            label: `${count} versions · Très bien`
+        };
+    }
+    if (count >= 5) {
+        return {
+            count,
+            mention: 'Bien',
+            icon: '🥈',
+            badgeClass: 'conda-version-badge-good',
+            label: `${count} versions · Bien`
+        };
+    }
+    if (count >= 3) {
+        return {
+            count,
+            mention: 'Assez bien',
+            icon: '🥉',
+            badgeClass: 'conda-version-badge-fair',
+            label: `${count} versions · Assez bien`
+        };
+    }
+    return {
+        count,
+        mention: 'En cours',
+        icon: '🔴',
+        badgeClass: 'conda-version-badge-initial',
+        label: `${count} version${count > 1 ? 's' : ''} (vise 3+ versions)`
+    };
+};
+
 export const parseConversationBlocks = (text) => {
     if (!text || !text.trim()) return [];
 
@@ -528,9 +566,11 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [aiAdviceBlocks, setAiAdviceBlocks] = useState([]);
     const [editingBlockId, setEditingBlockId] = useState(null);
     const [editingNoteText, setEditingNoteText] = useState('');
+    const [editingChatText, setEditingChatText] = useState('');
     const [memoSheetText, setMemoSheetText] = useState('');
     const [showAiNotes, setShowAiNotes] = useState(false);
     const [attemptsCount, setAttemptsCount] = useState(1);
+    const versionProgression = getVersionProgression(attemptsCount);
     const [attemptsHistory, setAttemptsHistory] = useState([]);
     const [copyTargetMode, setCopyTargetMode] = useState('both'); // 'both' | 'draft' | 'essay'
     const [aiCopiedToast, setAiCopiedToast] = useState(false);
@@ -1047,19 +1087,66 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         setAiNotesText(e.target.value);
     };
 
-    // Copier-coller autorisé pour faciliter les échanges avec l'IA
+    // Copier-coller autorisé : Ctrl+C / Cmd+C sur le devoir effectue un clic virtuel sur "Copier mon devoir pour l'IA"
+    const handleTextareaCopy = (e) => {
+        e.preventDefault();
+        handleCopyForAI();
+    };
+
     const handleBlockedPaste = (e) => {
-        // Le copier-coller est désormais autorisé
+        // Le copier-coller Ctrl+V vers l'éditeur ou les notes est entièrement autorisé
     };
 
     const handleBlockedCopy = (e) => {
-        // Le copier-coller est désormais autorisé
+        // Copie standard dans les champs secondaires
     };
 
-    // Raccourcis clavier (Ctrl+C, Ctrl+V, Ctrl+X) entièrement autorisés
+    // Raccourcis clavier (Ctrl+C déclenche la copie officielle avec injection)
     const handleKeyDown = (e) => {
-        // Événements clavier normaux préservés
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+            e.preventDefault();
+            handleCopyForAI();
+        }
     };
+
+    // Interception globale de Ctrl+C / Cmd+C et clic droit Copier depuis la page vers l'IA
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+                const activeEl = document.activeElement;
+                const activeTag = activeEl?.tagName?.toLowerCase();
+                const activeClass = activeEl?.className || '';
+                // Si l'élève est dans un champ secondaire d'une modale (ex: prise de notes, chat), on le laisse copier son texte
+                if ((activeTag === 'textarea' || activeTag === 'input') && !String(activeClass).includes('conda-redaction-textarea')) {
+                    return;
+                }
+                if (!isNotesFocusMode && !showFinalModal && !showShortWarning && !showPreFinalWarning && !showIntermediateEvalModal) {
+                    e.preventDefault();
+                    handleCopyForAI();
+                }
+            }
+        };
+
+        const handleGlobalCopy = (e) => {
+            const activeEl = document.activeElement;
+            const activeTag = activeEl?.tagName?.toLowerCase();
+            const activeClass = activeEl?.className || '';
+            if ((activeTag === 'textarea' || activeTag === 'input') && !String(activeClass).includes('conda-redaction-textarea')) {
+                return;
+            }
+            if (!isNotesFocusMode && !showFinalModal && !showShortWarning && !showPreFinalWarning && !showIntermediateEvalModal) {
+                e.preventDefault();
+                handleCopyForAI();
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        window.addEventListener('copy', handleGlobalCopy);
+        return () => {
+            window.removeEventListener('keydown', handleGlobalKeyDown);
+            window.removeEventListener('copy', handleGlobalCopy);
+        };
+    }, [essayText, topicText, registeredKeys, aiNotesText, isNotesFocusMode, showFinalModal, showShortWarning, showPreFinalWarning, showIntermediateEvalModal]);
 
     const handleUndo = () => {
         if (historyIdx > 0) {
@@ -1216,12 +1303,14 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
     const openAddNotesModal = () => {
         setEditingBlockId(null);
         setEditingNoteText('');
+        setEditingChatText('');
         setIsNotesFocusMode(true);
     };
 
     const openEditNotesModal = (block) => {
         setEditingBlockId(block.id);
         setEditingNoteText(block.content || '');
+        setEditingChatText('');
         setIsNotesFocusMode(true);
     };
 
@@ -1236,7 +1325,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         showToast("🗑️ Bloc de conseils supprimé.");
     };
 
-    // "J'ai fini de prendre mes notes" handler: consigne dans un bloc distinct
+    // "J'ai fini de prendre mes notes" handler: consigne dans un bloc distinct et enregistre le chat IA
     const handleFinishNotes = () => {
         const cleanNotes = editingNoteText.trim();
         if (cleanNotes.length < 10) {
@@ -1273,10 +1362,21 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
             };
             nextBlocks.push(newBlock);
 
-            if (attemptsCount === 1) {
-                setAttemptsCount(2);
-            }
+            // Archive automatiquement l'essai actuel et passe à la version supérieure
+            archiveAttempt(attemptsCount, essayText, draftText, copyTargetMode);
+            setAttemptsCount((prev) => Math.max(prev + 1, targetVer));
+
             showToast(`✨ Conseils consignés dans un bloc distinct pour la Version ${targetVer} !`);
+        }
+
+        // Sauvegarde et mise à jour du chat IA si l'élève l'a collé
+        if (editingChatText && editingChatText.trim().length > 0) {
+            const cleanChat = editingChatText.trim();
+            setAiConversationText((prev) => {
+                if (!prev) return cleanChat;
+                if (prev.includes(cleanChat)) return prev;
+                return `${prev}\n\n--- ÉCHANGE IA (VERSION ${targetVer}) ---\n${cleanChat}`;
+            });
         }
 
         setAiAdviceBlocks(nextBlocks);
@@ -1287,10 +1387,14 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         setIsNotesFocusMode(false);
         setEditingBlockId(null);
         setEditingNoteText('');
+        setEditingChatText('');
         setShowAiNotes(true);
         setShowAdviceWindow(true);
         setAdviceCollapsed(false);
         bringWindowToFront('advice');
+
+        // Déclenche une sauvegarde automatique en arrière-plan
+        setTimeout(() => triggerAutoSave(false), 500);
     };
 
     // "Nouvelle tentative" handler
@@ -1556,6 +1660,16 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                 <div className="conda-redaction-header-left">
                     <span className="conda-redaction-badge">✍️ Rédaction</span>
                     <h1 className="conda-redaction-title">{homework.title || 'Devoir Rédaction'}</h1>
+
+                    {/* Progression des versions : Rouge (<3), Vert clair (3-4 Assez bien), Vert foncé (5-6 Bien), Vert très soutenu (7+ Très bien) */}
+                    <div
+                        className={`conda-version-progression-badge ${versionProgression.badgeClass}`}
+                        title={`Version ${attemptsCount}. Barème : <3 = Rouge, 3-4 = Vert clair (Assez bien), 5-6 = Vert foncé (Bien), 7+ = Très bien.`}
+                    >
+                        <span>{versionProgression.icon}</span>
+                        <span>{versionProgression.label}</span>
+                    </div>
+
                     {alreadySubmitted && (
                         <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm">
                             <span>✨</span>
@@ -1981,9 +2095,13 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 <span>↷</span>
                                 <span>Rétablir</span>
                             </button>
-                            <span className="text-[11px] font-bold text-slate-500 ml-2">
-                                Version {attemptsCount}
-                            </span>
+                            <div
+                                className={`conda-version-progression-badge small ${versionProgression.badgeClass} ml-2`}
+                                title="Progression de vos versions"
+                            >
+                                <span>{versionProgression.icon}</span>
+                                <span>{versionProgression.label}</span>
+                            </div>
                             {attemptsHistory && attemptsHistory.length > 0 && (
                                 <div className="flex items-center gap-1 ml-2 overflow-x-auto">
                                     {attemptsHistory.map((att) => (
@@ -2025,8 +2143,8 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                         value={essayText}
                         onChange={handleTextChange}
                         onKeyDown={handleKeyDown}
-                        onCopy={handleBlockedCopy}
-                        onCut={handleBlockedCopy}
+                        onCopy={handleTextareaCopy}
+                        onCut={handleTextareaCopy}
                         onPaste={handleBlockedPaste}
                     />
 
@@ -2109,9 +2227,10 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                             type="button"
                             className="conda-btn-validate"
                             onClick={handleValidateClick}
+                            title="Transmettre votre devoir au professeur (vous pourrez continuer à créer de nouvelles versions et vous améliorer sans limite !)"
                         >
-                            <span>✅</span>
-                            <span>Validation finale</span>
+                            <span>📤</span>
+                            <span>Transmettre au professeur</span>
                         </button>
                     </div>
                 </div>
@@ -2131,7 +2250,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                     <span className="text-[11px] font-bold text-indigo-400">
                                         {editingBlockId
                                             ? (aiAdviceBlocks.find((b) => b.id === editingBlockId)?.title || "Bloc sélectionné")
-                                            : `Conseils pour la Version ${attemptsCount === 1 && aiAdviceBlocks.length === 0 ? 2 : (aiAdviceBlocks.length + 1)}`
+                                            : `Conseils pour la Version ${attemptsCount === 1 && aiAdviceBlocks.length === 0 ? 2 : (attemptsCount + 1)}`
                                         }
                                     </span>
                                 </div>
@@ -2153,7 +2272,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 2. Lisez attentivement les remarques du tuteur.
                             </p>
                             <p className="m-0 font-semibold text-amber-300">
-                                💡 Résumez ci-dessous les erreurs signalées et les axes d'amélioration. Vos notes seront consignées dans un bloc distinct pour guider votre prochaine version !
+                                💡 Résumez ci-dessous les erreurs signalées et collez l'échange avec l'IA. Vos notes seront consignées dans un bloc distinct pour guider votre prochaine version !
                             </p>
                         </div>
 
@@ -2162,7 +2281,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 {editingBlockId ? "Modifier le contenu de ce bloc de conseils :" : "Mes notes sur les conseils reçus pour cette prochaine version :"}
                             </label>
                             <textarea
-                                className="w-full h-40 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                className="w-full h-36 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
                                 placeholder="Résumez ici :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de méthode, vocabulaire ou structure signalées&#10;- Ce que vous devez modifier dans votre prochaine version..."
                                 value={editingNoteText}
                                 onChange={(e) => setEditingNoteText(e.target.value)}
@@ -2171,6 +2290,32 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 onCut={handleBlockedCopy}
                                 onPaste={handleBlockedPaste}
                                 autoFocus
+                            />
+                        </div>
+
+                        {/* Champ pour coller l'échange complet avec l'IA */}
+                        <div className="space-y-1.5 pt-3 border-t border-slate-700/60">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                                    <span>💬</span>
+                                    <span>Collez ici l'échange complet avec l'IA (Gemini / ChatGPT) :</span>
+                                </label>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                    {editingChatText.trim().length > 0 ? `✅ ${editingChatText.trim().length} car. collés` : 'Permet de certifier vos notes'}
+                                </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 m-0">
+                                Copiez depuis l'IA l'intégralité du chat ou de la réponse reçue, et collez-la ci-dessous pour l'enregistrer et certifier votre travail.
+                            </p>
+                            <textarea
+                                className="w-full h-28 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                placeholder="Collez ici (Ctrl+V) l'intégralité du dialogue ou de la réponse reçue de Gemini / ChatGPT..."
+                                value={editingChatText}
+                                onChange={(e) => setEditingChatText(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                onCopy={handleBlockedCopy}
+                                onCut={handleBlockedCopy}
+                                onPaste={handleBlockedPaste}
                             />
                         </div>
 
