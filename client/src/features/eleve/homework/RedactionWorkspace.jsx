@@ -176,6 +176,69 @@ Gemini a dit :
 Pour expliquer la brutalisation selon George Mosse :
 Rappelle que la violence extrême et continue des tranchées a habitué les soldats à la mort de masse. Cette violence ne s'arrête pas avec l'armistice de 1918 : elle imprègne durablement les mentalités et la vie politique d'après-guerre.`;
 
+export const serializeAdviceBlocks = (blocks) => {
+    if (!Array.isArray(blocks) || blocks.length === 0) return '';
+    return blocks.map((b, idx) => {
+        const title = b.title || `Conseils pour la Version ${b.versionTarget || (idx + 1)}`;
+        const time = b.timestamp ? ` (${b.timestamp})` : '';
+        return `=== [${title.toUpperCase()}]${time} ===\n${(b.content || '').trim()}`;
+    }).join('\n\n');
+};
+
+export const parseAdviceBlocks = (text) => {
+    if (!text || typeof text !== 'string') return [];
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].content !== undefined) {
+                return parsed;
+            }
+        } catch (e) {
+            // Ignore non-JSON
+        }
+    }
+
+    const regex = /===\s*\[([^\]]+)\](?:\s*\(([^)]*)\))?\s*===/gi;
+    const matches = [...trimmed.matchAll(regex)];
+
+    if (matches.length > 0) {
+        const blocks = [];
+        for (let i = 0; i < matches.length; i++) {
+            const match = matches[i];
+            const title = match[1].trim();
+            const time = match[2] ? match[2].trim() : '';
+            const startIndex = match.index + match[0].length;
+            const endIndex = (i + 1 < matches.length) ? matches[i + 1].index : trimmed.length;
+            const content = trimmed.slice(startIndex, endIndex).trim();
+
+            const vMatch = title.match(/VERSION\s*(\d+)|ESSAI\s*(\d+)/i);
+            const versionTarget = vMatch ? parseInt(vMatch[1] || vMatch[2], 10) : (i + 1);
+
+            blocks.push({
+                id: `block_${i + 1}_${Date.now()}`,
+                versionTarget,
+                title,
+                content,
+                timestamp: time || '',
+                createdAt: new Date().toISOString()
+            });
+        }
+        return blocks;
+    }
+
+    return [{
+        id: `block_1_${Date.now()}`,
+        versionTarget: 1,
+        title: 'Conseils Version 1',
+        content: trimmed,
+        timestamp: '',
+        createdAt: new Date().toISOString()
+    }];
+};
+
 export const parseConversationBlocks = (text) => {
     if (!text || !text.trim()) return [];
 
@@ -462,6 +525,9 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     // 2. Draft & AI Notes State (Persists across attempts)
     const [draftText, setDraftText] = useState('');
     const [aiNotesText, setAiNotesText] = useState('');
+    const [aiAdviceBlocks, setAiAdviceBlocks] = useState([]);
+    const [editingBlockId, setEditingBlockId] = useState(null);
+    const [editingNoteText, setEditingNoteText] = useState('');
     const [memoSheetText, setMemoSheetText] = useState('');
     const [showAiNotes, setShowAiNotes] = useState(false);
     const [attemptsCount, setAttemptsCount] = useState(1);
@@ -489,7 +555,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
             x: Math.max(20, Math.round(((typeof window !== 'undefined' ? window.innerWidth : 1200) - 660) / 2)),
             y: 85,
             w: 660,
-            h: 280
+            h: 380
         },
         draft: {
             x: Math.max(30, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 540),
@@ -589,9 +655,9 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     // Sauvegarde locale immédiate à chaque frappe dans le brouillon ou la copie
     useEffect(() => {
         if (!initialLoading) {
-            saveToLocalStorage({ essayText, draftText, aiNotesText, aiConversationText, sessionSeconds, attemptsCount });
+            saveToLocalStorage({ essayText, draftText, aiNotesText, aiAdviceBlocks, aiConversationText, sessionSeconds, attemptsCount });
         }
-    }, [essayText, draftText, aiNotesText, aiConversationText]);
+    }, [essayText, draftText, aiNotesText, aiAdviceBlocks, aiConversationText]);
 
     // Fetch previous submission if student reopens an already-submitted homework or draft
     useEffect(() => {
@@ -632,7 +698,14 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                             setHistory([initialText]);
                             setHistoryIdx(0);
                         }
-                        if (localBackup.aiNotesText) {
+                        if (localBackup.aiAdviceBlocks && Array.isArray(localBackup.aiAdviceBlocks)) {
+                            setAiAdviceBlocks(localBackup.aiAdviceBlocks);
+                            setAiNotesText(serializeAdviceBlocks(localBackup.aiAdviceBlocks));
+                            const lastContent = localBackup.aiAdviceBlocks[localBackup.aiAdviceBlocks.length - 1]?.content || '';
+                            setPinnedAiNotes(lastContent);
+                        } else if (localBackup.aiNotesText) {
+                            const blocks = parseAdviceBlocks(localBackup.aiNotesText);
+                            setAiAdviceBlocks(blocks);
                             setAiNotesText(localBackup.aiNotesText);
                             setPinnedAiNotes(localBackup.aiNotesText);
                         }
@@ -674,8 +747,16 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                     setHistoryIdx(0);
                 }
                 if (resolvedNotes) {
+                    let blocks = [];
+                    if (localBackup?.aiAdviceBlocks && Array.isArray(localBackup.aiAdviceBlocks) && localBackup.aiAdviceBlocks.length > 0) {
+                        blocks = localBackup.aiAdviceBlocks;
+                    } else {
+                        blocks = parseAdviceBlocks(resolvedNotes);
+                    }
+                    setAiAdviceBlocks(blocks);
                     setAiNotesText(resolvedNotes);
-                    setPinnedAiNotes(resolvedNotes);
+                    const lastContent = blocks.length > 0 ? blocks[blocks.length - 1].content : resolvedNotes;
+                    setPinnedAiNotes(lastContent);
                     if (isRealFinalSubmission) setShowAiNotes(true);
                 }
                 if (resolvedChat) setAiConversationText(resolvedChat);
@@ -1122,7 +1203,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
             }
         }
 
-        setIsNotesFocusMode(true);
+        openAddNotesModal();
         setAiCopiedToast(true);
         if (copiedOk) {
             showToast(`📋 ${modeLabel} copié(e) avec clé #${currentKey} ! Collez à Gemini.`);
@@ -1131,23 +1212,85 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         }
     };
 
-    // "J'ai fini de prendre mes notes" handler
+    // Helper handlers pour la modale de notes
+    const openAddNotesModal = () => {
+        setEditingBlockId(null);
+        setEditingNoteText('');
+        setIsNotesFocusMode(true);
+    };
+
+    const openEditNotesModal = (block) => {
+        setEditingBlockId(block.id);
+        setEditingNoteText(block.content || '');
+        setIsNotesFocusMode(true);
+    };
+
+    const handleDeleteAdviceBlock = (blockId) => {
+        if (!window.confirm("Voulez-vous supprimer ce bloc de conseils ?")) return;
+        const nextBlocks = aiAdviceBlocks.filter(b => b.id !== blockId);
+        setAiAdviceBlocks(nextBlocks);
+        const serialized = serializeAdviceBlocks(nextBlocks);
+        setAiNotesText(serialized);
+        const lastContent = nextBlocks.length > 0 ? nextBlocks[nextBlocks.length - 1].content : '';
+        setPinnedAiNotes(lastContent);
+        showToast("🗑️ Bloc de conseils supprimé.");
+    };
+
+    // "J'ai fini de prendre mes notes" handler: consigne dans un bloc distinct
     const handleFinishNotes = () => {
-        const cleanNotes = aiNotesText.trim();
-        if (cleanNotes.length < 15) {
-            showToast("⚠️ Résumez au moins 2 ou 3 remarques clés du tuteur pour continuer.");
+        const cleanNotes = editingNoteText.trim();
+        if (cleanNotes.length < 10) {
+            showToast("⚠️ Notez au moins les remarques clés ou conseils du tuteur pour continuer.");
             return;
         }
+
+        let nextBlocks = [...aiAdviceBlocks];
+        let targetVer = attemptsCount;
+
+        if (editingBlockId) {
+            // Mode modification d'un bloc existant
+            nextBlocks = nextBlocks.map((b) => {
+                if (b.id === editingBlockId) {
+                    return {
+                        ...b,
+                        content: cleanNotes,
+                        updatedAt: new Date().toISOString()
+                    };
+                }
+                return b;
+            });
+            showToast("✏️ Bloc de conseils mis à jour avec succès !");
+        } else {
+            // Mode consignation d'un NOUVEAU bloc distinct
+            targetVer = attemptsCount === 1 && aiAdviceBlocks.length === 0 ? 2 : (aiAdviceBlocks.length + 1);
+            const newBlock = {
+                id: `block_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                versionTarget: targetVer,
+                title: `Conseils pour la Version ${targetVer}`,
+                content: cleanNotes,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                createdAt: new Date().toISOString()
+            };
+            nextBlocks.push(newBlock);
+
+            if (attemptsCount === 1) {
+                setAttemptsCount(2);
+            }
+            showToast(`✨ Conseils consignés dans un bloc distinct pour la Version ${targetVer} !`);
+        }
+
+        setAiAdviceBlocks(nextBlocks);
+        const serialized = serializeAdviceBlocks(nextBlocks);
+        setAiNotesText(serialized);
         setPinnedAiNotes(cleanNotes);
+
         setIsNotesFocusMode(false);
+        setEditingBlockId(null);
+        setEditingNoteText('');
         setShowAiNotes(true);
         setShowAdviceWindow(true);
         setAdviceCollapsed(false);
         bringWindowToFront('advice');
-        if (attemptsCount === 1) {
-            setAttemptsCount(2);
-        }
-        showToast("📌 Conseils affichés en haut ! Déplacez ou redimensionnez la fenêtre selon vos besoins.");
     };
 
     // "Nouvelle tentative" handler
@@ -1592,18 +1735,21 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                 </section>
             )}
 
-            {/* Pinned AI Notes Status Strip (with quick button to open floating window) */}
-            {pinnedAiNotes.trim() && (
+            {/* Pinned AI Notes Status Strip */}
+            {aiAdviceBlocks.length > 0 && (
                 <div className="bg-gradient-to-r from-indigo-950/90 via-slate-900 to-indigo-950/90 border-b border-indigo-500/40 py-2 px-6 flex items-center justify-between gap-4 sticky top-[65px] z-30 shadow-md">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="text-base flex-shrink-0">📌</span>
                         <div className="flex items-center gap-2 min-w-0">
                             <span className="text-[10px] font-black uppercase text-indigo-300 tracking-wider flex-shrink-0">
-                                Conseils IA retenus :
+                                {aiAdviceBlocks[aiAdviceBlocks.length - 1]?.title || 'Derniers conseils IA'} :
                             </span>
                             <p className="text-xs text-slate-200 font-medium truncate m-0 max-w-md lg:max-w-xl">
-                                {pinnedAiNotes}
+                                {aiAdviceBlocks[aiAdviceBlocks.length - 1]?.content || ''}
                             </p>
+                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/40 font-mono flex-shrink-0">
+                                {aiAdviceBlocks.length} bloc{aiAdviceBlocks.length > 1 ? 's' : ''}
+                            </span>
                         </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -1615,18 +1761,18 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 bringWindowToFront('advice');
                             }}
                             className="text-xs text-indigo-200 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 px-3 py-1 rounded-lg font-bold transition flex items-center gap-1.5"
-                            title="Ouvrir ou afficher la fenêtre transportable des conseils"
+                            title="Ouvrir ou afficher la fenêtre des conseils"
                         >
                             <span>🪟</span>
                             <span>{showAdviceWindow ? (adviceCollapsed ? "Déplier fenêtre" : "Fenêtre ouverte") : "Ouvrir fenêtre"}</span>
                         </button>
                         <button
                             type="button"
-                            onClick={() => setIsNotesFocusMode(true)}
+                            onClick={openAddNotesModal}
                             className="text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1 rounded-lg font-bold transition flex items-center gap-1.5"
                         >
-                            <span>✏️</span>
-                            <span>Modifier</span>
+                            <span>➕</span>
+                            <span>Ajouter des notes</span>
                         </button>
                     </div>
                 </div>
@@ -1634,7 +1780,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
 
             {/* FLOATING WINDOWS LAYER (Transportables, Redimensionnables & Rétractables) */}
             <div className="v8-windows-layer">
-                {/* 1. Fenêtre Flottante des CONSEILS IA */}
+                {/* 1. Fenêtre Flottante des CONSEILS DU TUTEUR IA */}
                 {showAdviceWindow && (
                     <div
                         className={`v8-layer-panel conda-floating-advice-panel${adviceCollapsed ? ' is-collapsed' : ''}${windowAction?.name === 'advice' ? ' is-moving' : ''}`}
@@ -1643,7 +1789,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                             top: windows.advice.y,
                             width: adviceCollapsed ? 'auto' : windows.advice.w,
                             height: adviceCollapsed ? 'auto' : windows.advice.h,
-                            minWidth: adviceCollapsed ? '340px' : '400px',
+                            minWidth: adviceCollapsed ? '340px' : '440px',
                             zIndex: windowZ.advice
                         }}
                         onMouseDown={() => bringWindowToFront('advice')}
@@ -1653,17 +1799,17 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 <span className="text-base">📌</span>
                                 <strong className="truncate">CONSEILS DU TUTEUR IA</strong>
                                 <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/40 font-mono">
-                                    Essai {attemptsCount}
+                                    {aiAdviceBlocks.length > 0 ? `${aiAdviceBlocks.length} bloc${aiAdviceBlocks.length > 1 ? 's' : ''}` : `Essai ${attemptsCount}`}
                                 </span>
                             </div>
                             <div className="flex items-center gap-1.5" onMouseDown={(e) => e.stopPropagation()}>
                                 <button
                                     type="button"
-                                    onClick={() => setIsNotesFocusMode(true)}
+                                    onClick={openAddNotesModal}
                                     className="conda-win-head-btn"
-                                    title="Modifier mes notes"
+                                    title="Prendre de nouvelles notes pour la prochaine version"
                                 >
-                                    ✏️
+                                    ➕
                                 </button>
                                 <button
                                     type="button"
@@ -1686,23 +1832,76 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
 
                         {!adviceCollapsed ? (
                             <div className="v8-layer-body conda-advice-body">
-                                {pinnedAiNotes.trim() ? (
-                                    <div className="space-y-3">
-                                        <div className="text-[11px] font-black uppercase text-indigo-400 tracking-wider flex items-center gap-1.5">
-                                            <span>💡</span>
-                                            <span>Remarques clés et points d'attention retenus :</span>
-                                        </div>
-                                        <div className="conda-advice-formatted-text whitespace-pre-wrap font-sans text-sm text-slate-100 leading-relaxed bg-slate-950/70 p-4 rounded-2xl border border-indigo-500/30 select-text">
-                                            {pinnedAiNotes}
-                                        </div>
-                                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                                            <span>Gardez cette fenêtre ouverte pour guider votre écriture.</span>
+                                {aiAdviceBlocks.length > 0 ? (
+                                    <div className="conda-advice-thread">
+                                        {aiAdviceBlocks.map((block, idx) => {
+                                            const isLatest = idx === aiAdviceBlocks.length - 1;
+                                            const targetNum = block.versionTarget || (idx + 1);
+                                            return (
+                                                <React.Fragment key={block.id || idx}>
+                                                    {idx > 0 && (
+                                                        <div className="conda-advice-separator">
+                                                            <span>⬇️ Conseils pour la Version suivante ⬇️</span>
+                                                        </div>
+                                                    )}
+                                                    <div className={`conda-advice-block ${isLatest ? 'is-latest' : ''}`}>
+                                                        <div className="conda-advice-block-header">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span className="text-sm">🤖</span>
+                                                                <strong className="conda-advice-block-title truncate">
+                                                                    {block.title || `Conseils pour la Version ${targetNum}`}
+                                                                </strong>
+                                                                {isLatest && (
+                                                                    <span className="conda-advice-latest-badge">
+                                                                        🎯 Version active
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                                {block.timestamp && (
+                                                                    <span className="conda-advice-time">
+                                                                        🕒 {block.timestamp}
+                                                                    </span>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openEditNotesModal(block)}
+                                                                    className="conda-advice-edit-btn"
+                                                                    title="Modifier ce bloc"
+                                                                >
+                                                                    ✏️ Modifier
+                                                                </button>
+                                                                {aiAdviceBlocks.length > 1 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleDeleteAdviceBlock(block.id)}
+                                                                        className="conda-advice-delete-btn"
+                                                                        title="Supprimer ce bloc"
+                                                                    >
+                                                                        🗑️
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="conda-advice-block-content">
+                                                            {block.content}
+                                                        </div>
+                                                    </div>
+                                                </React.Fragment>
+                                            );
+                                        })}
+
+                                        <div className="conda-advice-thread-footer">
+                                            <span className="text-[11px] text-slate-400 font-medium">
+                                                {aiAdviceBlocks.length} bloc{aiAdviceBlocks.length > 1 ? 's' : ''} consigné{aiAdviceBlocks.length > 1 ? 's' : ''}
+                                            </span>
                                             <button
                                                 type="button"
-                                                onClick={() => setIsNotesFocusMode(true)}
-                                                className="text-indigo-400 hover:text-indigo-300 font-bold underline"
+                                                onClick={openAddNotesModal}
+                                                className="conda-advice-add-btn"
                                             >
-                                                Compléter mes notes
+                                                <span>➕</span>
+                                                <span>Prendre des notes (V{attemptsCount === 1 && aiAdviceBlocks.length === 0 ? 2 : (aiAdviceBlocks.length + 1)})</span>
                                             </button>
                                         </div>
                                     </div>
@@ -1717,7 +1916,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                         </p>
                                         <button
                                             type="button"
-                                            onClick={() => setIsNotesFocusMode(true)}
+                                            onClick={openAddNotesModal}
                                             className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg transition inline-flex items-center gap-2"
                                         >
                                             <span>✏️</span>
@@ -1731,7 +1930,11 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 className="px-3 py-2 bg-slate-900/90 text-xs text-indigo-200 flex items-center justify-between cursor-pointer"
                                 onClick={() => setAdviceCollapsed(false)}
                             >
-                                <span className="truncate font-medium">{pinnedAiNotes.trim() ? pinnedAiNotes.slice(0, 55) + '...' : 'Cliquez pour déplier les conseils...'}</span>
+                                <span className="truncate font-medium">
+                                    {aiAdviceBlocks.length > 0
+                                        ? `${aiAdviceBlocks[aiAdviceBlocks.length - 1].title} : ${aiAdviceBlocks[aiAdviceBlocks.length - 1].content.slice(0, 50)}...`
+                                        : 'Cliquez pour déplier les conseils...'}
+                                </span>
                                 <span className="text-[10px] text-indigo-400 font-bold ml-2">Déplier ▼</span>
                             </div>
                         )}
@@ -1923,10 +2126,13 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 <span className="text-2xl">🤖</span>
                                 <div>
                                     <h3 className="text-base font-black text-white uppercase tracking-wider">
-                                        Phase de Consultation & Prise de Notes IA
+                                        {editingBlockId ? "Modifier un bloc de conseils" : "Phase de Consultation & Prise de Notes IA"}
                                     </h3>
                                     <span className="text-[11px] font-bold text-indigo-400">
-                                        Tentative n°{attemptsCount}
+                                        {editingBlockId
+                                            ? (aiAdviceBlocks.find((b) => b.id === editingBlockId)?.title || "Bloc sélectionné")
+                                            : `Conseils pour la Version ${attemptsCount === 1 && aiAdviceBlocks.length === 0 ? 2 : (aiAdviceBlocks.length + 1)}`
+                                        }
                                     </span>
                                 </div>
                             </div>
@@ -1941,25 +2147,25 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 <span>Consigne de travail :</span>
                             </div>
                             <p className="m-0">
-                                1. Votre texte a été copié dans votre presse-papier. Collez-le (Ctrl+V) dans le volet <strong>Demander à Gemini</strong> à droite.
+                                1. Votre texte a été copié dans votre presse-papier. Collez-le (Ctrl+V) dans Gemini ou ChatGPT.
                             </p>
                             <p className="m-0">
                                 2. Lisez attentivement les remarques du tuteur.
                             </p>
                             <p className="m-0 font-semibold text-amber-300">
-                                💡 Important pour votre bonus : Résumez ci-dessous avec vos propres mots les erreurs signalées et les axes d'amélioration. À la fin du devoir, pour valider l'étape, vous devrez refaire votre plan et citer ce que vous avez retenu !
+                                💡 Résumez ci-dessous les erreurs signalées et les axes d'amélioration. Vos notes seront consignées dans un bloc distinct pour guider votre prochaine version !
                             </p>
                         </div>
 
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-slate-300 block">
-                                Mes notes sur les conseils du tuteur (obligatoire) :
+                                {editingBlockId ? "Modifier le contenu de ce bloc de conseils :" : "Mes notes sur les conseils reçus pour cette prochaine version :"}
                             </label>
                             <textarea
                                 className="w-full h-40 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
-                                placeholder="Résumez ici :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de vocabulaire ou de structure signalées&#10;- Ce que vous devez ajouter ou modifier dans votre prochain essai..."
-                                value={aiNotesText}
-                                onChange={handleAiNotesChange}
+                                placeholder="Résumez ici :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de méthode, vocabulaire ou structure signalées&#10;- Ce que vous devez modifier dans votre prochaine version..."
+                                value={editingNoteText}
+                                onChange={(e) => setEditingNoteText(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 onCopy={handleBlockedCopy}
                                 onCut={handleBlockedCopy}
@@ -1972,9 +2178,13 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                             <button
                                 type="button"
                                 className="text-xs text-slate-400 hover:text-slate-200"
-                                onClick={() => setIsNotesFocusMode(false)}
+                                onClick={() => {
+                                    setIsNotesFocusMode(false);
+                                    setEditingBlockId(null);
+                                    setEditingNoteText('');
+                                }}
                             >
-                                Revenir au brouillon
+                                Revenir au devoir
                             </button>
                             <button
                                 type="button"
@@ -1982,7 +2192,12 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 onClick={handleFinishNotes}
                             >
                                 <span>✅</span>
-                                <span>J'ai fini de prendre mes notes ➔ Améliorer mon devoir</span>
+                                <span>
+                                    {editingBlockId
+                                        ? "Enregistrer les modifications de ce bloc"
+                                        : "J'ai fini de prendre mes notes ➔ Consigner ce bloc et améliorer mon devoir"
+                                    }
+                                </span>
                             </button>
                         </div>
                     </div>
