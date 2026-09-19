@@ -1475,6 +1475,7 @@
 
 /* Modal Capture Card */
 .conda-scan-capture-card {
+    position: relative;
     background: #0f172a;
     color: #ffffff;
     width: 100%;

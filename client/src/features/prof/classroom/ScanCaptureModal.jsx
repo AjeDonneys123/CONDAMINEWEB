@@ -258,6 +258,16 @@ export default function ScanCaptureModal({
     return (
         <div className="conda-scan-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="conda-scan-capture-card">
+                {/* Bouton fermeture permanent et proéminent (toujours visible sur mobile) */}
+                <button
+                    className="conda-scan-sticky-close-btn"
+                    onClick={onClose}
+                    title="Fermer la fenêtre (Échap)"
+                    aria-label="Fermer"
+                >
+                    ✕
+                </button>
+
                 {/* Entête */}
                 <div className="conda-scan-modal-header">
                     <div className="conda-scan-title-group">
@@ -290,7 +300,6 @@ export default function ScanCaptureModal({
                                 🖼️ Galerie {sessionCaptures.length > 0 ? `(${sessionCaptures.length})` : ''}
                             </button>
                         )}
-                        <button className="conda-scan-modal-close" onClick={onClose} title="Fermer (Échap)">✕</button>
                     </div>
                 </div>
 
