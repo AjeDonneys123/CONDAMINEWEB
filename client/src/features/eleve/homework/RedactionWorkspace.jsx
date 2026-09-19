@@ -1779,6 +1779,11 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                             💡 <strong>Objectif :</strong> Réaliser plusieurs versions et avoir une <strong>forte progression</strong> entre la première et la dernière version. L'IA vous aidera toujours à vous améliorer.
                         </div>
 
+                        <div className="bg-amber-500/15 border border-amber-500/40 rounded-2xl p-3 text-xs text-amber-200 flex items-start gap-2.5 text-left">
+                            <span className="text-base flex-shrink-0">⚠️</span>
+                            <span><strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.</span>
+                        </div>
+
                         <button
                             type="button"
                             onClick={() => setShowProgressionGuide(false)}
@@ -1799,6 +1804,14 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                 </div>
                 <p className="conda-redaction-topic-text">{topicText}</p>
             </section>
+
+            {/* Mention d'avertissement en haut du devoir */}
+            <div className="conda-redaction-integrity-alert">
+                <span className="conda-alert-icon">⚠️</span>
+                <p className="conda-alert-text">
+                    <strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.
+                </p>
+            </div>
 
             {/* Continuous AI Perfection Banner (Displayed if previously submitted) */}
             {alreadySubmitted && (
@@ -2126,6 +2139,12 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                         <div className="conda-redaction-words-counter">
                             {wordsCount} mot{wordsCount > 1 ? 's' : ''}
                         </div>
+                    </div>
+
+                    {/* Mention d'avertissement en haut du devoir */}
+                    <div className="conda-editor-integrity-warning">
+                        <span className="text-base flex-shrink-0">⚠️</span>
+                        <span><strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.</span>
                     </div>
 
                     {/* Hint / Consigne espace unique */}

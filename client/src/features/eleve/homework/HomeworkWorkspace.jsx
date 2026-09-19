@@ -1292,6 +1292,12 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       {behaviorNotice.open && <div className="v8-behavior-notice">{behaviorNotice.text}</div>}
       <button onClick={onQuit} className="v8-quit-btn">⬅ QUITTER</button>
 
+      {/* Mention d'avertissement en haut du devoir */}
+      <div className="v8-top-integrity-banner">
+        <span>⚠️</span>
+        <span><strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.</span>
+      </div>
+
       {/* ZONE SUJET */}
       <div className="viewer-top-area" style={{ height: `${splitTopPercent}%` }} onMouseDown={(e) => handleMouseDown(e, 'doc')} onMouseMove={(e) => handleMouseMove(e, 'doc')} onMouseUp={() => handleMouseUp('doc')} onMouseLeave={() => handleMouseUp('doc')}>
           <div className="v8-zoom-controls">

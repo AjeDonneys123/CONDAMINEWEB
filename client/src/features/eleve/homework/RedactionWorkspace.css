@@ -827,6 +827,59 @@
     font-weight: 900;
 }
 
+/* Mention d'intégrité / Avertissement différence de niveau */
+.conda-redaction-integrity-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(220, 38, 38, 0.12) 100%);
+    border: 1.5px solid rgba(245, 158, 11, 0.5);
+    border-radius: 16px;
+    padding: 10px 18px;
+    margin: 8px 16px 0 16px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.conda-redaction-integrity-alert .conda-alert-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.conda-redaction-integrity-alert .conda-alert-text {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #fef08a;
+    line-height: 1.5;
+}
+
+.conda-redaction-integrity-alert .conda-alert-text strong {
+    color: #fbbf24;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+/* Version inside the writing sheet */
+.conda-editor-integrity-warning {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(180, 83, 9, 0.1) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-left: 4px solid #f59e0b;
+    border-radius: 10px;
+    padding: 8px 14px;
+    margin-bottom: 12px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #fef08a;
+    line-height: 1.5;
+}
+
+.conda-editor-integrity-warning strong {
+    color: #fbbf24;
+}
+
 /* Floating Draft Panel Specifics */
 .conda-floating-draft-panel {
     border: 1.5px solid rgba(245, 158, 11, 0.4);
