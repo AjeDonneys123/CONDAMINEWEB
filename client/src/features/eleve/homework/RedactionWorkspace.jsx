@@ -2141,12 +2141,6 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                         </div>
                     </div>
 
-                    {/* Mention d'avertissement en haut du devoir */}
-                    <div className="conda-editor-integrity-warning">
-                        <span className="text-base flex-shrink-0">⚠️</span>
-                        <span><strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.</span>
-                    </div>
-
                     {/* Hint / Consigne espace unique */}
                     <div className="conda-single-workspace-hint">
                         <span className="conda-hint-icon">💡</span>
