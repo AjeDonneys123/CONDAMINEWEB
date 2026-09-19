@@ -701,6 +701,18 @@ const Models = {
         }]
     }),
 
+    ClassroomScan: getModel('ClassroomScan', {
+        studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', default: null, index: true },
+        studentName: { type: String, default: '' },
+        classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', default: null, index: true },
+        className: { type: String, default: '' },
+        teacherId: { type: String, default: '' },
+        imageUrl: { type: String, required: true },
+        driveFileId: { type: String, default: '' },
+        title: { type: String, default: '' },
+        createdAt: { type: Date, default: Date.now, index: true }
+    }),
+
     Teacher: getModel('Teacher', {
         firstName: String, lastName: String, password: { type: String, required: true },
         mail: { type: String, default: '', trim: true, lowercase: true },

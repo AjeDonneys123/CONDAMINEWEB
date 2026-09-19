@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './ClassroomManager.css';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
+import ScanCaptureModal from './ScanCaptureModal';
+import ScanGalleryModal from './ScanGalleryModal';
 
 const LearningReferenceBadges = ({ student }) => (Array.isArray(student?.learningReferences) ? student.learningReferences : []).map((learning) => (
     <span
@@ -36,6 +38,22 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
     const [placementStudent, setPlacementStudent] = useState(null);
+    
+    // Scan & Photos Classe / Élève
+    const [classroomInfo, setClassroomInfo] = useState(null);
+    const [scanCaptureOpen, setScanCaptureOpen] = useState(false);
+    const [scanGalleryOpen, setScanGalleryOpen] = useState(false);
+    const [scanTargetStudent, setScanTargetStudent] = useState(null);
+
+    const handleOpenScanCapture = (targetStudent = null) => {
+        setScanTargetStudent(targetStudent || selectedStudent || null);
+        setScanCaptureOpen(true);
+    };
+
+    const handleOpenScanGallery = (targetStudent = null) => {
+        setScanTargetStudent(targetStudent || selectedStudent || null);
+        setScanGalleryOpen(true);
+    };
     
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -210,6 +228,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             const resClass = await fetch(`/api/classroom/${globalClassId}`);
             if (resClass.ok) {
                 const clsInfo = await resClass.json();
+                setClassroomInfo(clsInfo);
                 if (clsInfo.layout) {
                     setSeparators(clsInfo.layout.separators || []);
                     setGridSize({ 
@@ -1492,6 +1511,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     </button>
                     <button className="class-score-btn negative" onClick={() => void adjustClassScores(-1)} disabled={classScoreBusy}>−1C</button>
                     <button className="class-score-btn" onClick={addClassScorePoint} disabled={classScoreBusy}>+1C</button>
+                    <button className="cm-header-scan-btn" onClick={() => handleOpenScanCapture(null)} title="Scanner un travail (vidéo)">📷 SCAN</button>
+                    <button className="cm-header-images-btn" onClick={() => handleOpenScanGallery(null)} title="Galerie d'images de la classe">🖼️ IMAGES</button>
                 </div>
             </div>
             
@@ -1712,6 +1733,14 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     {selectedGradeHas(selectedStudent, 'boardWarning') ? 'DÉSAVERTIR AU TABLEAU' : '⚠️ AVERTIR AU TABLEAU'}
                                 </button>
                             </div>
+                            <div className="student-scan-drawer-row">
+                                <button className="act-btn btn-scan-capture" onClick={() => handleOpenScanCapture(selectedStudent)}>
+                                    📷 CAPTURE
+                                </button>
+                                <button className="act-btn btn-scan-images" onClick={() => handleOpenScanGallery(selectedStudent)}>
+                                    🖼️ IMAGES
+                                </button>
+                            </div>
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
                         </div>
                         {showNoteInput && (
@@ -1763,6 +1792,27 @@ export default function ClassroomManager({ globalClassId, user }) {
                     </div>
                 </div>
             )}
+
+            {/* ===== MODAL SCAN CAPTURE ===== */}
+            <ScanCaptureModal
+                isOpen={scanCaptureOpen}
+                onClose={() => setScanCaptureOpen(false)}
+                student={scanTargetStudent}
+                classId={globalClassId}
+                className={classroomInfo?.name || ''}
+                teacherId={user?.id || user?._id || ''}
+                onOpenGallery={() => handleOpenScanGallery(scanTargetStudent)}
+            />
+
+            {/* ===== MODAL SCAN GALERIE ===== */}
+            <ScanGalleryModal
+                isOpen={scanGalleryOpen}
+                onClose={() => setScanGalleryOpen(false)}
+                student={scanTargetStudent}
+                classId={globalClassId}
+                className={classroomInfo?.name || ''}
+                onOpenCapture={() => handleOpenScanCapture(scanTargetStudent)}
+            />
         </div>
     );
 }

@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress } = require('../models/prof.models');
+const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress, ClassroomScan } = require('../models/prof.models');
 const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
 const multer = require('multer');
 const path = require('path');
@@ -11,6 +11,9 @@ const { sendLatePunishmentMail, resetLateMailState } = require('../../services/p
 
 // Configuration Multer pour l'import d'image
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
+const scansUploadDir = path.join(process.cwd(), 'public', 'uploads', 'scans');
+try { fs.mkdirSync(scansUploadDir, { recursive: true }); } catch (_) {}
+const scanUpload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -496,6 +499,78 @@ router.post('/:classId/score-alerts/sync', async (req, res) => {
         });
     } catch (e) {
         return res.status(500).json({ error: e.message });
+    }
+});
+
+// ==========================================
+// 📸 SCANS & CAPTURES CLASSE / ÉLÈVE
+// ==========================================
+
+router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "Aucun fichier reçu" });
+        }
+        const ext = path.extname(req.file.originalname || '') || '.jpg';
+        const finalName = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+        const finalPath = path.join(scansUploadDir, finalName);
+        
+        fs.renameSync(req.file.path, finalPath);
+        const imageUrl = `/uploads/scans/${finalName}`;
+
+        const studentId = String(req.body.studentId || '').trim();
+        const classId = String(req.body.classId || '').trim();
+
+        const scan = await ClassroomScan.create({
+            studentId: studentId && mongoose.Types.ObjectId.isValid(studentId) ? studentId : null,
+            studentName: String(req.body.studentName || '').trim(),
+            classId: classId && mongoose.Types.ObjectId.isValid(classId) ? classId : null,
+            className: String(req.body.className || '').trim(),
+            teacherId: String(req.body.teacherId || '').trim(),
+            imageUrl,
+            title: String(req.body.title || '').trim(),
+            createdAt: new Date()
+        });
+
+        res.json({ ok: true, scan });
+    } catch (e) {
+        console.error("Erreur upload scan classroom:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/scans', async (req, res) => {
+    try {
+        const studentId = String(req.query.studentId || '').trim();
+        const classId = String(req.query.classId || '').trim();
+        const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 60));
+
+        const query = {};
+        if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+            query.studentId = studentId;
+        } else if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+            query.classId = classId;
+        }
+
+        const scans = await ClassroomScan.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+        res.json({ ok: true, scans });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/scans/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "ID invalide" });
+        const scan = await ClassroomScan.findByIdAndDelete(id);
+        if (scan?.imageUrl && scan.imageUrl.startsWith('/uploads/scans/')) {
+            const filePath = path.join(process.cwd(), 'public', scan.imageUrl);
+            try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+        }
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
