@@ -1864,22 +1864,12 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                     <div className="conda-perfectionnement-actions">
                         <button
                             type="button"
-                            onClick={() => setShowIntermediateEvalModal(true)}
-                            disabled={reevaluating || (!essayText.trim() && !draftText.trim())}
-                            className="conda-perfectionnement-reeval-btn"
-                            title="Faire corriger la copie actuelle par l'IA pour actualiser votre note (ex: 15-16). Sauvegarde l'état actuel de votre chat avec l'IA."
+                            onClick={handleCopyForAI}
+                            className="conda-btn-ia-copy"
+                            title="Consulter l'IA pour obtenir de nouveaux conseils et enrichir votre devoir"
                         >
-                            <span>{reevaluating ? '⏳' : '🎯'}</span>
-                            <span>{reevaluating ? 'Correction en cours...' : "⚡ Corriger / Évaluer par l'IA"}</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleNewAttempt}
-                            className="conda-perfectionnement-btn"
-                            title="Créer une nouvelle version pour poursuivre le perfectionnement"
-                        >
-                            <span>🔄</span>
-                            <span>Nouvelle version ({attemptsCount + 1})</span>
+                            <span>📋</span>
+                            <span>Consulter l'IA pour perfectionner</span>
                         </button>
                     </div>
                 </section>
@@ -2215,48 +2205,6 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                     {pinnedAiNotes.trim() && <span className="conda-badge-dot" />}
                                 </button>
                             </div>
-
-                            {(showAiNotes || alreadySubmitted || attemptsCount > 1) && (
-                                <button
-                                    type="button"
-                                    className="conda-redaction-tool-btn border-indigo-500/50 bg-indigo-950/40 text-indigo-300"
-                                    onClick={handleNewAttempt}
-                                    title="Démarrer une nouvelle tentative tout en conservant vos notes sur l'IA"
-                                >
-                                    <span>🔄</span>
-                                    <span>Nouvelle tentative ({attemptsCount + 1})</span>
-                                </button>
-                            )}
-
-                            <button
-                                type="button"
-                                className="conda-redaction-tool-btn border-indigo-500/40 bg-indigo-950/40 text-indigo-300 hover:text-white"
-                                onClick={() => setShowIntermediateEvalModal(true)}
-                                title="Afficher ou coller l'état actuel de votre échange avec l'IA"
-                            >
-                                <span>💬</span>
-                                <span>Chat IA {aiConversationText.trim().length > 10 ? '✅' : ''}</span>
-                            </button>
-
-                            <button
-                                type="button"
-                                className="conda-btn-reevaluate"
-                                onClick={() => setShowIntermediateEvalModal(true)}
-                                disabled={reevaluating || !essayText.trim()}
-                                title="Faire corriger votre texte par l'IA : sauvegarde l'état actuel de votre chat avec l'IA et met à jour votre note (ex: 15-16)"
-                            >
-                                {reevaluating ? (
-                                    <>
-                                        <span className="animate-spin">⏳</span>
-                                        <span>Correction en cours...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>🎯</span>
-                                        <span>Corriger / Évaluer par l'IA {currentGrade ? `(Note : ${currentGrade}/20)` : ''}</span>
-                                    </>
-                                )}
-                            </button>
                         </div>
 
                         <button
