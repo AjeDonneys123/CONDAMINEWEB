@@ -47,7 +47,7 @@ function AssignedTraining({ user }) {
     const onScore = (event) => {
       const scoreId = String(event?.detail?.exerciseId || '');
       const normalizedScoreId = scoreId.replace('5e-geo-', '5e-').replace(/::\d+$/, '');
-      const item = assignment.items.find((entry) => entry.id === normalizedScoreId);
+      const item = assignment.items.find((entry) => entry.id === normalizedScoreId || (entry.id === '5e-image' && scoreId.includes('image')));
       if (item) validate(item);
     };
     window.addEventListener(TRAINING_SCORE_EVENT, onScore);
@@ -4559,7 +4559,10 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
   const reportProgress = (reached) => {
     const studentId = user?._id || user?.id;
     if (!studentId || total === 0) return;
-    if (reached >= total) reportTrainingScore(`dnb-doc-method-${type}`, total, total);
+    if (reached >= total) {
+      reportTrainingScore(`dnb-doc-method-${type}`, total, total);
+      if (type === 'image') reportTrainingScore('5e-image', total, total);
+    }
     fetch('/api/games/save-progress', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5793,12 +5796,19 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
   const [attributeAnswers, setAttributeAnswers] = useState({});
   const [scaleAnswers, setScaleAnswers] = useState({});
   const [curveAnswers, setCurveAnswers] = useState({});
+  const accountEmail = String(user?.email || user?.mail || '').trim().toLowerCase();
+  const accountName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim().toUpperCase();
+  const isTeacherAccount = accountEmail === 'vuillet.jean@condamine.edu.ec' || accountName === 'JP VUILLET' || user?.role === 'prof' || user?.isProf;
+  const canCalibrate = canCalibrateFromProf || user?.isDeveloper === true || user?.isTestAccount === true || isTeacherAccount;
+  const [imageAdminMode, setImageAdminMode] = useState(canCalibrate ? 'calibration' : 'reader');
   useEffect(() => {
-    const open = (event) => event?.detail?.view && resetCheck(event.detail.view);
+    const open = (event) => {
+      const next = event?.detail?.view || (event?.detail?.module === 'image' || event?.detail?.id === 'dnb-doc-method-image' || event?.detail?.id === '5e-image' ? 'image' : null);
+      if (next) resetCheck(next);
+    };
     window.addEventListener('condaweb:open-assigned-training', open);
     return () => window.removeEventListener('condaweb:open-assigned-training', open);
   }, []);
-  const canCalibrate = canCalibrateFromProf || user?.isDeveloper === true || user?.isTestAccount === true;
   const worldMapImageKey = 'condaweb-fifth-grade-world-map-v1';
   const worldMapModelKey = 'condaweb-fifth-grade-world-map-model-v1';
   const customMapsModelKey = 'condaweb-fifth-grade-map-attributes-v1';
@@ -6376,11 +6386,12 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
           {[
             ['learn', '📖 Apprendre'], ['world', '🌍 Continents et océans'], ['compass', '🧭 Points cardinaux'],
             ['attributes', '🗺️ Attributs de la carte'], ['scales', '🔎 Échelles géographiques'],
-            ['curves', '📈 Courbes démographiques'], ['dates', '📅 Dates et frise']
+            ['curves', '📈 Courbes démographiques'], ['dates', '📅 Dates et frise'],
+            ['image', '🖼️ Description d’image']
           ].map(([key, label]) => {
             const id = `5e-${key}`;
             return <div key={key} className="flex items-center gap-2 rounded-2xl bg-white p-1 shadow-sm">
-              {assignmentMode && <input type="checkbox" aria-label={`Sélectionner ${label}`} checked={selectedAssignmentIds?.has(id) || false} onChange={(event) => onAssignmentToggle?.({ id, title: label, section: 'GEO', subject: 'Géographie', questionType: 'navigation', content: { view: key } }, event.target.checked)} className="ml-2 h-5 w-5 accent-violet-600" />}
+              {assignmentMode && <input type="checkbox" aria-label={`Sélectionner ${label}`} checked={selectedAssignmentIds?.has(id) || false} onChange={(event) => onAssignmentToggle?.({ id, title: label, section: 'GEO', subject: key === 'image' ? 'Méthodologie' : 'Géographie', questionType: 'navigation', content: { view: key } }, event.target.checked)} className="ml-2 h-5 w-5 accent-violet-600" />}
               <button type="button" onClick={() => resetCheck(key)} className={`rounded-xl border px-4 py-3 text-sm font-black ${view === key ? 'border-emerald-700 bg-emerald-600 text-white' : 'border-white bg-white text-slate-700'}`}>{label}</button>
             </div>;
           })}
@@ -6445,10 +6456,72 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
               </div>
             </div>
           </article>
+          <article className="rounded-3xl border border-emerald-200 bg-white p-5 xl:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600">Méthodologie · Image et paysage</div>
+                <h3 className="m-0 text-xl font-black text-slate-900">8. Décrire une image ou un paysage</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => resetCheck('image')}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 transition"
+              >
+                Passer aux exercices →
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <strong className="text-emerald-900">1. Premier plan</strong>
+                <p className="mt-1 text-sm font-bold text-slate-600">Ce qui est devant, donc le plus proche du spectateur.</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <strong className="text-emerald-900">2. Deuxième plan</strong>
+                <p className="mt-1 text-sm font-bold text-slate-600">Ce qui se trouve au milieu de l’image.</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <strong className="text-emerald-900">3. Arrière-plan</strong>
+                <p className="mt-1 text-sm font-bold text-slate-600">Ce qui est derrière, donc le plus éloigné.</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <strong className="text-emerald-900">4. Deux plans</strong>
+                <p className="mt-1 text-sm font-bold text-slate-600">Si l’image n’a que deux plans, décris seulement le premier plan et l’arrière-plan.</p>
+              </div>
+            </div>
+          </article>
         </div>
       )}
 
       {view === 'dates' && <FifthGradeDatesTimelineTraining />}
+
+      {view === 'image' && (
+        <div className="space-y-4">
+          {canCalibrate && (
+            <div className="mx-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div>
+                <div className="text-[10px] font-black uppercase text-emerald-700">Contrôle professeur · Description d’image</div>
+                <div className="text-sm font-black text-slate-800">
+                  {imageAdminMode === 'calibration'
+                    ? 'Mode calibrage actif (Ajout et modification d’exercices)'
+                    : 'Mode vue élève actif (Tester en conditions réelles)'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImageAdminMode((prev) => (prev === 'calibration' ? 'reader' : 'calibration'))}
+                className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-xs font-black text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+              >
+                {imageAdminMode === 'calibration' ? '👁️ Tester la vue élève' : '✏️ Calibrer les exercices'}
+              </button>
+            </div>
+          )}
+          {canCalibrate && imageAdminMode === 'calibration' ? (
+            <DnbDocumentMethodCalibration type="image" onBack={() => resetCheck('learn')} />
+          ) : (
+            <DnbDocumentMethodReader type="image" user={user} onBack={() => resetCheck('learn')} />
+          )}
+        </div>
+      )}
 
       {view === 'world' && (
         <article className="rounded-3xl border border-sky-200 bg-white p-5">
