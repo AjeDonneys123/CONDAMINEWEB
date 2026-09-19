@@ -1325,11 +1325,35 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         showToast("🗑️ Bloc de conseils supprimé.");
     };
 
-    // "J'ai fini de prendre mes notes" handler: consigne dans un bloc distinct et enregistre le chat IA
+    // Validation des deux espaces obligatoires pour la prise de notes / consultation IA
+    const isNotesFilled = (editingNoteText || '').trim().length >= 10;
+    const isChatFilled = (editingChatText || '').trim().length >= 5;
+    const isBothNotesSpacesFilled = Boolean(editingBlockId ? isNotesFilled : (isNotesFilled && isChatFilled));
+
+    // Fermeture de la fenêtre : impossible tant que les deux espaces ne sont pas remplis
+    const handleCancelOrCloseNotesModal = () => {
+        if (!isBothNotesSpacesFilled && !editingBlockId) {
+            showToast("⚠️ Les deux espaces doivent être remplis pour continuer (vos notes + la réponse de l'IA).");
+            return;
+        }
+        setIsNotesFocusMode(false);
+        setEditingBlockId(null);
+        setEditingNoteText('');
+        setEditingChatText('');
+    };
+
+    // "J'ai fini de prendre mes notes" handler: consigne dans un bloc distinct et enregistre la réponse de l'IA
     const handleFinishNotes = () => {
-        const cleanNotes = editingNoteText.trim();
-        if (cleanNotes.length < 10) {
-            showToast("⚠️ Notez au moins les remarques clés ou conseils du tuteur pour continuer.");
+        const cleanNotes = (editingNoteText || '').trim();
+        const cleanChat = (editingChatText || '').trim();
+
+        if (!cleanNotes || cleanNotes.length < 10) {
+            showToast("⚠️ Rédigez d'abord vos notes personnelles dans le 1er espace (au moins quelques mots).");
+            return;
+        }
+
+        if (!editingBlockId && (!cleanChat || cleanChat.length < 5)) {
+            showToast("⚠️ Collez la réponse reçue de l'IA dans le 2e espace pour enregistrer et valider.");
             return;
         }
 
@@ -1369,13 +1393,12 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
             showToast(`✨ Conseils consignés dans un bloc distinct pour la Version ${targetVer} !`);
         }
 
-        // Sauvegarde et mise à jour du chat IA si l'élève l'a collé
-        if (editingChatText && editingChatText.trim().length > 0) {
-            const cleanChat = editingChatText.trim();
+        // Sauvegarde au fur et à mesure de la réponse IA
+        if (cleanChat && cleanChat.length > 0) {
             setAiConversationText((prev) => {
                 if (!prev) return cleanChat;
                 if (prev.includes(cleanChat)) return prev;
-                return `${prev}\n\n--- ÉCHANGE IA (VERSION ${targetVer}) ---\n${cleanChat}`;
+                return `${prev}\n\n--- RÉPONSE IA (VERSION ${targetVer}) ---\n${cleanChat}`;
             });
         }
 
@@ -2282,78 +2305,114 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 1. Votre texte a été copié dans votre presse-papier. Collez-le (Ctrl+V) dans Gemini ou ChatGPT.
                             </p>
                             <p className="m-0">
-                                2. Lisez attentivement les remarques du tuteur.
+                                2. Lisez attentivement les remarques et conseils du tuteur.
                             </p>
                             <p className="m-0 font-semibold text-amber-300">
-                                💡 Résumez ci-dessous les erreurs signalées et collez l'échange avec l'IA. Vos notes seront consignées dans un bloc distinct pour guider votre prochaine version !
+                                💡 Rédigez d'abord vos notes personnelles (1er espace), puis copiez et collez la réponse de l'IA (2e espace). L'échange s'enregistre ainsi au fur et à mesure (plus fluide et plus sûr) et vos notes guident votre prochaine version !
                             </p>
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-300 block">
-                                {editingBlockId ? "Modifier le contenu de ce bloc de conseils :" : "Mes notes sur les conseils reçus pour cette prochaine version :"}
-                            </label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-slate-300 block">
+                                    {editingBlockId ? "Modifier le contenu de ce bloc de conseils :" : "Mes notes sur les conseils reçus pour cette prochaine version :"}
+                                </label>
+                                <span className="text-[10.5px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                                    <span>✍️</span> Saisie manuelle (copier-coller désactivé)
+                                </span>
+                            </div>
                             <textarea
                                 className="w-full h-36 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
-                                placeholder="Résumez ici :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de méthode, vocabulaire ou structure signalées&#10;- Ce que vous devez modifier dans votre prochaine version..."
+                                placeholder="Résumez ici avec vos propres mots :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de méthode, vocabulaire ou structure signalées&#10;- Ce que vous devez modifier dans votre prochaine version..."
                                 value={editingNoteText}
                                 onChange={(e) => setEditingNoteText(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                onCopy={handleBlockedCopy}
-                                onCut={handleBlockedCopy}
-                                onPaste={handleBlockedPaste}
+                                onKeyDown={(e) => {
+                                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                                        e.preventDefault();
+                                        showToast("🚫 Le copier-coller est désactivé dans vos notes ! Rédigez avec vos propres mots.");
+                                    }
+                                }}
+                                onPaste={(e) => {
+                                    e.preventDefault();
+                                    showToast("🚫 Le copier-coller est désactivé dans vos notes ! Rédigez avec vos propres mots.");
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    showToast("🚫 Le glisser-déposer est désactivé ici ! Rédigez avec vos propres mots.");
+                                }}
                                 autoFocus
                             />
+                            <div className="flex items-center justify-between text-[11px]">
+                                <span className={isNotesFilled ? "text-emerald-400 font-semibold" : "text-amber-400/90"}>
+                                    {isNotesFilled ? `✅ Notes rédigées (${editingNoteText.trim().length} car.)` : "⚠️ 1er espace obligatoire (au moins 10 car. rédigés)"}
+                                </span>
+                                <span className="text-slate-500 text-[10px]">
+                                    Synthèse personnelle
+                                </span>
+                            </div>
                         </div>
 
-                        {/* Champ pour coller l'échange complet avec l'IA */}
+                        {/* Champ pour coller la réponse de l'IA */}
                         <div className="space-y-1.5 pt-3 border-t border-slate-700/60">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                                     <span>💬</span>
-                                    <span>Collez ici l'échange complet avec l'IA (Gemini / ChatGPT) :</span>
+                                    <span>Collez ici la réponse de l'IA (Gemini / ChatGPT) :</span>
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                    {editingChatText.trim().length > 0 ? `✅ ${editingChatText.trim().length} car. collés` : 'Permet de certifier vos notes'}
+                                <span className="text-[10.5px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                                    <span>📋</span> Copier-coller autorisé
                                 </span>
                             </div>
                             <p className="text-[11px] text-slate-400 m-0">
-                                Copiez depuis l'IA l'intégralité du chat ou de la réponse reçue, et collez-la ci-dessous pour l'enregistrer et certifier votre travail.
+                                Copiez la réponse de l'IA et collez-la ci-dessous. On enregistre ainsi le chat au fur et à mesure : c'est plus fluide et plus sûr.
                             </p>
                             <textarea
                                 className="w-full h-28 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
-                                placeholder="Collez ici (Ctrl+V) l'intégralité du dialogue ou de la réponse reçue de Gemini / ChatGPT..."
+                                placeholder="Collez ici (Ctrl+V) la réponse reçue de Gemini / ChatGPT..."
                                 value={editingChatText}
                                 onChange={(e) => setEditingChatText(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                onCopy={handleBlockedCopy}
-                                onCut={handleBlockedCopy}
-                                onPaste={handleBlockedPaste}
                             />
+                            <div className="flex items-center justify-between text-[11px]">
+                                <span className={isChatFilled ? "text-emerald-400 font-semibold" : "text-amber-400/90"}>
+                                    {isChatFilled ? `✅ Réponse IA collée (${editingChatText.trim().length} car.)` : "⚠️ 2e espace obligatoire (collez la réponse de l'IA)"}
+                                </span>
+                                <span className="text-slate-500 text-[10px]">
+                                    Enregistrement au fur et à mesure
+                                </span>
+                            </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                             <button
                                 type="button"
-                                className="text-xs text-slate-400 hover:text-slate-200"
-                                onClick={() => {
-                                    setIsNotesFocusMode(false);
-                                    setEditingBlockId(null);
-                                    setEditingNoteText('');
-                                }}
+                                className={`text-xs flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg transition ${
+                                    !isBothNotesSpacesFilled && !editingBlockId
+                                        ? "text-slate-500 cursor-not-allowed bg-slate-800/40 border border-slate-700/50"
+                                        : "text-slate-400 hover:text-slate-200 cursor-pointer"
+                                }`}
+                                onClick={handleCancelOrCloseNotesModal}
+                                title={!isBothNotesSpacesFilled && !editingBlockId ? "Les 2 espaces doivent être remplis pour continuer" : "Revenir au devoir"}
                             >
-                                Revenir au devoir
+                                {!isBothNotesSpacesFilled && !editingBlockId && <span>🔒</span>}
+                                <span>Revenir au devoir</span>
                             </button>
                             <button
                                 type="button"
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-3 rounded-xl shadow-lg transition flex items-center gap-2"
+                                className={`font-bold text-xs px-6 py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${
+                                    isBothNotesSpacesFilled
+                                        ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
+                                        : "bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700"
+                                }`}
                                 onClick={handleFinishNotes}
+                                title={!isBothNotesSpacesFilled ? "Remplissez les 2 espaces pour continuer" : "Enregistrer et continuer"}
                             >
-                                <span>✅</span>
+                                <span>{isBothNotesSpacesFilled ? "✅" : "🔒"}</span>
                                 <span>
                                     {editingBlockId
                                         ? "Enregistrer les modifications de ce bloc"
-                                        : "J'ai fini de prendre mes notes ➔ Consigner ce bloc et améliorer mon devoir"
+                                        : isBothNotesSpacesFilled
+                                            ? "J'ai fini de prendre mes notes ➔ Consigner ce bloc et améliorer mon devoir"
+                                            : "Remplissez les 2 espaces pour continuer (Notes + Réponse IA)"
                                     }
                                 </span>
                             </button>
