@@ -1,11 +1,12 @@
 // @signatures: ProfScansRouter, sessions, upload
 const express = require('express');
 const router = express.Router();
-const { ScanSession, Student } = require('../models/prof.models');
+const { ScanSession, Student, ClassroomScan } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const ScanAI = require('../../domains/scans/ai/scan.ai');
 const MistakeService = require('../../services/mistake.service');
 const multer = require('multer');
+const fs = require('fs');
 const { Readable } = require('stream');
 const upload = multer({ dest: 'public/uploads/temp' });
 const defaultAiInstructions = `Objectif prioritaire: comprendre le sens réel de ce que l'élève a écrit.
@@ -144,6 +145,51 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const update = type === 'SUBJECT' ? { $push: { subjectUrls: url } } : { $push: { copyUrls: url } };
     await ScanSession.findByIdAndUpdate(sessionId, update);
     res.json({ url });
+});
+
+router.post('/upload-classroom', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+
+        const folderId = await ProfDrive.getOrCreateFolder("SCANS");
+        const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
+        const imageUrl = `/api/structure/proxy/${driveFile.id}`;
+        const studentId = String(req.body.studentId || '').trim() || null;
+        const classId = String(req.body.classId || '').trim() || null;
+        const sessionId = String(req.body.sessionId || '').trim() || `session_${Date.now()}`;
+        const pageIndex = Math.max(1, Number(req.body.pageIndex) || 1);
+
+        let homeworkNumber = 0;
+        const existingInSession = await ClassroomScan.findOne({ sessionId, homeworkNumber: { $gt: 0 } }).lean();
+        if (existingInSession?.homeworkNumber) {
+            homeworkNumber = existingInSession.homeworkNumber;
+        } else {
+            const scope = studentId ? { studentId } : (classId ? { classId } : {});
+            const highest = await ClassroomScan.findOne(scope).sort({ homeworkNumber: -1 }).lean();
+            homeworkNumber = (highest?.homeworkNumber || 0) + 1;
+        }
+
+        const scan = await ClassroomScan.create({
+            studentId,
+            studentName: String(req.body.studentName || '').trim(),
+            classId,
+            className: String(req.body.className || '').trim(),
+            teacherId: String(req.body.teacherId || '').trim(),
+            imageUrl,
+            driveFileId: driveFile.id,
+            title: `Page ${pageIndex}`,
+            sessionId,
+            homeworkNumber,
+            pageIndex,
+            createdAt: new Date()
+        });
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        res.json({ ok: true, scan });
+    } catch (e) {
+        try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch (_) {}
+        console.error("Erreur upload scan classroom via prof scans:", e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.post('/delete-file', async (req, res) => {

@@ -179,7 +179,7 @@ export default function ScanCaptureModal({
             if (className) formData.append('className', className);
             if (teacherId) formData.append('teacherId', teacherId);
 
-            const res = await fetch('/api/classroom/scans/upload', {
+            const res = await fetch('/api/scans/upload-classroom', {
                 method: 'POST',
                 body: formData
             });
@@ -189,9 +189,11 @@ export default function ScanCaptureModal({
                 if (onScanUploaded) onScanUploaded(data.scan);
             } else {
                 setSessionCaptures((prev) => prev.map((item) => (item.id === tempId ? { ...item, uploading: false, error: true } : item)));
+                setCameraError(data?.error || "Échec de l'envoi de la photo.");
             }
         } catch (err) {
             console.error("Erreur capture photo:", err);
+            setCameraError(err?.message || "Échec de l'envoi de la photo.");
         } finally {
             setCapturing(false);
         }
@@ -236,7 +238,7 @@ export default function ScanCaptureModal({
             if (className) formData.append('className', className);
             if (teacherId) formData.append('teacherId', teacherId);
 
-            const res = await fetch('/api/classroom/scans/upload', {
+            const res = await fetch('/api/scans/upload-classroom', {
                 method: 'POST',
                 body: formData
             });

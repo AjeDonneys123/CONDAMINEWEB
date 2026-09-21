@@ -7,6 +7,7 @@ const ClassroomExpert = require('../../domains/classroom/experts/classroom.exper
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const ProfDrive = require('../core/drive.prof');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 
 // Configuration Multer pour l'import d'image
@@ -513,10 +514,10 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
         }
         const ext = path.extname(req.file.originalname || '') || '.jpg';
         const finalName = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
-        const finalPath = path.join(scansUploadDir, finalName);
-        
-        fs.renameSync(req.file.path, finalPath);
-        const imageUrl = `/uploads/scans/${finalName}`;
+        const folderId = await ProfDrive.getOrCreateFolder("SCANS");
+        const driveFile = await ProfDrive.uploadFile(finalName, req.file.path, folderId);
+        const imageUrl = `/api/structure/proxy/${driveFile.id}`;
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
 
         const studentId = String(req.body.studentId || '').trim();
         const classId = String(req.body.classId || '').trim();
@@ -547,6 +548,7 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
             className: String(req.body.className || '').trim(),
             teacherId: String(req.body.teacherId || '').trim(),
             imageUrl,
+            driveFileId: driveFile.id,
             title: String(req.body.title || `Page ${pageIndex}`).trim(),
             sessionId,
             homeworkNumber,
@@ -554,9 +556,7 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
             createdAt: new Date()
         });
 
-        const responseScan = scan.toObject();
-        responseScan.imageUrl = `/api/classroom/scans/${scan._id}/image`;
-        res.json({ ok: true, scan: responseScan });
+        res.json({ ok: true, scan });
     } catch (e) {
         console.error("Erreur upload scan classroom:", e);
         res.status(500).json({ error: e.message });
@@ -577,31 +577,9 @@ router.get('/scans', async (req, res) => {
         }
 
         const scans = await ClassroomScan.find(query).sort({ createdAt: -1 }).limit(limit).lean();
-        scans.forEach((scan) => {
-            scan.imageUrl = `/api/classroom/scans/${scan._id}/image`;
-        });
         res.json({ ok: true, scans });
     } catch (e) {
         res.status(500).json({ error: e.message });
-    }
-});
-
-router.get('/scans/:id/image', async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ error: "ID invalide" });
-        }
-        const scan = await ClassroomScan.findById(req.params.id).select('imageUrl').lean();
-        if (!scan?.imageUrl) return res.status(404).json({ error: "Image introuvable" });
-
-        const fileName = path.basename(scan.imageUrl);
-        const filePath = path.join(scansUploadDir, fileName);
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier image introuvable" });
-
-        res.set('Cache-Control', 'private, max-age=86400');
-        return res.sendFile(filePath);
-    } catch (e) {
-        return res.status(500).json({ error: e.message });
     }
 });
 
@@ -610,12 +588,15 @@ router.delete('/scans/session/:sessionId', async (req, res) => {
         const sessionId = String(req.params.sessionId || '').trim();
         if (!sessionId) return res.status(400).json({ error: "sessionId manquant" });
         const scans = await ClassroomScan.find({ sessionId }).lean();
-        scans.forEach((scan) => {
+        for (const scan of scans) {
+            if (scan?.driveFileId) {
+                try { await ProfDrive.deleteFile(scan.driveFileId); } catch (_) {}
+            }
             if (scan?.imageUrl && scan.imageUrl.startsWith('/uploads/scans/')) {
                 const filePath = path.join(process.cwd(), 'public', scan.imageUrl);
                 try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
             }
-        });
+        }
         await ClassroomScan.deleteMany({ sessionId });
         res.json({ ok: true, deletedCount: scans.length });
     } catch (e) {
@@ -628,6 +609,9 @@ router.delete('/scans/:id', async (req, res) => {
         const id = req.params.id;
         if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "ID invalide" });
         const scan = await ClassroomScan.findByIdAndDelete(id);
+        if (scan?.driveFileId) {
+            try { await ProfDrive.deleteFile(scan.driveFileId); } catch (_) {}
+        }
         if (scan?.imageUrl && scan.imageUrl.startsWith('/uploads/scans/')) {
             const filePath = path.join(process.cwd(), 'public', scan.imageUrl);
             try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
