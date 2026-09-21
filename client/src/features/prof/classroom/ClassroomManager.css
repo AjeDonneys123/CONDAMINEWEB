@@ -1469,7 +1469,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    padding: 0;
     animation: fadeIn 0.2s ease-out;
 }
 
@@ -1478,9 +1478,11 @@
     position: relative;
     background: #0f172a;
     color: #ffffff;
-    width: 100%;
-    max-width: 760px;
-    border-radius: 24px;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
     border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
     display: flex;
@@ -1670,8 +1672,9 @@
 .conda-scan-viewfinder-container {
     position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
-    max-height: 58vh;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
     background: #000000;
     display: flex;
     align-items: center;
@@ -1682,7 +1685,7 @@
 .conda-scan-video {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     opacity: 0;
     transition: opacity 0.3s ease;
 }
@@ -2605,4 +2608,28 @@
     }
 }
 
+@media (orientation: landscape) and (max-height: 700px) {
+    .conda-scan-modal-header {
+        padding: 8px 64px 8px 14px;
+    }
+
+    .conda-scan-modal-subtitle,
+    .shutter-tip {
+        display: none;
+    }
+
+    .conda-scan-bottom-bar {
+        padding: 7px 16px;
+    }
+
+    .conda-scan-shutter-btn {
+        width: 58px;
+        height: 58px;
+    }
+
+    .shutter-inner {
+        width: 44px;
+        height: 44px;
+    }
+}
 
