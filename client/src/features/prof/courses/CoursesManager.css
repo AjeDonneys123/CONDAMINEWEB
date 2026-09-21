@@ -617,19 +617,20 @@
 
 .active-course-shelf-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 9px;
+    width: 100%;
 }
 
 .active-course-shelf-item {
     display: flex;
-    min-width: 230px;
-    flex: 1 1 280px;
+    width: 100%;
     align-items: center;
     border: 1px solid #d1fae5;
     border-radius: 11px;
     background: #fff;
     overflow: hidden;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .active-course-shelf-list .active-course-present {
