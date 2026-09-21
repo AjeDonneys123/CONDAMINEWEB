@@ -2223,8 +2223,9 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
             {/* FOCUS MODE: Prise de Notes IA Dédiée */}
             {isNotesFocusMode && (
                 <div className="conda-redaction-modal-overlay">
-                    <div className="bg-slate-900 border-2 border-indigo-500 rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl space-y-5 text-left">
-                        <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                    <div className="bg-slate-900 border-2 border-indigo-500 rounded-3xl p-5 sm:p-7 max-w-2xl w-full shadow-2xl flex flex-col max-h-[90vh] text-left">
+                        {/* Header: fixé en haut */}
+                        <div className="flex items-center justify-between border-b border-slate-700 pb-3 flex-shrink-0">
                             <div className="flex items-center gap-2.5">
                                 <span className="text-2xl">🤖</span>
                                 <div>
@@ -2239,98 +2240,112 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                     </span>
                                 </div>
                             </div>
-                            <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded border border-amber-500/30">
-                                Jeton : #{computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount)}
-                            </span>
-                        </div>
-
-                        <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-2xl p-3.5 text-xs text-indigo-200/90 leading-relaxed space-y-1.5">
-                            <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>📋</span>
-                                <span>Consigne de travail :</span>
-                            </div>
-                            <p className="m-0">
-                                1. Votre texte a été copié dans votre presse-papier. Collez-le (Ctrl+V) dans Gemini ou ChatGPT.
-                            </p>
-                            <p className="m-0">
-                                2. Lisez attentivement les remarques et conseils du tuteur.
-                            </p>
-                            <p className="m-0 font-semibold text-amber-300">
-                                💡 Rédigez d'abord vos notes personnelles (1er espace), puis copiez et collez la réponse de l'IA (2e espace). L'échange s'enregistre ainsi au fur et à mesure (plus fluide et plus sûr) et vos notes guident votre prochaine version !
-                            </p>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs font-bold text-slate-300 block">
-                                    {editingBlockId ? "Modifier le contenu de ce bloc de conseils :" : "Mes notes sur les conseils reçus pour cette prochaine version :"}
-                                </label>
-                                <span className="text-[10.5px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
-                                    <span>✍️</span> Saisie manuelle (copier-coller désactivé)
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded border border-amber-500/30">
+                                    Jeton : #{computeSessionToken(user?._id || user?.id, homework?._id, attemptsCount)}
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={handleCancelOrCloseNotesModal}
+                                    className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg transition leading-none cursor-pointer"
+                                    title="Fermer"
+                                >
+                                    ✕
+                                </button>
                             </div>
-                            <textarea
-                                className="w-full h-36 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
-                                placeholder="Résumez ici avec vos propres mots :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de méthode, vocabulaire ou structure signalées&#10;- Ce que vous devez modifier dans votre prochaine version..."
-                                value={editingNoteText}
-                                onChange={(e) => setEditingNoteText(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                        </div>
+
+                        {/* Corps défilable : Consignes + Notes + Chat IA */}
+                        <div className="overflow-y-auto flex-1 min-h-0 py-3 space-y-4 pr-1 sm:pr-2">
+                            <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-2xl p-3.5 text-xs text-indigo-200/90 leading-relaxed space-y-1.5">
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                    <span>📋</span>
+                                    <span>Consigne de travail :</span>
+                                </div>
+                                <p className="m-0">
+                                    1. Votre texte a été copié dans votre presse-papier. Collez-le (Ctrl+V) dans Gemini ou ChatGPT.
+                                </p>
+                                <p className="m-0">
+                                    2. Lisez attentivement les remarques et conseils du tuteur.
+                                </p>
+                                <p className="m-0 font-semibold text-amber-300">
+                                    💡 Rédigez d'abord vos notes personnelles (1er espace), puis copiez et collez la réponse de l'IA (2e espace). L'échange s'enregistre ainsi au fur et à mesure (plus fluide et plus sûr) et vos notes guident votre prochaine version !
+                                </p>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-300 block">
+                                        {editingBlockId ? "Modifier le contenu de ce bloc de conseils :" : "Mes notes sur les conseils reçus pour cette prochaine version :"}
+                                    </label>
+                                    <span className="text-[10.5px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                                        <span>✍️</span> Saisie manuelle (copier-coller désactivé)
+                                    </span>
+                                </div>
+                                <textarea
+                                    className="w-full h-28 sm:h-32 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                    placeholder="Résumez ici avec vos propres mots :&#10;- Ce que l'IA a trouvé réussi&#10;- Les erreurs de méthode, vocabulaire ou structure signalées&#10;- Ce que vous devez modifier dans votre prochaine version..."
+                                    value={editingNoteText}
+                                    onChange={(e) => setEditingNoteText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                                            e.preventDefault();
+                                            showToast("🚫 Le copier-coller est désactivé dans vos notes ! Rédigez avec vos propres mots.");
+                                        }
+                                    }}
+                                    onPaste={(e) => {
                                         e.preventDefault();
                                         showToast("🚫 Le copier-coller est désactivé dans vos notes ! Rédigez avec vos propres mots.");
-                                    }
-                                }}
-                                onPaste={(e) => {
-                                    e.preventDefault();
-                                    showToast("🚫 Le copier-coller est désactivé dans vos notes ! Rédigez avec vos propres mots.");
-                                }}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    showToast("🚫 Le glisser-déposer est désactivé ici ! Rédigez avec vos propres mots.");
-                                }}
-                                autoFocus
-                            />
-                            <div className="flex items-center justify-between text-[11px]">
-                                <span className={isNotesFilled ? "text-emerald-400 font-semibold" : "text-amber-400/90"}>
-                                    {isNotesFilled ? `✅ Notes rédigées (${editingNoteText.trim().length} car.)` : "⚠️ 1er espace obligatoire (au moins 10 car. rédigés)"}
-                                </span>
-                                <span className="text-slate-500 text-[10px]">
-                                    Synthèse personnelle
-                                </span>
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        showToast("🚫 Le glisser-déposer est désactivé ici ! Rédigez avec vos propres mots.");
+                                    }}
+                                    autoFocus
+                                />
+                                <div className="flex items-center justify-between text-[11px]">
+                                    <span className={isNotesFilled ? "text-emerald-400 font-semibold" : "text-amber-400/90"}>
+                                        {isNotesFilled ? `✅ Notes rédigées (${editingNoteText.trim().length} car.)` : "⚠️ 1er espace obligatoire (au moins 10 car. rédigés)"}
+                                    </span>
+                                    <span className="text-slate-500 text-[10px]">
+                                        Synthèse personnelle
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Champ pour coller la réponse de l'IA */}
+                            <div className="space-y-1.5 pt-2 border-t border-slate-700/60">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                                        <span>💬</span>
+                                        <span>Collez ici la réponse de l'IA (Gemini / ChatGPT) :</span>
+                                    </label>
+                                    <span className="text-[10.5px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                                        <span>📋</span> Copier-coller autorisé
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 m-0">
+                                    Copiez la réponse de l'IA et collez-la ci-dessous. On enregistre ainsi le chat au fur et à mesure : c'est plus fluide et plus sûr.
+                                </p>
+                                <textarea
+                                    className="w-full h-24 sm:h-28 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
+                                    placeholder="Collez ici (Ctrl+V) la réponse reçue de Gemini / ChatGPT..."
+                                    value={editingChatText}
+                                    onChange={(e) => setEditingChatText(e.target.value)}
+                                />
+                                <div className="flex items-center justify-between text-[11px]">
+                                    <span className={isChatFilled ? "text-emerald-400 font-semibold" : "text-amber-400/90"}>
+                                        {isChatFilled ? `✅ Réponse IA collée (${editingChatText.trim().length} car.)` : "⚠️ 2e espace obligatoire (collez la réponse de l'IA)"}
+                                    </span>
+                                    <span className="text-slate-500 text-[10px]">
+                                        Enregistrement au fur et à mesure
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Champ pour coller la réponse de l'IA */}
-                        <div className="space-y-1.5 pt-3 border-t border-slate-700/60">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-                                    <span>💬</span>
-                                    <span>Collez ici la réponse de l'IA (Gemini / ChatGPT) :</span>
-                                </label>
-                                <span className="text-[10.5px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
-                                    <span>📋</span> Copier-coller autorisé
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 m-0">
-                                Copiez la réponse de l'IA et collez-la ci-dessous. On enregistre ainsi le chat au fur et à mesure : c'est plus fluide et plus sûr.
-                            </p>
-                            <textarea
-                                className="w-full h-28 p-3.5 rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-indigo-500 resize-y placeholder:text-slate-600"
-                                placeholder="Collez ici (Ctrl+V) la réponse reçue de Gemini / ChatGPT..."
-                                value={editingChatText}
-                                onChange={(e) => setEditingChatText(e.target.value)}
-                            />
-                            <div className="flex items-center justify-between text-[11px]">
-                                <span className={isChatFilled ? "text-emerald-400 font-semibold" : "text-amber-400/90"}>
-                                    {isChatFilled ? `✅ Réponse IA collée (${editingChatText.trim().length} car.)` : "⚠️ 2e espace obligatoire (collez la réponse de l'IA)"}
-                                </span>
-                                <span className="text-slate-500 text-[10px]">
-                                    Enregistrement au fur et à mesure
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                        {/* Boutons d'action : toujours visibles en bas */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-700/60 flex-shrink-0 bg-slate-900 mt-1">
                             <button
                                 type="button"
                                 className={`text-xs flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg transition ${
@@ -2346,7 +2361,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                             </button>
                             <button
                                 type="button"
-                                className={`font-bold text-xs px-6 py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${
+                                className={`font-bold text-xs px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${
                                     isBothNotesSpacesFilled
                                         ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
                                         : "bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700"

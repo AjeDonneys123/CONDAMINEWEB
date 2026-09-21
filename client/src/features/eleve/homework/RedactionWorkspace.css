@@ -419,9 +419,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 16px;
     z-index: 100;
     animation: fadeIn 0.2s ease;
+    overflow-y: auto;
+    max-height: 100vh;
 }
 
 .conda-redaction-modal {
@@ -431,6 +433,8 @@
     padding: 32px;
     max-width: 600px;
     width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     color: #f8fafc;
 }
