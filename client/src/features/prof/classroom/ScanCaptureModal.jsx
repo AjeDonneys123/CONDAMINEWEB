@@ -20,6 +20,7 @@ export default function ScanCaptureModal({
     const [facingMode, setFacingMode] = useState('environment'); // 'environment' (back) or 'user' (front)
 
     const sessionIdRef = useRef('');
+    const nextPageIndexRef = useRef(1);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -56,6 +57,7 @@ export default function ScanCaptureModal({
 
         // Nouvelle session de devoir pour ce regroupement d'images
         sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        nextPageIndexRef.current = 1;
         setSessionCaptures([]);
 
         let isCancelled = false;
@@ -162,7 +164,7 @@ export default function ScanCaptureModal({
             if (!blob) throw new Error("Échec création image");
 
             const localPreviewUrl = URL.createObjectURL(blob);
-            const tempId = Date.now();
+            const tempId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
             const tempItem = { id: tempId, url: localPreviewUrl, uploading: true };
             setSessionCaptures((prev) => [tempItem, ...prev]);
 
@@ -170,7 +172,7 @@ export default function ScanCaptureModal({
             const formData = new FormData();
             formData.append('file', blob, `capture_${Date.now()}.jpg`);
             formData.append('sessionId', sessionIdRef.current);
-            formData.append('pageIndex', String(sessionCaptures.length + 1));
+            formData.append('pageIndex', String(nextPageIndexRef.current++));
             if (student?._id) {
                 formData.append('studentId', student._id);
                 formData.append('studentName', `${student.firstName || ''} ${student.lastName || ''}`.trim());
@@ -179,21 +181,21 @@ export default function ScanCaptureModal({
             if (className) formData.append('className', className);
             if (teacherId) formData.append('teacherId', teacherId);
 
-            const res = await fetch('/api/scans/upload-classroom', {
+            setCapturing(false);
+            void fetch('/api/scans/upload-classroom', {
                 method: 'POST',
                 body: formData
-            });
-            const data = await res.json();
-            if (res.ok && data.scan) {
+            }).then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.scan) throw new Error(data?.error || "Échec de l'envoi");
                 setSessionCaptures((prev) => prev.map((item) => (item.id === tempId ? { ...item, uploading: false, serverScan: data.scan } : item)));
                 if (onScanUploaded) onScanUploaded(data.scan);
-            } else {
+            }).catch((err) => {
+                console.error("Erreur envoi photo:", err);
                 setSessionCaptures((prev) => prev.map((item) => (item.id === tempId ? { ...item, uploading: false, error: true } : item)));
-                setCameraError(data?.error || "Échec de l'envoi de la photo.");
-            }
+            });
         } catch (err) {
             console.error("Erreur capture photo:", err);
-            setCameraError(err?.message || "Échec de l'envoi de la photo.");
         } finally {
             setCapturing(false);
         }
@@ -222,14 +224,14 @@ export default function ScanCaptureModal({
         setCapturing(true);
         try {
             const localPreviewUrl = URL.createObjectURL(file);
-            const tempId = Date.now();
+            const tempId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
             const tempItem = { id: tempId, url: localPreviewUrl, uploading: true };
             setSessionCaptures((prev) => [tempItem, ...prev]);
 
             const formData = new FormData();
             formData.append('file', file, file.name || `import_${Date.now()}.jpg`);
             formData.append('sessionId', sessionIdRef.current);
-            formData.append('pageIndex', String(sessionCaptures.length + 1));
+            formData.append('pageIndex', String(nextPageIndexRef.current++));
             if (student?._id) {
                 formData.append('studentId', student._id);
                 formData.append('studentName', `${student.firstName || ''} ${student.lastName || ''}`.trim());
