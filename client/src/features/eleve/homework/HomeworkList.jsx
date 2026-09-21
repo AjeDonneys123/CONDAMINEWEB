@@ -25,8 +25,15 @@ export default function HomeworkList({
     const myId = String(user._id || user.id);
     
     try {
+        const queryParams = new URLSearchParams();
+        if (user?.isVisitorPreview) queryParams.set('visitor', '1');
+        if (user?.isStudentPreview) queryParams.set('preview', '1');
+        if (user?.currentClass) queryParams.set('level', user.currentClass);
+        if (user?.classId) queryParams.set('classId', user.classId);
+        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
         const [hwRes, subRes] = await Promise.all([
-          fetch(`/api/eleve/homework/list/${myId}${user?.isVisitorPreview ? `?visitor=1&level=${encodeURIComponent(user.currentClass || '')}` : ''}`),
+          fetch(`/api/eleve/homework/list/${myId}${qs}`),
           user?.isVisitorPreview ? Promise.resolve({ ok: true, json: async () => [] }) : fetch(`/api/eleve/homework/submissions/${myId}`)
         ]);
         if (!hwRes.ok) throw new Error("404");
@@ -69,7 +76,7 @@ export default function HomeworkList({
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, [user, JSON.stringify(assessmentKinds), JSON.stringify(levelFilter)]);
+  useEffect(() => { loadData(); }, [user, user?.isStudentPreview, user?.currentClass, user?.classId, JSON.stringify(assessmentKinds), JSON.stringify(levelFilter)]);
 
   useEffect(() => {
     if (!openPunishmentDirect || selectedHw) return;

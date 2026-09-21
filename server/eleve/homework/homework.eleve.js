@@ -252,6 +252,13 @@ async function buildStudentClassTargets(student) {
     const targets = new Set();
 
     addClassTarget(targets, student?.currentClass);
+    const rawClass = String(student?.currentClass || '').trim();
+    const digitMatch = rawClass.match(/^[1-6]/)?.[0] || rawClass.match(/[1-6]/)?.[0];
+    if (digitMatch) {
+        addClassTarget(targets, digitMatch);
+        addClassTarget(targets, `${digitMatch}e`);
+        addClassTarget(targets, `${digitMatch}eme`);
+    }
 
     const classId = student?.classId && String(student.classId);
     if (classId && mongoose.Types.ObjectId.isValid(classId)) {
@@ -367,15 +374,24 @@ router.get('/list/:studentId', async (req, res) => {
         const Submission = mongoose.model('Submission');
 
         const isVisitor = req.query?.visitor === '1';
+        const isPreview = req.query?.preview === '1';
         const visitorLevel = String(req.query?.level || '').match(/[1-6]/)?.[0] || '';
-        const student = isVisitor ? { _id: null, currentClass: req.query?.level || '' } : await Student.findById(req.params.studentId);
+        let student = isVisitor ? { _id: null, currentClass: req.query?.level || '' } : await Student.findById(req.params.studentId);
+        if (!student && (isPreview || req.query?.level || req.query?.classId)) {
+            student = {
+                _id: req.params.studentId,
+                currentClass: req.query?.level || '',
+                classId: req.query?.classId || '',
+                isTeacherPreview: true
+            };
+        }
         if (!student) return res.json([]);
-        if (!isVisitor) await ensurePunishmentState(student, Homework, Submission);
+        if (!isVisitor && !student.isTeacherPreview) await ensurePunishmentState(student, Homework, Submission);
 
         const classTargets = await buildStudentClassTargets(student);
         const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
 
-        // On cherche les devoirs pour toute la classe OU assignés à Julian
+        // On cherche les devoirs pour toute la classe OU assignés à l'élève
         const rawHomeworks = await Homework.find({
             isEnabled: { $ne: false },
             isPunishment: { $ne: true },
@@ -388,7 +404,8 @@ router.get('/list/:studentId', async (req, res) => {
             if (isVisitor) return (hw.targetClassrooms || []).some((target) => String(target || '').match(/[1-6]/)?.[0] === visitorLevel);
             const assigned = (hw.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
-            if (!hw.isAllClass) return false;
+            if (!hw.isAllClass && !student.isTeacherPreview) return false;
+            if (!hw.targetClassrooms || hw.targetClassrooms.length === 0) return true;
             return matchesClassTargets(hw.targetClassrooms, classTargetKeys);
         });
 
@@ -956,7 +973,11 @@ router.post('/submit', async (req, res) => {
         ? lvl.compactCorrection
         : null;
 
-    const student = await Student.findById(playerId, 'currentClass').lean();
+    let student = await Student.findById(playerId, 'currentClass').lean();
+    if (!student && playerId && mongoose.Types.ObjectId.isValid(playerId)) {
+        const teacher = await mongoose.model('User').findById(playerId, 'currentClass').lean();
+        if (teacher) student = { currentClass: teacher.currentClass || req.body?.studentClass || '' };
+    }
     const instructionText = hw?.mode === 'redaction'
         ? (hw.promptTopic || lvl?.instruction || 'Rédaction')
         : (lvl?.instruction || '');

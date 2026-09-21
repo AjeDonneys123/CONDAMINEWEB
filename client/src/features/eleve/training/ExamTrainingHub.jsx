@@ -4356,15 +4356,17 @@ function TrainingMethodSheetModal({ src, title, onClose }) {
   </div>;
 }
 
-function DnbDocumentsMethodology({ onBack, user, assignmentMode = false, selectedAssignmentIds = new Set(), onAssignmentToggle, initialModule = '' }) {
+function DnbDocumentsMethodology({ onBack, user, canCalibrate: canCalibrateProp, assignmentMode = false, selectedAssignmentIds = new Set(), onAssignmentToggle, initialModule = '' }) {
   const [module, setModule] = useState(initialModule || 'home');
   useEffect(() => {
     if (initialModule) setModule(initialModule);
   }, [initialModule]);
   const accountEmail = String(user?.email || user?.mail || '').trim().toLowerCase();
   const accountName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim().toUpperCase();
-  const canCalibrate = user?.isTestAccount !== true && user?.isVisitorPreview !== true
-    && (accountEmail === 'vuillet.jean@condamine.edu.ec' || accountName === 'JP VUILLET');
+  const isTeacher = accountEmail === 'vuillet.jean@condamine.edu.ec' || accountName === 'JP VUILLET' || user?.role === 'prof';
+  const canCalibrate = canCalibrateProp !== undefined
+    ? Boolean(canCalibrateProp && !user?.isStudentPreview && !user?.isVisitorPreview)
+    : (user?.isTestAccount !== true && user?.isVisitorPreview !== true && !user?.isStudentPreview && isTeacher);
   if (module === 'presentation') return canCalibrate
     ? <DnbDocumentMethodCalibration type="presentation" onBack={() => setModule('home')} />
     : <DnbDocumentMethodReader type="presentation" user={user} onBack={() => setModule('home')} />;
@@ -5799,8 +5801,11 @@ function FifthGradeGeoTraining({ user, canCalibrate: canCalibrateFromProf = fals
   const accountEmail = String(user?.email || user?.mail || '').trim().toLowerCase();
   const accountName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim().toUpperCase();
   const isTeacherAccount = accountEmail === 'vuillet.jean@condamine.edu.ec' || accountName === 'JP VUILLET' || user?.role === 'prof' || user?.isProf;
-  const canCalibrate = canCalibrateFromProf || user?.isDeveloper === true || user?.isTestAccount === true || isTeacherAccount;
+  const canCalibrate = !user?.isStudentPreview && user?.isVisitorPreview !== true && (canCalibrateFromProf || user?.isDeveloper === true || isTeacherAccount);
   const [imageAdminMode, setImageAdminMode] = useState(canCalibrate ? 'calibration' : 'reader');
+  useEffect(() => {
+    if (!canCalibrate) setImageAdminMode('reader');
+  }, [canCalibrate]);
   useEffect(() => {
     const open = (event) => {
       const next = event?.detail?.view || (event?.detail?.module === 'image' || event?.detail?.id === 'dnb-doc-method-image' || event?.detail?.id === '5e-image' ? 'image' : null);
@@ -6734,7 +6739,8 @@ function RqpMethodExercises() {
   </div>;
 }
 
-export default function ExamTrainingHub({ user, canCalibrate = false, assignmentMode = false, selectedAssignmentIds = new Set(), onAssignmentToggle }) {
+export default function ExamTrainingHub({ user, canCalibrate = false, isStudentView = false, assignmentMode = false, selectedAssignmentIds = new Set(), onAssignmentToggle }) {
+  const effectiveCanCalibrate = canCalibrate && !isStudentView && user?.isStudentPreview !== true;
   const mode = getTrainingModeForStudent(user);
   const [section, setSection] = useState(mode === 'seconde' ? 'rqp' : 'full');
   const [dnbSubject, setDnbSubject] = useState('all');
@@ -6757,7 +6763,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false, assignment
   }, []);
 
   if (mode === 'cinquieme') {
-    return <><AssignedTraining user={user} /><FifthGradeGeoTraining user={user} canCalibrate={canCalibrate} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} /></>;
+    return <><AssignedTraining user={user} /><FifthGradeGeoTraining user={user} canCalibrate={effectiveCanCalibrate} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} /></>;
   }
 
   if (mode === 'dnb') {
@@ -6839,7 +6845,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false, assignment
 	        ) : section === 'paragraphe' && selectedDnbChapter?.subject === 'methodo' ? (
 	          <DnbParagraphMethodology onBack={() => setSelectedDnbChapter(null)} />
 	        ) : section === 'docs' && selectedDnbChapter?.subject === 'methodo-docs' ? (
-	          <DnbDocumentsMethodology user={user} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} initialModule={assignedDnbModule} onBack={() => { setSelectedDnbChapter(null); setAssignedDnbModule(''); }} />
+	          <DnbDocumentsMethodology user={user} canCalibrate={effectiveCanCalibrate} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} initialModule={assignedDnbModule} onBack={() => { setSelectedDnbChapter(null); setAssignedDnbModule(''); }} />
 	        ) : showChapterFolders && !selectedDnbChapter ? (
 	          <DnbChapterFolders user={user} sectionFilter={section} onOpenChapter={(chapter) => {
 	            setSelectedDnbChapter(chapter);

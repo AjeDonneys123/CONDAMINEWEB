@@ -7,6 +7,7 @@ import './TrainingManager.css';
 export default function TrainingManager({ globalClassId, globalClass, user }) {
     const [addingExercise, setAddingExercise] = useState(false);
     const [creatingTraining, setCreatingTraining] = useState(false);
+    const [studentView, setStudentView] = useState(false);
     if (!globalClassId) {
         return (
             <div className="tm-empty">
@@ -16,12 +17,62 @@ export default function TrainingManager({ globalClassId, globalClass, user }) {
         );
     }
 
-    const previewUser = { ...user, currentClass: globalClass || '', className: globalClass || '', classId: globalClassId };
+    const previewUser = {
+        ...user,
+        currentClass: globalClass || '',
+        className: globalClass || '',
+        classId: globalClassId,
+        isStudentPreview: studentView,
+        isVisitorPreview: false
+    };
+
     if (creatingTraining) return <TrainingAssignmentStudio user={user} allClasses={[{ _id: globalClassId, name: globalClass, level: globalClass }]} allStudents={[]} chapters={[]} globalClass={globalClass} globalClassId={globalClassId} globalLevel={extractLevel(globalClass)} targetSection="GÉNÉRAL" initialData={{}} onClose={() => setCreatingTraining(false)} />;
-    if (addingExercise) return <div><button type="button" onClick={() => setAddingExercise(false)} className="m-4 rounded-xl border bg-white px-4 py-2 font-black text-slate-600">← Retour à la vue élève</button><LegacyTrainingManager globalClassId={globalClassId} globalClass={globalClass} user={user} /></div>;
+    if (addingExercise) return <div><button type="button" onClick={() => setAddingExercise(false)} className="m-4 rounded-xl border bg-white px-4 py-2 font-black text-slate-600">← Retour aux entraînements</button><LegacyTrainingManager globalClassId={globalClassId} globalClass={globalClass} user={user} /></div>;
     return <div className="relative pb-20">
-        <div className="sticky top-2 z-40 mb-3 flex justify-end gap-2 px-4"><button type="button" onClick={() => setCreatingTraining(true)} className="rounded-2xl bg-slate-900 px-5 py-3 font-black text-white shadow-lg">✨ Nouvel entraînement</button><button type="button" onClick={() => setAddingExercise(true)} className="rounded-2xl bg-violet-600 px-5 py-3 font-black text-white shadow-lg">＋ Ajouter ou modifier des exercices</button></div>
-        <ExamTrainingHub user={previewUser} canCalibrate={false} />
+        <div className="sticky top-2 z-40 mb-3 flex flex-wrap items-center justify-end gap-2 px-4">
+            {studentView ? (
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-2xl border border-indigo-200 bg-indigo-50 px-3.5 py-2.5 text-xs font-black text-indigo-900 shadow-sm">
+                        <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Vue élève active ({globalClass})
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setStudentView(false)}
+                        className="flex items-center gap-2 rounded-2xl bg-violet-700 px-5 py-3 font-black text-white shadow-lg ring-2 ring-violet-300 transition hover:bg-violet-800"
+                        title="Revenir à la vue professeur"
+                    >
+                        🎓 Vue prof
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => setStudentView(true)}
+                        className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg transition hover:bg-indigo-700"
+                        title="Tester les activités exactement comme un élève"
+                    >
+                        👁️ Vue élève
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setCreatingTraining(true)}
+                        className="rounded-2xl bg-slate-900 px-5 py-3 font-black text-white shadow-lg"
+                    >
+                        ✨ Nouvel entraînement
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setAddingExercise(true)}
+                        className="rounded-2xl bg-violet-600 px-5 py-3 font-black text-white shadow-lg"
+                    >
+                        ＋ Ajouter ou modifier des exercices
+                    </button>
+                </>
+            )}
+        </div>
+        <ExamTrainingHub user={previewUser} canCalibrate={!studentView} isStudentView={studentView} />
     </div>;
 }
 
