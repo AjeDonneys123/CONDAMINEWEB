@@ -44,6 +44,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [scanCaptureOpen, setScanCaptureOpen] = useState(false);
     const [scanGalleryOpen, setScanGalleryOpen] = useState(false);
     const [scanTargetStudent, setScanTargetStudent] = useState(null);
+    const [studentIdsWithScans, setStudentIdsWithScans] = useState([]);
 
     const handleOpenScanCapture = (targetStudent = null) => {
         setScanTargetStudent(targetStudent || selectedStudent || null);
@@ -248,6 +249,13 @@ export default function ClassroomManager({ globalClassId, user }) {
                     if (!current?._id) return current;
                     return nextStudents.find((student) => String(student._id) === String(current._id)) || current;
                 });
+            }
+            const scansRes = await fetch(`/api/classroom/scans?classId=${encodeURIComponent(globalClassId)}&limit=200`);
+            if (scansRes.ok) {
+                const scansData = await scansRes.json();
+                setStudentIdsWithScans(Array.from(new Set(
+                    (scansData.scans || []).map((scan) => String(scan.studentId || '')).filter(Boolean)
+                )));
             }
         } catch(e) { console.error(e); }
         setLoading(false);
@@ -1271,7 +1279,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <div className="sc-avatar-row">
                                     <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 </div>
-                                <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
+                                <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''} ${studentIdsWithScans.includes(String(student._id)) ? 'has-scanned-homework' : ''}`}>{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
                                 <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className={`sc-score positive ${getGradeStateClass(g)} ${hasScoreDebt(student) && String(g.id) === String(getMyStats(student).forcedSixScoreId || getSelectedGrade(student)?.id) ? 'debt' : ''}`}>{formatScore(g.value)}</span>)}</div>
                             </div>
                         ) : ( <div className={`grid-cell-empty ${isOver ? 'drag-over' : ''}`}>+</div> )}
@@ -1802,6 +1810,15 @@ export default function ClassroomManager({ globalClassId, user }) {
                 className={classroomInfo?.name || ''}
                 teacherId={user?.id || user?._id || ''}
                 onOpenGallery={() => handleOpenScanGallery(scanTargetStudent)}
+                onExit={() => {
+                    setScanCaptureOpen(false);
+                    setScanTargetStudent(null);
+                    setSelectedStudent(null);
+                }}
+                onScanUploaded={(scan) => {
+                    const studentId = String(scan?.studentId || '');
+                    if (studentId) setStudentIdsWithScans((prev) => prev.includes(studentId) ? prev : [...prev, studentId]);
+                }}
             />
 
             {/* ===== MODAL SCAN GALERIE ===== */}

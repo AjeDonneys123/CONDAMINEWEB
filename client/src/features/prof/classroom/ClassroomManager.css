@@ -406,6 +406,7 @@
     filter: drop-shadow(0 1px 0 #fff);
 }
 .student-card-drag.has-training-leader .sc-realizations { left: 23px; }
+.sc-name.has-scanned-homework { color: #7c3aed !important; }
 
 /* --- REALIZATIONS BADGES --- */
 .sc-realizations { 

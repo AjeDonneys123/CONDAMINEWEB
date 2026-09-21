@@ -8,7 +8,8 @@ export default function ScanCaptureModal({
     className = '',
     teacherId = '',
     onOpenGallery = null,
-    onScanUploaded = null
+    onScanUploaded = null,
+    onExit = null
 }) {
     const [cameraReady, setCameraReady] = useState(false);
     const [cameraError, setCameraError] = useState('');
@@ -304,6 +305,13 @@ export default function ScanCaptureModal({
                                 🖼️ Galerie {sessionCaptures.length > 0 ? `(${sessionCaptures.length})` : ''}
                             </button>
                         )}
+                        <button
+                            className="conda-scan-tool-btn"
+                            onClick={() => fileInputRef.current?.click()}
+                            title="Importer un fichier image"
+                        >
+                            📁 Fichier
+                        </button>
                     </div>
                 </div>
 
@@ -408,10 +416,10 @@ export default function ScanCaptureModal({
                         />
                         <button
                             className="conda-scan-import-btn"
-                            onClick={() => fileInputRef.current?.click()}
-                            title="Importer un fichier image"
+                            onClick={() => (onExit || onClose)()}
+                            title="Fermer et revenir au plan de classe"
                         >
-                            📁 Fichier
+                            ✕ Fermer
                         </button>
                         {sessionCaptures.length > 0 && onOpenGallery && (
                             <button
