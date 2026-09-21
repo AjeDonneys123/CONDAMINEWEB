@@ -368,7 +368,11 @@ export default function ScanCaptureModal({
                             <span className="conda-scan-no-recent">Aucune capture dans cette session</span>
                         ) : (
                             sessionCaptures.map((item, idx) => (
-                                <div key={item.id} className="conda-scan-thumb-item" title={`Capture #${sessionCaptures.length - idx}`}>
+                                <div
+                                    key={item.id}
+                                    className={`conda-scan-thumb-item ${item.uploading ? 'uploading' : item.error ? 'failed' : 'uploaded'}`}
+                                    title={item.uploading ? 'Envoi en cours' : item.error ? 'Échec de l’envoi' : 'Photo envoyée'}
+                                >
                                     <img src={item.url} alt={`Capture ${idx + 1}`} />
                                     {item.uploading && <div className="thumb-uploading-badge">⏳</div>}
                                     {item.error && <div className="thumb-error-badge">⚠️</div>}

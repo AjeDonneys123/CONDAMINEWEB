@@ -1800,7 +1800,7 @@
     align-items: center;
     gap: 8px;
     overflow-x: auto;
-    max-width: 220px;
+    max-width: min(38vw, 520px);
     min-height: 48px;
 }
 
@@ -1817,8 +1817,12 @@
     border-radius: 8px;
     overflow: hidden;
     flex-shrink: 0;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 3px solid rgba(255, 255, 255, 0.2);
 }
+
+.conda-scan-thumb-item.uploading { border-color: #f59e0b; }
+.conda-scan-thumb-item.uploaded { border-color: #22c55e; }
+.conda-scan-thumb-item.failed { border-color: #ef4444; }
 
 .conda-scan-thumb-item img {
     width: 100%;
@@ -2632,4 +2636,3 @@
         height: 44px;
     }
 }
-
