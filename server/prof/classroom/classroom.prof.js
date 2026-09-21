@@ -554,7 +554,9 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
             createdAt: new Date()
         });
 
-        res.json({ ok: true, scan });
+        const responseScan = scan.toObject();
+        responseScan.imageUrl = `/api/classroom/scans/${scan._id}/image`;
+        res.json({ ok: true, scan: responseScan });
     } catch (e) {
         console.error("Erreur upload scan classroom:", e);
         res.status(500).json({ error: e.message });
@@ -575,9 +577,31 @@ router.get('/scans', async (req, res) => {
         }
 
         const scans = await ClassroomScan.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+        scans.forEach((scan) => {
+            scan.imageUrl = `/api/classroom/scans/${scan._id}/image`;
+        });
         res.json({ ok: true, scans });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/scans/:id/image', async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ error: "ID invalide" });
+        }
+        const scan = await ClassroomScan.findById(req.params.id).select('imageUrl').lean();
+        if (!scan?.imageUrl) return res.status(404).json({ error: "Image introuvable" });
+
+        const fileName = path.basename(scan.imageUrl);
+        const filePath = path.join(scansUploadDir, fileName);
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier image introuvable" });
+
+        res.set('Cache-Control', 'private, max-age=86400');
+        return res.sendFile(filePath);
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
     }
 });
 
