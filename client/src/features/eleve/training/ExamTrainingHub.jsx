@@ -1029,7 +1029,7 @@ function DnbHistoryPeopleGame({ compact = false }) {
   );
 }
 
-function DnbGeoReperesWorkspace({ onBack }) {
+function DnbGeoReperesWorkspace({ onBack, canCalibrate = false }) {
   const marathonGames = [
     ['metropoles', 'Métropoles'], ['territoire', 'Territoire'], ['repartition', 'Répartition'],
     ['espacesProductifs', 'Espaces productifs'], ['dromCom', 'DROM-COM'], ['ue', 'Union européenne'],
@@ -1161,7 +1161,7 @@ function DnbGeoReperesWorkspace({ onBack }) {
         <button type="button" onClick={() => moveMarathon(1)} className="rounded-xl bg-violet-600 px-5 py-3 text-xs font-black text-white">{marathonIndex === marathonGames.length - 1 ? 'Terminer le marathon ✓' : 'Carte suivante →'}</button>
       </div> : null}
       {geoGame === 'metropoles'
-        ? (mode === 'revision' ? <DnbGeoMetropolesRevision /> : <DnbGeoMetropolesGame />)
+        ? (mode === 'revision' ? <DnbGeoMetropolesRevision /> : <DnbGeoMetropolesGame canCalibrate={canCalibrate} />)
           : geoGame === 'territoire'
           ? <DnbGeoTerritoryDrawingGame revisionMode={mode === 'revision' && !marathonActive} />
           : geoGame === 'repartition'
@@ -1244,7 +1244,7 @@ function DnbGeoMetropolesRevision() {
   );
 }
 
-function DnbGeoMetropolesGame() {
+function DnbGeoMetropolesGame({ canCalibrate = false }) {
   const mapBoxRef = useRef(null);
   const [activeCityId, setActiveCityId] = useState('');
   const [answers, setAnswers] = useState({});
@@ -1342,9 +1342,9 @@ function DnbGeoMetropolesGame() {
           <div className="text-2xl font-black text-slate-900">Clique sur un point et écris la ville</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setEditPoints((prev) => !prev)} className={`rounded-2xl px-4 py-3 text-xs font-black ${editPoints ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
+          {canCalibrate && <button type="button" onClick={() => setEditPoints((prev) => !prev)} className={`rounded-2xl px-4 py-3 text-xs font-black ${editPoints ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
             Placer les points
-          </button>
+          </button>}
           {editPoints ? (
             <>
               <button type="button" onClick={() => setEditLabels((prev) => !prev)} className={`rounded-2xl px-4 py-3 text-xs font-black ${editLabels ? 'bg-violet-600 text-white' : 'bg-white text-slate-700'}`}>
@@ -1632,7 +1632,8 @@ function DnbGeoRepartitionColoringGame({
   allowPointLabels = false,
   stagedWorkflow = false,
   revisionMode = false,
-  revisionLegendBelow = false
+  revisionLegendBelow = false,
+  canCalibrate = false
 }) {
   const drawingRef = useRef(null);
   const mapImageRef = useRef(null);
@@ -2478,7 +2479,7 @@ function DnbGeoRepartitionColoringGame({
           }}
           className={`rounded-xl px-3 py-2 text-xs font-black ${drawMode === 'star' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`}
         >★ Institution UE</button>}
-        {allowPointLabels && !stagedWorkflow && <button
+        {allowPointLabels && canCalibrate && !stagedWorkflow && <button
           type="button"
           onClick={() => { setEditPointLabels((previous) => !previous); setCheckedPointLabels(false); }}
           className={`rounded-xl px-3 py-2 text-xs font-black ${editPointLabels ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'}`}
@@ -2547,7 +2548,7 @@ function DnbGeoRepartitionColoringGame({
         ))}
       </div>}
       {stagedWorkflow && workflowStage === 'names' && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-3">
-        <button type="button" onClick={() => { setEditPointLabels((previous) => !previous); setCheckedPointLabels(false); }} className={`rounded-xl px-4 py-3 text-xs font-black ${editPointLabels ? 'bg-amber-500 text-white' : 'bg-white text-amber-800'}`}>▭ Calibrer les noms</button>
+        {canCalibrate && <button type="button" onClick={() => { setEditPointLabels((previous) => !previous); setCheckedPointLabels(false); }} className={`rounded-xl px-4 py-3 text-xs font-black ${editPointLabels ? 'bg-amber-500 text-white' : 'bg-white text-amber-800'}`}>▭ Calibrer les noms</button>}
         {!editPointLabels && <button type="button" onClick={() => setCheckedPointLabels(true)} className="rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white">✓ Vérifier les noms</button>}
       </div>}
 
@@ -4747,11 +4748,15 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
   </section>;
 }
 
-function DnbParagraphMethodology({ onBack }) {
+function DnbParagraphMethodology({ onBack, user, canCalibrate = false }) {
   const [module, setModule] = useState('home');
   const [showSheet, setShowSheet] = useState(false);
-  if (module === 'hors-sujet') return <DnbOffTopicCalibration onBack={() => setModule('home')} />;
-  if (module === 'introduction') return <DnbIntroductionCalibration onBack={() => setModule('home')} />;
+  if (module === 'hors-sujet') return canCalibrate
+    ? <DnbOffTopicCalibration onBack={() => setModule('home')} />
+    : <DnbOffTopicReader onBack={() => setModule('home')} />;
+  if (module === 'introduction') return canCalibrate
+    ? <DnbIntroductionCalibration onBack={() => setModule('home')} />
+    : <DnbIntroductionReader onBack={() => setModule('home')} />;
   return (
     <><section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4801,7 +4806,13 @@ function DnbParagraphMethodology({ onBack }) {
           <div className="text-xl font-black text-slate-900">Vérifier une introduction</div>
           <p className="mt-1 text-sm font-bold text-violet-800">Repérer s’il manque une définition ou des bornes spatiales et temporelles.</p>
         </div>
-        <button type="button" onClick={() => setModule('introduction')} className="rounded-2xl bg-violet-600 px-6 py-4 text-sm font-black text-white shadow-sm">Calibrer les 6 introductions</button>
+        <button
+          type="button"
+          onClick={() => setModule('introduction')}
+          className="rounded-2xl bg-violet-600 px-6 py-4 text-sm font-black text-white shadow-sm"
+        >
+          {canCalibrate ? 'Calibrer les 6 introductions' : 'S’entraîner sur les 6 introductions'}
+        </button>
       </div>
     </section><TrainingMethodSheetModal src={showSheet ? '/dnb-paragraph.png' : ''} title="Réussir le développement construit" onClose={() => setShowSheet(false)} /></>
   );
@@ -4814,6 +4825,165 @@ const DNB_INTRO_CHOICES = [
   { key: 'temporal', label: 'Il manque les bornes temporelles' },
   { key: 'complete', label: 'Rien ne manque' }
 ];
+
+const DEFAULT_DNB_INTRODUCTIONS = [
+  {
+    id: 'introduction-1',
+    subject: 'Décrivez et expliquez les violences subies par les civils et les militaires pendant la Première Guerre mondiale.',
+    text: "La Première Guerre mondiale est une guerre de masse d'une violence inédite. Les soldats dans les tranchées et les civils à l'arrière font face à des souffrances considérables. Comment cette guerre totale bouleverse-t-elle les combattants et les sociétés ?",
+    expected: 'temporal',
+    feedback: "Il manque les bornes temporelles précises (1914-1918) pour bien situer le sujet dans le temps."
+  },
+  {
+    id: 'introduction-2',
+    subject: 'Montrez comment le régime nazi s’installe en Allemagne et met en place un État totalitaire.',
+    text: "En janvier 1933, Adolf Hitler est nommé chancelier. Très rapidement, il met fin à la démocratie de Weimar et installe une dictature. En quoi le nazisme transforme-t-il l'Allemagne en un régime totalitaire fondé sur la terreur et l'antisémitisme ?",
+    expected: 'keywords',
+    feedback: "Il manque la définition des mots-clés essentiels, notamment ce qu'est un « régime totalitaire »."
+  },
+  {
+    id: 'introduction-3',
+    subject: 'Décrivez les caractéristiques et les dynamiques des espaces productifs agricoles en France.',
+    text: "L'agriculture française est une agriculture intensive intégrée à l'agro-industrie mondiale. De 1945 à nos jours, les campagnes se sont spécialisées et modernisées. Comment ces espaces agricoles participent-ils à la puissance économique nationale tout en connaissant des disparités spatiales ?",
+    expected: 'spatial',
+    feedback: "Il manque de poser clairement le cadre spatial (la France métropolitaine, grandes plaines céréalières, etc.)."
+  },
+  {
+    id: 'introduction-4',
+    subject: 'Sous la forme d’un développement construit, présentez l’aménagement du territoire en France pour réduire les inégalités.',
+    text: "L'aménagement du territoire désigne les actions menées par les pouvoirs publics pour organiser l'espace français et réduire les inégalités entre les territoires. Depuis les années 1960 jusqu'à nos jours, en métropole comme dans les Outre-mer, l'État et l'Union européenne mènent des politiques de rééquilibrage. Quelles sont les priorités et les réalisations de cet aménagement ?",
+    expected: 'complete',
+    feedback: "Bravo ! Rien ne manque : définition des notions, cadre spatial (métropole et Outre-mer) et temporel (depuis 1960) sont bien posés."
+  },
+  {
+    id: 'introduction-5',
+    subject: 'Expliquez comment la résistance française s’est organisée pendant la Seconde Guerre mondiale.',
+    text: "Refusant l'armistice de juin 1940, des Français choisissent de résister à l'occupant allemand et au régime de Vichy. De Londres aux maquis de métropole jusqu'à la Libération en 1944, l'action clandestine s'unifie grâce à Jean Moulin. Comment la Résistance s'est-elle organisée pour libérer le territoire ?",
+    expected: 'complete',
+    feedback: "Excellente introduction : cadre temporel (1940-1944), spatial (Londres et métropole) et définition de l'enjeu sont complets."
+  },
+  {
+    id: 'introduction-6',
+    subject: 'Montrez les transformations des espaces de faible densité en France métropolitaine.',
+    text: "Les espaces de faible densité, qui comptent moins de 30 habitants par kilomètre carré, connaissent d'importantes mutations. Autrefois marqués par l'exode rural, ils attirent aujourd'hui de nouveaux habitants en quête de cadre de vie. Quelles sont les dynamiques actuelles de ces territoires ?",
+    expected: 'spatial',
+    feedback: "Il manque les bornes spatiales explicites (la « diagonale des faibles densités », les massifs montagneux comme le Massif central)."
+  }
+];
+
+function DnbIntroductionReader({ onBack }) {
+  const [introductions] = useState(() => {
+    let storedItems = [];
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(DNB_INTRO_DRAFT_KEY) || 'null');
+      if (Array.isArray(stored?.introductions)) storedItems = stored.introductions;
+    } catch (_) {}
+    return DEFAULT_DNB_INTRODUCTIONS.map((def, idx) => {
+      const item = storedItems[idx];
+      return {
+        ...def,
+        ...(item?.text ? item : {})
+      };
+    });
+  });
+
+  const [answers, setAnswers] = useState({});
+  const [checked, setChecked] = useState({});
+
+  return (
+    <section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase text-violet-600">Méthodologie · Entraînement</div>
+          <h3 className="m-0 text-2xl font-black text-slate-900">Vérifier une introduction</h3>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600"
+        >
+          ← Retour à la méthode
+        </button>
+      </div>
+      <div className="mt-4 rounded-2xl bg-violet-50 p-4 text-sm font-bold text-violet-900">
+        Lis attentivement chaque introduction et indique s'il manque des éléments essentiels (mots-clés, cadre spatial, cadre temporel) ou si elle est complète.
+      </div>
+      <div className="mt-5 space-y-5">
+        {introductions.map((intro, index) => {
+          const userChoice = answers[intro.id];
+          const isChecked = checked[intro.id];
+          const isCorrect = isChecked && userChoice === intro.expected;
+
+          return (
+            <article key={intro.id} className="rounded-3xl border-2 border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="rounded-xl bg-violet-100 px-3 py-1 text-xs font-black uppercase text-violet-700">
+                  Introduction {index + 1}
+                </span>
+                {isChecked && (
+                  <span className={`text-xs font-black ${isCorrect ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {isCorrect ? '✓ Exact !' : 'À revoir'}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3">
+                <span className="text-[11px] font-black uppercase text-slate-500">Sujet demandé :</span>
+                <div className="text-sm font-black text-slate-900">{intro.subject}</div>
+              </div>
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-medium leading-relaxed text-slate-800">
+                « {intro.text} »
+              </div>
+              <div className="mt-4 text-xs font-black uppercase text-slate-500">Que penses-tu de cette introduction ?</div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {DNB_INTRO_CHOICES.map((choice) => {
+                  const selected = userChoice === choice.key;
+                  let btnClass = 'border-slate-200 bg-white text-slate-700 hover:border-violet-300';
+                  if (selected) {
+                    btnClass = 'border-violet-600 bg-violet-600 text-white shadow-sm';
+                  }
+                  if (isChecked) {
+                    if (choice.key === intro.expected) {
+                      btnClass = 'border-emerald-600 bg-emerald-600 text-white';
+                    } else if (selected && !isCorrect) {
+                      btnClass = 'border-red-500 bg-red-100 text-red-800';
+                    }
+                  }
+                  return (
+                    <button
+                      key={choice.key}
+                      type="button"
+                      disabled={isChecked}
+                      onClick={() => setAnswers((prev) => ({ ...prev, [intro.id]: choice.key }))}
+                      className={`rounded-2xl border-2 p-3 text-xs font-black transition ${btnClass}`}
+                    >
+                      {choice.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                {!isChecked ? (
+                  <button
+                    type="button"
+                    disabled={!userChoice}
+                    onClick={() => setChecked((prev) => ({ ...prev, [intro.id]: true }))}
+                    className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-black text-white transition hover:bg-violet-700 disabled:opacity-40"
+                  >
+                    Vérifier
+                  </button>
+                ) : (
+                  <div className="text-xs font-bold text-slate-700">
+                    {intro.feedback || (isCorrect ? 'Bonne analyse !' : `La bonne réponse était : ${DNB_INTRO_CHOICES.find((c) => c.key === intro.expected)?.label}`)}
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function DnbIntroductionCalibration({ onBack }) {
   const [introductions, setIntroductions] = useState(() => {
@@ -5063,6 +5233,90 @@ function DnbOffTopicCalibration({ onBack, storageKey = DNB_OFF_TOPIC_DRAFT_KEY, 
     </article>)}</div>
     <div className="mt-5 flex flex-wrap items-center gap-3"><button type="button" disabled={saving} onClick={saveCalibration} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? 'Publication…' : `Valider et publier le calibrage ${audience}`}</button>{saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage partagé avec les élèves</span>}{saveError && <span className="text-sm font-black text-red-600">{saveError}</span>}</div>
   </section>;
+}
+
+function DnbOffTopicReader({ onBack, storageKey = DNB_OFF_TOPIC_DRAFT_KEY, audience = 'DNB' }) {
+  const [paragraphs, setParagraphs] = useState(() => normalizeOffTopicParagraphs(readLegacyOffTopicCalibration(storageKey)));
+  const [revealed, setRevealed] = useState({});
+
+  useEffect(() => {
+    let active = true;
+    fetch(RQP_OFF_TOPIC_CONFIG_ROUTE)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || 'Chargement impossible');
+        if (active && Array.isArray(data?.model?.paragraphs) && data.model.paragraphs.length) {
+          setParagraphs(normalizeOffTopicParagraphs(data.model.paragraphs));
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [storageKey]);
+
+  const renderHighlighted = (paragraph) => {
+    if (!paragraph.text) return null;
+    const parts = [];
+    let cursor = 0;
+    paragraph.offTopicRanges.forEach((range, index) => {
+      if (range.start > cursor) parts.push(<React.Fragment key={`norm-${index}`}>{paragraph.text.slice(cursor, range.start)}</React.Fragment>);
+      parts.push(
+        <mark key={`off-${index}`} className="rounded bg-red-200 px-1 font-black text-red-800">
+          {paragraph.text.slice(range.start, range.end)}
+        </mark>
+      );
+      cursor = range.end;
+    });
+    if (cursor < paragraph.text.length) parts.push(<React.Fragment key="norm-end">{paragraph.text.slice(cursor)}</React.Fragment>);
+    return parts;
+  };
+
+  return (
+    <section className="mx-4 rounded-3xl border border-amber-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase text-amber-600">Méthodologie · Entraînement</div>
+          <h3 className="m-0 text-2xl font-black text-slate-900">Détecter et éviter le hors-sujet</h3>
+        </div>
+        <button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">
+          ← Retour à la méthode
+        </button>
+      </div>
+      <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900">
+        Lis attentivement chaque paragraphe. Essaie de repérer mentalement les phrases ou arguments qui ne répondent pas directement au sujet, puis clique sur « Voir la correction » pour vérifier les passages en rouge.
+      </div>
+      <div className="mt-5 space-y-5">
+        {paragraphs.map((paragraph, index) => {
+          const isRevealed = Boolean(revealed[paragraph.id]);
+          return (
+            <article key={paragraph.id} className="rounded-3xl border-2 border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <div className="text-xs font-black uppercase text-amber-700">Paragraphe argumenté {index + 1}</div>
+              <div className="mt-2">
+                <span className="text-[11px] font-black uppercase text-slate-500">Sujet demandé :</span>
+                <div className="text-sm font-black text-slate-900">{paragraph.subject}</div>
+              </div>
+              <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white p-4 text-sm font-medium leading-relaxed text-slate-800">
+                {isRevealed ? renderHighlighted(paragraph) : paragraph.text}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRevealed((prev) => ({ ...prev, [paragraph.id]: !prev[paragraph.id] }))}
+                  className={`rounded-2xl px-5 py-3 text-xs font-black shadow-sm transition ${isRevealed ? 'bg-slate-700 text-white' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
+                >
+                  {isRevealed ? 'Masquer la correction' : '👁️ Voir les passages hors-sujet'}
+                </button>
+                {isRevealed && paragraph.explanation && (
+                  <div className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs font-bold text-blue-900">
+                    💡 <strong>Explication du correcteur :</strong> {paragraph.explanation}
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function DnbParagraphFillActivity({ activity, onBack }) {
@@ -6839,11 +7093,11 @@ export default function ExamTrainingHub({ user, canCalibrate = false, isStudentV
         {section === 'reperes' && !selectedDnbChapter ? (
           <DnbReperesSubjectFolders onOpenSubject={setSelectedDnbChapter} />
         ) : section === 'reperes' && selectedDnbChapter?.subject === 'histoire' ? (
-          <DnbHistoryReperesWorkspace onBack={() => setSelectedDnbChapter(null)} />
+          <DnbHistoryReperesWorkspace canCalibrate={effectiveCanCalibrate} onBack={() => setSelectedDnbChapter(null)} />
         ) : section === 'reperes' && selectedDnbChapter?.subject === 'geo' ? (
-          <DnbGeoReperesWorkspace onBack={() => setSelectedDnbChapter(null)} />
+          <DnbGeoReperesWorkspace canCalibrate={effectiveCanCalibrate} onBack={() => setSelectedDnbChapter(null)} />
 	        ) : section === 'paragraphe' && selectedDnbChapter?.subject === 'methodo' ? (
-	          <DnbParagraphMethodology onBack={() => setSelectedDnbChapter(null)} />
+	          <DnbParagraphMethodology user={user} canCalibrate={effectiveCanCalibrate} onBack={() => setSelectedDnbChapter(null)} />
 	        ) : section === 'docs' && selectedDnbChapter?.subject === 'methodo-docs' ? (
 	          <DnbDocumentsMethodology user={user} canCalibrate={effectiveCanCalibrate} assignmentMode={assignmentMode} selectedAssignmentIds={selectedAssignmentIds} onAssignmentToggle={onAssignmentToggle} initialModule={assignedDnbModule} onBack={() => { setSelectedDnbChapter(null); setAssignedDnbModule(''); }} />
 	        ) : showChapterFolders && !selectedDnbChapter ? (
@@ -6918,11 +7172,19 @@ export default function ExamTrainingHub({ user, canCalibrate = false, isStudentV
           </div>
         </div>
         {openOffTopic ? (
-          <DnbOffTopicCalibration
-            audience="RQP"
-            storageKey="condaweb-rqp-off-topic-calibration-v1"
-            onBack={() => setSecondeRqpModule('home')}
-          />
+          effectiveCanCalibrate ? (
+            <DnbOffTopicCalibration
+              audience="RQP"
+              storageKey="condaweb-rqp-off-topic-calibration-v1"
+              onBack={() => setSecondeRqpModule('home')}
+            />
+          ) : (
+            <DnbOffTopicReader
+              audience="RQP"
+              storageKey="condaweb-rqp-off-topic-calibration-v1"
+              onBack={() => setSecondeRqpModule('home')}
+            />
+          )
         ) : isRqp && <section className="mx-4 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
           <div><div className="text-[11px] font-black uppercase text-blue-600">RQP · Méthodologie</div><h3 className="m-0 text-2xl font-black text-slate-900">Réussir une réponse à une question problématisée</h3></div>
           <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.68fr)_minmax(340px,0.9fr)]">
