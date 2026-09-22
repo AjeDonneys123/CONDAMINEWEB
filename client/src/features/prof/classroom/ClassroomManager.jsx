@@ -15,7 +15,7 @@ const LearningReferenceBadges = ({ student }) => (Array.isArray(student?.learnin
 
 export default function ClassroomManager({ globalClassId, user }) {
     const [students, setStudents] = useState([]);
-    const [gridSize, setGridSize] = useState({ cols: 6, rows: 5 });
+    const [gridSize, setGridSize] = useState({ cols: 6, rows: 6 });
     const [separators, setSeparators] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -234,7 +234,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     setSeparators(clsInfo.layout.separators || []);
                     setGridSize({ 
                         cols: clsInfo.layout.cols || 6, 
-                        rows: clsInfo.layout.rows || 5 
+                        rows: clsInfo.layout.rows || 6 
                     });
                 }
             }
