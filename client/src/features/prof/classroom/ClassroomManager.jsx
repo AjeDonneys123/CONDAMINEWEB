@@ -1322,11 +1322,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {searchTerm.trim() ? listFinderCount : students.length}
                         </span>}
                         <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
-                        <button
-                            className="plan-cols-toggle"
-                            onClick={() => changeGrid((gridSize.cols === 5 ? 6 : 5) - gridSize.cols, 0)}
-                            title={`Passer le plan à ${gridSize.cols === 5 ? 6 : 5} colonnes`}
-                        >{gridSize.cols} COL</button>
                         {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                         {(frenchMode ? frenchExpression : searchTerm).trim() && (
                             <button
@@ -1555,6 +1550,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR N</button>
+                            <button
+                                className="plan-cols-toggle"
+                                onClick={() => changeGrid((gridSize.cols === 5 ? 6 : 5) - gridSize.cols, 0)}
+                                title={`Passer le plan à ${gridSize.cols === 5 ? 6 : 5} colonnes`}
+                            >{gridSize.cols} COL</button>
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
