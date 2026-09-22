@@ -4641,6 +4641,41 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
   const [previews, setPreviews] = useState({});
   const [sheetPreview, setSheetPreview] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  // Charger depuis l'API au montage (BDD > localStorage)
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/training-config/dnb-doc-method/${type}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.model || !active) return;
+        const apiModel = data.model;
+        const imageUrls = data.imageUrls || {};
+        if (Array.isArray(apiModel.exercises)) {
+          apiModel.exercises = apiModel.exercises.map((exercise) => ({
+            ...exercise,
+            imageSrc: imageUrls[exercise.imageKey] || exercise.imageSrc || '',
+            imageSrc2: imageUrls[exercise.imageKey2] || exercise.imageSrc2 || ''
+          }));
+        }
+        if (apiModel.sheetKey && imageUrls[apiModel.sheetKey]) apiModel.sheetSrc = imageUrls[apiModel.sheetKey];
+        if (type === 'presentation' && Array.isArray(apiModel.exercises)) {
+          apiModel.exercises = apiModel.exercises.map((e) => ({ ...e, expected: { ...e.expected, subject: e.expected?.subject || e.expected?.source || '' } }));
+        }
+        setModel(withDefaultDocumentMethodContent(type, apiModel));
+        const nextPreviews = {};
+        (apiModel.exercises || []).forEach((exercise) => {
+          if (exercise.imageSrc) nextPreviews[exercise.id] = exercise.imageSrc;
+          if (exercise.imageSrc2) nextPreviews[`${exercise.id}:2`] = exercise.imageSrc2;
+        });
+        if (Object.keys(nextPreviews).length > 0) setPreviews((prev) => ({ ...prev, ...nextPreviews }));
+        if (apiModel.sheetSrc) setSheetPreview(apiModel.sheetSrc);
+      })
+      .catch(() => {/* localStorage fallback reste actif */});
+    return () => { active = false; };
+  }, [type]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4702,10 +4737,50 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
     setModel((previous) => ({ ...previous, sheetKey, sheetName: file.name, sheetMime: file.type || '' }));
     setSaved(false);
   };
-  const save = () => {
-    window.localStorage.setItem(storageKey, JSON.stringify(model));
-    setSaved(true);
+
+  // Publication en BDD via l'API (multipart : JSON modèle + images binaires)
+  const save = async () => {
+    setSaving(true);
+    setSaved(false);
+    setSaveError('');
+    try {
+      const formData = new FormData();
+      formData.append('model', JSON.stringify(model));
+      // Collecter toutes les images depuis IndexedDB
+      for (const exercise of model.exercises) {
+        for (const [key, name] of [[exercise.imageKey, exercise.imageName], [exercise.imageKey2, exercise.imageName2]]) {
+          if (!key) continue;
+          try {
+            const blob = await loadDnbMethodImage(key);
+            if (blob) {
+              const file = blob instanceof File ? blob : new File([blob], `${key}__${name || 'image.jpg'}`, { type: blob.type || 'image/jpeg' });
+              formData.append('images', file, `${key}__${name || 'image.jpg'}`);
+            }
+          } catch (_) {}
+        }
+      }
+      if (model.sheetKey) {
+        try {
+          const blob = await loadDnbMethodImage(model.sheetKey);
+          if (blob) {
+            const file = blob instanceof File ? blob : new File([blob], `${model.sheetKey}__${model.sheetName || 'sheet'}`, { type: blob.type || 'image/png' });
+            formData.append('images', file, `${model.sheetKey}__${model.sheetName || 'sheet'}`);
+          }
+        } catch (_) {}
+      }
+      const response = await fetch(`/api/training-config/dnb-doc-method/${type}`, { method: 'PUT', body: formData });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Publication impossible.');
+      // Copie locale en fallback
+      window.localStorage.setItem(storageKey, JSON.stringify(model));
+      setSaved(true);
+    } catch (error) {
+      setSaveError(error.message || 'Le calibrage n\'a pas été publié.');
+    } finally {
+      setSaving(false);
+    }
   };
+
   const embedUrl = youtubeEmbedUrl(model.videoUrl);
 
   return <section className="mx-4 rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm">
@@ -4744,7 +4819,11 @@ function DnbDocumentMethodCalibration({ type, onBack }) {
       <label className="mt-3 block"><span className="mb-1 block text-[10px] font-black uppercase text-blue-600">Description / explication du corrigé</span><textarea value={exercise.correction || ''} onChange={(event) => updateExercise(exercise.id, { correction: event.target.value })} placeholder="Ajoute l’explication qui sera montrée après la correction." className="min-h-[80px] w-full rounded-2xl border-2 border-blue-100 bg-blue-50 p-3 text-sm font-bold leading-relaxed outline-none focus:border-blue-400" /></label>
     </article>)}</div>
     {model.exercises.length === 0 && <div className="mt-4 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-400">Ajoute le premier exercice pour commencer le calibrage.</div>}
-    <div className="mt-5 flex flex-wrap items-center gap-3"><button type="button" onClick={save} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white">Valider et enregistrer</button>{saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage enregistré</span>}</div>
+    <div className="mt-5 flex flex-wrap items-center gap-3">
+      <button type="button" disabled={saving} onClick={save} className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? 'Publication en cours…' : 'Valider et publier le calibrage'}</button>
+      {saved && <span className="text-sm font-black text-emerald-600">✓ Calibrage partagé avec les élèves</span>}
+      {saveError && <span className="text-sm font-black text-red-600">{saveError}</span>}
+    </div>
   </section>;
 }
 

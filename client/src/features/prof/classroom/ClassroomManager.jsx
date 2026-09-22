@@ -1281,7 +1281,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <div className="sc-avatar-row">
                                     <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 </div>
-                                <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''} ${studentIdsWithScans.includes(String(student._id)) ? 'has-scanned-homework' : ''}`}>{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
+                                <div className={`sc-name ${getMyStats(student).workIncomplete ? 'work-incomplete' : ''} ${studentIdsWithScans.includes(String(student._id)) ? 'has-scanned-homework' : ''}`}>{getDisplayName(student)}</div>
+                                <div className="sc-lastname-initial">{student.lastName ? `${String(student.lastName).trim().charAt(0)}.` : ''}</div>
                                 <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className={`sc-score positive ${getGradeStateClass(g)} ${hasScoreDebt(student) && String(g.id) === String(getMyStats(student).forcedSixScoreId || getSelectedGrade(student)?.id) ? 'debt' : ''}`}>{formatScore(g.value)}</span>)}</div>
                             </div>
                         ) : ( <div className={`grid-cell-empty ${isOver ? 'drag-over' : ''}`}>+</div> )}
@@ -1382,7 +1383,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                                             <LearningReferenceBadges student={student} />
                                         </div>
                                         <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
-                                        <div className={`sc-name ${stats.workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}<br />{String(student.lastName || '').slice(0, 1)}.</div>
+                                        <div className={`sc-name ${stats.workIncomplete ? 'work-incomplete' : ''}`}>{getDisplayName(student)}</div>
+                                        <div className="sc-lastname-initial">{student.lastName ? `${String(student.lastName).trim().charAt(0)}.` : ''}</div>
                                         <div className="sc-grades">{getStudentGrades(student).map(g => <span key={g.id} className="sc-score positive">{formatScore(g.value)}</span>)}{Array.from({ length: getForcedSixCount(student) }).map((_, sixIdx) => <span key={`six-${sixIdx}`} className="sc-score forced">6</span>)}</div>
                                     </div>
                                 </div>

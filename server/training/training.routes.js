@@ -193,4 +193,107 @@ router.put('/rqp-off-topic', async (req, res) => {
     }
 });
 
+
+// ─── DNB Document-method calibration (description d'image / présentation) ────
+// Previously saved only in the teacher's localStorage + IndexedDB.
+// These routes persist the model and images in MongoDB so every student
+// account (and every browser) always sees the latest calibration.
+
+const ALLOWED_DOC_METHOD_TYPES = ['image', 'presentation'];
+
+const DOC_METHOD_CONFIG_KEY = (type) => `dnb-doc-method-${type}-v1`;
+
+const cleanDocMethodExercise = (exercise, index) => ({
+    id: String(exercise?.id || `exercise-${index + 1}`).slice(0, 120),
+    imageKey: String(exercise?.imageKey || '').slice(0, 200),
+    imageName: String(exercise?.imageName || '').slice(0, 200),
+    imageKey2: String(exercise?.imageKey2 || '').slice(0, 200),
+    imageName2: String(exercise?.imageName2 || '').slice(0, 200),
+    correction: String(exercise?.correction || '').slice(0, 6000),
+    expected: Object.fromEntries(
+        Object.entries(exercise?.expected || {}).map(([k, v]) => [
+            String(k).slice(0, 60),
+            String(v || '').slice(0, 2000)
+        ])
+    )
+});
+
+const cleanDocMethodModel = (raw) => ({
+    videoUrl: String(raw?.videoUrl || '').slice(0, 500),
+    sheetKey: String(raw?.sheetKey || '').slice(0, 200),
+    sheetName: String(raw?.sheetName || '').slice(0, 200),
+    sheetMime: String(raw?.sheetMime || '').slice(0, 100),
+    exercises: Array.isArray(raw?.exercises)
+        ? raw.exercises.slice(0, 30).map(cleanDocMethodExercise)
+        : []
+});
+
+// GET model + image URL map
+router.get('/dnb-doc-method/:type', async (req, res) => {
+    const { type } = req.params;
+    if (!ALLOWED_DOC_METHOD_TYPES.includes(type)) return res.status(400).json({ error: 'Type invalide.' });
+    try {
+        const document = await TrainingConfig.findOne({ key: DOC_METHOD_CONFIG_KEY(type) })
+            .select('model images.id images.name updatedAt').lean();
+        if (!document) return res.json({ model: null, imageUrls: {}, updatedAt: null });
+        const imageUrls = Object.fromEntries(
+            (document.images || []).map((img) => [
+                img.id,
+                `/api/training-config/dnb-doc-method/${type}/image/${encodeURIComponent(img.id)}`
+            ])
+        );
+        return res.json({ model: document.model || null, imageUrls, updatedAt: document.updatedAt || null });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// GET single image
+router.get('/dnb-doc-method/:type/image/:id', async (req, res) => {
+    const { type, id } = req.params;
+    if (!ALLOWED_DOC_METHOD_TYPES.includes(type)) return res.status(400).json({ error: 'Type invalide.' });
+    try {
+        const document = await TrainingConfig.findOne({ key: DOC_METHOD_CONFIG_KEY(type) }).select('images').lean();
+        const image = (document?.images || []).find((entry) => entry.id === id);
+        if (!image) return res.status(404).end();
+        res.setHeader('Content-Type', image.contentType || 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        const data = Buffer.isBuffer(image.data) ? image.data : Buffer.from(image.data?.buffer || image.data || []);
+        return res.send(data);
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// PUT model + images (multipart: field "model" JSON + files named "<imageKey>__<originalName>")
+router.put('/dnb-doc-method/:type', upload.array('images', 50), async (req, res) => {
+    const { type } = req.params;
+    if (!ALLOWED_DOC_METHOD_TYPES.includes(type)) return res.status(400).json({ error: 'Type invalide.' });
+    try {
+        const raw = JSON.parse(String(req.body?.model || '{}'));
+        const model = cleanDocMethodModel(raw);
+        const images = (req.files || []).map((file) => {
+            const separator = file.originalname.indexOf('__');
+            const id = separator >= 0 ? file.originalname.slice(0, separator) : file.originalname;
+            const name = separator >= 0 ? file.originalname.slice(separator + 2) : file.originalname;
+            return { id, name, contentType: file.mimetype || 'image/png', data: file.buffer };
+        });
+        const document = await TrainingConfig.findOneAndUpdate(
+            { key: DOC_METHOD_CONFIG_KEY(type) },
+            { $set: { model, images } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        const imageUrls = Object.fromEntries(
+            images.map((img) => [
+                img.id,
+                `/api/training-config/dnb-doc-method/${type}/image/${encodeURIComponent(img.id)}`
+            ])
+        );
+        return res.json({ ok: true, updatedAt: document.updatedAt, exercises: model.exercises.length, images: images.length, imageUrls });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;
+
