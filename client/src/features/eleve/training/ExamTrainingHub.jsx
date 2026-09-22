@@ -4496,7 +4496,7 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
   const storageKey = `condaweb-dnb-doc-method-${type}-v1`;
   const isImageDescription = type === 'image';
   const fields = documentMethodFields[type];
-  const [model] = useState(() => {
+  const [model, setModel] = useState(() => {
     try {
       const stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
       if (stored && Array.isArray(stored.exercises)) {
@@ -4514,12 +4514,38 @@ function DnbDocumentMethodReader({ type, user, onBack }) {
   const [exercisePreview, setExercisePreview] = useState('');
   const [exercisePreview2, setExercisePreview2] = useState('');
   const [sheetPreview, setSheetPreview] = useState('');
-  const total = model.exercises.length;
-  const exercise = model.exercises[page];
+  const total = model?.exercises?.length || 0;
+  const exercise = model?.exercises?.[page];
   const lessonVideoUrl = type === 'presentation'
     ? 'https://www.youtube.com/embed/NVh1P8Lbx1A'
     : youtubeEmbedUrl(model.videoUrl);
   const effectiveSheetPreview = sheetPreview || model.sheetSrc || '';
+
+  // Charger depuis l'API au montage (BDD MongoDB partagée pour tous les élèves)
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/training-config/dnb-doc-method/${type}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.model || !active) return;
+        const apiModel = data.model;
+        const imageUrls = data.imageUrls || {};
+        if (Array.isArray(apiModel.exercises)) {
+          apiModel.exercises = apiModel.exercises.map((ex) => ({
+            ...ex,
+            imageSrc: imageUrls[ex.imageKey] || ex.imageSrc || '',
+            imageSrc2: imageUrls[ex.imageKey2] || ex.imageSrc2 || ''
+          }));
+        }
+        if (apiModel.sheetKey && imageUrls[apiModel.sheetKey]) apiModel.sheetSrc = imageUrls[apiModel.sheetKey];
+        if (type === 'presentation' && Array.isArray(apiModel.exercises)) {
+          apiModel.exercises = apiModel.exercises.map((e) => ({ ...e, expected: { ...e.expected, subject: e.expected?.subject || e.expected?.source || '' } }));
+        }
+        setModel(withDefaultDocumentMethodContent(type, apiModel));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [type]);
 
   useEffect(() => {
     let cancelled = false;
