@@ -757,9 +757,25 @@
     width: 100%;
     height: calc(100% - 46px);
     min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 .v8-draft-fallback .v8-draft-input {
-    height: 100%;
+    flex: 1;
+    min-height: 0;
+}
+.v8-draft-clipboard-warning {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
 }
 .v8-draft-error {
     margin-top: 8px;

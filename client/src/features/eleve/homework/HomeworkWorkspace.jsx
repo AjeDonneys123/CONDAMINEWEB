@@ -702,6 +702,11 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     // Le copier-coller est désormais autorisé
   };
 
+  const handleDraftClipboard = (e) => {
+    e.preventDefault();
+    showToast('Coller est interdit dans le brouillon.');
+  };
+
   const handleKeyDown = (e) => {
     // Le raccourci Ctrl+V / Cmd+V est désormais autorisé
   };
@@ -1457,12 +1462,14 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       {draftDoc.loading && <div className="v8-draft-loading">Création du brouillon Google...</div>}
                       {!draftDoc.loading && (
                         <div className="v8-draft-fallback">
+                          <div className="v8-draft-clipboard-warning">Coller dans le brouillon est interdit</div>
                           <textarea
                             className="v8-draft-input"
                             placeholder="Écris ton brouillon ici..."
                             value={draftText}
                             onChange={handleDraftChange}
-                            onPaste={handleBlockedPaste}
+                            onPaste={handleDraftClipboard}
+                            onDrop={handleDraftClipboard}
                             onKeyDown={handleKeyDown}
                           />
                         </div>
