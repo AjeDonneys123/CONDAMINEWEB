@@ -338,11 +338,13 @@ export default function ClassroomManager({ globalClassId, user }) {
         const newSize = { cols: Math.max(2, gridSize.cols + dC), rows: Math.max(2, gridSize.rows + dR) };
         setGridSize(newSize); 
         try {
-            await fetch('/api/classroom/layout', { 
+            const response = await fetch('/api/classroom/layout', {
                 method: 'POST', 
                 headers: {'Content-Type':'application/json'}, 
                 body: JSON.stringify({ classId: globalClassId, cols: newSize.cols, rows: newSize.rows }) 
             });
+            if (!response.ok) throw new Error('Enregistrement du plan impossible');
+            await loadData();
         } catch(e) {}
     };
     const handleDragStart = (e, sId) => {
@@ -1320,6 +1322,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {searchTerm.trim() ? listFinderCount : students.length}
                         </span>}
                         <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
+                        <button
+                            className="plan-cols-toggle"
+                            onClick={() => changeGrid((gridSize.cols === 5 ? 6 : 5) - gridSize.cols, 0)}
+                            title={`Passer le plan à ${gridSize.cols === 5 ? 6 : 5} colonnes`}
+                        >{gridSize.cols} COL</button>
                         {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                         {(frenchMode ? frenchExpression : searchTerm).trim() && (
                             <button

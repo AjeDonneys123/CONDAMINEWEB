@@ -263,8 +263,49 @@ const ClassroomExpert = {
     updateLayout: async (cid, data) => { 
         const update = {};
         if (data.separators !== undefined) update['layout.separators'] = data.separators;
-        if (data.cols !== undefined) update['layout.cols'] = data.cols;
-        if (data.rows !== undefined) update['layout.rows'] = data.rows;
+        if (data.cols !== undefined) {
+            const Classroom = mongoose.model('Classroom');
+            const Student = mongoose.model('Student');
+            const classroom = await Classroom.findById(cid).lean();
+            if (!classroom) throw new Error('Classe/Groupe introuvable');
+
+            const cols = Math.max(2, Number(data.cols) || 6);
+            const studentQuery = classroom.type === 'GROUP' ? { assignedGroups: classroom._id } : { classId: classroom._id };
+            const students = await Student.find(studentQuery, '_id seatX seatY').lean();
+            const occupied = new Set();
+            const overflow = [];
+
+            students.forEach((student) => {
+                const x = Number(student.seatX);
+                const y = Number(student.seatY);
+                const valid = Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < cols && y >= 0;
+                const key = `${x}-${y}`;
+                if (valid && !occupied.has(key)) occupied.add(key);
+                else overflow.push(student);
+            });
+
+            const moves = [];
+            let cursor = 0;
+            overflow.forEach((student) => {
+                while (occupied.has(`${cursor % cols}-${Math.floor(cursor / cols)}`)) cursor += 1;
+                const x = cursor % cols;
+                const y = Math.floor(cursor / cols);
+                occupied.add(`${x}-${y}`);
+                moves.push({
+                    updateOne: {
+                        filter: { _id: student._id },
+                        update: { $set: { seatX: x, seatY: y } }
+                    }
+                });
+                cursor += 1;
+            });
+            if (moves.length) await Student.bulkWrite(moves);
+
+            const highestRow = students.length ? Math.max(2, ...Array.from(occupied).map((seat) => Number(seat.split('-')[1]) + 1)) : 2;
+            update['layout.cols'] = cols;
+            update['layout.rows'] = Math.max(Number(data.rows) || 0, highestRow);
+        }
+        if (data.rows !== undefined) update['layout.rows'] = Math.max(Number(update['layout.rows']) || 2, Number(data.rows) || 2);
         
         await mongoose.model('Classroom').findByIdAndUpdate(cid, { $set: update }); 
         return { ok: true }; 
