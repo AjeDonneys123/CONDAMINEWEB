@@ -2774,17 +2774,30 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                 color: String(r.color || '').trim()
             }))
             .filter((r) => r.end > r.start);
+        // Les suffixes `_Indice` servent uniquement à construire les questions IA.
+        // On les conserve dans les données, mais on ne les affiche jamais dans la fiche élève.
+        const localPlaceholderRanges = localFormatting
+            .filter((r) => r.bold)
+            .map((r) => {
+                const formattedText = source.slice(r.start, r.end);
+                const underscoreAt = formattedText.lastIndexOf('_');
+                return underscoreAt > 0
+                    ? { start: r.start + underscoreAt, end: r.end }
+                    : null;
+            })
+            .filter(Boolean);
         const lineCuts = [];
         source.split('').forEach((character, index) => {
             if (character === '\n') lineCuts.push(index + 1);
         });
-        const cuts = [0, source.length, ...lineCuts, ...localRanges.flatMap((r) => [r.start, r.end]), ...localFormatting.flatMap((r) => [r.start, r.end])];
+        const cuts = [0, source.length, ...lineCuts, ...localRanges.flatMap((r) => [r.start, r.end]), ...localFormatting.flatMap((r) => [r.start, r.end]), ...localPlaceholderRanges.flatMap((r) => [r.start, r.end])];
         const points = [...new Set(cuts)].sort((a, b) => a - b);
         const out = [];
         for (let i = 0; i < points.length - 1; i += 1) {
             const start = points[i];
             const end = points[i + 1];
             if (end <= start) continue;
+            if (localPlaceholderRanges.some((r) => start >= r.start && end <= r.end)) continue;
             const chunk = source.slice(start, end);
             const inPink = localRanges.some((r) => start >= r.start && end <= r.end);
             const formatting = localFormatting.find((r) => start >= r.start && end <= r.end);

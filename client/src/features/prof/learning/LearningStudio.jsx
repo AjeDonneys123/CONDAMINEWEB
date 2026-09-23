@@ -655,7 +655,9 @@ const formatGeneratedSheetBlock = (text = '', innerHtml = '', numberedIdeasPlain
     }
 
     const style = romanHeading
-        ? 'color:#dc2626;font-weight:700'
+        ? numberedIdeasPlain
+            ? 'color:#16a34a;font-weight:700'
+            : 'color:#dc2626;font-weight:700'
         : mainHeading && !numberedIdeasPlain
             ? 'color:#16a34a;font-weight:700'
             : '';
@@ -5746,26 +5748,29 @@ Première ligne : titre général de la leçon.
 Construis une fiche courte, progressive, très claire et facile à mémoriser. Adapte réellement la quantité d'informations, la longueur des phrases et le vocabulaire au niveau ${targetLevel || 'indiqué'}.
 
 ${isFifthOrSixthGrade ? `RÈGLE SPÉCIALE 5e/6e — PRÉSENTATION TRÈS LÉGÈRE
-- Les seuls titres sont les grandes parties I., II., III. : elles seront mises en rouge et en gras.
-- Les idées principales sont numérotées « 1- », « 2- », « 3- » et restent noires, sans gras.
-- Si une idée doit être précisée, place la précision à la ligne suivante avec un tiret « - », noir et sans gras.
-- N'utilise jamais « a) », « b) » ni aucun sous-sous-plan.
-- Aucun texte ne doit être vert. Aucun texte ne doit être gras sauf les véritables mots-clés à apprendre.
+- Les titres des leçons sont les grandes parties I., II., III. : ils seront affichés en vert et en gras.
+- Sous chaque titre de leçon, numérote chaque point important « 1- », « 2- », « 3- », en noir et sans gras de hiérarchie.
+- La numérotation repart obligatoirement à « 1- » après chaque nouveau titre I., II., III.
+- Chaque point important doit être une phrase courte, autonome et facile à apprendre.
+- N'utilise jamais « a) », « b) », « c) », « d) », « e) » ni aucun marqueur alphabétique ou sous-sous-plan.
+- En dehors des titres de leçons, aucun texte ne doit être vert. Aucun texte ne doit être gras sauf les véritables mots-clés à apprendre.
 
 Exemple de présentation attendue :
 I. Titre de la grande partie
 1- En **1789_Date**, le peuple prend la Bastille.
-- La **monarchie absolue_Régime politique** est alors contestée.
-2- **Napoléon Bonaparte_Personnage** prend ensuite le pouvoir.
+2- La **monarchie absolue_Régime politique** est alors contestée.
+3- **Napoléon Bonaparte_Personnage** prend ensuite le pouvoir.
 II. Titre de la grande partie suivante
+1- Premier point important de cette nouvelle leçon.
 
 RÈGLES STRICTES
 Après chaque élément, insère immédiatement un retour à la ligne.
-Un marqueur I., 1- ou un tiret doit toujours être le premier élément de sa ligne.
+Un marqueur I. ou un numéro suivi de « - » doit toujours être le premier élément de sa ligne.
 Il est interdit de placer deux éléments sur une même ligne.
-Les chiffres romains correspondent aux grandes parties.
-Les nombres suivis de - correspondent aux idées principales.
-Ne multiplie pas les niveaux de plan : une fiche de 5e ou 6e doit être courte, lisible et facile à apprendre.` : `Hiérarchie de référence :
+Les chiffres romains correspondent aux titres des leçons.
+Tous les contenus à apprendre sont des points importants numérotés « 1- », « 2- », « 3- ».
+Ne crée aucun niveau intermédiaire entre le titre de leçon et les points importants.
+Une fiche de 5e ou 6e doit être courte, lisible et facile à apprendre.` : `Hiérarchie de référence :
 
 I. Titre de la grande partie
 1- En **1789_Date**, la prise de la Bastille marque le début de la Révolution.

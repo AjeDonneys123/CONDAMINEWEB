@@ -209,12 +209,40 @@ const applySheetHeadingColors = (root, numberedIdeasPlain = false) => {
     });
     return changed;
   };
+  let plainPointNumber = 0;
+  const replaceLeadingMarker = (line, markerPattern, replacement, prepend = false) => {
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (prepend) {
+        node.nodeValue = `${replacement}${String(node.nodeValue || '').replace(/^\s*/, '')}`;
+        return true;
+      }
+      if (!markerPattern.test(String(node.nodeValue || ''))) continue;
+      node.nodeValue = String(node.nodeValue || '').replace(markerPattern, replacement);
+      return true;
+    }
+    return false;
+  };
   const styleLine = (line) => {
-    const text = String(line.textContent || '').replace(/\u00a0/g, ' ').trim();
+    let text = String(line.textContent || '').replace(/\u00a0/g, ' ').trim();
     if (/^(?:VIII|VII|VI|IV|III|II|IX|X|V|I)\.\s+.+/i.test(text)) {
-      line.style.color = '#dc2626';
+      if (numberedIdeasPlain) plainPointNumber = 0;
+      line.style.color = numberedIdeasPlain ? '#16a34a' : '#dc2626';
       line.style.fontWeight = '700';
       return true;
+    }
+    if (numberedIdeasPlain && (/^(?:[•*-]|[a-z]\)|\d{1,2}\s*-)/i.test(text) || line.tagName === 'LI')) {
+      plainPointNumber += 1;
+      const markerPattern = /^\s*(?:[•*-]|[a-z]\)|\d{1,2}\s*-)\s*/i;
+      replaceLeadingMarker(
+        line,
+        markerPattern,
+        `${plainPointNumber}- `,
+        line.tagName === 'LI' && !markerPattern.test(text),
+      );
+      line.style.listStyle = 'none';
+      text = String(line.textContent || '').replace(/\u00a0/g, ' ').trim();
     }
     if (/^\d{1,2}\s*-\s+.+/.test(text)) {
       if (numberedIdeasPlain) {
