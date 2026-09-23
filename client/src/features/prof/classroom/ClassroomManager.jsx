@@ -1837,6 +1837,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 student={scanTargetStudent}
                 classId={globalClassId}
                 className={classroomInfo?.name || ''}
+                students={students}
                 onOpenCapture={() => handleOpenScanCapture(scanTargetStudent)}
             />
         </div>

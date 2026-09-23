@@ -645,13 +645,48 @@ router.get('/scans/share/:token', async (req, res) => {
             pages.sort((a, b) => Number(a.pageIndex || 1) - Number(b.pageIndex || 1));
             const first = pages[0] || {};
             const studentName = escapeHtml(first.studentName || `Élève ${copyIndex + 1}`);
-            return `<section class="copy"><h2>Copie ${copyIndex + 1} — ${studentName}</h2>${pages.map((scan, pageIndex) => `<figure><div>Page ${pageIndex + 1} / ${pages.length}</div><img src="/api/classroom/scans/share/${escapeHtml(share.token)}/image/${escapeHtml(scan._id)}" alt="${studentName}, page ${pageIndex + 1}" loading="eager"></figure>`).join('')}</section>`;
+            const assignmentName = escapeHtml(first.assignmentName || `Devoir #${first.homeworkNumber || copyIndex + 1}`);
+            const correctionPrompt = escapeHtml(first.correctionPrompt || '');
+            const promptBlock = correctionPrompt || first.correctionPromptImageUrl
+                ? `<aside><strong>Instructions de correction — ${assignmentName}</strong>${correctionPrompt ? `<p>${correctionPrompt}</p>` : ''}${first.correctionPromptImageUrl ? `<img class="prompt-image" src="${escapeHtml(first.correctionPromptImageUrl)}" alt="Document d’instructions de correction">` : ''}</aside>`
+                : '';
+            return `<section class="copy"><h2>${assignmentName} — ${studentName}</h2>${promptBlock}${pages.map((scan, pageIndex) => `<figure><div>Page ${pageIndex + 1} / ${pages.length}</div><img src="/api/classroom/scans/share/${escapeHtml(share.token)}/image/${escapeHtml(scan._id)}" alt="${studentName}, page ${pageIndex + 1}" loading="eager"></figure>`).join('')}</section>`;
         }).join('');
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'private, max-age=300');
-        return res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Copies ${escapeHtml(share.className)}</title><style>*{box-sizing:border-box}body{margin:0;background:#eef2f7;color:#0f172a;font-family:system-ui,sans-serif}header{position:sticky;top:0;z-index:2;padding:24px;background:#062b22;color:white;border-bottom:5px solid #34d399}header h1{margin:0;font-size:28px}header p{margin:6px 0 0;color:#a7f3d0;font-weight:700}main{width:min(1840px,100%);margin:auto;padding:24px}.copy{margin:0 0 40px;padding:20px;background:white;border-radius:24px;box-shadow:0 12px 30px #0f172a18;break-after:page}.copy h2{margin:0 0 16px;padding:14px 18px;border-radius:14px;background:#172554;color:white}figure{margin:0 0 20px}figure div{padding:8px 14px;background:#1e293b;color:white;font-weight:900}img{display:block;width:100%;height:auto;background:white}</style></head><body><header><h1>Copies à corriger — ${escapeHtml(share.className || 'Classe')}</h1><p>${groups.size} copie(s) · ${scans.length} page(s) · lien valable 7 jours</p></header><main>${copiesHtml}</main></body></html>`);
+        return res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Copies ${escapeHtml(share.className)}</title><style>*{box-sizing:border-box}body{margin:0;background:#eef2f7;color:#0f172a;font-family:system-ui,sans-serif}header{position:sticky;top:0;z-index:2;padding:24px;background:#062b22;color:white;border-bottom:5px solid #34d399}header h1{margin:0;font-size:28px}header p{margin:6px 0 0;color:#a7f3d0;font-weight:700}main{width:min(1840px,100%);margin:auto;padding:24px}.copy{margin:0 0 40px;padding:20px;background:white;border-radius:24px;box-shadow:0 12px 30px #0f172a18;break-after:page}.copy h2{margin:0 0 16px;padding:14px 18px;border-radius:14px;background:#172554;color:white}aside{margin:0 0 18px;padding:16px;border:3px solid #f59e0b;border-radius:14px;background:#fffbeb}aside p{white-space:pre-wrap}.prompt-image{max-width:900px;border:2px solid #f59e0b;border-radius:10px}figure{margin:0 0 20px}figure div{padding:8px 14px;background:#1e293b;color:white;font-weight:900}img{display:block;width:100%;height:auto;background:white}</style></head><body><header><h1>Copies à corriger — ${escapeHtml(share.className || 'Classe')}</h1><p>${groups.size} copie(s) · ${scans.length} page(s) · lien valable 7 jours</p></header><main>${copiesHtml}</main></body></html>`);
     } catch (e) {
         return res.status(500).send('Impossible de charger les copies.');
+    }
+});
+
+router.post('/scans/session/:sessionId/meta', scanUpload.single('promptImage'), async (req, res) => {
+    try {
+        const sessionId = String(req.params.sessionId || '').trim();
+        if (!sessionId) return res.status(400).json({ error: 'Session manquante' });
+        const updates = {};
+        if (req.body.assignmentName !== undefined) updates.assignmentName = String(req.body.assignmentName || '').trim();
+        if (req.body.correctionPrompt !== undefined) updates.correctionPrompt = String(req.body.correctionPrompt || '').trim();
+        const studentId = String(req.body.studentId || '').trim();
+        if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+            updates.studentId = studentId;
+            updates.studentName = String(req.body.studentName || '').trim();
+        }
+        if (req.file) {
+            const ext = path.extname(req.file.originalname || '') || '.jpg';
+            const finalName = `prompt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+            const folderId = await ProfDrive.getOrCreateFolder('SCANS');
+            const driveFile = await ProfDrive.uploadFile(finalName, req.file.path, folderId);
+            try { fs.unlinkSync(req.file.path); } catch (_) {}
+            updates.correctionPromptImageUrl = `/api/structure/proxy/${driveFile.id}`;
+            updates.correctionPromptImageDriveId = driveFile.id;
+        }
+        await ClassroomScan.updateMany({ sessionId }, { $set: updates });
+        const scans = await ClassroomScan.find({ sessionId }).sort({ pageIndex: 1 }).lean();
+        return res.json({ ok: true, scans });
+    } catch (e) {
+        if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(500).json({ error: e.message });
     }
 });
 

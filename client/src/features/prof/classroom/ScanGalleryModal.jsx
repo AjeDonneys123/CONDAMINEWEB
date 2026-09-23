@@ -4,6 +4,7 @@ export default function ScanGalleryModal({
     isOpen,
     onClose,
     student = null,
+    students = [],
     classId = '',
     className = '',
     onOpenCapture = null
@@ -16,6 +17,7 @@ export default function ScanGalleryModal({
     const [copyingStatus, setCopyingStatus] = useState(''); // Toast status
     const [toastTimer, setToastTimer] = useState(null);
     const [collapsedDevoirs, setCollapsedDevoirs] = useState({}); // { [devoirId]: boolean }
+    const [devoirEditor, setDevoirEditor] = useState(null);
 
     const showToast = (message) => {
         setCopyingStatus(message);
@@ -126,8 +128,10 @@ export default function ScanGalleryModal({
                 id: sessionId,
                 sessionId,
                 homeworkNumber: homeworkNum,
-                title: `Devoir #${homeworkNum}`,
+                title: firstScan.assignmentName || `Devoir #${homeworkNum}`,
                 studentName: firstScan.studentName || student?.firstName || '',
+                correctionPrompt: firstScan.correctionPrompt || '',
+                correctionPromptImageUrl: firstScan.correctionPromptImageUrl || '',
                 date: firstScan.createdAt,
                 scans: sortedItems
             });
@@ -332,11 +336,54 @@ export default function ScanGalleryModal({
             });
             const data = await res.json();
             if (!res.ok || !data?.url) throw new Error(data?.error || 'Lien indisponible');
-            await navigator.clipboard.writeText(data.url);
+            const promptLines = devoirsList
+                .filter((devoir) => devoir.correctionPrompt || devoir.correctionPromptImageUrl)
+                .map((devoir) => `${devoir.title} : ${devoir.correctionPrompt || 'utilise l’image d’instructions visible sur la page'}`);
+            const instruction = promptLines.length > 0
+                ? `Pour chaque copie, transcris puis propose une correction et une note en suivant ces instructions de correction :\n${promptLines.join('\n')}\n\nCopies : ${data.url}`
+                : `Pour chaque copie, transcris puis corrige la copie et propose une note.\n\nCopies : ${data.url}`;
+            await navigator.clipboard.writeText(instruction);
             showToast('✅ Lien vers toutes les copies copié ! Collez-le dans le chat IA.');
         } catch (error) {
             console.error('Erreur création page IA:', error);
             showToast('❌ Impossible de créer ou copier le lien IA.');
+        }
+    };
+
+    const openDevoirEditor = (devoir, mode) => {
+        setDevoirEditor({
+            id: devoir.id,
+            mode,
+            assignmentName: devoir.title,
+            studentId: String(devoir.scans[0]?.studentId || ''),
+            studentName: devoir.studentName || '',
+            studentSearch: '',
+            correctionPrompt: devoir.correctionPrompt || '',
+            promptImage: null
+        });
+    };
+
+    const saveDevoirMetadata = async (devoir) => {
+        if (!devoirEditor || devoirEditor.id !== devoir.id || devoir.id.startsWith('cluster_')) return;
+        const form = new FormData();
+        form.append('assignmentName', devoirEditor.assignmentName || devoir.title);
+        form.append('correctionPrompt', devoirEditor.correctionPrompt || '');
+        if (devoirEditor.studentId) {
+            form.append('studentId', devoirEditor.studentId);
+            form.append('studentName', devoirEditor.studentName || '');
+        }
+        if (devoirEditor.promptImage) form.append('promptImage', devoirEditor.promptImage);
+        try {
+            const res = await fetch(`/api/classroom/scans/session/${encodeURIComponent(devoir.id)}/meta`, { method: 'POST', body: form });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Enregistrement impossible');
+            const replacements = new Map((data.scans || []).map((scan) => [String(scan._id), scan]));
+            setScans((prev) => prev.map((scan) => replacements.get(String(scan._id)) || scan));
+            setDevoirEditor(null);
+            showToast('✅ Informations du devoir enregistrées.');
+        } catch (error) {
+            console.error('Erreur métadonnées devoir:', error);
+            showToast('❌ Impossible d’enregistrer les modifications.');
         }
     };
 
@@ -534,6 +581,9 @@ export default function ScanGalleryModal({
 
                                             {/* Boutons d'action du devoir */}
                                             <div className="devoir-folder-actions" onClick={(e) => e.stopPropagation()}>
+                                                <button className="devoir-btn-icon" onClick={() => openDevoirEditor(devoir, 'name')} title="Renommer le devoir">✏️</button>
+                                                <button className="devoir-btn-icon" onClick={() => openDevoirEditor(devoir, 'student')} title="Changer l’élève">👤</button>
+                                                <button className="devoir-btn-icon" onClick={() => openDevoirEditor(devoir, 'prompt')} title="Ajouter les instructions de correction">➕ Prompt</button>
                                                 {/* Bouton dédié pour copier ce devoir pour l'IA */}
                                                 <button
                                                     className="btn-devoir-copy-ai"
@@ -568,6 +618,47 @@ export default function ScanGalleryModal({
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {devoirEditor?.id === devoir.id && (
+                                            <div className="m-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4" onClick={(e) => e.stopPropagation()}>
+                                                {devoirEditor.mode === 'name' && (
+                                                    <label className="block font-black text-slate-700">Nom du devoir
+                                                        <input className="mt-2 w-full rounded-xl border-2 border-slate-200 bg-white p-3" value={devoirEditor.assignmentName} onChange={(e) => setDevoirEditor((prev) => ({ ...prev, assignmentName: e.target.value }))} autoFocus />
+                                                    </label>
+                                                )}
+                                                {devoirEditor.mode === 'student' && (
+                                                    <div>
+                                                        <label className="block font-black text-slate-700">Rechercher un élève
+                                                            <input className="mt-2 w-full rounded-xl border-2 border-slate-200 bg-white p-3" value={devoirEditor.studentSearch} onChange={(e) => setDevoirEditor((prev) => ({ ...prev, studentSearch: e.target.value }))} placeholder="Tape le prénom ou le nom…" autoFocus />
+                                                        </label>
+                                                        <div className="mt-3 max-h-52 overflow-auto rounded-xl border bg-white p-2">
+                                                            {students
+                                                                .filter((item) => `${item.firstName || ''} ${item.lastName || ''}`.toLowerCase().includes(devoirEditor.studentSearch.toLowerCase()))
+                                                                .map((item) => {
+                                                                    const itemId = String(item._id || item.id || '');
+                                                                    const fullName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
+                                                                    return <button key={itemId} type="button" onClick={() => setDevoirEditor((prev) => ({ ...prev, studentId: itemId, studentName: fullName }))} className={`mb-1 block w-full rounded-lg px-3 py-2 text-left font-bold ${devoirEditor.studentId === itemId ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100'}`}>{fullName}</button>;
+                                                                })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {devoirEditor.mode === 'prompt' && (
+                                                    <div>
+                                                        <label className="block font-black text-slate-700">Instructions de correction
+                                                            <textarea className="mt-2 min-h-32 w-full rounded-xl border-2 border-slate-200 bg-white p-3" value={devoirEditor.correctionPrompt} onChange={(e) => setDevoirEditor((prev) => ({ ...prev, correctionPrompt: e.target.value }))} placeholder="Colle ici le barème ou les consignes pour l’IA…" autoFocus />
+                                                        </label>
+                                                        <label className="mt-3 block font-bold text-slate-600">Ou ajouter une image du sujet/barème
+                                                            <input type="file" accept="image/*" className="mt-2 block w-full rounded-xl bg-white p-3" onChange={(e) => setDevoirEditor((prev) => ({ ...prev, promptImage: e.target.files?.[0] || null }))} />
+                                                        </label>
+                                                        {devoir.correctionPromptImageUrl && <div className="mt-2 text-sm font-bold text-emerald-700">✓ Une image d’instructions est déjà enregistrée.</div>}
+                                                    </div>
+                                                )}
+                                                <div className="mt-4 flex justify-end gap-2">
+                                                    <button type="button" className="rounded-xl bg-slate-200 px-4 py-2 font-black" onClick={() => setDevoirEditor(null)}>Annuler</button>
+                                                    <button type="button" className="rounded-xl bg-emerald-600 px-4 py-2 font-black text-white" onClick={() => saveDevoirMetadata(devoir)}>Enregistrer</button>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Contenu : Pages du Devoir */}
                                         {!isCollapsed && (
