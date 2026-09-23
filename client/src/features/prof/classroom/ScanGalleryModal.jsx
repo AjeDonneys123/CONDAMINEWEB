@@ -251,53 +251,62 @@ export default function ScanGalleryModal({
                     showToast("⚠️ Presse-papier direct indisponible sur ce navigateur.");
                 }
             } else {
-                // Multi-pages : couture verticale haute résolution
-                const loadedImages = await Promise.all(targetScans.map((s) => loadImageElement(s.imageUrl)));
-                const maxWidth = Math.max(...loadedImages.map((img) => img.naturalWidth || img.width || 1200));
-
-                const spacing = 32;
-                const headerHeight = 64;
-                const scaledHeights = loadedImages.map((img) => {
-                    const w = img.naturalWidth || img.width || 1200;
-                    const h = img.naturalHeight || img.height || 800;
-                    const scale = maxWidth / w;
-                    return Math.round(h * scale);
-                });
-                const totalHeight = scaledHeights.reduce((acc, h) => acc + h + spacing + headerHeight, 0);
-
-                const canvas = document.createElement('canvas');
-                canvas.width = maxWidth;
-                canvas.height = totalHeight;
-                const ctx = canvas.getContext('2d');
-
-                ctx.fillStyle = '#f8fafc';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                let currentY = 0;
-                loadedImages.forEach((img, idx) => {
-                    const scanItem = targetScans[idx];
-                    const h = scaledHeights[idx];
-
-                    // Bandeau en-tête page
-                    ctx.fillStyle = '#1e293b';
-                    ctx.fillRect(0, currentY, maxWidth, headerHeight);
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = 'bold 24px system-ui, -apple-system, sans-serif';
-                    ctx.textBaseline = 'middle';
-
-                    const pageLabel = `${customLabel ? `${customLabel} — ` : ''}PAGE ${idx + 1} / ${loadedImages.length} • ${scanItem.studentName || student?.firstName || 'Élève'} (${new Date(scanItem.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
-                    ctx.fillText(pageLabel, 24, currentY + headerHeight / 2);
-
-                    currentY += headerHeight;
-                    ctx.drawImage(img, 0, currentY, maxWidth, h);
-                    currentY += h + spacing;
-                });
-
-                const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-                if (!blob) throw new Error("Échec assemblage des pages");
-
                 if (navigator.clipboard?.write && window.ClipboardItem) {
-                    await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]);
+                    // L'appel à clipboard.write doit avoir lieu pendant le clic.
+                    // Sinon Safari/Chrome peuvent refuser silencieusement la copie
+                    // après les attentes réseau et laisser l'ancienne image collée.
+                    const combinedBlobPromise = (async () => {
+                        const loadedImages = await Promise.all(targetScans.map((s) => loadImageElement(s.imageUrl)));
+                        const maxWidth = Math.min(
+                            1800,
+                            Math.max(...loadedImages.map((img) => img.naturalHeight || img.height || 1200)),
+                        );
+                        const spacing = 32;
+                        const headerHeight = 64;
+                        const scaledHeights = loadedImages.map((img) => {
+                            const sourceWidth = img.naturalWidth || img.width || 1200;
+                            const sourceHeight = img.naturalHeight || img.height || 800;
+                            // Après rotation à droite, la hauteur d'origine
+                            // devient la largeur de la page assemblée.
+                            return Math.round(sourceWidth * (maxWidth / sourceHeight));
+                        });
+                        const totalHeight = scaledHeights.reduce((acc, height) => acc + height + spacing + headerHeight, 0);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = maxWidth;
+                        canvas.height = totalHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = 'high';
+                        ctx.fillStyle = '#f8fafc';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                        let currentY = 0;
+                        loadedImages.forEach((img, idx) => {
+                            const scanItem = targetScans[idx];
+                            const height = scaledHeights[idx];
+                            ctx.fillStyle = '#1e293b';
+                            ctx.fillRect(0, currentY, maxWidth, headerHeight);
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = 'bold 24px system-ui, -apple-system, sans-serif';
+                            ctx.textBaseline = 'middle';
+                            const pageLabel = `${customLabel ? `${customLabel} — ` : ''}PAGE ${idx + 1} / ${loadedImages.length} • ${scanItem.studentName || student?.firstName || 'Élève'} (${new Date(scanItem.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
+                            ctx.fillText(pageLabel, 24, currentY + headerHeight / 2);
+                            currentY += headerHeight;
+                            ctx.save();
+                            ctx.translate(0, currentY + height);
+                            ctx.rotate(-Math.PI / 2);
+                            ctx.drawImage(img, 0, 0, height, maxWidth);
+                            ctx.restore();
+                            currentY += height + spacing;
+                        });
+
+                        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+                        if (!blob) throw new Error("Échec assemblage des pages");
+                        return blob;
+                    })();
+                    await navigator.clipboard.write([
+                        new window.ClipboardItem({ 'image/png': combinedBlobPromise }),
+                    ]);
                     showToast(`✅ ${targetScans.length} pages assemblées et copiées ! Collez (Ctrl+V) dans votre IA.`);
                 } else {
                     showToast("⚠️ Presse-papier direct indisponible sur ce navigateur.");
@@ -306,6 +315,28 @@ export default function ScanGalleryModal({
         } catch (err) {
             console.error("Erreur copie presse-papier:", err);
             showToast("❌ Erreur lors de la copie dans le presse-papier.");
+        }
+    };
+
+    const handleCopyClassShareLink = async () => {
+        if (!scans.length) return;
+        showToast(`⏳ Création de la page avec ${scans.length} page(s)...`);
+        try {
+            const res = await fetch('/api/classroom/scans/share', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scanIds: scans.map((scan) => scan._id),
+                    className: className || student?.currentClass || ''
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data?.url) throw new Error(data?.error || 'Lien indisponible');
+            await navigator.clipboard.writeText(data.url);
+            showToast('✅ Lien vers toutes les copies copié ! Collez-le dans le chat IA.');
+        } catch (error) {
+            console.error('Erreur création page IA:', error);
+            showToast('❌ Impossible de créer ou copier le lien IA.');
         }
     };
 
@@ -416,6 +447,15 @@ export default function ScanGalleryModal({
                     </div>
 
                     <div className="toolbar-right">
+                        {filterMode === 'class' && scans.length > 0 && (
+                            <button
+                                className="conda-scan-btn-copy-ai"
+                                onClick={handleCopyClassShareLink}
+                                title="Créer une page partageable contenant toutes les copies de la classe"
+                            >
+                                🔗 LIEN IA — TOUTES LES COPIES
+                            </button>
+                        )}
                         {selectedScanIds.length > 0 && (
                             <button
                                 className="conda-scan-btn-copy-ai"

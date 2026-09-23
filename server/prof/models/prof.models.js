@@ -716,6 +716,14 @@ const Models = {
         createdAt: { type: Date, default: Date.now, index: true }
     }),
 
+    ClassroomScanShare: getModel('ClassroomScanShare', {
+        token: { type: String, required: true, unique: true, index: true },
+        className: { type: String, default: '' },
+        scanIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ClassroomScan' }],
+        createdAt: { type: Date, default: Date.now },
+        expiresAt: { type: Date, required: true, index: { expires: 0 } }
+    }),
+
     Teacher: getModel('Teacher', {
         firstName: String, lastName: String, password: { type: String, required: true },
         mail: { type: String, default: '', trim: true, lowercase: true },

@@ -2,11 +2,13 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress, ClassroomScan } = require('../models/prof.models');
+const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress, ClassroomScan, ClassroomScanShare } = require('../models/prof.models');
 const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const sharp = require('sharp');
 const ProfDrive = require('../core/drive.prof');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 
@@ -580,6 +582,76 @@ router.get('/scans', async (req, res) => {
         res.json({ ok: true, scans });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/scans/share', async (req, res) => {
+    try {
+        const requestedIds = Array.isArray(req.body?.scanIds) ? req.body.scanIds : [];
+        const scanIds = [...new Set(requestedIds.map((id) => String(id || '').trim()))]
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))
+            .slice(0, 200);
+        if (!scanIds.length) return res.status(400).json({ error: 'Aucune copie à partager' });
+        const existingIds = await ClassroomScan.find({ _id: { $in: scanIds } }).distinct('_id');
+        if (!existingIds.length) return res.status(404).json({ error: 'Copies introuvables' });
+        const token = crypto.randomBytes(24).toString('hex');
+        const share = await ClassroomScanShare.create({
+            token,
+            className: String(req.body?.className || '').trim(),
+            scanIds: existingIds,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
+        const origin = `${req.protocol}://${req.get('host')}`;
+        return res.json({ ok: true, url: `${origin}/api/classroom/scans/share/${share.token}`, expiresAt: share.expiresAt });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/scans/share/:token/image/:scanId', async (req, res) => {
+    try {
+        const share = await ClassroomScanShare.findOne({ token: req.params.token, expiresAt: { $gt: new Date() } }).lean();
+        if (!share || !share.scanIds.some((id) => String(id) === String(req.params.scanId))) return res.status(404).end();
+        const scan = await ClassroomScan.findById(req.params.scanId).lean();
+        if (!scan?.driveFileId) return res.status(404).end();
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        const source = await ProfDrive.getFileStream(scan.driveFileId);
+        source.on('error', () => { if (!res.headersSent) res.status(502); res.end(); });
+        source.pipe(sharp().rotate(-90).jpeg({ quality: 90 })).pipe(res);
+    } catch (_) {
+        if (!res.headersSent) res.status(500);
+        res.end();
+    }
+});
+
+router.get('/scans/share/:token', async (req, res) => {
+    const escapeHtml = (value = '') => String(value || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    try {
+        const share = await ClassroomScanShare.findOne({ token: req.params.token, expiresAt: { $gt: new Date() } }).lean();
+        if (!share) return res.status(404).send('Lien expiré ou introuvable.');
+        const scans = await ClassroomScan.find({ _id: { $in: share.scanIds } }).lean();
+        const order = new Map(share.scanIds.map((id, index) => [String(id), index]));
+        scans.sort((a, b) => (order.get(String(a._id)) || 0) - (order.get(String(b._id)) || 0));
+        const groups = new Map();
+        scans.forEach((scan) => {
+            const key = `${scan.studentId || scan.studentName || 'eleve'}_${scan.sessionId || scan.homeworkNumber || ''}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(scan);
+        });
+        const copiesHtml = [...groups.values()].map((pages, copyIndex) => {
+            pages.sort((a, b) => Number(a.pageIndex || 1) - Number(b.pageIndex || 1));
+            const first = pages[0] || {};
+            const studentName = escapeHtml(first.studentName || `Élève ${copyIndex + 1}`);
+            return `<section class="copy"><h2>Copie ${copyIndex + 1} — ${studentName}</h2>${pages.map((scan, pageIndex) => `<figure><div>Page ${pageIndex + 1} / ${pages.length}</div><img src="/api/classroom/scans/share/${escapeHtml(share.token)}/image/${escapeHtml(scan._id)}" alt="${studentName}, page ${pageIndex + 1}" loading="eager"></figure>`).join('')}</section>`;
+        }).join('');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        return res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Copies ${escapeHtml(share.className)}</title><style>*{box-sizing:border-box}body{margin:0;background:#eef2f7;color:#0f172a;font-family:system-ui,sans-serif}header{position:sticky;top:0;z-index:2;padding:24px;background:#062b22;color:white;border-bottom:5px solid #34d399}header h1{margin:0;font-size:28px}header p{margin:6px 0 0;color:#a7f3d0;font-weight:700}main{width:min(1840px,100%);margin:auto;padding:24px}.copy{margin:0 0 40px;padding:20px;background:white;border-radius:24px;box-shadow:0 12px 30px #0f172a18;break-after:page}.copy h2{margin:0 0 16px;padding:14px 18px;border-radius:14px;background:#172554;color:white}figure{margin:0 0 20px}figure div{padding:8px 14px;background:#1e293b;color:white;font-weight:900}img{display:block;width:100%;height:auto;background:white}</style></head><body><header><h1>Copies à corriger — ${escapeHtml(share.className || 'Classe')}</h1><p>${groups.size} copie(s) · ${scans.length} page(s) · lien valable 7 jours</p></header><main>${copiesHtml}</main></body></html>`);
+    } catch (e) {
+        return res.status(500).send('Impossible de charger les copies.');
     }
 });
 
