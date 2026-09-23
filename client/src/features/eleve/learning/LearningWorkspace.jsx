@@ -729,12 +729,16 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
     }, [user?.currentClass, module?.chapterLevel, module?.isLycee]);
 
     const isSeconde = useMemo(() => {
-        const raw = String(user?.currentClass || user?.classroom || user?.classe || module?.chapterLevel || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const normalizeClass = (value) => String(value || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const studentClass = normalizeClass(user?.currentClass || user?.classroom || user?.classe);
+        if (studentClass) return /^(2|2DE|2NDE|SECONDE)/.test(studentClass);
+        const raw = normalizeClass(module?.chapterLevel);
         if (/^(2|2DE|2NDE|SECONDE)/.test(raw)) return true;
         return Boolean(module?.isSeconde);
     }, [user?.currentClass, user?.classroom, user?.classe, module?.chapterLevel, module?.isSeconde]);
 
     const [collaborativeViewMode, setCollaborativeViewMode] = useState(true);
+    const showCollaborativeSheet = isSeconde && collaborativeViewMode !== false;
     const [traceEcriteUnlocked, setTraceEcriteUnlocked] = useState(true);
     const [traceEcritePhotoFile, setTraceEcritePhotoFile] = useState(null);
     const [traceEcritePreviewUrl, setTraceEcritePreviewUrl] = useState(
@@ -1630,7 +1634,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (!currentStep) return false;
         if (isInformationalOnly) return true;
         if (currentStep.type === 'sheet') {
-            if (collaborativeViewMode !== false) return true;
+            if (showCollaborativeSheet) return true;
             if (
                 forcedSheetReview &&
                 Number(forcedSheetReview.stepIndex) === Number(stepIndex) &&
@@ -1643,7 +1647,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         if (currentStep.type === 'video') return videoUnlocked;
         if (currentStep.type === 'question') return isHardRecitation ? studentGptValidated : true;
         return false;
-    }, [currentStep, isInformationalOnly, sheetReadMs, sheetScrollRatio, videoUnlocked, isHardRecitation, studentGptValidated, collaborativeViewMode]);
+    }, [currentStep, isInformationalOnly, sheetReadMs, sheetScrollRatio, videoUnlocked, isHardRecitation, studentGptValidated, showCollaborativeSheet]);
 
     useEffect(() => {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
@@ -2826,7 +2830,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
                 {currentStep.type === 'sheet' && (
                     <>
-                        <div className="flex items-center justify-end mb-3">
+                        {isSeconde && <div className="flex items-center justify-end mb-3">
                             <button
                                 type="button"
                                 onClick={() => setCollaborativeViewMode((prev) => (prev === false ? true : false))}
@@ -2834,9 +2838,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             >
                                 <span>{collaborativeViewMode !== false ? '📄 Basculer en vue classique' : '🤝 Basculer en fiche participative'}</span>
                             </button>
-                        </div>
+                        </div>}
 
-                        {collaborativeViewMode !== false ? (
+                        {showCollaborativeSheet ? (
                             <CollaborativeSuperfiche
                                 moduleId={module?._id}
                                 stepId={

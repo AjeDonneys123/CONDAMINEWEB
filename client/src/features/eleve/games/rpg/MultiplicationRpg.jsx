@@ -4,11 +4,10 @@ import { gameUrl } from './gameHosting';
 import ProtectedGameSurface from '../ProtectedGameSurface';
 
 const ASSET_ROOT = gameUrl('simple-rpg/assets');
-const TARGET_SCORE = 400;
-const MAX_ARROW_SECONDS = 80;
-const ARROW_SECONDS_PER_CORRECT = 20;
-const POINTS_PER_ENEMY = 20;
+const TARGET_GEMS = 4;
 const MAX_HEARTS = 6;
+const ANSWER_COLORS = [0x00e5ff, 0xffea00, 0x39ff14, 0xff2bd6];
+const ANSWER_CSS_COLORS = ['#00e5ff', '#ffea00', '#39ff14', '#ff2bd6'];
 
 export default function MultiplicationRpg({ onExit, learningContext = { lessons: [] } }) {
   const canvasHostRef = useRef(null);
@@ -17,25 +16,22 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
   const quizRef = useRef(null);
   const gameRef = useRef(null);
   const sceneRef = useRef(null);
-  const questionOpenRef = useRef(false);
+  const questionRef = useRef(null);
+  const questionIndexRef = useRef(0);
+  const gemsRef = useRef(0);
+  const quizQuestionsRef = useRef([]);
   const virtualKeysRef = useRef(new Set());
-  const quizPoolRef = useRef([]);
-  const quizStepRef = useRef(0);
-  const questionRewardRef = useRef('arrows');
   const activeTouchControlsRef = useRef(new Map());
   const wrongQuestionsRef = useRef([]);
-  const scoreRef = useRef(0);
-  const arrowTimeRef = useRef(0);
   const [question, setQuestion] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [gems, setGems] = useState(0);
+  const [superChallenge, setSuperChallenge] = useState(null);
   const [hearts, setHearts] = useState(3);
-  const [score, setScore] = useState(0);
-  const [arrowSeconds, setArrowSeconds] = useState(0);
   const [scorePop, setScorePop] = useState(null);
+  const [scorePopError, setScorePopError] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
-
-  useEffect(() => { scoreRef.current = score; }, [score]);
 
   const wrongStorageKey = `condaweb-forest-wrong-v1:${String(learningContext?.activeChapterId || 'chapter')}`;
   const questionKey = (row = {}) => String(row?.id || row?._id || row?.question || '').trim();
@@ -50,14 +46,6 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     wrongQuestionsRef.current = rows;
     try { window.localStorage.setItem(wrongStorageKey, JSON.stringify(rows)); } catch (_) {}
   };
-
-  const setArrowTime = (seconds) => {
-    const next = Math.max(0, Math.min(MAX_ARROW_SECONDS, Number(seconds) || 0));
-    arrowTimeRef.current = next;
-    setArrowSeconds(next);
-  };
-
-  const grantArrowSeconds = (seconds = ARROW_SECONDS_PER_CORRECT) => setArrowTime(arrowTimeRef.current + seconds);
 
   useEffect(() => {
     const shield = screenShieldRef.current;
@@ -121,9 +109,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         const code = resolveControl(touch, '[data-game-code]', true);
         if (!code) return;
         activeTouchControlsRef.current.set(touch.identifier, code);
-        if (code === 'Reload') openQuestion('arrows');
-        else if (code === 'Heal') openQuestion('hearts');
-        else setVirtualKey(code, true);
+        setVirtualKey(code, true);
       });
     };
     const handleControlsTouchMove = (event) => {
@@ -191,19 +177,17 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     (lesson?.quiz || []).map((row) => ({ ...row, lessonTitle: lesson.title }))
   ), [learningContext]);
 
-  const openQuestion = (reward = 'arrows') => {
-    if (questionOpenRef.current || gameOver) return;
-    questionRewardRef.current = reward;
-    questionOpenRef.current = true;
-    sceneRef.current?.setQuizPaused(true);
-    const pending = [...wrongQuestionsRef.current];
-    const pendingKeys = new Set(pending.map(questionKey));
-    const shuffled = quizQuestions.filter((row) => !pendingKeys.has(questionKey(row))).sort(() => Math.random() - 0.5);
-    const ordered = [...pending, ...shuffled];
-    quizPoolRef.current = Array.from({ length: 4 }, (_, index) => ordered[index % Math.max(1, ordered.length)]).filter(Boolean);
-    quizStepRef.current = 0;
-    setQuestion(quizPoolRef.current[0] || { unavailable: true, question: 'Aucun QCM disponible pour cette leçon.', choices: ['Fermer'], correctIndex: -1 });
+  useEffect(() => { quizQuestionsRef.current = quizQuestions; }, [quizQuestions]);
+
+  const getNextQuestion = () => {
+    const pool = quizQuestionsRef.current;
+    const next = pool.length
+      ? pool[questionIndexRef.current++ % pool.length]
+      : { unavailable: true, question: 'Aucun QCM disponible pour cette leçon.', choices: ['Continuer'], correctIndex: 0 };
+    questionRef.current = next;
+    setQuestion(next);
     setFeedback(null);
+    return next;
   };
 
   useEffect(() => {
@@ -222,8 +206,6 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.playerSpeed = 105;
           this.isQuizPaused = false;
           this.invulnerableUntil = 0;
-          this.lastArrowTime = null;
-          this.lastArrowDisplay = 0;
         }
 
         preload() {
@@ -232,6 +214,7 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.load.image('forest-tiles', `${ASSET_ROOT}/environment/tileset.png`);
           this.load.image('arrow', `${ASSET_ROOT}/sprites/misc/arrow.png`);
           this.load.image('heart', `${ASSET_ROOT}/heart.png`);
+          this.load.spritesheet('answer-gem', `${ASSET_ROOT}/spritesheets/misc/gem.png`, { frameWidth: 7, frameHeight: 7 });
           this.load.spritesheet('hero-down', `${ASSET_ROOT}/spritesheets/hero/idle/hero-idle-front.png`, { frameWidth: 32, frameHeight: 32 });
           this.load.spritesheet('hero-up', `${ASSET_ROOT}/spritesheets/hero/idle/hero-idle-back.png`, { frameWidth: 32, frameHeight: 32 });
           this.load.spritesheet('hero-side', `${ASSET_ROOT}/spritesheets/hero/idle/hero-idle-side.png`, { frameWidth: 32, frameHeight: 32 });
@@ -291,25 +274,89 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           this.monsters = this.physics.add.group();
 
           const monsterLayer = map.getObjectLayer('monsters');
+          this.shrineTeleportPoints = (monsterLayer?.objects || []).map((obj) => ({ x: obj.x, y: obj.y }));
           (monsterLayer?.objects || []).forEach((obj, index) => {
             const key = String(obj.name || '').toLowerCase().includes('mole') ? 'mole' : 'treant';
-            [0, 1, 2, 3].forEach((copy) => {
-              const angle = (Math.PI * 2 * copy) / 4;
-              const spawnX = Phaser.Math.Clamp(obj.x + Math.cos(angle) * 52, 24, map.widthInPixels - 24);
-              const spawnY = Phaser.Math.Clamp(obj.y + Math.sin(angle) * 52, 24, map.heightInPixels - 24);
+            [0, 1].forEach((copy) => {
+              const angle = Math.PI * copy;
+              let spawnX = Phaser.Math.Clamp(obj.x + Math.cos(angle) * 52, 24, map.widthInPixels - 24);
+              let spawnY = Phaser.Math.Clamp(obj.y + Math.sin(angle) * 52, 24, map.heightInPixels - 24);
+              const fromPlayerX = spawnX - this.player.x;
+              const fromPlayerY = spawnY - this.player.y;
+              const fromPlayerDistance = Math.hypot(fromPlayerX, fromPlayerY) || 1;
+              if (fromPlayerDistance < 150) {
+                spawnX = Phaser.Math.Clamp(this.player.x + (fromPlayerX / fromPlayerDistance) * 165, 24, map.widthInPixels - 24);
+                spawnY = Phaser.Math.Clamp(this.player.y + (fromPlayerY / fromPlayerDistance) * 165, 24, map.heightInPixels - 24);
+              }
               const monster = this.monsters.create(spawnX, spawnY, key).setDepth(8);
               monster.hp = 1;
               monster.speed = key === 'treant' ? 24 : 30;
               monster.setData('spawnX', spawnX).setData('spawnY', spawnY).setCollideWorldBounds(true);
               monster.setData('kind', key);
               monster.play(key === 'treant' ? 'treant-walk' : 'mole-walk');
-              monster.setTint((index + copy) % 2 ? 0xffffff : 0xfff3cf);
             });
           });
           if (terrain) this.physics.add.collider(this.monsters, terrain);
           if (deco) this.physics.add.collider(this.monsters, deco);
+          this.physics.add.collider(this.monsters, this.monsters);
           this.physics.add.overlap(this.arrows, this.monsters, this.hitMonster, null, this);
           this.physics.add.overlap(this.player, this.monsters, this.hitPlayer, null, this);
+
+          this.activeGemQuestion = false;
+          this.answerGems = this.physics.add.group();
+          this.shrines = this.physics.add.staticGroup();
+          const isWalkableTile = (tileX, tileY) => {
+            if (tileX < 1 || tileY < 1 || tileX >= map.width - 1 || tileY >= map.height - 1) return false;
+            const terrainTile = terrain?.getTileAt(tileX, tileY);
+            const decoTile = deco?.getTileAt(tileX, tileY);
+            return !terrainTile?.collides && !decoTile?.collides;
+          };
+          const startTileX = map.worldToTileX(this.player.x);
+          const startTileY = map.worldToTileY(this.player.y);
+          let seedTile = [startTileX, startTileY];
+          for (let radius = 0; radius <= 3 && !isWalkableTile(seedTile[0], seedTile[1]); radius += 1) {
+            for (let dx = -radius; dx <= radius; dx += 1) {
+              for (let dy = -radius; dy <= radius; dy += 1) {
+                if (isWalkableTile(startTileX + dx, startTileY + dy)) seedTile = [startTileX + dx, startTileY + dy];
+              }
+            }
+          }
+          const queue = [seedTile];
+          const visited = new Set([`${seedTile[0]},${seedTile[1]}`]);
+          const reachable = [];
+          for (let cursor = 0; cursor < queue.length; cursor += 1) {
+            const [tileX, tileY] = queue[cursor];
+            if (!isWalkableTile(tileX, tileY)) continue;
+            const worldX = map.tileToWorldX(tileX) + map.tileWidth / 2;
+            const worldY = map.tileToWorldY(tileY) + map.tileHeight / 2;
+            if (Phaser.Math.Distance.Between(worldX, worldY, this.player.x, this.player.y) > 90) reachable.push({ x: worldX, y: worldY });
+            [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+              const nextX = tileX + dx;
+              const nextY = tileY + dy;
+              const key = `${nextX},${nextY}`;
+              if (!visited.has(key) && isWalkableTile(nextX, nextY)) { visited.add(key); queue.push([nextX, nextY]); }
+            });
+          }
+          this.safeShrinePoints = reachable.filter((_point, index) => index % 6 === 0);
+          const shrinePositions = Array.from({ length: 4 }, (_, index) => {
+            const point = this.safeShrinePoints[Math.floor(((index + 1) * this.safeShrinePoints.length) / 5)] || { x: this.player.x + 80 + index * 24, y: this.player.y + 80 };
+            return [point.x, point.y];
+          });
+          shrinePositions.forEach(([x, y], index) => {
+            const shrine = this.shrines.create(x, y, 'answer-gem', index % 4).setScale(3).setDepth(7);
+            shrine.setData('used', false).setTint(0xffffff);
+            this.tweens.add({ targets: shrine, y: y - 5, duration: 650, yoyo: true, repeat: -1 });
+          });
+          const superPoint = this.safeShrinePoints[Math.floor(this.safeShrinePoints.length / 2)] || { x: this.player.x + 100, y: this.player.y };
+          const superX = superPoint.x;
+          const superY = superPoint.y;
+          const superGlow = this.add.circle(superX, superY, 22, 0xffd900, 0.28).setDepth(6);
+          const superShrine = this.shrines.create(superX, superY, 'answer-gem', 0)
+            .setScale(4.2).setDepth(7).setTintFill(0xffe600);
+          superShrine.setData('used', false).setData('isSuper', true).setData('glow', superGlow);
+          this.tweens.add({ targets: superShrine, scale: { from: 3.6, to: 4.8 }, alpha: { from: 0.65, to: 1 }, duration: 520, yoyo: true, repeat: -1 });
+          this.tweens.add({ targets: superGlow, scale: { from: 0.8, to: 1.35 }, alpha: { from: 0.18, to: 0.55 }, duration: 520, yoyo: true, repeat: -1 });
+          this.physics.add.overlap(this.player, this.shrines, (_player, shrine) => this.beginGemQuestion(shrine), null, this);
 
           // Les rectangles "zones" sont les portes reliant les deux cartes
           // dans le projet RPG original.
@@ -330,8 +377,8 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             this.physics.add.overlap(this.player, zone, () => {
               if (this.isChangingMap) return;
               if (this.currentMapKey === 'forest-map-2') {
-                if (scoreRef.current < TARGET_SCORE) {
-                  setScorePop(`Encore ${TARGET_SCORE - scoreRef.current} points`);
+                if (gemsRef.current < TARGET_GEMS) {
+                  setScorePop(`Encore ${TARGET_GEMS - gemsRef.current} gemme(s)`);
                   window.setTimeout(() => setScorePop(null), 1200);
                   return;
                 }
@@ -339,9 +386,16 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
                 setWon(true);
                 return;
               }
+              if (gemsRef.current < TARGET_GEMS) {
+                setScorePop(`Encore ${TARGET_GEMS - gemsRef.current} gemme(s) pour ouvrir le passage`);
+                window.setTimeout(() => setScorePop(null), 1200);
+                return;
+              }
               this.isChangingMap = true;
               const nextMapKey = this.currentMapKey === 'forest-map' ? 'forest-map-2' : 'forest-map';
               const nextSpawn = nextMapKey === 'forest-map-2' ? { x: 60, y: 303 } : { x: 412, y: 430 };
+              gemsRef.current = 0;
+              setGems(0);
               this.cameras.main.fadeOut(220, 8, 47, 35);
               this.time.delayedCall(230, () => this.scene.restart({ mapKey: nextMapKey, spawn: nextSpawn }));
             });
@@ -356,6 +410,130 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold', color: '#ffffff',
             backgroundColor: '#082f2399', padding: { x: 8, y: 5 }
           }).setScrollFactor(0).setDepth(100);
+        }
+
+        beginGemQuestion(shrine) {
+          if (this.activeGemQuestion || shrine.getData('used')) return;
+          if (!shrine.getData('isSuper')) this.deactivatePower();
+          this.activeGemQuestion = true;
+          this.activeShrine = shrine;
+          this.superQuestionMode = Boolean(shrine.getData('isSuper'));
+          if (this.superQuestionMode) {
+            this.superAttempts = 0;
+            this.superCorrect = 0;
+            this.superDeadline = this.time.now + 30000;
+            this.lastSuperDisplay = -1;
+            setSuperChallenge({ answered: 0, seconds: 30 });
+          }
+          this.showAnswerGems();
+          this.monsters.setVelocity(0, 0);
+        }
+
+        showAnswerGems() {
+          const next = getNextQuestion();
+          const offsets = [[0, -58], [58, 0], [0, 58], [-58, 0]];
+          if (!this.shield) {
+            this.shield = this.add.circle(this.player.x, this.player.y, 88, 0x38bdf8, 0.12)
+              .setStrokeStyle(4, 0x7dd3fc, 0.95).setDepth(6);
+          }
+          this.answerGems.clear(true, true);
+          (next.choices || []).slice(0, 4).forEach((_choice, index) => {
+            const [dx, dy] = offsets[index];
+            const gem = this.answerGems.create(this.player.x + dx, this.player.y + dy, 'answer-gem', index % 4)
+              .setScale(3.2).setDepth(15).setTint(ANSWER_COLORS[index] || ANSWER_COLORS[0]);
+            gem.setData('answerIndex', index).body.setCircle(6);
+          });
+        }
+
+        chooseAnswerIndex(answerIndex) {
+          if (!this.activeGemQuestion) return;
+          const isCorrect = Number(answerIndex) === Number(questionRef.current?.correctIndex);
+          if (this.superQuestionMode) {
+            this.superAttempts += 1;
+            if (isCorrect) this.superCorrect += 1;
+            setSuperChallenge({ answered: this.superAttempts, seconds: Math.max(0, Math.ceil((this.superDeadline - this.time.now) / 1000)) });
+            if (this.superAttempts >= 4) {
+              if (this.superCorrect === 4) this.completeSuperChallenge();
+              else this.failSuperChallenge();
+            } else {
+              setScorePop(isCorrect ? 'Bonne réponse !' : 'Mauvaise réponse');
+              setScorePopError(!isCorrect);
+              window.setTimeout(() => { setScorePop(null); setScorePopError(false); }, 650);
+              this.showAnswerGems();
+            }
+            return;
+          }
+          if (isCorrect) {
+            setScorePopError(false);
+            gemsRef.current = Math.min(TARGET_GEMS, gemsRef.current + 1);
+            setGems(gemsRef.current);
+            setHearts((value) => Math.min(MAX_HEARTS, value + 1));
+            this.activeShrine?.setData('used', true).setVisible(false).disableBody(true, true);
+            setScorePop(`Bonne réponse · 💎 ${gemsRef.current}/${TARGET_GEMS}`);
+          } else {
+            setScorePopError(true);
+            setScorePop(`Mauvaise réponse · ${questionRef.current?.choices?.[questionRef.current?.correctIndex] || ''}`);
+            const destinations = (this.safeShrinePoints || []).filter((point) =>
+              Phaser.Math.Distance.Between(point.x, point.y, this.player.x, this.player.y) > 110
+            );
+            const destination = destinations[Math.floor(Math.random() * destinations.length)];
+            if (this.activeShrine && destination) {
+              this.tweens.killTweensOf(this.activeShrine);
+              this.activeShrine.setPosition(destination.x, destination.y).refreshBody();
+            }
+          }
+          window.setTimeout(() => { setScorePop(null); setScorePopError(false); }, 1100);
+          this.activeGemQuestion = false;
+          this.answerGems.clear(true, true);
+          this.shield?.destroy();
+          this.shield = null;
+          this.activeShrine = null;
+          questionRef.current = null;
+          setQuestion(null);
+        }
+
+        completeSuperChallenge() {
+          this.finishQuestionPhase();
+          this.poweredUntil = this.time.now + 20000;
+          this.player.setScale(1.5);
+          this.powerAura?.setVisible(true);
+          this.activeShrine?.setData('used', true).disableBody(true, true).setVisible(false);
+          this.activeShrine?.getData('glow')?.setVisible(false);
+          this.activeShrine = null;
+          setScorePopError(false);
+          setScorePop('SUPER POUVOIR · boules de feu pendant 20 secondes !');
+          window.setTimeout(() => setScorePop(null), 1300);
+        }
+
+        failSuperChallenge() {
+          this.finishQuestionPhase();
+          setHearts((value) => {
+            const next = Math.max(0, value - 1);
+            if (next === 0) { this.setQuizPaused(true); setGameOver(true); }
+            return next;
+          });
+          this.activeShrine = null;
+          setScorePopError(true);
+          setScorePop('Défi échoué · −1 cœur');
+          window.setTimeout(() => { setScorePop(null); setScorePopError(false); }, 1100);
+        }
+
+        finishQuestionPhase() {
+          this.activeGemQuestion = false;
+          this.superQuestionMode = false;
+          this.superDeadline = 0;
+          setSuperChallenge(null);
+          this.answerGems.clear(true, true);
+          this.shield?.destroy();
+          this.shield = null;
+          questionRef.current = null;
+          setQuestion(null);
+        }
+
+        deactivatePower() {
+          this.poweredUntil = 0;
+          this.player?.setScale(1);
+          this.powerAura?.setVisible(false);
         }
 
         createAnimations() {
@@ -374,7 +552,6 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
         setQuizPaused(paused) {
           this.isQuizPaused = paused;
-          this.lastArrowTime = null;
           if (paused) {
             this.physics.pause();
             this.player?.setVelocity(0);
@@ -385,16 +562,19 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
 
         update(time) {
           if (!this.player || this.isQuizPaused || !this.player.active) return;
-          if (this.lastArrowTime === null) this.lastArrowTime = time;
-          const elapsedSeconds = Math.max(0, (time - this.lastArrowTime) / 1000);
-          this.lastArrowTime = time;
-          if (arrowTimeRef.current > 0 && elapsedSeconds > 0) {
-            arrowTimeRef.current = Math.max(0, arrowTimeRef.current - elapsedSeconds);
-            const shown = Math.ceil(arrowTimeRef.current * 10) / 10;
-            if (shown !== this.lastArrowDisplay) {
-              this.lastArrowDisplay = shown;
-              setArrowSeconds(shown);
+          if (this.superQuestionMode) {
+            const seconds = Math.max(0, Math.ceil((this.superDeadline - time) / 1000));
+            if (seconds !== this.lastSuperDisplay) {
+              this.lastSuperDisplay = seconds;
+              setSuperChallenge({ answered: this.superAttempts, seconds });
             }
+            if (time >= this.superDeadline) { this.failSuperChallenge(); return; }
+          }
+          if (this.poweredUntil && time >= this.poweredUntil) this.deactivatePower();
+          if (this.activeGemQuestion) {
+            this.player.setVelocity(0);
+            this.monsters.setVelocity(0, 0);
+            return;
           }
           const virtual = virtualKeysRef.current;
           const left = virtual.has('ArrowLeft') || this.cursors.left.isDown || this.wasd.A.isDown || this.wasd.Q.isDown;
@@ -421,17 +601,36 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             this.player.setTexture(idleKey, 0).setFlipX(this.orientation === 'left');
           }
 
-          if ((virtual.has('Space') || this.space.isDown) && time - this.lastShot >= this.reloadMs) this.shoot(time);
+          if ((virtual.has('Shoot') || this.space.isDown) && time - this.lastShot >= this.reloadMs) this.shoot(time);
           this.monsters.children.iterate((monster) => {
             if (!monster?.active) return;
+            if (this.activeGemQuestion) { monster.setVelocity(0); return; }
             const distance = Phaser.Math.Distance.Between(monster.x, monster.y, this.player.x, this.player.y);
             if (distance < 280) this.physics.moveToObject(monster, this.player, monster.speed);
             else this.physics.moveTo(monster, monster.getData('spawnX'), monster.getData('spawnY'), monster.speed * 0.6);
           });
+          const activeMonsters = this.monsters.getChildren().filter((monster) => monster?.active);
+          for (let i = 0; i < activeMonsters.length; i += 1) {
+            for (let j = i + 1; j < activeMonsters.length; j += 1) {
+              const first = activeMonsters[i];
+              const second = activeMonsters[j];
+              const dx = second.x - first.x;
+              const dy = second.y - first.y;
+              const distance = Math.hypot(dx, dy) || 0.01;
+              const minimumDistance = 46;
+              if (distance >= minimumDistance) continue;
+              const push = (minimumDistance - distance) * 1.8;
+              const nx = dx / distance;
+              const ny = dy / distance;
+              first.body.velocity.x -= nx * push;
+              first.body.velocity.y -= ny * push;
+              second.body.velocity.x += nx * push;
+              second.body.velocity.y += ny * push;
+            }
+          }
         }
 
         shoot(time) {
-          if (arrowTimeRef.current <= 0) return;
           this.lastShot = time;
           // Le sprite original de la flèche est vertical : sa rotation doit
           // suivre la convention du projet source.
@@ -439,35 +638,45 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
           const [dx, dy, angle] = vectors[this.orientation];
           const shootAnim = this.orientation === 'up' ? 'shoot-up' : this.orientation === 'down' ? 'shoot-down' : 'shoot-side';
           this.player.play(shootAnim, true).setFlipX(this.orientation === 'left');
-          const arrow = this.arrows.create(this.player.x + dx * 15, this.player.y + dy * 15, 'arrow');
-          arrow.setDepth(9).setAngle(angle).setVelocity(dx * 275, dy * 275).setData('bornAt', time);
+          let arrow;
+          if (this.poweredUntil > time) {
+            arrow = this.add.circle(this.player.x + dx * 18, this.player.y + dy * 18, 8, 0xff5a00, 1)
+              .setStrokeStyle(4, 0xffd000, 0.95).setDepth(16);
+            this.physics.add.existing(arrow);
+            this.arrows.add(arrow);
+            arrow.body.setVelocity(dx * 350, dy * 350);
+          } else {
+            arrow = this.arrows.create(this.player.x + dx * 15, this.player.y + dy * 15, 'arrow');
+            arrow.setDepth(9).setAngle(angle).setVelocity(dx * 275, dy * 275);
+          }
+          arrow.setData('bornAt', time);
           this.time.delayedCall(1500, () => arrow?.active && arrow.destroy());
+        }
+
+        respawnMonster(spawnX, spawnY, kind) {
+          if (!this.player?.active) return;
+          if (Phaser.Math.Distance.Between(spawnX, spawnY, this.player.x, this.player.y) < 160) {
+            this.time.delayedCall(900, () => this.respawnMonster(spawnX, spawnY, kind));
+            return;
+          }
+          const revived = this.monsters.create(spawnX, spawnY, kind).setDepth(8).setCollideWorldBounds(true);
+          revived.hp = 1;
+          revived.speed = kind === 'treant' ? 24 : 30;
+          revived.setData('spawnX', spawnX).setData('spawnY', spawnY).setData('kind', kind);
+          revived.play(kind === 'treant' ? 'treant-walk' : 'mole-walk');
         }
 
         hitMonster(arrow, monster) {
           arrow.destroy();
-          monster.hp -= this.reloadMs < 200 ? 2 : 1;
-          monster.setTint(0xff3b30);
-          this.time.delayedCall(100, () => monster?.active && monster.clearTint());
-          if (monster.hp <= 0) {
-            const spawnX = monster.getData('spawnX');
-            const spawnY = monster.getData('spawnY');
-            const kind = monster.getData('kind');
-            monster.destroy();
-            setScore((value) => value + POINTS_PER_ENEMY);
-            setScorePop(`+${POINTS_PER_ENEMY} points`);
-            window.setTimeout(() => setScorePop(null), 900);
-            this.time.delayedCall(2500, () => {
-              const revived = this.monsters.create(spawnX, spawnY, kind).setDepth(8).setCollideWorldBounds(true);
-              revived.hp = 1;
-              revived.speed = kind === 'treant' ? 24 : 30;
-              revived.setData('spawnX', spawnX).setData('spawnY', spawnY).setData('kind', kind);
-              revived.play(kind === 'treant' ? 'treant-walk' : 'mole-walk');
-            });
-          }
+          const spawnX = monster.getData('spawnX');
+          const spawnY = monster.getData('spawnY');
+          const kind = monster.getData('kind');
+          monster.destroy();
+          this.time.delayedCall(2500, () => this.respawnMonster(spawnX, spawnY, kind));
         }
 
         hitPlayer(_player, monster) {
+          if (this.activeGemQuestion) return;
           if (this.time.now < this.invulnerableUntil || this.time.now < (this.lastPlayerHit || 0) + 900) return;
           this.lastPlayerHit = this.time.now;
           monster.setVelocity(-monster.body.velocity.x * 3, -monster.body.velocity.y * 3);
@@ -505,53 +714,13 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
     };
   }, []);
 
-  const validateAnswer = (index) => {
-    if (!question || feedback) return;
-    const isCorrect = index === Number(question.correctIndex);
-    if (isCorrect) {
-      const nextStep = quizStepRef.current + 1;
-      grantArrowSeconds();
-      const currentKey = questionKey(question);
-      saveWrongQuestions(wrongQuestionsRef.current.filter((row) => questionKey(row) !== currentKey));
-      setFeedback({ ok: true, selectedIndex: index, correctIndex: Number(question.correctIndex), message: `Bonne réponse ${nextStep}/4 · +${ARROW_SECONDS_PER_CORRECT} secondes de flèches infinies` });
-      window.setTimeout(() => {
-        quizStepRef.current = nextStep;
-        setFeedback(null);
-        if (nextStep >= 4) {
-          if (questionRewardRef.current === 'hearts') setHearts((value) => Math.min(MAX_HEARTS, value + 3));
-          sceneRef.current?.setQuizPaused(false);
-          questionOpenRef.current = false;
-          setQuestion(null);
-        } else setQuestion(quizPoolRef.current[nextStep]);
-      }, 650);
-    } else {
-      const currentKey = questionKey(question);
-      if (!wrongQuestionsRef.current.some((row) => questionKey(row) === currentKey)) saveWrongQuestions([...wrongQuestionsRef.current, question]);
-      const correctIndex = Number(question.correctIndex);
-      const correctAnswer = String(question.choices?.[correctIndex] || 'Réponse indisponible');
-      setFeedback({
-        ok: false,
-        selectedIndex: index,
-        correctIndex,
-        message: `Mauvaise réponse. La bonne réponse est : « ${correctAnswer} ». Cette question reviendra au prochain QCM.`
-      });
-      window.setTimeout(() => {
-        sceneRef.current?.setQuizPaused(false);
-        questionOpenRef.current = false;
-        setQuestion(null);
-        setFeedback(null);
-      }, 1200);
-    }
-  };
-
   const restart = () => {
     virtualKeysRef.current.clear();
     setHearts(3);
-    setScore(0);
-    scoreRef.current = 0;
-    setArrowTime(0);
     setGameOver(false);
-    questionOpenRef.current = false;
+    gemsRef.current = 0;
+    setGems(0);
+    setQuestion(null);
     sceneRef.current?.scene.restart();
   };
 
@@ -589,8 +758,9 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
         </div>
         <div className="edu-rpg-hud">
           <div className="edu-rpg-hearts" aria-label={`${hearts} cœurs`}>{Array.from({ length: MAX_HEARTS }, (_, i) => <span key={i} className={i < hearts ? 'active' : ''}>♥</span>)}</div>
-          <strong>{score}/{TARGET_SCORE}</strong>
-          <span className="edu-rpg-arrow-energy"><b>🏹 ∞ {arrowSeconds.toFixed(1)} s</b><i><em style={{ width: `${(arrowSeconds / MAX_ARROW_SECONDS) * 100}%` }} /></i></span>
+          <strong>💎 {gems}/{TARGET_GEMS}</strong>
+          <span>🏹 Flèches infinies · trouve un diamant</span>
+          {superChallenge && <span>⚡ Super-gemme : {superChallenge.answered}/4 · {superChallenge.seconds}s</span>}
         </div>
         <button type="button" className="edu-rpg-exit" onClick={onExit}>✕ Quitter</button>
       </header>
@@ -598,10 +768,14 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
       <main className="edu-rpg-stage">
         <div ref={canvasHostRef} className="edu-rpg-canvas" />
         <div ref={screenShieldRef} className="edu-rpg-screen-shield" aria-hidden="true" />
-        <div className="edu-rpg-help">Atteins la dernière porte avec {TARGET_SCORE} points · chaque ennemi rapporte {POINTS_PER_ENEMY} points.</div>
-        {scorePop && <div className="edu-rpg-score-pop">{scorePop}</div>}
-        {arrowSeconds <= 0 && !question && !gameOver && !won && <button type="button" className="edu-rpg-empty-ammo" onClick={() => openQuestion('arrows')}>🏹 Jauge vide · RECHARGER</button>}
-        <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
+        {question && <div className={`edu-rpg-combat-question ${superChallenge ? 'is-super' : ''}`}>
+          {superChallenge && <div className="edu-rpg-super-banner"><strong>⚡ DÉFI CHRONO ⚡</strong><b>{superChallenge.seconds}s</b><span>QUESTION {Math.min(4, superChallenge.answered + 1)}/4</span></div>}
+          <strong>{question.question}</strong>
+        </div>}
+        {question && <div className="edu-rpg-answer-bar">{(question.choices || []).map((choice, index) => <button key={index} type="button" style={{ backgroundColor: ANSWER_CSS_COLORS[index] || ANSWER_CSS_COLORS[0] }} onClick={() => sceneRef.current?.chooseAnswerIndex(index)}>{choice}</button>)}</div>}
+        {!question && <div className="edu-rpg-help">Rejoins un diamant pour faire apparaître une question.</div>}
+        {scorePop && <div className={`edu-rpg-score-pop ${scorePopError ? 'is-error' : ''}`}>{scorePop}</div>}
+        {!question && <div ref={mobileControlsRef} className="edu-rpg-mobile-controls" onContextMenu={(event) => event.preventDefault()}>
           <div className="edu-rpg-dpad">
             {[
               ['ArrowUp', 'up', '▲'],
@@ -611,35 +785,22 @@ export default function MultiplicationRpg({ onExit, learningContext = { lessons:
             ].map(([code, direction, label]) => <button type="button" key={code} data-game-code={code} aria-label={code} className={`edu-rpg-control dir-${direction}`} onPointerDown={(event) => pressControl(event, code)} onPointerUp={(event) => releaseControl(event, code)} onPointerCancel={(event) => releaseControl(event, code)}>{label}</button>)}
           </div>
           <div className="edu-rpg-actions">
-            <button type="button" data-game-code="Space" aria-label="Tirer" className="edu-rpg-control shoot" onPointerDown={(event) => pressControl(event, 'Space')} onPointerUp={(event) => releaseControl(event, 'Space')} onPointerCancel={(event) => releaseControl(event, 'Space')}><span aria-hidden="true">➤</span><small>TIRER</small></button>
-            <button type="button" data-game-code="Reload" aria-label="Recharger" className="edu-rpg-control reload" onPointerDown={(event) => { blockGameGesture(event); openQuestion('arrows'); }}><span aria-hidden="true">↻</span><small>RECHARGER</small></button>
-            <button type="button" data-game-code="Heal" aria-label="Guérir" className="edu-rpg-control heal" onPointerDown={(event) => { blockGameGesture(event); openQuestion('hearts'); }}><span aria-hidden="true">♥</span><small>GUÉRIR +3</small></button>
+            <button type="button" data-game-code="Shoot" aria-label="Tirer" className="edu-rpg-control shoot correct-shot" onPointerDown={(event) => pressControl(event, 'Shoot')} onPointerUp={(event) => releaseControl(event, 'Shoot')} onPointerCancel={(event) => releaseControl(event, 'Shoot')}><span aria-hidden="true">➤</span><small>TIRER</small><kbd>ESPACE</kbd></button>
           </div>
-        </div>
-
-        {question && !gameOver && (
-          <div className="edu-rpg-quiz-backdrop">
-            <div ref={quizRef} className={`edu-rpg-quiz ${feedback ? (feedback.ok ? 'correct' : 'wrong') : ''}`}>
-              <div className="edu-rpg-quiz-label">{questionRewardRef.current === 'hearts' ? 'Guérison +3 cœurs' : 'Recharge des flèches infinies'} · question {quizStepRef.current + 1}/4 · +{ARROW_SECONDS_PER_CORRECT} s si juste</div>
-              <h2>{question.question}</h2>
-              <div className="edu-rpg-qcm-options">{(question.choices || []).map((choice, index) => <button key={index} type="button" disabled={Boolean(feedback)} className={feedback ? (index === feedback.correctIndex ? 'is-answer-correct' : index === feedback.selectedIndex ? 'is-answer-wrong' : '') : ''} onClick={() => validateAnswer(index)}>{choice}</button>)}</div>
-              {feedback && <p>{feedback.message}</p>}
-            </div>
-          </div>
-        )}
+        </div>}
 
         {gameOver && (
           <div className="edu-rpg-quiz-backdrop">
             <div className="edu-rpg-game-over">
               <div className="edu-rpg-quiz-label">Fin de la partie</div>
               <h2>La forêt t’attend encore !</h2>
-              <p>Score obtenu : <strong>{score} points</strong></p>
+              <p>Tu peux repartir à la recherche des gemmes.</p>
               <button type="button" onClick={restart}>Recommencer</button>
               <button type="button" className="secondary" onClick={onExit}>Retour aux jeux</button>
             </div>
           </div>
         )}
-        {won && <div className="edu-rpg-quiz-backdrop"><div className="edu-rpg-game-over"><div className="edu-rpg-quiz-label">Mission réussie</div><h2>Forêt maîtrisée !</h2><p>Tu as atteint la dernière porte avec {score} points.</p><button type="button" onClick={restart}>Rejouer</button><button type="button" className="secondary" onClick={onExit}>Retour aux jeux</button></div></div>}
+        {won && <div className="edu-rpg-quiz-backdrop"><div className="edu-rpg-game-over"><div className="edu-rpg-quiz-label">Mission réussie</div><h2>Forêt maîtrisée !</h2><p>Tu as trouvé les 4 gemmes et atteint la dernière porte.</p><button type="button" onClick={restart}>Rejouer</button><button type="button" className="secondary" onClick={onExit}>Retour aux jeux</button></div></div>}
       </main>
       <footer className="edu-rpg-credit">Code adapté de Phaser3 Simple RPG (MIT) · graphismes Tiny RPG Forest par Ansimuz (CC0).</footer>
     </div></ProtectedGameSurface>
