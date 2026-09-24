@@ -7,7 +7,11 @@ const ClassroomAI = {
         const imageBuffer = fs.readFileSync(imagePath);
         const base64Image = imageBuffer.toString('base64');
         
-        const rosterContext = studentsList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
+        const rosterContext = (Array.isArray(studentsList) ? studentsList : [])
+            .filter(Boolean)
+            .map(s => `${s.firstName || ''} ${s.lastName || ''}`.trim())
+            .filter(Boolean)
+            .join(', ');
 
         const system = `Tu es un expert en lecture de plans de classe. 
         Ta mission : Extraire les noms d'élèves et leurs positions (X, Y) depuis l'image.
@@ -26,7 +30,11 @@ const ClassroomAI = {
 
         try {
             const resultRaw = await AIEngine.ask(prompt, system);
-            return AIEngine.sanitizeJSON(resultRaw);
+            const parsed = AIEngine.sanitizeJSON(resultRaw);
+            const positions = Array.isArray(parsed)
+                ? parsed
+                : (Array.isArray(parsed?.positions) ? parsed.positions : (Array.isArray(parsed?.students) ? parsed.students : []));
+            return positions.filter((entry) => entry && typeof entry === 'object' && entry.name != null);
         } catch (e) {
             console.error("❌ Erreur Plan AI:", e.message);
             return [];

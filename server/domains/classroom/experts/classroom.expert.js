@@ -168,6 +168,9 @@ const ClassroomExpert = {
         
         // 2. Lancer l'analyse IA
         const aiResults = await ClassroomAI.analyzePlanImage(file.path, file.mimetype, dbStudents);
+        if (!Array.isArray(aiResults) || aiResults.length === 0) {
+            throw new Error("L’analyse n’a détecté aucun nom sur l’image. Essaie une photo plus nette, prise de face.");
+        }
         console.log(`📡 IA a renvoyé ${aiResults.length} positions.`);
 
         const updates = [];
@@ -175,7 +178,7 @@ const ClassroomExpert = {
 
         // 3. Mapping intelligent
         for (const entry of aiResults) {
-            if (!entry.name) continue;
+            if (!entry || typeof entry !== 'object' || !entry.name) continue;
 
             const cleanName = (s) => s.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             const aiName = cleanName(entry.name);
@@ -203,6 +206,7 @@ const ClassroomExpert = {
             await Promise.all(updates);
         }
 
+        if (!matchCount) throw new Error("Aucun nom détecté ne correspond aux élèves de cette classe.");
         console.log(`✅ Mise à jour terminée : ${matchCount} élèves placés.`);
         return updates;
     },

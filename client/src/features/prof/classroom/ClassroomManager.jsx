@@ -1,6 +1,5 @@
 // @signatures: ClassroomManager, addBehavior, changeGrid, getMyStats, handleDragOver, handleDragStart, handleDrop, handleFileSelect, handleOpenStudent, loadData, moveStudentTo, renderGrid, renderHeaders, renderList, toggleSeparator
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import PlanRotateButton from './PlanRotateButton';
 import './ClassroomManager.css';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 import ScanCaptureModal from './ScanCaptureModal';
@@ -39,6 +38,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
     const [placementStudent, setPlacementStudent] = useState(null);
+    const [placementMode, setPlacementMode] = useState(false);
     
     // Scan & Photos Classe / Élève
     const [classroomInfo, setClassroomInfo] = useState(null);
@@ -620,6 +620,10 @@ export default function ClassroomManager({ globalClassId, user }) {
         event?.stopPropagation?.();
         if (studentLongPressTriggeredRef.current === String(student?._id || '')) {
             studentLongPressTriggeredRef.current = '';
+            return;
+        }
+        if (placementMode) {
+            setPlacementStudent((current) => String(current?._id || '') === String(student?._id || '') ? null : student);
             return;
         }
         handleOpenStudent(student);
@@ -1511,7 +1515,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="cm-header-center">
                     <div className="view-switcher">
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
-                  {viewMode === 'PLAN' && <PlanRotateButton storageKey={`condaweb:plan-rotation:${classroomInfo?.name || 'default'}`} />}
                         <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A–Z</button>
                     </div>
                     {renderProjectorButton()}
@@ -1555,10 +1558,16 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR N</button>
                             <button
-                                className="plan-cols-toggle"
-                                onClick={() => changeGrid((gridSize.cols === 5 ? 6 : 5) - gridSize.cols, 0)}
-                                title={`Passer le plan à ${gridSize.cols === 5 ? 6 : 5} colonnes`}
-                            >{gridSize.cols} COL</button>
+                                className={`plan-cols-toggle plan-place-toggle ${placementMode ? 'active' : ''}`}
+                                aria-pressed={placementMode}
+                                onClick={() => {
+                                    setPlacementMode((active) => {
+                                        if (active) setPlacementStudent(null);
+                                        return !active;
+                                    });
+                                }}
+                                title={placementMode ? 'Désactiver le placement : un clic ouvre la fiche élève' : 'Activer le placement : sélectionner un élève puis cliquer sa case'}
+                            >PLACER</button>
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
