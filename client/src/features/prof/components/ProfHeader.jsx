@@ -1,11 +1,12 @@
-// @signatures: ProfHeader, checkDrive
 import React, { useState, useEffect } from 'react';
 import DatabaseViewer from './DatabaseViewer';
 import DriveViewer from './DriveViewer';
+import DidakbotKeyModal from './DidakbotKeyModal';
 
 export default function ProfHeader({ user, onLogout }) {
   const [showDB, setShowDB] = useState(false);
   const [showDrive, setShowDrive] = useState(false);
+  const [showDidakbotModal, setShowDidakbotModal] = useState(false);
   const billingUrl = 'https://console.cloud.google.com/billing/01D3D4-5D92C6-3C6900/payment?project=condamine-483523';
   const [drive, setDrive] = useState({ loading: true, ok: false, email: '' });
   const [aiUsage, setAiUsage] = useState({
@@ -149,6 +150,15 @@ export default function ProfHeader({ user, onLogout }) {
               title="Télécharger l’extension Chrome CondaWeb pour Google Slides"
               className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"
             >🧩 EXTENSION</a>
+            <button
+              type="button"
+              onClick={() => setShowDidakbotModal(true)}
+              title="Conserver et afficher la clé de mes chatbots Didak'bot 3"
+              className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform flex items-center gap-1.5"
+            >
+              <span>🤖</span>
+              <span>CLÉ CHATBOTS</span>
+            </button>
             <button onClick={handlePasswordReset} className="bg-amber-50 text-amber-700 px-4 py-2 rounded-2xl font-black text-[10px] uppercase border border-amber-200">
               RÉCUPÉRER MON MOT DE PASSE
             </button>
@@ -184,6 +194,13 @@ export default function ProfHeader({ user, onLogout }) {
                   title="Télécharger l’extension Chrome CondaWeb pour Google Slides"
                   className="bg-indigo-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase"
                 >🧩 EXT</a>
+                <button
+                  type="button"
+                  onClick={() => setShowDidakbotModal(true)}
+                  className="bg-cyan-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase"
+                >
+                  🤖 BOTS
+                </button>
                 <button onClick={handlePasswordReset} className="bg-amber-50 text-amber-700 px-2 py-1 rounded-lg font-black text-[8px] uppercase border border-amber-200">
                   MDP
                 </button>
@@ -204,6 +221,15 @@ export default function ProfHeader({ user, onLogout }) {
         {/* MODALES */}
         {showDB && user?.isDeveloper && <DatabaseViewer user={user} onClose={() => setShowDB(false)} />}
         {showDrive && user?.isDeveloper && <DriveViewer user={user} onClose={() => setShowDrive(false)} />}
+        {showDidakbotModal && (
+          <DidakbotKeyModal
+            user={user}
+            onClose={() => setShowDidakbotModal(false)}
+            onKeyUpdated={(newKey) => {
+              if (user) user.didakbotKey = newKey;
+            }}
+          />
+        )}
     </>
   );
 }

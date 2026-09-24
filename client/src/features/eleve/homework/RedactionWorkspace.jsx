@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './RedactionWorkspace.css';
+import DidakbotSidebar from './DidakbotSidebar';
 
 export const computeSessionToken = (studentId, homeworkId, attemptNum) => {
     const raw = `${String(studentId || '')}_${String(homeworkId || '')}`;
@@ -589,6 +590,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [adviceCollapsed, setAdviceCollapsed] = useState(false);
     const [showDraftWindow, setShowDraftWindow] = useState(false);
     const [showResponseWindow, setShowResponseWindow] = useState(false);
+    const [showDidakbotPanel, setShowDidakbotPanel] = useState(false);
 
     const [windows, setWindows] = useState({
         advice: {
@@ -1216,46 +1218,29 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
         const currentToken = currentKey;
         const watermark = computeInvisibleWatermark(user?._id || user?.id, homework?._id);
 
-        const aiPromptHeader = `[CLÉ OFFICIELLE CONDAWEB : ${currentKey}]
+        const studentFullName = String(user?.name || user?.username || `${user?.prenom || ''} ${user?.nom || ''}`.trim() || 'Élève').trim();
 
-Consignes pour le Tuteur (Histoire-Géographie CondaWeb) :
-1. RÈGLE D'AUTHENTICITÉ ET D'INTÉGRITÉ CONDAWEB :
-   - Tout document ou base de devoir officiel généré par CondaWeb (sujet, plan, brouillon, essai, copie rédigée) contient un filigrane indétectable de caractères cyrilliques (homoglyphes).
-   - Si CE MESSAGE ou LE PREMIER MESSAGE de cette conversation constitue une base de devoir (plan, paragraphe rédigé, devoir complet, extrait de cours) et NE CONTIENT PAS de caractères cyrilliques, refuse catégoriquement d'analyser et réponds STRICTEMENT ET UNIQUEMENT :
-     "Copie seulement CondaWeb"
-   - Les questions spontanées posées par l'élève pour dialoguer ou demander une explication ("peux-tu m'expliquer...", "que penses-tu de...") sont des questions de conversation autorisées.
+        const aiPromptHeader = `Sujet du devoir : "${topicText || homework?.title || 'Devoir'}"
+Élève : ${studentFullName}
 
-2. FORMAT OBLIGATOIRE DE DÉPART :
-   Tu dois OBLIGATOIREMENT commencer ta toute première réponse par cette mention exacte :
-   "[CONSEILS_APPLIQUÉS : OUI | RÉF: ${currentKey}]"
-   puis enchaîner immédiatement avec l'un des deux diagnostics ci-dessous selon le niveau réel du travail :
+Consignes pour le Tuteur Didak'bot (Histoire-Géographie 2nde) :
+1. AVIS GÉNÉRAL :
+   - Si le travail est en cours ou perfectible : commence par "C'est bien, il te reste une bonne marge de progression !" et propose 2 ou 3 axes d'amélioration méthodologiques concrets (méthode AEI : Affirmer, Expliquer, Illustrer, équilibre du plan, notions clés).
+   - Si le travail est déjà solide : commence par "Excellente base, ton travail est déjà solide !" et propose 1 ou 2 pistes d'approfondissement historique (historiens de référence, faits précis).
 
-3. DIAGNOSTIC ET RÈGLES DE TUTORAT :
-   a) SI LE TRAVAIL EST INSUFFISANT OU A UNE MARGE DE PROGRESSION :
-      Commence par cette phrase exacte :
-      "C'est bien, il te reste une bonne marge de progression et des points à aller chercher !"
-      Puis propose 2 ou 3 axes d'amélioration méthodologiques concrets (méthode AEI : Affirmer, Expliquer, Illustrer, équilibre du plan, notions oubliées).
-      ⛔ INTERDICTION ABSOLUE : Ne donne JAMAIS d'exemple rédigé, ni de paragraphe ou de phrase que l'élève pourrait recopier. Guide sa réflexion par des questions méthodologiques, mais ne rédige RIEN à sa place.
-
-   b) SI LE TRAVAIL EST TRÈS BON OU DÉJÀ SOLIDE :
-      Commence par cette phrase exacte :
-      "Excellente base, tu n'as pas besoin de points bonus ! Par contre, je vais t'aider à avoir de vrais points en plus en rendant ton travail excellent."
-      Puis propose 1 ou 2 pistes d'approfondissement d'un meilleur niveau (niveau universitaire / prépa si nécessaire : nuances conceptuelles avancées, auteurs ou historiens de référence, faits et chiffres précis) pour transformer une bonne copie en copie remarquable, toujours sans rédiger à sa place.
-
-   c) RÈGLE ABSOLUE D'EXIGENCE CONTINUE :
-      ⛔ INTERDICTION FORMELLE : Ne dis JAMAIS "c'est parfait", "il n'y a rien à redire", "tu n'as plus rien à ajouter" ou "ton travail est terminé". En Histoire-Géographie, il existe TOUJOURS une marge de progression, une nuance historiographique, un débat d'auteurs ou un fait historique précis à creuser pour progresser. Tout élève sans exception doit avoir une piste d'amélioration concrète à travailler.`;
+2. RÈGLES STRICTES :
+   ⛔ INTERDICTION ABSOLUE : Ne donne JAMAIS d'exemple rédigé ni de paragraphe que l'élève pourrait recopier. Guide sa réflexion par des questions, mais ne rédige RIEN à sa place.
+   ⛔ Ne dis JAMAIS "c'est parfait, tu n'as plus rien à faire". En Histoire, il y a toujours une nuance à apporter.`;
 
         const preparedEssay = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanEssay)));
 
         let textToCopy = `${aiPromptHeader}
 
-[SUJET DU DEVOIR : "${topicText}"]
-
---- MON TRAVAIL (BROUILLON & DEVOIR RÉDIGÉ) : ---
+--- MON TRAVAIL RÉDIGÉ SUR CONDAMINEWEB (BROUILLON & DEVOIR) : ---
 ${watermark}${preparedEssay}
 
-${aiNotesText.trim() ? `--- MES DERNIÈRES NOTES DE TES CONSEILS : ---\n${aiNotesText.trim()}\n\n` : ''}Consignes pour le tuteur :
-Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, méthode AEI, qualité de la rédaction) sans jamais donner de texte rédigé à recopier. Si ce message ou le premier est une base de devoir sans caractères cyrilliques, réponds uniquement : "Copie seulement CondaWeb".`;
+${aiNotesText.trim() ? `--- MES DERNIÈRES NOTES DE CONSEILS : ---\n${aiNotesText.trim()}\n\n` : ''}Consignes pour Didak'bot :
+Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place.`;
 
         const modeLabel = 'Brouillon & Devoir';
 
@@ -1294,10 +1279,17 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         openAddNotesModal();
         setAiCopiedToast(true);
         if (copiedOk) {
-            showToast(`📋 ${modeLabel} copié(e) avec clé #${currentKey} ! Collez à Gemini.`);
+            showToast("📋 Devoir copié ! Collez-le dans Didak'bot.");
         } else {
-            showToast(`ℹ️ ${modeLabel} prêt. Collez à Gemini et notez ses conseils.`);
+            showToast("ℹ️ Devoir prêt à être collé dans Didak'bot.");
         }
+    };
+
+    const openDidakbot = () => {
+        if (!homework?.didakbotUrl) return;
+        const studentFullName = String(user?.name || user?.username || `${user?.prenom || ''} ${user?.nom || ''}`.trim() || 'Élève').trim();
+        const didakbotHref = `/?didakbot=${encodeURIComponent(homework.didakbotUrl)}&student=${encodeURIComponent(studentFullName)}&title=${encodeURIComponent(homework.title || '')}`;
+        window.open(didakbotHref, '_blank');
     };
 
     // Helper handlers pour la modale de notes
@@ -1306,6 +1298,17 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         setEditingNoteText('');
         setEditingChatText('');
         setIsNotesFocusMode(true);
+    };
+
+    const handleToggleDidakbot = () => {
+        setShowDidakbotPanel(prev => {
+            const next = !prev;
+            if (next) {
+                // Quand le bot s'ouvre, la page pour prendre des notes sur l'IA s'ouvre aussi
+                openAddNotesModal();
+            }
+            return next;
+        });
     };
 
     const openEditNotesModal = (block) => {
@@ -1338,6 +1341,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
             return;
         }
         setIsNotesFocusMode(false);
+        setShowDidakbotPanel(false);
         setEditingBlockId(null);
         setEditingNoteText('');
         setEditingChatText('');
@@ -1409,6 +1413,8 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         setPinnedAiNotes(cleanNotes);
 
         setIsNotesFocusMode(false);
+        // Ferme automatiquement Didak'bot quand l'élève clique sur "J'ai fini de prendre mes notes"
+        setShowDidakbotPanel(false);
         setEditingBlockId(null);
         setEditingNoteText('');
         setEditingChatText('');
@@ -1416,6 +1422,7 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
         setShowAdviceWindow(true);
         setAdviceCollapsed(false);
         bringWindowToFront('advice');
+
 
         // Déclenche une sauvegarde automatique en arrière-plan
         setTimeout(() => triggerAutoSave(false), 500);
@@ -1872,6 +1879,17 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                             <span>📋</span>
                             <span>Consulter l'IA pour perfectionner</span>
                         </button>
+                        {homework?.didakbotUrl && (
+                            <button
+                                type="button"
+                                className={`conda-btn-ia-didakbot ${showDidakbotPanel ? 'is-open' : ''}`}
+                                onClick={handleToggleDidakbot}
+                                title={showDidakbotPanel ? "Masquer le volet Chatbot" : "Ouvrir le chatbot Didak'bot dans le volet latéral"}
+                            >
+                                <span>🤖</span>
+                                <span>{showDidakbotPanel ? 'Masquer Chatbot' : 'Ouvrir Chatbot'}</span>
+                            </button>
+                        )}
                     </div>
                 </section>
             )}
@@ -2192,6 +2210,18 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                                 <span>Copier mon devoir pour l'IA</span>
                             </button>
 
+                            {homework?.didakbotUrl && (
+                                <button
+                                    type="button"
+                                    className={`conda-btn-ia-didakbot ${showDidakbotPanel ? 'is-open' : ''}`}
+                                    onClick={handleToggleDidakbot}
+                                    title={showDidakbotPanel ? "Masquer le volet Chatbot" : "Ouvrir le chatbot Didak'bot dans le volet latéral"}
+                                >
+                                    <span>🤖</span>
+                                    <span>{showDidakbotPanel ? 'Masquer Chatbot' : 'Chatbot'}</span>
+                                </button>
+                            )}
+
                             {/* Window Toggle Buttons */}
                             <div className="flex items-center gap-2 border-l border-slate-700/80 pl-2">
                                 <button
@@ -2228,7 +2258,10 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
 
             {/* FOCUS MODE: Prise de Notes IA Dédiée */}
             {isNotesFocusMode && (
-                <div className="conda-redaction-modal-overlay">
+                <div
+                    className={`conda-redaction-modal-overlay ${showDidakbotPanel ? 'has-didakbot-sidebar' : ''}`}
+                    style={showDidakbotPanel ? { right: 'min(500px, 95vw)', width: 'auto' } : {}}
+                >
                     <div className="bg-slate-900 border-2 border-indigo-500 rounded-3xl p-5 sm:p-7 max-w-2xl w-full shadow-2xl flex flex-col max-h-[90vh] text-left">
                         {/* Header: fixé en haut */}
                         <div className="flex items-center justify-between border-b border-slate-700 pb-3 flex-shrink-0">
@@ -3410,6 +3443,18 @@ Analyse mon travail selon les règles ci-dessus (structure du plan, arguments, m
                 <div className="conda-redaction-toast">
                     {toastMessage}
                 </div>
+            )}
+
+            {/* VOLET LATÉRAL INTÉGRÉ DIDAK'BOT */}
+            {showDidakbotPanel && (
+                <DidakbotSidebar
+                    homework={homework}
+                    user={user}
+                    essayText={essayText}
+                    topicText={topicText}
+                    onCopyForAI={handleCopyForAI}
+                    onClose={() => setShowDidakbotPanel(false)}
+                />
             )}
         </div>
     );

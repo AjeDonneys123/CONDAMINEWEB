@@ -2102,6 +2102,12 @@
     transition: all 0.2s ease;
 }
 
+.conda-devoir-folder-card.has-dropdown-open {
+    overflow: visible !important;
+    z-index: 50 !important;
+    position: relative !important;
+}
+
 .conda-devoir-folder-card:hover {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
@@ -2116,6 +2122,7 @@
     cursor: pointer;
     gap: 12px;
     flex-wrap: wrap;
+    overflow: visible;
 }
 
 .devoir-folder-left {
@@ -2141,6 +2148,268 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    position: relative;
+}
+
+.devoir-title-dropdown-container {
+    position: relative;
+    display: inline-flex;
+}
+
+.devoir-folder-title-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-size: 1.05rem;
+    font-weight: 950;
+    color: #0f172a;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+}
+
+.devoir-folder-title-btn:hover {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+}
+
+.devoir-folder-title-btn.active {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.devoir-title-chevron {
+    font-size: 0.65rem;
+    color: #64748b;
+    transition: transform 0.2s ease;
+}
+
+.devoir-category-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 320px;
+    max-width: 90vw;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 16px;
+    box-shadow: 0 14px 34px -4px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.06);
+    z-index: 999;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: fadeInDown 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dropdown-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dropdown-section-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #475569;
+}
+
+.dropdown-rename-form {
+    display: flex;
+    gap: 6px;
+}
+
+.dropdown-input {
+    flex: 1;
+    min-width: 0;
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 7px 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1e293b;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.dropdown-input:focus {
+    background: #ffffff;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.dropdown-save-btn {
+    background: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 7px 12px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.dropdown-save-btn:hover {
+    background: #059669;
+}
+
+.dropdown-caption {
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.2;
+}
+
+.dropdown-categories-list {
+    max-height: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid #f1f5f9;
+    border-radius: 10px;
+    padding: 4px;
+    background: #f8fafc;
+}
+
+.dropdown-cat-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+}
+
+.dropdown-cat-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 0.82rem;
+    text-align: left;
+}
+
+.dropdown-cat-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.dropdown-cat-delete-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #fca5a5;
+    transform: scale(1.05);
+}
+
+.dropdown-cat-btn:hover {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+}
+
+.dropdown-cat-btn.current {
+    background: #ecfdf5;
+    border-color: #10b981;
+    font-weight: 800;
+    color: #065f46;
+}
+
+.dropdown-cat-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.dropdown-cat-icon {
+    font-size: 0.8rem;
+    color: #10b981;
+    font-weight: 900;
+}
+
+.dropdown-cat-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.dropdown-cat-count {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 999px;
+    margin-left: 6px;
+    flex-shrink: 0;
+}
+
+.dropdown-footer {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 8px;
+}
+
+.dropdown-new-assignment-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f0fdf4;
+    border: 1.5px dashed #22c55e;
+    border-radius: 10px;
+    color: #15803d;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.dropdown-new-assignment-btn:hover {
+    background: #dcfce7;
+    border-color: #16a34a;
 }
 
 .devoir-folder-title {

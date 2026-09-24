@@ -11,7 +11,8 @@ const DEFAULT_HW_DATA = {
     assessmentKind: '',
     mode: 'docs',
     promptTopic: '',
-    minTimeMinutes: 25
+    minTimeMinutes: 25,
+    didakbotUrl: ''
 };
 
 const DNB_SECTION_OPTIONS = [
@@ -53,6 +54,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         base.mode = base.mode || 'docs';
         base.promptTopic = base.promptTopic || '';
         base.minTimeMinutes = Number(base.minTimeMinutes || 25);
+        base.didakbotUrl = base.didakbotUrl || '';
         if (!base.date) {
             const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
             base.date = tomorrow.toISOString().split('T')[0];
@@ -79,6 +81,32 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     const fileInputRef = useRef(null);
     const uploadTypeRef = useRef(null);
     const [uploadType, setUploadType] = useState(null);
+
+    const [creatorKey, setCreatorKey] = useState(() => {
+        return user?.didakbotKey || (typeof window !== 'undefined' ? window.localStorage.getItem('conda_didakbot_key') : '') || '';
+    });
+    const [keySaved, setKeySaved] = useState(false);
+
+    const handleSaveCreatorKey = async (val) => {
+        const clean = String(val || '').trim().toUpperCase();
+        setCreatorKey(clean);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('conda_didakbot_key', clean);
+        }
+        const userId = user?.id || user?._id;
+        if (userId) {
+            try {
+                await fetch(`/api/admin/teachers/${userId}/didakbot-key`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: clean })
+                });
+                if (user) user.didakbotKey = clean;
+                setKeySaved(true);
+                setTimeout(() => setKeySaved(false), 2500);
+            } catch (_) {}
+        }
+    };
 
     // 4. CHARGEMENT DE SECOURS (Si les props sont vides)
     useEffect(() => {
@@ -357,6 +385,136 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                             >
                                 ✍️ Rédaction & Sujet Libre
                             </button>
+                        </div>
+                    </div>
+
+                    {/* CONFIGURATION DIDAK'BOT (Tuteur IA sans coût API) */}
+                    <div className="mb-4 p-4 rounded-3xl border border-cyan-200 bg-gradient-to-r from-cyan-50/70 via-sky-50/50 to-indigo-50/60 shadow-sm space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-2xl">🤖</span>
+                                <div>
+                                    <div className="text-xs font-black uppercase text-cyan-950 tracking-wider flex items-center gap-2">
+                                        <span>Assistant Tuteur Didak'bot 3</span>
+                                        <span className="text-[10px] bg-cyan-100 text-cyan-800 font-bold px-2 py-0.5 rounded-full border border-cyan-300">0 € Coût API · NovaPéda</span>
+                                    </div>
+                                    <div className="text-[11px] font-medium text-slate-500">
+                                        Proposez à vos élèves un chatbot tuteur calibré avec vos consignes pédagogiques.
+                                    </div>
+                                </div>
+                            </div>
+                            <a
+                                href="https://novapeda.eu/didakbot3.php"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs shadow-sm transition"
+                            >
+                                <span>🔗 Créer / Calibrer sur Didak'bot 3</span>
+                                <span className="text-[10px]">↗</span>
+                            </a>
+                        </div>
+
+                        {/* CLÉ CRÉATEUR ENSEIGNANT (MODIFIABLE & COLLABLE) */}
+                        <div className="flex items-center justify-between flex-wrap gap-2.5 p-3 rounded-2xl bg-cyan-100/80 border border-cyan-300">
+                            <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+                                <span className="text-base">🔑</span>
+                                <label className="text-xs font-black text-cyan-950 uppercase tracking-wider whitespace-nowrap">
+                                    Votre clé créateur :
+                                </label>
+                                <input
+                                    type="text"
+                                    className="flex-1 max-w-xs px-3 py-1.5 rounded-xl border border-cyan-300 bg-white font-mono font-black text-cyan-900 text-xs tracking-wider uppercase focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                                    placeholder="Collez votre clé (ex: K2L6SK8B)"
+                                    value={creatorKey}
+                                    onChange={(e) => {
+                                        const val = e.target.value.toUpperCase();
+                                        setCreatorKey(val);
+                                        handleSaveCreatorKey(val);
+                                    }}
+                                    onPaste={(e) => {
+                                        const pasted = e.clipboardData.getData('text');
+                                        if (pasted) {
+                                            e.preventDefault();
+                                            const clean = pasted.trim().toUpperCase();
+                                            setCreatorKey(clean);
+                                            handleSaveCreatorKey(clean);
+                                        }
+                                    }}
+                                />
+                                {keySaved && <span className="text-[11px] font-bold text-emerald-700 animate-fadeIn">✓ Mémorisée !</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        try {
+                                            const text = await navigator.clipboard.readText();
+                                            if (text) {
+                                                const clean = text.trim().toUpperCase();
+                                                setCreatorKey(clean);
+                                                handleSaveCreatorKey(clean);
+                                            }
+                                        } catch (_) {
+                                            const p = window.prompt("Collez votre clé Didak'bot ici :", creatorKey);
+                                            if (p !== null) {
+                                                const clean = p.trim().toUpperCase();
+                                                setCreatorKey(clean);
+                                                handleSaveCreatorKey(clean);
+                                            }
+                                        }
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-cyan-50 text-cyan-900 text-xs font-black border border-cyan-300 shadow-sm transition flex items-center gap-1"
+                                    title="Coller depuis le presse-papier"
+                                >
+                                    <span>📋</span>
+                                    <span>Coller</span>
+                                </button>
+                                {creatorKey && (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            try {
+                                                await navigator.clipboard.writeText(creatorKey);
+                                                alert(`Clé ${creatorKey} copiée !`);
+                                            } catch (_) {}
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-black shadow-sm transition"
+                                        title="Copier la clé dans le presse-papier"
+                                    >
+                                        Copier
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="block text-[11px] font-black uppercase text-cyan-950 tracking-wider">
+                                Lien de partage ou code d'intégration iframe du Didak'bot (Optionnel) :
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full px-3.5 py-2 rounded-xl border border-cyan-200 bg-white font-medium text-slate-800 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 transition outline-none text-xs"
+                                placeholder="Ex : https://novapeda.eu/... ou collez le code <iframe src='...'></iframe>"
+                                value={formData.didakbotUrl || ''}
+                                onChange={(e) => {
+                                    let val = e.target.value.trim();
+                                    const match = val.match(/src=["'](.*?)["']/);
+                                    if (match && match[1]) val = match[1];
+                                    handleInput('didakbotUrl', val);
+                                }}
+                            />
+                            <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                <span>💡 Laissez vide si ce devoir ne nécessite pas de chatbot. Si renseigné, un bouton <strong>🤖 Chatbot</strong> s'affichera côté élève.</span>
+                                {formData.didakbotUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleInput('didakbotUrl', '')}
+                                        className="text-red-500 hover:underline font-bold text-[10px]"
+                                    >
+                                        Retirer le chatbot ✕
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 

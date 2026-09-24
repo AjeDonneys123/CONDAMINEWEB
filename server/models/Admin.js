@@ -14,6 +14,7 @@ const AdminSchema = new mongoose.Schema({
     role: { type: String, enum: ['admin', 'developer'], default: 'admin' },
     subjectSections: { type: [SectionSchema], default: [] },
     isDeveloper: { type: Boolean, default: false },
+    didakbotKey: { type: String, default: '' },
     isTestAccount: { type: Boolean, default: false }
 }, { collection: 'admins' });
 

@@ -1,8 +1,8 @@
-// @signatures: HomeworkWorkspace, getModalConfig, handleInputCheck, handleModalAction, handleMouseDown, handleMouseMove, handleMouseUp, handleZoom, resolveSource, submitToIA
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Homework.css';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 import { injectHomoglyphs } from './RedactionWorkspace';
+import DidakbotSidebar from './DidakbotSidebar';
 
 // CORRECTION V380 : Résolution d'URL Intelligente
 const resolveSource = (url) => {
@@ -23,6 +23,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [pageIdx, setPageIdx] = useState(0);
   const [activeDocIdx, setActiveDocIdx] = useState(0);
   const [activeInstrIdx, setActiveInstrIdx] = useState(0);
+  const [showDidakbotPanel, setShowDidakbotPanel] = useState(false);
   const [splitTopPercent, setSplitTopPercent] = useState(65);
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [bottomLeftPercent, setBottomLeftPercent] = useState(40);
@@ -857,6 +858,12 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const openGeminiHelper = () => {
     document.dispatchEvent(new CustomEvent('CHATGMINI_OPEN_GEMINI'));
   };
+  const openDidakbot = () => {
+    if (!homework?.didakbotUrl) return;
+    const studentFullName = String(user?.name || user?.username || `${user?.prenom || ''} ${user?.nom || ''}`.trim() || 'Élève').trim();
+    const didakbotHref = `/?didakbot=${encodeURIComponent(homework.didakbotUrl)}&student=${encodeURIComponent(studentFullName)}&title=${encodeURIComponent(homework.title || '')}`;
+    window.open(didakbotHref, '_blank');
+  };
   const handleHomeworkAiReplyChange = (e) => {
     const nextValue = e.target.value;
     setHomeworkAiReplyInput(nextValue);
@@ -1390,6 +1397,16 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       <div className="v8-progress">PAGE {pageIdx + 1} / {homework.levels.length}</div>
                       <button className="btn-draft" onClick={() => openWindow('draft')}>BROUILLON</button>
                       <button className="btn-response-window" onClick={() => openWindow('response')}>RÉPONSE FENÊTRE</button>
+                      {homework?.didakbotUrl && (
+                        <button
+                          type="button"
+                          className={`btn-didakbot ${showDidakbotPanel ? 'active' : ''}`}
+                          onClick={() => setShowDidakbotPanel((prev) => !prev)}
+                          title={showDidakbotPanel ? "Masquer le volet Chatbot" : "Ouvrir le chatbot Didak'bot dans le volet latéral"}
+                        >
+                          🤖 {showDidakbotPanel ? 'MASQUER CHATBOT' : 'CHATBOT'}
+                        </button>
+                      )}
                       <button className="btn-validate-answer" onClick={startVerificationFlow} disabled={submitting || !(isFillPage ? fillBoxesToAnswer() : answer).trim()}>
                           {submitting ? 'ENVOI...' : 'VALIDER'}
                       </button>
@@ -1657,6 +1674,15 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
         }}>
           {toastMessage}
         </div>
+      )}
+
+      {/* VOLET LATÉRAL INTÉGRÉ DIDAK'BOT */}
+      {showDidakbotPanel && (
+        <DidakbotSidebar
+          homework={homework}
+          user={user}
+          onClose={() => setShowDidakbotPanel(false)}
+        />
       )}
     </div>
   );

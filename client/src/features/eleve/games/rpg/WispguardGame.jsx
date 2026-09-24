@@ -23,6 +23,12 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   const [question, setQuestion] = useState(null);
   const [answer, setAnswer] = useState('');
   const [questionState, setQuestionState] = useState('answer');
+  const [combatQuestion, setCombatQuestion] = useState('');
+  const [combatPhase, setCombatPhase] = useState('idle');
+  const [possessionCharge, setPossessionCharge] = useState(0);
+  const [summonStage, setSummonStage] = useState(0);
+  const [summonHearts, setSummonHearts] = useState(0);
+  const [combatNotice, setCombatNotice] = useState('');
   const [sheetCalibration, setSheetCalibration] = useState(null);
   const [draftSelection, setDraftSelection] = useState(null);
 
@@ -30,6 +36,22 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     const handleGameMessage = (event) => {
       if (event.source !== frameRef.current?.contentWindow || event.data?.source !== 'condamine-game') return;
       if (event.data.type === 'request-bonus-question') openBonusQuestion();
+      if (event.data.type === 'combat-space') handleCombatSpace();
+      if (event.data.type === 'combat-possession-hit') {
+        setCombatPhase('possession-question');
+        openCombatQuestion('possession');
+      }
+      if (event.data.type === 'combat-summon-ready') {
+        setCombatPhase('possessed');
+        setCombatNotice('Ennemi possédé ! ESPACE pour l’invoquer.');
+        window.setTimeout(() => setCombatNotice(''), 2800);
+      }
+      if (event.data.type === 'combat-summon-hurt') setSummonHearts((hearts) => Math.max(0, hearts - 1));
+      if (event.data.type === 'combat-summon-died') {
+        setSummonHearts(0);
+        setSummonStage(0);
+        setCombatPhase('seeking');
+      }
       if (event.data.type === 'sprite-ready') {
         spriteImportPendingRef.current = false;
         setSpriteNotice('Les poses sont prêtes : clique dans le donjon pour placer le mage, puis utilise « Devenir le mage ».');
@@ -54,19 +76,19 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     };
   });
 
-  // L'iframe peut perdre le focus quand l'élève utilise les commandes situées
-  // autour du jeu. La barre d'espace doit néanmoins toujours ouvrir l'aide.
+  // L'iframe peut perdre le focus avec les commandes externes : espace reste
+  // associé au combat, et non à l'ancien QCM bonus.
   useEffect(() => {
     const handleSpace = (event) => {
       if (event.code !== 'Space' || event.repeat || question) return;
       const tag = String(event.target?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
       event.preventDefault();
-      openBonusQuestion();
+      handleCombatSpace();
     };
     window.addEventListener('keydown', handleSpace);
     return () => window.removeEventListener('keydown', handleSpace);
-  }, [question]);
+  }, [question, combatPhase, possessionCharge, summonHearts, summonStage]);
 
   useEffect(() => () => {
     const held = touchRepeatRef.current;
@@ -144,7 +166,47 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
     sendToGame('quiz-open');
   };
 
+  const openCombatQuestion = (kind) => {
+    const questions = (learningContext?.lessons || []).flatMap((lesson) => lesson?.quiz || []);
+    const nextQuestion = questions.length
+      ? questions[Math.floor(Math.random() * questions.length)]
+      : { unavailable: true, question: 'Ce chapitre ne contient pas encore de QCM.' };
+    setCombatQuestion(kind);
+    setQuestion(nextQuestion);
+    setAnswer('');
+    setQuestionState('answer');
+    sendToGame('quiz-open');
+  };
+
+  const handleCombatSpace = () => {
+    if (question) return;
+    if (combatPhase === 'charging') {
+      setPossessionCharge((value) => {
+        const next = Math.min(12, value + 1);
+        sendToGame('combat-charge', { charge: next / 12 });
+        if (next === 12) {
+          setCombatPhase('possessed');
+          sendToGame('combat-possession-complete');
+        }
+        return next;
+      });
+      return;
+    }
+    if (summonHearts > 0) {
+      pressGameKey('KeyZ', 'z');
+      sendToGame('combat-summon-attack');
+      return;
+    }
+    if (combatPhase === 'possessed') {
+      setSummonStage(0);
+      openCombatQuestion('summon');
+      return;
+    }
+    sendToGame('combat-cast-possession');
+  };
+
   const closeBonusQuestion = () => {
+    setCombatQuestion('');
     setQuestion(null);
     setAnswer('');
     sendToGame('quiz-close');
@@ -154,8 +216,29 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
   const checkAnswer = (event) => {
     event.preventDefault();
     if (Number(answer) === Number(question?.correctIndex)) {
+      if (combatQuestion === 'possession') {
+        setQuestion(null);
+        setCombatQuestion('');
+        setPossessionCharge(0);
+        setCombatPhase('charging');
+        sendToGame('quiz-close');
+        return;
+      }
+      if (combatQuestion === 'summon') {
+        const nextStage = summonStage + 1;
+        setSummonStage(nextStage);
+        setSummonHearts((hearts) => nextStage === 1 ? 1 : hearts + 1);
+        sendToGame('combat-summon-stage', { stage: nextStage, wrong: false });
+        setQuestionState('choose');
+        return;
+      }
       setQuestionState('choose');
       return;
+    }
+    if (combatQuestion === 'summon') {
+      setSummonHearts(1);
+      setSummonStage(0);
+      sendToGame('combat-summon-stage', { stage: 0, wrong: true });
     }
     setQuestionState('wrong');
   };
@@ -344,10 +427,19 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
         <iframe
           ref={frameRef}
           title="La légende du Gardien"
-          src="/wispguard/?v=embedded-clean-4"
+          src="/wispguard/?v=possession-combat-2"
           allow="autoplay; fullscreen"
           tabIndex="0"
         />
+        {summonHearts > 0 && <div className="wispguard-summon-hearts" aria-label={`Cœurs de la créature : ${summonHearts}`}>Allié <span>{'♥'.repeat(summonHearts)}</span></div>}
+        {combatNotice && <div className="wispguard-combat-notice" role="status">{combatNotice}</div>}
+        {combatPhase === 'charging' && (
+          <div className="wispguard-possession-charge" aria-live="polite">
+            <strong>Possession — appuie vite sur ESPACE !</strong>
+            <div><span style={{ width: `${(possessionCharge / 12) * 100}%` }} /></div>
+            <small>{possessionCharge} / 12</small>
+          </div>
+        )}
         {!started && (
           <button type="button" className="wispguard-start" onClick={focusGame}>
             <span>⚔️</span>
@@ -367,7 +459,7 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
           <button type="button" data-game-code="KeyZ" className="attack" onPointerDown={(event) => startTouchKey(event, 'KeyZ', 'z')} onPointerUp={stopTouchKey}>Z<small>ÉPÉE</small></button>
           <button type="button" data-game-code="KeyX" className="lift" onPointerDown={(event) => startTouchKey(event, 'KeyX', 'x')} onPointerUp={stopTouchKey}>X<small>PRENDRE</small></button>
           <button type="button" data-game-code="Enter" className="interact" onPointerDown={(event) => startTouchKey(event, 'Enter', 'Enter')} onPointerUp={stopTouchKey}>OK<small>VALIDER</small></button>
-          <button type="button" data-game-code="Space" className="help" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')} onPointerUp={stopTouchKey}>★<small>QUESTION</small></button>
+          <button type="button" data-game-code="Space" className="help" onPointerDown={(event) => startTouchKey(event, 'Space', ' ')} onPointerUp={stopTouchKey}>★<small>COMBAT</small></button>
         </div>
       </div>
 
@@ -505,8 +597,8 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
             {questionState === 'wrong' && (
               <div className="wispguard-quiz-result">
                 <div className="wispguard-quiz-icon">🕸️</div>
-                <h2>Pas de bonus cette fois</h2>
-                <p>La bonne réponse était « {question.choices?.[question.correctIndex]} ». Tu pourras redemander de l’aide.</p>
+                <h2>{combatQuestion === 'summon' ? 'Invocation fragile !' : 'Pas de bonus cette fois'}</h2>
+                <p>{combatQuestion === 'summon' ? 'La créature apparaît à moitié taille et ne possède qu’un cœur.' : <>La bonne réponse était « {question.choices?.[question.correctIndex]} ». Tu pourras redemander de l’aide.</>}</p>
                 <button type="button" onClick={closeBonusQuestion}>Retour au donjon</button>
               </div>
             )}
@@ -514,13 +606,16 @@ export default function WispguardGame({ onExit, learningContext = { lessons: [] 
               <div className="wispguard-quiz-result">
                 <div className="wispguard-quiz-icon">🎉</div>
                 <h2>Bonne réponse !</h2>
-                <p>Choisis le pouvoir dont tu as besoin maintenant.</p>
+                {combatQuestion === 'summon' ? (
+                  <><p>{summonStage === 1 ? 'La créature apparaît sous sa forme normale avec un cœur.' : 'La créature grandit de 20 % et gagne un cœur.'} Réponds à {4 - summonStage} autre(s) question(s) pour atteindre sa forme maximale.</p>
+                  <button type="button" onClick={() => summonStage < 4 ? openCombatQuestion('summon') : closeBonusQuestion()}>{summonStage < 4 ? 'Question suivante' : 'Invoquer l’allié'}</button></>
+                ) : <><p>Choisis le pouvoir dont tu as besoin maintenant.</p>
                 <div className="wispguard-bonus-choices">
                   <button type="button" onClick={() => grantBonus('hearts')}>❤️ Soins complets<small>Récupère tous tes cœurs</small></button>
                   <button type="button" onClick={() => grantBonus('shield')}>🛡️ Bouclier<small>Invincible pendant 15 secondes</small></button>
                   <button type="button" className="wispguard-mage-form" onClick={() => grantBonus('mage-form')}>🧙 Forme de mage<small>Utilise la dernière fiche animée importée</small></button>
                   <button type="button" className="wispguard-super-weapon" onClick={() => grantBonus('super-weapon')}>💥 Mitrailleuse lance-grenades<small>ESPACE : rafales explosives pendant 20 secondes</small></button>
-                </div>
+                </div></>}
               </div>
             )}
           </section>

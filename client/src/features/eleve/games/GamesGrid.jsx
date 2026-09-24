@@ -4,6 +4,7 @@ import GamePlayer from './GamePlayer';
 import MultiplicationRpg from './rpg/MultiplicationRpg';
 import WispguardGame from './rpg/WispguardGame';
 import MonsterTamerGame from './rpg/MonsterTamerGame';
+import CondaGame from './condagame/CondaGame';
 import { buildGameLearningContext } from './rpg/gameLearningContext';
 
 /**
@@ -19,6 +20,7 @@ export default function GamesGrid({ user }) {
   const [playingMultiplicationRpg, setPlayingMultiplicationRpg] = useState(false);
   const [playingWispguard, setPlayingWispguard] = useState(false);
   const [playingMonsterTamer, setPlayingMonsterTamer] = useState(false);
+  const [playingCondaGame, setPlayingCondaGame] = useState(false);
   const [loading, setLoading] = useState(false);
   const [learningModules, setLearningModules] = useState([]);
   const [pendingLaunch, setPendingLaunch] = useState(null);
@@ -100,6 +102,7 @@ export default function GamesGrid({ user }) {
       const launch = pendingLaunch;
       setPendingLaunch(null);
       if (launch?.type === 'monster') setPlayingMonsterTamer(true);
+      if (launch?.type === 'condagame') setPlayingCondaGame(true);
       if (launch?.type === 'wispguard') setPlayingWispguard(true);
       if (launch?.type === 'multiplication') setPlayingMultiplicationRpg(true);
       if (launch?.type === 'game') setPlayingGame({ ...launch.payload, learningContext: context, selectedChapter });
@@ -156,10 +159,18 @@ export default function GamesGrid({ user }) {
       );
   }
 
+  if (playingCondaGame) {
+      return <CondaGame onExit={() => setPlayingCondaGame(false)} learningContext={selectedLearningContext || learningContext} />;
+  }
+
+
   return (
     <div className="flex flex-col gap-4 animate-in">
         <h2 className="text-base md:text-xl font-black text-slate-800 uppercase px-1 md:px-4">Jeux pédagogiques</h2>
         <div className="mx-1 grid gap-4 md:mx-4 md:grid-cols-2">
+            {isBuiltInGameEnabled('condagame') && <button type="button" onClick={() => requestLaunch('condagame')} className="rounded-[26px] border-4 border-lime-500 bg-gradient-to-br from-sky-500 via-emerald-600 to-lime-700 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
+                <div className="text-5xl">🍄</div><div className="mt-3 text-3xl font-black uppercase">CondaGame</div><div className="mt-2 font-bold text-lime-50">Plateforme générée et tableaux question tous les trois niveaux.</div>
+            </button>}
             {isBuiltInGameEnabled('zombie') && <button type="button" onClick={() => requestLaunch('learning-game', 'zombie')} className="rounded-[26px] border-4 border-lime-500 bg-gradient-to-br from-slate-950 via-emerald-950 to-lime-800 p-6 text-left text-white shadow-xl transition hover:scale-[1.01]">
                 <div className="text-5xl">🧟</div><div className="mt-3 text-3xl font-black uppercase">Zombie</div><div className="mt-2 font-bold text-lime-100">Les parties de la fiche deviennent les niveaux du jeu.</div>
             </button>}

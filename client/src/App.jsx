@@ -10,6 +10,7 @@ const ProfPage = lazy(() => import('./features/prof/ProfPage'));
 const ElevePage = lazy(() => import('./features/eleve/ElevePage'));
 const ControlRecoveryMobileCapture = lazy(() => import('./features/eleve/controlRecovery/ControlRecoveryMobileCapture'));
 const PublicAssessmentControl = lazy(() => import('./features/eleve/controls/PublicAssessmentControl'));
+const DidakbotViewer = lazy(() => import('./features/eleve/homework/DidakbotViewer'));
 const AppLoading = () => <div className="min-h-screen grid place-items-center bg-slate-50 font-black text-slate-400">CHARGEMENT…</div>;
 
 const VISITOR_LEVELS = ['5e', '3e', '2de'];
@@ -59,6 +60,19 @@ export default function App() {
   const recoveryMobileToken = String(urlParams.get('recoveryMobile') || '').trim();
   if (recoveryMobileToken) {
     return <Suspense fallback={<AppLoading />}><ControlRecoveryMobileCapture token={recoveryMobileToken} /></Suspense>;
+  }
+
+  const didakbotUrl = String(urlParams.get('didakbot') || '').trim();
+  if (didakbotUrl) {
+    return (
+      <Suspense fallback={<AppLoading />}>
+        <DidakbotViewer
+          botUrl={didakbotUrl}
+          studentName={String(urlParams.get('student') || '').trim()}
+          hwTitle={String(urlParams.get('title') || '').trim()}
+        />
+      </Suspense>
+    );
   }
 
   const publicControlId = String(urlParams.get('control') || '').trim();

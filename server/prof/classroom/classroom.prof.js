@@ -525,22 +525,43 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
         const classId = String(req.body.classId || '').trim();
         const sessionId = String(req.body.sessionId || '').trim() || `session_${Date.now()}`;
         const pageIndex = Math.max(1, Number(req.body.pageIndex) || 1);
-
-        // Déterminer le numéro du devoir (par session ou incrémentiel)
+        let assignmentInstanceId = String(req.body.assignmentInstanceId || '').trim();
         let homeworkNumber = Number(req.body.homeworkNumber) || 0;
-        if (!homeworkNumber) {
-            const existingInSession = await ClassroomScan.findOne({ sessionId, homeworkNumber: { $gt: 0 } }).lean();
-            if (existingInSession?.homeworkNumber) {
-                homeworkNumber = existingInSession.homeworkNumber;
-            } else if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
-                const highest = await ClassroomScan.findOne({ studentId }).sort({ homeworkNumber: -1 }).lean();
-                homeworkNumber = (highest?.homeworkNumber || 0) + 1;
-            } else if (classId && mongoose.Types.ObjectId.isValid(classId)) {
-                const highest = await ClassroomScan.findOne({ classId }).sort({ homeworkNumber: -1 }).lean();
-                homeworkNumber = (highest?.homeworkNumber || 0) + 1;
-            } else {
-                homeworkNumber = 1;
+        let assignmentName = '';
+
+        const existingInSession = await ClassroomScan.findOne({ sessionId }).lean();
+        if (existingInSession) {
+            assignmentInstanceId = existingInSession.assignmentInstanceId || '';
+            homeworkNumber = existingInSession.homeworkNumber || 0;
+            assignmentName = existingInSession.assignmentName || '';
+        } else if (assignmentInstanceId) {
+            const existingWithInstance = await ClassroomScan.findOne({ classId, assignmentInstanceId }).lean();
+            if (existingWithInstance) {
+                homeworkNumber = existingWithInstance.homeworkNumber || 1;
+                assignmentName = existingWithInstance.assignmentName || '';
             }
+        } else if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+            const recentScan = await ClassroomScan.findOne({
+                classId,
+                createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) }
+            }).sort({ createdAt: -1 }).lean();
+            if (recentScan) {
+                assignmentInstanceId = String(recentScan.assignmentInstanceId || '').trim();
+                if (!assignmentInstanceId) assignmentInstanceId = `assignment_legacy_${recentScan.homeworkNumber || 1}`;
+                homeworkNumber = recentScan.homeworkNumber || 1;
+                assignmentName = recentScan.assignmentName || '';
+            }
+        }
+
+        if (!assignmentInstanceId) assignmentInstanceId = `assignment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        // Déterminer le numéro du devoir (par classe en priorité)
+        if (!homeworkNumber) {
+            const scope = classId && mongoose.Types.ObjectId.isValid(classId)
+                ? { classId }
+                : (studentId && mongoose.Types.ObjectId.isValid(studentId) ? { studentId } : {});
+            const highest = await ClassroomScan.findOne(scope).sort({ homeworkNumber: -1 }).lean();
+            homeworkNumber = (highest?.homeworkNumber || 0) + 1;
         }
 
         const scan = await ClassroomScan.create({
@@ -552,6 +573,8 @@ router.post('/scans/upload', scanUpload.single('file'), async (req, res) => {
             imageUrl,
             driveFileId: driveFile.id,
             title: String(req.body.title || `Page ${pageIndex}`).trim(),
+            assignmentInstanceId,
+            assignmentName,
             sessionId,
             homeworkNumber,
             pageIndex,
@@ -579,7 +602,14 @@ router.get('/scans', async (req, res) => {
         }
 
         const scans = await ClassroomScan.find(query).sort({ createdAt: -1 }).limit(limit).lean();
-        res.json({ ok: true, scans });
+
+        let knownCategories = [];
+        if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+            const classroom = await Classroom.findById(classId).select('scanAssignmentCategories').lean();
+            knownCategories = Array.isArray(classroom?.scanAssignmentCategories) ? classroom.scanAssignmentCategories : [];
+        }
+
+        res.json({ ok: true, scans, knownCategories });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -665,7 +695,8 @@ router.post('/scans/session/:sessionId/meta', scanUpload.single('promptImage'), 
         const sessionId = String(req.params.sessionId || '').trim();
         if (!sessionId) return res.status(400).json({ error: 'Session manquante' });
         const updates = {};
-        if (req.body.assignmentName !== undefined) updates.assignmentName = String(req.body.assignmentName || '').trim();
+        const assignmentName = req.body.assignmentName !== undefined ? String(req.body.assignmentName || '').trim() : null;
+        if (assignmentName !== null) updates.assignmentName = assignmentName;
         if (req.body.correctionPrompt !== undefined) updates.correctionPrompt = String(req.body.correctionPrompt || '').trim();
         const studentId = String(req.body.studentId || '').trim();
         if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
@@ -681,11 +712,169 @@ router.post('/scans/session/:sessionId/meta', scanUpload.single('promptImage'), 
             updates.correctionPromptImageUrl = `/api/structure/proxy/${driveFile.id}`;
             updates.correctionPromptImageDriveId = driveFile.id;
         }
-        await ClassroomScan.updateMany({ sessionId }, { $set: updates });
-        const scans = await ClassroomScan.find({ sessionId }).sort({ pageIndex: 1 }).lean();
-        return res.json({ ok: true, scans });
+        const sessionScan = await ClassroomScan.findOne({ sessionId }).lean();
+        let targetAssignmentInstanceId = String(req.body.assignmentInstanceId || '').trim();
+
+        if (req.body.createAssignmentInstance === 'true') {
+            targetAssignmentInstanceId = `assignment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            let nextHwNumber = 1;
+            if (sessionScan?.classId) {
+                const highest = await ClassroomScan.findOne({ classId: sessionScan.classId }).sort({ homeworkNumber: -1 }).lean();
+                nextHwNumber = (highest?.homeworkNumber || 0) + 1;
+            } else {
+                nextHwNumber = (sessionScan?.homeworkNumber || 0) + 1;
+            }
+            updates.assignmentInstanceId = targetAssignmentInstanceId;
+            updates.homeworkNumber = nextHwNumber;
+            updates.assignmentName = String(req.body.assignmentName || `Devoir #${nextHwNumber}`).trim();
+        } else {
+            // Recherche d'un devoir cible existant dans la classe soit par assignmentInstanceId soit par nom
+            let targetScan = null;
+            if (sessionScan?.classId) {
+                if (targetAssignmentInstanceId && !targetAssignmentInstanceId.startsWith('legacy_')) {
+                    targetScan = await ClassroomScan.findOne({
+                        classId: sessionScan.classId,
+                        assignmentInstanceId: targetAssignmentInstanceId
+                    }).lean();
+                }
+                if (!targetScan && assignmentName && assignmentName.toLowerCase() !== 'none') {
+                    targetScan = await ClassroomScan.findOne({
+                        classId: sessionScan.classId,
+                        assignmentName: { $regex: new RegExp(`^${assignmentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                        sessionId: { $ne: sessionId }
+                    }).lean();
+                }
+            }
+
+            if (targetScan) {
+                // FUSION : rattacher la session courante à ce devoir existant
+                const unifiedInstanceId = targetScan.assignmentInstanceId || `assignment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                const unifiedHwNumber = targetScan.homeworkNumber || 1;
+                const unifiedName = targetScan.assignmentName || assignmentName;
+
+                updates.assignmentInstanceId = unifiedInstanceId;
+                updates.homeworkNumber = unifiedHwNumber;
+                updates.assignmentName = unifiedName;
+
+                // Propager cet unifiedInstanceId à tous les scans partageant ce nom dans la classe
+                await ClassroomScan.updateMany(
+                    { classId: sessionScan.classId, assignmentName: unifiedName },
+                    { $set: { assignmentInstanceId: unifiedInstanceId, homeworkNumber: unifiedHwNumber } }
+                );
+            } else if (targetAssignmentInstanceId) {
+                updates.assignmentInstanceId = targetAssignmentInstanceId;
+                if (targetAssignmentInstanceId.startsWith('legacy_')) {
+                    const legacyNum = Number(targetAssignmentInstanceId.replace('legacy_', ''));
+                    if (legacyNum) updates.homeworkNumber = legacyNum;
+                }
+            } else if (req.body.applyNameToAssignmentInstance === 'true' && assignmentName !== null && sessionScan) {
+                // Renommage simple de l'instance courante car aucun devoir existant ne porte ce nom
+                const currentInstanceId = String(sessionScan.assignmentInstanceId || '').trim();
+                const assignmentQuery = currentInstanceId && !currentInstanceId.startsWith('legacy_')
+                    ? { classId: sessionScan.classId, assignmentInstanceId: currentInstanceId }
+                    : { classId: sessionScan.classId, homeworkNumber: sessionScan.homeworkNumber };
+                await ClassroomScan.updateMany(assignmentQuery, { $set: { assignmentName } });
+                delete updates.assignmentName;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await ClassroomScan.updateMany({ sessionId }, { $set: updates });
+        }
+
+        // Mémorisation dans scanAssignmentCategories de la classe pour conserver les catégories même à 0 copie
+        let knownCategories = [];
+        if (sessionScan?.classId) {
+            const classroom = await Classroom.findById(sessionScan.classId);
+            if (classroom) {
+                let cats = Array.isArray(classroom.scanAssignmentCategories) ? [...classroom.scanAssignmentCategories] : [];
+                const oldName = String(sessionScan.assignmentName || '').trim();
+                if (oldName && oldName.toLowerCase() !== 'none' && !cats.some((c) => c.title?.trim().toLowerCase() === oldName.toLowerCase())) {
+                    cats.push({
+                        id: sessionScan.assignmentInstanceId || `known_${Date.now()}`,
+                        title: oldName,
+                        homeworkNumber: sessionScan.homeworkNumber || 1
+                    });
+                }
+                const newName = String(updates.assignmentName || assignmentName || '').trim();
+                if (newName && newName.toLowerCase() !== 'none' && !cats.some((c) => c.title?.trim().toLowerCase() === newName.toLowerCase())) {
+                    cats.push({
+                        id: updates.assignmentInstanceId || targetAssignmentInstanceId || `known_${Date.now()}`,
+                        title: newName,
+                        homeworkNumber: updates.homeworkNumber || 1
+                    });
+                }
+                classroom.scanAssignmentCategories = cats;
+                await classroom.save();
+                knownCategories = cats;
+            }
+        }
+
+        const responseQuery = sessionScan?.classId ? { classId: sessionScan.classId } : { sessionId };
+        const scans = await ClassroomScan.find(responseQuery).sort({ pageIndex: 1 }).lean();
+        return res.json({ ok: true, scans, knownCategories });
     } catch (e) {
         if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/scans/assignment/reset-to-none', async (req, res) => {
+    try {
+        const classId = String(req.body.classId || '').trim();
+        const assignmentInstanceId = String(req.body.assignmentInstanceId || '').trim();
+        const homeworkNumber = Number(req.body.homeworkNumber) || 0;
+        const title = String(req.body.title || '').trim();
+
+        if (!classId && !assignmentInstanceId && !homeworkNumber && !title) {
+            return res.status(400).json({ error: "Paramètres manquants" });
+        }
+
+        const query = {};
+        if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+            query.classId = classId;
+        }
+
+        const orConditions = [];
+        if (assignmentInstanceId && !assignmentInstanceId.startsWith('legacy_')) {
+            orConditions.push({ assignmentInstanceId });
+        }
+        if (title && title.toLowerCase() !== 'none') {
+            orConditions.push({ assignmentName: { $regex: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+        }
+        if (homeworkNumber > 0 && orConditions.length === 0) {
+            orConditions.push({ homeworkNumber });
+        }
+
+        if (orConditions.length > 0) {
+            query.$or = orConditions;
+        }
+
+        await ClassroomScan.updateMany(query, {
+            $set: {
+                assignmentName: 'none'
+            }
+        });
+
+        let knownCategories = [];
+        if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+            const classroom = await Classroom.findById(classId);
+            if (classroom && Array.isArray(classroom.scanAssignmentCategories)) {
+                classroom.scanAssignmentCategories = classroom.scanAssignmentCategories.filter((c) => {
+                    if (assignmentInstanceId && c.id === assignmentInstanceId) return false;
+                    if (title && c.title?.trim().toLowerCase() === title.toLowerCase()) return false;
+                    return true;
+                });
+                await classroom.save();
+                knownCategories = classroom.scanAssignmentCategories;
+            }
+        }
+
+        const responseQuery = classId && mongoose.Types.ObjectId.isValid(classId) ? { classId } : {};
+        const scans = await ClassroomScan.find(responseQuery).sort({ pageIndex: 1 }).lean();
+        return res.json({ ok: true, scans, knownCategories });
+    } catch (e) {
+        console.error("Erreur reset devoir vers none:", e);
         return res.status(500).json({ error: e.message });
     }
 });

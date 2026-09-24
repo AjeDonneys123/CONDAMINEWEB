@@ -18,6 +18,9 @@ export default function ScanGalleryModal({
     const [toastTimer, setToastTimer] = useState(null);
     const [collapsedDevoirs, setCollapsedDevoirs] = useState({}); // { [devoirId]: boolean }
     const [devoirEditor, setDevoirEditor] = useState(null);
+    const [categoryDropdownDevoirId, setCategoryDropdownDevoirId] = useState(null);
+    const [tempCategoryName, setTempCategoryName] = useState('');
+    const [knownCategories, setKnownCategories] = useState([]);
 
     const showToast = (message) => {
         setCopyingStatus(message);
@@ -42,6 +45,9 @@ export default function ScanGalleryModal({
                 setScans(data.scans);
             } else {
                 setScans([]);
+            }
+            if (res.ok && Array.isArray(data.knownCategories)) {
+                setKnownCategories(data.knownCategories);
             }
         } catch (e) {
             console.error("Erreur chargement scans:", e);
@@ -128,6 +134,8 @@ export default function ScanGalleryModal({
                 id: sessionId,
                 sessionId,
                 homeworkNumber: homeworkNum,
+                assignmentInstanceId: firstScan.assignmentInstanceId || `legacy_${homeworkNum}`,
+                assignmentName: firstScan.assignmentName || '',
                 title: firstScan.assignmentName || `Devoir #${homeworkNum}`,
                 studentName: firstScan.studentName || student?.firstName || '',
                 correctionPrompt: firstScan.correctionPrompt || '',
@@ -142,6 +150,50 @@ export default function ScanGalleryModal({
         // Renvoyer les devoirs du plus récent au plus ancien
         return devoirs.reverse();
     }, [scans, student]);
+
+    const assignmentCategories = useMemo(() => {
+        const map = new Map();
+
+        // 1. Initialiser avec les catégories mémorisées de la classe (qui peuvent avoir 0 copie)
+        (knownCategories || []).forEach((cat) => {
+            const rawTitle = String(cat.title || '').trim();
+            const key = rawTitle.toLowerCase();
+            if (key && key !== 'none') {
+                map.set(key, {
+                    id: cat.id || `known_${key}`,
+                    homeworkNumber: cat.homeworkNumber || 1,
+                    title: rawTitle,
+                    count: 0
+                });
+            }
+        });
+
+        // 2. Agréger les devoirs existants par nom (empêche tout doublon de même nom)
+        devoirsList.forEach((devoir) => {
+            const rawTitle = String(devoir.title || '').trim();
+            const key = rawTitle.toLowerCase();
+            if (!key || key === 'none') return;
+
+            if (!map.has(key)) {
+                map.set(key, {
+                    id: devoir.assignmentInstanceId || `legacy_${devoir.homeworkNumber}`,
+                    homeworkNumber: devoir.homeworkNumber,
+                    title: rawTitle,
+                    count: 0
+                });
+            }
+            map.get(key).count += 1;
+            if (devoir.assignmentInstanceId && !devoir.assignmentInstanceId.startsWith('legacy_')) {
+                map.get(key).id = devoir.assignmentInstanceId;
+            }
+        });
+
+        return Array.from(map.values()).sort((a, b) => {
+            if (a.count === 0 && b.count > 0) return 1;
+            if (a.count > 0 && b.count === 0) return -1;
+            return a.homeworkNumber - b.homeworkNumber;
+        });
+    }, [devoirsList, knownCategories]);
 
     // Basculer l'état déplié/replié d'un devoir
     const toggleDevoirCollapse = (devoirId) => {
@@ -355,6 +407,8 @@ export default function ScanGalleryModal({
             id: devoir.id,
             mode,
             assignmentName: devoir.title,
+            assignmentInstanceId: devoir.assignmentInstanceId,
+            createAssignmentInstance: false,
             studentId: String(devoir.scans[0]?.studentId || ''),
             studentName: devoir.studentName || '',
             studentSearch: '',
@@ -363,16 +417,20 @@ export default function ScanGalleryModal({
         });
     };
 
-    const saveDevoirMetadata = async (devoir) => {
+    const saveDevoirMetadata = async (devoir, overrides = {}) => {
         if (!devoirEditor || devoirEditor.id !== devoir.id || devoir.id.startsWith('cluster_')) return;
+        const editor = { ...devoirEditor, ...overrides };
         const form = new FormData();
-        form.append('assignmentName', devoirEditor.assignmentName || devoir.title);
-        form.append('correctionPrompt', devoirEditor.correctionPrompt || '');
-        if (devoirEditor.studentId) {
-            form.append('studentId', devoirEditor.studentId);
-            form.append('studentName', devoirEditor.studentName || '');
+        form.append('assignmentName', editor.assignmentName || devoir.title);
+        if (editor.assignmentInstanceId && !String(editor.assignmentInstanceId).startsWith('legacy_')) form.append('assignmentInstanceId', editor.assignmentInstanceId);
+        if (editor.createAssignmentInstance) form.append('createAssignmentInstance', 'true');
+        if (editor.renameWholeAssignment) form.append('applyNameToAssignmentInstance', 'true');
+        form.append('correctionPrompt', editor.correctionPrompt || '');
+        if (editor.studentId) {
+            form.append('studentId', editor.studentId);
+            form.append('studentName', editor.studentName || '');
         }
-        if (devoirEditor.promptImage) form.append('promptImage', devoirEditor.promptImage);
+        if (editor.promptImage) form.append('promptImage', editor.promptImage);
         try {
             const res = await fetch(`/api/classroom/scans/session/${encodeURIComponent(devoir.id)}/meta`, { method: 'POST', body: form });
             const data = await res.json();
@@ -386,6 +444,162 @@ export default function ScanGalleryModal({
             showToast('❌ Impossible d’enregistrer les modifications.');
         }
     };
+
+    const toggleCategoryDropdown = (devoir, e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (categoryDropdownDevoirId === devoir.id) {
+            setCategoryDropdownDevoirId(null);
+        } else {
+            setCategoryDropdownDevoirId(devoir.id);
+            setTempCategoryName(devoir.assignmentName || devoir.title);
+        }
+    };
+
+    const handleRenameCategory = async (devoir, newName) => {
+        const trimmed = (newName || '').trim();
+        if (!trimmed) return;
+        try {
+            const form = new FormData();
+            form.append('assignmentName', trimmed);
+            form.append('applyNameToAssignmentInstance', 'true');
+            if (devoir.assignmentInstanceId && !String(devoir.assignmentInstanceId).startsWith('legacy_')) {
+                form.append('assignmentInstanceId', devoir.assignmentInstanceId);
+            } else {
+                form.append('homeworkNumber', String(devoir.homeworkNumber));
+            }
+
+            const res = await fetch(`/api/classroom/scans/session/${encodeURIComponent(devoir.id)}/meta`, {
+                method: 'POST',
+                body: form
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur lors du renommage');
+            if (Array.isArray(data.scans)) {
+                const replacements = new Map(data.scans.map((scan) => [String(scan._id), scan]));
+                setScans((prev) => prev.map((scan) => replacements.get(String(scan._id)) || scan));
+            }
+            if (Array.isArray(data.knownCategories)) setKnownCategories(data.knownCategories);
+            showToast(`✅ Devoir renommé en « ${trimmed} » pour toute la classe.`);
+            setCategoryDropdownDevoirId(null);
+        } catch (err) {
+            console.error('Erreur renommage catégorie:', err);
+            showToast('❌ Impossible de renommer le devoir.');
+        }
+    };
+
+    const handleAssignToCategory = async (devoir, targetCat) => {
+        if ((devoir.title || '').trim().toLowerCase() === (targetCat.title || '').trim().toLowerCase()) {
+            setCategoryDropdownDevoirId(null);
+            return;
+        }
+        try {
+            const form = new FormData();
+            if (targetCat.id && !targetCat.id.startsWith('legacy_') && !targetCat.id.startsWith('known_')) {
+                form.append('assignmentInstanceId', targetCat.id);
+            }
+            form.append('homeworkNumber', String(targetCat.homeworkNumber || 1));
+            form.append('assignmentName', targetCat.title);
+
+            const res = await fetch(`/api/classroom/scans/session/${encodeURIComponent(devoir.id)}/meta`, {
+                method: 'POST',
+                body: form
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur lors du rattachement');
+            if (Array.isArray(data.scans)) {
+                const replacements = new Map(data.scans.map((scan) => [String(scan._id), scan]));
+                setScans((prev) => prev.map((scan) => replacements.get(String(scan._id)) || scan));
+            }
+            if (Array.isArray(data.knownCategories)) setKnownCategories(data.knownCategories);
+            showToast(`✅ Copie rattachée à « ${targetCat.title} ».`);
+            setCategoryDropdownDevoirId(null);
+        } catch (err) {
+            console.error('Erreur rattachement catégorie:', err);
+            showToast('❌ Impossible d’associer le devoir.');
+        }
+    };
+
+    const handleCreateNewAssignment = async (devoir) => {
+        try {
+            const form = new FormData();
+            form.append('createAssignmentInstance', 'true');
+
+            const res = await fetch(`/api/classroom/scans/session/${encodeURIComponent(devoir.id)}/meta`, {
+                method: 'POST',
+                body: form
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur création devoir');
+            if (Array.isArray(data.scans)) {
+                const replacements = new Map(data.scans.map((scan) => [String(scan._id), scan]));
+                setScans((prev) => prev.map((scan) => replacements.get(String(scan._id)) || scan));
+            }
+            if (Array.isArray(data.knownCategories)) setKnownCategories(data.knownCategories);
+            showToast('✅ Nouveau devoir créé avec succès.');
+            setCategoryDropdownDevoirId(null);
+        } catch (err) {
+            console.error('Erreur création devoir:', err);
+            showToast('❌ Impossible de créer le nouveau devoir.');
+        }
+    };
+
+    const handleDeleteCategory = async (cat) => {
+        if (!cat) return;
+        const confirmMsg = cat.count > 0
+            ? `Supprimer le devoir « ${cat.title} » ?\n\nToutes les copies (${cat.count}) de cette catégorie passeront à la catégorie « none ».`
+            : `Supprimer la catégorie « ${cat.title} » (0 copie) ?`;
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            const res = await fetch('/api/classroom/scans/assignment/reset-to-none', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    classId: classId || (scans[0]?.classId ? String(scans[0].classId) : ''),
+                    assignmentInstanceId: cat.id,
+                    homeworkNumber: cat.homeworkNumber,
+                    title: cat.title
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur lors de la suppression');
+            if (Array.isArray(data.scans)) {
+                const replacements = new Map(data.scans.map((scan) => [String(scan._id), scan]));
+                setScans((prev) => prev.map((scan) => replacements.get(String(scan._id)) || scan));
+            }
+            if (Array.isArray(data.knownCategories)) {
+                setKnownCategories(data.knownCategories);
+            } else {
+                setKnownCategories((prev) => prev.filter((c) => c.title?.toLowerCase() !== cat.title?.toLowerCase()));
+            }
+            showToast(`🗑️ Devoir « ${cat.title} » supprimé.`);
+            setCategoryDropdownDevoirId(null);
+        } catch (err) {
+            console.error('Erreur suppression catégorie:', err);
+            showToast('❌ Impossible de supprimer la catégorie.');
+        }
+    };
+
+    useEffect(() => {
+        if (!categoryDropdownDevoirId) return;
+        const handleClickOutside = (e) => {
+            if (!e.target.closest('.devoir-category-dropdown') && !e.target.closest('.devoir-folder-title-btn')) {
+                setCategoryDropdownDevoirId(null);
+            }
+        };
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') setCategoryDropdownDevoirId(null);
+        };
+        document.addEventListener('pointerdown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [categoryDropdownDevoirId]);
 
     // Navigation plein écran
     const allScansInOrder = useMemo(() => {
@@ -418,8 +632,8 @@ export default function ScanGalleryModal({
     if (!isOpen) return null;
 
     return (
-        <div className="conda-scan-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-            <div className="conda-scan-gallery-card">
+        <div className="conda-scan-modal-overlay">
+            <div className="conda-scan-gallery-card" onClick={(e) => e.stopPropagation()}>
                 {/* Bouton fermeture permanent et proéminent (toujours visible sur mobile) */}
                 <button
                     className="conda-scan-sticky-close-btn"
@@ -556,8 +770,10 @@ export default function ScanGalleryModal({
                                 const devoirScanIds = devoir.scans.map((s) => s._id);
                                 const allInDevoirSelected = devoirScanIds.every((id) => selectedScanIds.includes(id));
 
+                                const isDropdownOpen = categoryDropdownDevoirId === devoir.id;
+
                                 return (
-                                    <div key={devoir.id} className="conda-devoir-folder-card">
+                                    <div key={devoir.id} className={`conda-devoir-folder-card ${isDropdownOpen ? 'has-dropdown-open' : ''}`}>
                                         {/* En-tête du dossier Devoir */}
                                         <div
                                             className="devoir-folder-header"
@@ -567,12 +783,118 @@ export default function ScanGalleryModal({
                                                 <span className="devoir-folder-icon">📂</span>
                                                 <div className="devoir-folder-meta">
                                                     <div className="devoir-folder-title-row">
-                                                        <span className="devoir-folder-title">{devoir.title}</span>
+                                                        <div className="devoir-title-dropdown-container" onClick={(e) => e.stopPropagation()}>
+                                                            <button
+                                                                type="button"
+                                                                className={`devoir-folder-title-btn ${isDropdownOpen ? 'active' : ''}`}
+                                                                onClick={(e) => toggleCategoryDropdown(devoir, e)}
+                                                                title="Cliquer pour changer de devoir, créer un nouveau devoir ou renommer"
+                                                            >
+                                                                <span className="devoir-folder-title-text">{devoir.title}</span>
+                                                                <span className="devoir-title-chevron">{isDropdownOpen ? '▲' : '▼'}</span>
+                                                            </button>
+
+                                                            {isDropdownOpen && (
+                                                                <div className="devoir-category-dropdown" onClick={(e) => e.stopPropagation()}>
+                                                                    {/* 1. Renommer cette catégorie */}
+                                                                    <div className="dropdown-section">
+                                                                        <div className="dropdown-section-title">
+                                                                            <span>🏷️ Nom du devoir (toute la classe)</span>
+                                                                        </div>
+                                                                        <form
+                                                                            onSubmit={(e) => {
+                                                                                e.preventDefault();
+                                                                                void handleRenameCategory(devoir, tempCategoryName);
+                                                                            }}
+                                                                            className="dropdown-rename-form"
+                                                                        >
+                                                                            <input
+                                                                                type="text"
+                                                                                className="dropdown-input"
+                                                                                value={tempCategoryName}
+                                                                                onChange={(e) => setTempCategoryName(e.target.value)}
+                                                                                placeholder="Nom du devoir..."
+                                                                                autoFocus
+                                                                            />
+                                                                            <button
+                                                                                type="submit"
+                                                                                className="dropdown-save-btn"
+                                                                                title="Appliquer à toutes les copies de cette catégorie"
+                                                                            >
+                                                                                Enregistrer
+                                                                            </button>
+                                                                        </form>
+                                                                        <div className="dropdown-caption">
+                                                                            Modifie le nom de toutes les copies de cette catégorie.
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* 2. Devoirs existants */}
+                                                                    {assignmentCategories.length > 0 && (
+                                                                        <div className="dropdown-section">
+                                                                            <div className="dropdown-section-title">
+                                                                                <span>📁 Devoirs existants dans la classe</span>
+                                                                            </div>
+                                                                            <div className="dropdown-categories-list custom-scrollbar">
+                                                                                {assignmentCategories.map((cat) => {
+                                                                                    const isCurrent = String(devoir.title || '').trim().toLowerCase() === String(cat.title || '').trim().toLowerCase();
+                                                                                    return (
+                                                                                        <div key={cat.id} className="dropdown-cat-row">
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                className={`dropdown-cat-btn ${isCurrent ? 'current' : ''}`}
+                                                                                                onClick={() => handleAssignToCategory(devoir, cat)}
+                                                                                                title={isCurrent ? 'Devoir actuel' : `Associer cette copie à ${cat.title}`}
+                                                                                            >
+                                                                                                <div className="dropdown-cat-info">
+                                                                                                    <span className="dropdown-cat-icon">{isCurrent ? '✓' : '•'}</span>
+                                                                                                    <span className="dropdown-cat-name">{cat.title}</span>
+                                                                                                </div>
+                                                                                                <span className="dropdown-cat-count">
+                                                                                                    {cat.count} copie{cat.count > 1 ? 's' : ''}
+                                                                                                </span>
+                                                                                            </button>
+                                                                                            {cat.title.toLowerCase() !== 'none' && (
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    className="dropdown-cat-delete-btn"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        void handleDeleteCategory(cat);
+                                                                                                    }}
+                                                                                                    title={`Supprimer le devoir « ${cat.title} » (passe en « none »)`}
+                                                                                                    aria-label={`Supprimer ${cat.title}`}
+                                                                                                >
+                                                                                                    ✕
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* 3. Nouveau devoir */}
+                                                                    <div className="dropdown-footer">
+                                                                        <button
+                                                                            type="button"
+                                                                            className="dropdown-new-assignment-btn"
+                                                                            onClick={() => handleCreateNewAssignment(devoir)}
+                                                                        >
+                                                                            <span>➕</span>
+                                                                            <span>Nouveau devoir</span>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
                                                         <span className="devoir-pages-count">
                                                             {devoir.scans.length} page{devoir.scans.length > 1 ? 's' : ''}
                                                         </span>
                                                         {filterMode === 'class' && devoir.studentName && (
-                                                            <span className="devoir-student-chip">{devoir.studentName}</span>
+                                                            <button type="button" className="devoir-student-chip transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-800" onClick={(e) => { e.stopPropagation(); openDevoirEditor(devoir, 'student'); }} title="Changer l’élève">{devoir.studentName}</button>
                                                         )}
                                                     </div>
                                                     <span className="devoir-folder-date">Scanné le {formattedDate}</span>
@@ -581,9 +903,7 @@ export default function ScanGalleryModal({
 
                                             {/* Boutons d'action du devoir */}
                                             <div className="devoir-folder-actions" onClick={(e) => e.stopPropagation()}>
-                                                <button className="devoir-btn-icon" onClick={() => openDevoirEditor(devoir, 'name')} title="Renommer le devoir">✏️</button>
-                                                <button className="devoir-btn-icon" onClick={() => openDevoirEditor(devoir, 'student')} title="Changer l’élève">👤</button>
-                                                <button className="devoir-btn-icon" onClick={() => openDevoirEditor(devoir, 'prompt')} title="Ajouter les instructions de correction">➕ Prompt</button>
+                                                <button className={`rounded-xl border-2 px-3 py-2 text-sm font-black transition ${devoir.correctionPrompt || devoir.correctionPromptImageUrl ? 'border-amber-400 bg-amber-100 text-amber-900' : 'border-slate-200 bg-white text-slate-700 hover:border-amber-400 hover:bg-amber-50'}`} onClick={() => openDevoirEditor(devoir, 'prompt')} title="Ajouter les instructions de correction">{devoir.correctionPrompt || devoir.correctionPromptImageUrl ? '✓ Prompt' : '+ Prompt'}</button>
                                                 {/* Bouton dédié pour copier ce devoir pour l'IA */}
                                                 <button
                                                     className="btn-devoir-copy-ai"
@@ -619,13 +939,8 @@ export default function ScanGalleryModal({
                                             </div>
                                         </div>
 
-                                        {devoirEditor?.id === devoir.id && (
+                                        {devoirEditor?.id === devoir.id && devoirEditor.mode !== 'name' && (
                                             <div className="m-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4" onClick={(e) => e.stopPropagation()}>
-                                                {devoirEditor.mode === 'name' && (
-                                                    <label className="block font-black text-slate-700">Nom du devoir
-                                                        <input className="mt-2 w-full rounded-xl border-2 border-slate-200 bg-white p-3" value={devoirEditor.assignmentName} onChange={(e) => setDevoirEditor((prev) => ({ ...prev, assignmentName: e.target.value }))} autoFocus />
-                                                    </label>
-                                                )}
                                                 {devoirEditor.mode === 'student' && (
                                                     <div>
                                                         <label className="block font-black text-slate-700">Rechercher un élève
@@ -637,7 +952,7 @@ export default function ScanGalleryModal({
                                                                 .map((item) => {
                                                                     const itemId = String(item._id || item.id || '');
                                                                     const fullName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
-                                                                    return <button key={itemId} type="button" onClick={() => setDevoirEditor((prev) => ({ ...prev, studentId: itemId, studentName: fullName }))} className={`mb-1 block w-full rounded-lg px-3 py-2 text-left font-bold ${devoirEditor.studentId === itemId ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100'}`}>{fullName}</button>;
+                                                                    return <button key={itemId} type="button" onClick={() => { setDevoirEditor((prev) => ({ ...prev, studentId: itemId, studentName: fullName })); void saveDevoirMetadata(devoir, { studentId: itemId, studentName: fullName }); }} className={`mb-1 block w-full rounded-lg px-3 py-2 text-left font-bold ${devoirEditor.studentId === itemId ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100'}`}>{fullName}</button>;
                                                                 })}
                                                         </div>
                                                     </div>

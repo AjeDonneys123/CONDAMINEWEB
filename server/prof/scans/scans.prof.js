@@ -159,12 +159,44 @@ router.post('/upload-classroom', upload.single('file'), async (req, res) => {
         const sessionId = String(req.body.sessionId || '').trim() || `session_${Date.now()}`;
         const pageIndex = Math.max(1, Number(req.body.pageIndex) || 1);
 
-        let homeworkNumber = 0;
-        const existingInSession = await ClassroomScan.findOne({ sessionId, homeworkNumber: { $gt: 0 } }).lean();
-        if (existingInSession?.homeworkNumber) {
-            homeworkNumber = existingInSession.homeworkNumber;
-        } else {
-            const scope = studentId ? { studentId } : (classId ? { classId } : {});
+        let assignmentInstanceId = String(req.body.assignmentInstanceId || '').trim();
+        let homeworkNumber = Number(req.body.homeworkNumber) || 0;
+        let assignmentName = '';
+
+        const existingInSession = await ClassroomScan.findOne({ sessionId }).lean();
+        if (existingInSession) {
+            assignmentInstanceId = existingInSession.assignmentInstanceId || '';
+            homeworkNumber = existingInSession.homeworkNumber || 0;
+            assignmentName = existingInSession.assignmentName || '';
+        } else if (assignmentInstanceId) {
+            const existingWithInstance = await ClassroomScan.findOne({ classId, assignmentInstanceId }).lean();
+            if (existingWithInstance) {
+                homeworkNumber = existingWithInstance.homeworkNumber || 1;
+                assignmentName = existingWithInstance.assignmentName || '';
+            }
+        } else if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+            // Rattachement automatique si scanné dans les 10 dernières minutes (même séance de scan pour la classe)
+            const recentScan = await ClassroomScan.findOne({
+                classId,
+                createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) }
+            }).sort({ createdAt: -1 }).lean();
+
+            if (recentScan) {
+                assignmentInstanceId = String(recentScan.assignmentInstanceId || '').trim();
+                if (!assignmentInstanceId) assignmentInstanceId = `assignment_legacy_${recentScan.homeworkNumber || 1}`;
+                homeworkNumber = recentScan.homeworkNumber || 1;
+                assignmentName = recentScan.assignmentName || '';
+            }
+        }
+
+        if (!assignmentInstanceId) {
+            assignmentInstanceId = `assignment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        }
+
+        if (!homeworkNumber) {
+            const scope = classId && mongoose.Types.ObjectId.isValid(classId)
+                ? { classId }
+                : (studentId && mongoose.Types.ObjectId.isValid(studentId) ? { studentId } : {});
             const highest = await ClassroomScan.findOne(scope).sort({ homeworkNumber: -1 }).lean();
             homeworkNumber = (highest?.homeworkNumber || 0) + 1;
         }
@@ -178,6 +210,8 @@ router.post('/upload-classroom', upload.single('file'), async (req, res) => {
             imageUrl,
             driveFileId: driveFile.id,
             title: `Page ${pageIndex}`,
+            assignmentInstanceId,
+            assignmentName,
             sessionId,
             homeworkNumber,
             pageIndex,

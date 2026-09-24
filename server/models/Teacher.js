@@ -18,6 +18,7 @@ const TeacherSchema = new mongoose.Schema({
     assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
     isDeveloper: { type: Boolean, default: false },
     driveFolderId: { type: String },
+    didakbotKey: { type: String, default: '' },
     isTestAccount: { type: Boolean, default: false }
 }, { collection: 'teachers' });
 

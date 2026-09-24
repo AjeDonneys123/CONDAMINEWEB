@@ -142,6 +142,22 @@ router.get('/teachers/:id', asyncHandler(async (req, res) => {
     res.json(user); 
 }));
 
+router.post('/teachers/:id/didakbot-key', asyncHandler(async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: "ID Invalide" });
+    const key = String(req.body?.key || '').trim().toUpperCase();
+    const updated = await mongoose.model('Teacher').findByIdAndUpdate(
+        req.params.id,
+        { $set: { didakbotKey: key } },
+        { new: true }
+    ) || await mongoose.model('Admin').findByIdAndUpdate(
+        req.params.id,
+        { $set: { didakbotKey: key } },
+        { new: true }
+    );
+    if (!updated) return res.status(404).json({ error: "Utilisateur introuvable" });
+    res.json({ ok: true, didakbotKey: key });
+}));
+
 // 6. Dump BDD (Pour le visualiseur BDD)
 router.get('/database-dump', requireDeveloper, asyncHandler(async (req, res) => res.json(await AdminExpert.getFullDump())));
 

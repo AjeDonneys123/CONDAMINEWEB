@@ -282,6 +282,27 @@
     box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45);
 }
 
+.conda-btn-ia-didakbot {
+    background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+    border: none;
+    color: #ffffff;
+    font-size: 13.5px;
+    font-weight: 800;
+    padding: 12px 20px;
+    border-radius: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 14px rgba(6, 182, 212, 0.35);
+    transition: all 0.2s ease;
+}
+
+.conda-btn-ia-didakbot:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(6, 182, 212, 0.45);
+}
+
 .conda-btn-validate {
     background: linear-gradient(135deg, #059669 0%, #10b981 100%);
     border: none;

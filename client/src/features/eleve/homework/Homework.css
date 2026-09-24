@@ -505,6 +505,25 @@
     cursor: pointer;
 }
 .btn-response-window:hover { background: #cffafe; }
+.btn-didakbot {
+    border: 1px solid #06b6d4;
+    background: #0891b2;
+    color: white;
+    border-radius: 12px;
+    padding: 9px 13px;
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    box-shadow: 0 4px 12px rgba(8, 145, 178, 0.25);
+    transition: all 0.2s ease;
+}
+.btn-didakbot:hover {
+    background: #0e7490;
+    box-shadow: 0 6px 16px rgba(8, 145, 178, 0.35);
+}
 .btn-validate-answer {
     border: 1px solid #16a34a;
     background: #22c55e;

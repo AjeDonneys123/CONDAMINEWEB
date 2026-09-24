@@ -214,7 +214,8 @@ const Models = {
         classNotification: { type: Object, default: null },
         classPlanVisible: { type: Boolean, default: false },
         activeTrainingAssignment: { type: mongoose.Schema.Types.Mixed, default: null },
-        trainingAssignments: { type: [mongoose.Schema.Types.Mixed], default: [] }
+        trainingAssignments: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        scanAssignmentCategories: { type: Array, default: [] }
     }),
 
     Student: getModel('Student', StudentSchema),
@@ -227,6 +228,7 @@ const Models = {
         assignedStudents: [mongoose.Schema.Types.ObjectId], isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
         todoClassrooms: { type: [String], default: [] },
+        didakbotUrl: { type: String, default: '' },
         date: { type: Date, default: Date.now }
     }),
 
@@ -710,6 +712,7 @@ const Models = {
         imageUrl: { type: String, required: true },
         driveFileId: { type: String, default: '' },
         title: { type: String, default: '' },
+        assignmentInstanceId: { type: String, default: '', index: true },
         assignmentName: { type: String, default: '' },
         correctionPrompt: { type: String, default: '' },
         correctionPromptImageUrl: { type: String, default: '' },
