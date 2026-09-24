@@ -370,6 +370,10 @@
 .student-card-drag { background: white; color: #0f172a !important; border-radius: 12px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 2px solid #f1f5f9; cursor: grab; user-select: none; position: relative; height: 100%; width: 100%; transition: transform 0.1s; overflow: hidden; container-type: inline-size; }
 .student-card-drag:active { cursor: grabbing; transform: scale(1.05); z-index: 10; }
 .student-card-drag.swap-source { border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); }
+.student-card-drag.placement-selected { background: #2563eb !important; border-color: #1d4ed8 !important; color: #fff !important; box-shadow: 0 0 0 4px rgba(37, 99, 235, .35), 0 6px 14px rgba(37, 99, 235, .3) !important; }
+.student-card-drag.placement-selected .sc-name,
+.student-card-drag.placement-selected .sc-lastname-initial,
+.student-card-drag.placement-selected .sc-grades { color: #fff !important; }
 .student-card-drag.finder-hit {
     border: 3px solid #dc2626;
     background: #fff1f2;

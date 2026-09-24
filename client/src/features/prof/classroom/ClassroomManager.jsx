@@ -623,7 +623,13 @@ export default function ClassroomManager({ globalClassId, user }) {
             return;
         }
         if (placementMode) {
-            setPlacementStudent((current) => String(current?._id || '') === String(student?._id || '') ? null : student);
+            if (!placementStudent?._id) {
+                setPlacementStudent(student);
+            } else if (String(placementStudent._id) === String(student?._id || '')) {
+                setPlacementStudent(null);
+            } else if (Number.isFinite(Number(student?.seatX)) && Number.isFinite(Number(student?.seatY))) {
+                handlePlaceStudentToCell(Number(student.seatX), Number(student.seatY));
+            }
             return;
         }
         handleOpenStudent(student);
@@ -1273,7 +1279,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
+                            <div className={`student-card-drag ${String(placementStudent?._id || '') === String(student._id) ? 'placement-selected' : ''} ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
