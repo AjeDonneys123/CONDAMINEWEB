@@ -161,6 +161,12 @@ export default function AdminDashboard({ user, onRefresh }) {
         }
         if (!target?.id) return alert('Choisis un profil valide.');
 
+        // Ouvrir l'onglet immédiatement lors du clic utilisateur pour éviter le bloqueur de pop-up
+        let popup = null;
+        try {
+            popup = window.open('about:blank', '_blank');
+        } catch (_) {}
+
         setConnectBusy(true);
         try {
             const requesterId = user?.id || user?._id || '';
@@ -172,11 +178,18 @@ export default function AdminDashboard({ user, onRefresh }) {
             const data = await res.json();
             if (!res.ok || !data?.user) throw new Error(data?.error || 'Connexion impossible');
 
-            const popup = window.open('', '_blank');
-            if (!popup) throw new Error('Popup bloquée');
-            popup.sessionStorage.setItem('player_override', JSON.stringify(data.user));
-            popup.location.href = '/';
+            if (popup && !popup.closed) {
+                try {
+                    popup.sessionStorage.setItem('player_override', JSON.stringify(data.user));
+                } catch (_) {}
+                popup.location.href = '/';
+            } else {
+                // Fallback si Chrome a bloqué les pop-ups : connexion directe dans l'onglet courant
+                sessionStorage.setItem('player_override', JSON.stringify(data.user));
+                window.location.href = '/';
+            }
         } catch (e) {
+            if (popup && !popup.closed) popup.close();
             alert(`Connect as échoué: ${e.message}`);
         }
         setConnectBusy(false);

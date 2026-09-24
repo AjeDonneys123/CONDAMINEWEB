@@ -7,6 +7,20 @@ import { installDevCompletionHorn } from './devCompletionHorn';
 
 installDevCompletionHorn();
 
+// A page left open across a Vercel deployment can reference an old hashed
+// lazy-loaded chunk. Retry once with the new index before showing the crash UI.
+const chunkReloadKey = 'condaweb:chunk-reload-at';
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    const previousReloadAt = Number(window.sessionStorage.getItem(chunkReloadKey) || 0);
+    if (Date.now() - previousReloadAt > 15000) {
+      window.sessionStorage.setItem(chunkReloadKey, String(Date.now()));
+      event.preventDefault();
+      window.location.reload();
+    }
+  } catch (_) {}
+});
+
 const versionBadge = document.createElement('div');
 const initialCommitName = import.meta.env.VITE_APP_COMMIT_NAME || import.meta.env.VITE_APP_COMMIT || 'local';
 versionBadge.textContent = initialCommitName;

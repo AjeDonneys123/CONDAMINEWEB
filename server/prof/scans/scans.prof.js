@@ -1,6 +1,7 @@
 // @signatures: ProfScansRouter, sessions, upload
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { ScanSession, Student, ClassroomScan } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const ScanAI = require('../../domains/scans/ai/scan.ai');
