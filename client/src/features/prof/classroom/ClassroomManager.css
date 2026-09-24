@@ -151,6 +151,12 @@
 .french-mode-btn.active { background: #3730a3; border-color: #3730a3; color: #fff; box-shadow: 0 5px 12px rgba(55,48,163,.25); }
 .plan-cols-toggle { height: 34px; border-radius: 10px; border: 2px solid #a78bfa; background: #f5f3ff; color: #6d28d9; padding: 0 10px; font-size: .7rem; font-weight: 950; cursor: pointer; white-space: nowrap; }
 .plan-cols-toggle:hover { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.plan-rotate-btn { height: 34px; border: 2px solid #0ea5e9; border-radius: 10px; padding: 0 11px; background: #effaff; color: #0369a1; font-size: .7rem; font-weight: 950; cursor: pointer; white-space: nowrap; }
+.plan-rotate-btn:hover, .plan-rotate-btn[aria-pressed="true"] { background: #0284c7; color: white; }
+.classroom-wrapper[data-plan-rotated="true"] .interactive-grid,
+.classroom-wrapper[data-plan-rotated="true"] .cm-local-plan-grid { rotate: 180deg; }
+.classroom-wrapper[data-plan-rotated="true"] .student-card-drag,
+.classroom-wrapper[data-plan-rotated="true"] .cm-local-plan-seat { rotate: 180deg; }
 .french-error-mode-btn { min-height: 38px; padding: 0 10px; border: 2px solid #fecaca; border-radius: 10px; background: #fff; color: #dc2626; font-size: .65rem; font-weight: 950; cursor: pointer; }
 .french-error-mode-btn.active { border-color: #dc2626; background: #dc2626; color: #fff; box-shadow: 0 5px 12px rgba(220,38,38,.25); }
 .french-validate-btn:disabled { opacity: .45; cursor: not-allowed; }

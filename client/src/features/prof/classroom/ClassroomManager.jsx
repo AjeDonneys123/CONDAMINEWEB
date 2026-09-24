@@ -1,5 +1,6 @@
 // @signatures: ClassroomManager, addBehavior, changeGrid, getMyStats, handleDragOver, handleDragStart, handleDrop, handleFileSelect, handleOpenStudent, loadData, moveStudentTo, renderGrid, renderHeaders, renderList, toggleSeparator
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import PlanRotateButton from './PlanRotateButton';
 import './ClassroomManager.css';
 import { startSpeechRecognitionWithFallback } from '../../../utils/speechRecognitionWithFallback';
 import ScanCaptureModal from './ScanCaptureModal';
@@ -1510,6 +1511,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="cm-header-center">
                     <div className="view-switcher">
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
+                  {viewMode === 'PLAN' && <PlanRotateButton storageKey={`condaweb:plan-rotation:${classroomInfo?.name || 'default'}`} />}
                         <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A–Z</button>
                     </div>
                     {renderProjectorButton()}
