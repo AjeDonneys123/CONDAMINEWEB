@@ -1561,10 +1561,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 className={`plan-cols-toggle plan-place-toggle ${placementMode ? 'active' : ''}`}
                                 aria-pressed={placementMode}
                                 onClick={() => {
-                                    setPlacementMode((active) => {
-                                        if (active) setPlacementStudent(null);
-                                        return !active;
-                                    });
+                                    const nextMode = !placementMode;
+                                    setPlacementMode(nextMode);
+                                    if (!nextMode) setPlacementStudent(null);
                                 }}
                                 title={placementMode ? 'Désactiver le placement : un clic ouvre la fiche élève' : 'Activer le placement : sélectionner un élève puis cliquer sa case'}
                             >PLACER</button>
