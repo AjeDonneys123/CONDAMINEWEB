@@ -1016,6 +1016,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                   isDone: Boolean(status?.done),
                   score: status?.score || null,
                   antiCheat: status ? (status.antiCheat || {}) : {},
+                  subId: status?.subId || null,
                   presentation: status ? (status.presentation || null) : null,
                   draftDoc: status ? (status.draftDoc || null) : null,
                   production: status ? (status.production || null) : null
@@ -2451,9 +2452,23 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                                 .map((copy) => ({ control, copy }))
                                         );
                                         const gptCorrections = gptCorrectionsByStudent[sid] || [];
-                                        if (!receivedControls.length && !gptCorrections.length) return null;
+                                        const submittedHomeworks = activities
+                                            .filter((act) => act.type === 'homework')
+                                            .map((act) => ({
+                                                act,
+                                                status: trackingData[`${sid}_${extractId(act._id)}`]
+                                                    || trackingData[`${sid}_TITLE_${norm(act.title)}`]
+                                                    || trackingData[`${studentName}_TITLE_${norm(act.title)}`]
+                                            }))
+                                            .filter(({ status }) => status?.done && status?.subId);
+                                        if (!receivedControls.length && !gptCorrections.length && !submittedHomeworks.length) return null;
                                         return (
                                             <div className="mt-2 flex flex-wrap gap-1.5">
+                                                {submittedHomeworks.map(({ act, status }) => (
+                                                    <button key={`homework-${extractId(act._id)}-${status.subId}`} type="button" onClick={() => setViewingStudent(s)} title={`Ouvrir le devoir rendu : ${act.title}`} className="rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[9px] font-black text-emerald-700 hover:bg-emerald-200">
+                                                        📄 {act.title} · RENDU
+                                                    </button>
+                                                ))}
                                                 {receivedControls.map(({ control, copy }) => (
                                                     <button key={`control-${control._id}-${copy.id}`} type="button" onClick={() => handleOpenControlCopy(control, copy, s)} title={`Ouvrir ${control.title}`} className="rounded-full border border-violet-200 bg-violet-100 px-2.5 py-1 text-[9px] font-black text-violet-700 hover:bg-violet-200">
                                                         📝 {control.title} · {copy.score}/{copy.total}
