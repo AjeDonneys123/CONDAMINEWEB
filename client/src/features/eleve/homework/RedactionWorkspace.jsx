@@ -721,7 +721,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
         fetch(`/api/eleve/homework/submission/${hwId}/${sid}`)
             .then((res) => (res.ok ? res.json() : null))
-            .then((sub) => {
+            .then(async (sub) => {
                 if (!isMounted) return;
                 
                 if (!sub) {
@@ -754,6 +754,39 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                         if (localBackup.aiConversationText) setAiConversationText(localBackup.aiConversationText);
                         if (localBackup.attemptsCount) setAttemptsCount(localBackup.attemptsCount);
                         showToast("💾 Votre travail précédent a été restauré depuis ce navigateur !");
+                    } else {
+                        try {
+                            const previousRes = await fetch(`/api/eleve/homework/previous-version/${hwId}/${sid}`);
+                            const previous = previousRes.ok ? await previousRes.json() : null;
+                            if (isMounted && previous) {
+                                const previousEssay = String(previous.content || '').trim();
+                                const previousDraft = String(previous.draftContent || '').trim();
+                                let restoredText = previousEssay;
+                                if (previousDraft) {
+                                    if (!restoredText) restoredText = previousDraft;
+                                    else if (!restoredText.includes(previousDraft)) restoredText = `${previousDraft}\n\n${restoredText}`;
+                                }
+                                if (restoredText) {
+                                    setEssayText(restoredText);
+                                    setHistory([restoredText]);
+                                    setHistoryIdx(0);
+                                    await fetch('/api/eleve/homework/autosave', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            homeworkId: hwId,
+                                            playerId: sid,
+                                            userText: restoredText,
+                                            draftContent: '',
+                                            attemptsCount: 1
+                                        })
+                                    });
+                                    showToast(`✅ Dernière version reprise${previous.sourceHomeworkTitle ? ` depuis « ${previous.sourceHomeworkTitle} »` : ''}.`);
+                                }
+                            }
+                        } catch (error) {
+                            console.warn('Previous homework version could not be restored:', error);
+                        }
                     }
                     setInitialLoading(false);
                     return;

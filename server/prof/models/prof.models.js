@@ -230,9 +230,16 @@ const Models = {
         todoClassrooms: { type: [String], default: [] },
         didakbotUrl: { type: String, default: '' },
         didakbotBotId: { type: Number, default: null },
+        didakbotClassBots: [{
+            className: { type: String, required: true },
+            chatbotId: { type: Number, required: true },
+            shareLink: { type: String, default: '' },
+            url: { type: String, default: '' }
+        }],
         didakbotAssignments: [{
             studentId: { type: String, required: true },
             studentName: { type: String, default: '' },
+            className: { type: String, default: '' },
             sessionId: { type: Number },
             sessionCode: { type: String, required: true },
             chatbotId: { type: Number }

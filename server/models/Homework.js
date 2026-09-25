@@ -42,6 +42,21 @@ const HomeworkSchema = new mongoose.Schema({
     isAllClass: { type: Boolean, default: true },
     isEnabled: { type: Boolean, default: true },
     didakbotUrl: { type: String, default: '' },
+    didakbotBotId: { type: Number, default: null },
+    didakbotClassBots: [{
+        className: { type: String, required: true },
+        chatbotId: { type: Number, required: true },
+        shareLink: { type: String, default: '' },
+        url: { type: String, default: '' }
+    }],
+    didakbotAssignments: [{
+        studentId: { type: String, required: true },
+        studentName: { type: String, default: '' },
+        className: { type: String, default: '' },
+        sessionId: Number,
+        sessionCode: { type: String, required: true },
+        chatbotId: Number
+    }],
     
     date: { type: Date, default: Date.now }
 }, { collection: 'homeworks' });

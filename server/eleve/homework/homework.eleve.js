@@ -464,6 +464,54 @@ router.get('/submission/:homeworkId/:studentId', async (req, res) => {
     }
 });
 
+router.get('/previous-version/:homeworkId/:studentId', async (req, res) => {
+    try {
+        const { homeworkId, studentId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(homeworkId) || !mongoose.Types.ObjectId.isValid(studentId)) {
+            return res.json(null);
+        }
+
+        const Homework = mongoose.model('Homework');
+        const Submission = mongoose.model('Submission');
+        const currentHomework = await Homework.findById(homeworkId, 'teacherId mode targetClassrooms').lean();
+        if (!currentHomework || currentHomework.mode !== 'redaction' || !currentHomework.teacherId) return res.json(null);
+
+        const classrooms = Array.isArray(currentHomework.targetClassrooms) ? currentHomework.targetClassrooms.filter(Boolean) : [];
+        if (classrooms.length === 0) return res.json(null);
+
+        const submissions = await Submission.find(
+            { studentId, homeworkId: { $ne: homeworkId } },
+            'homeworkId content draftContent updatedAt createdAt'
+        ).sort({ updatedAt: -1, createdAt: -1 }).limit(100).lean();
+        if (submissions.length === 0) return res.json(null);
+
+        const previousHomeworks = await Homework.find({
+            _id: { $in: submissions.map(submission => submission.homeworkId) },
+            teacherId: currentHomework.teacherId,
+            mode: 'redaction',
+            targetClassrooms: { $in: classrooms }
+        }, '_id title').lean();
+        const eligibleHomeworkIds = new Set(previousHomeworks.map(homework => String(homework._id)));
+
+        const previous = submissions.find(submission =>
+            eligibleHomeworkIds.has(String(submission.homeworkId)) &&
+            (String(submission.content || '').trim() || String(submission.draftContent || '').trim())
+        );
+        if (!previous) return res.json(null);
+
+        const sourceHomework = previousHomeworks.find(homework => String(homework._id) === String(previous.homeworkId));
+        res.json({
+            sourceHomeworkTitle: sourceHomework?.title || '',
+            content: previous.content || '',
+            draftContent: previous.draftContent || '',
+            updatedAt: previous.updatedAt || previous.createdAt || null
+        });
+    } catch (e) {
+        console.error('❌ [ELEVE HW PREVIOUS VERSION] error=%s', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/learned/:studentId', async (req, res) => {
     try {
         const Submission = mongoose.model('Submission');

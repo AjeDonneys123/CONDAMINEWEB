@@ -80,6 +80,8 @@ export default function StudentsManager({ globalClassId }) {
   const [viewingStudent, setViewingStudent] = useState(null); // Pour la modale de suivi
   const [controlRecoveriesByStudent, setControlRecoveriesByStudent] = useState({});
   const [viewingWork, setViewingWork] = useState(null);
+  const [homeworkCorrection, setHomeworkCorrection] = useState(null);
+  const [homeworkCorrectionLoading, setHomeworkCorrectionLoading] = useState('');
   const [ficheBoardActivity, setFicheBoardActivity] = useState(null);
   const [ficheBoardEditing, setFicheBoardEditing] = useState(null);
   const [ficheBoardSaving, setFicheBoardSaving] = useState(false);
@@ -845,6 +847,22 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       setEditorLoading(false);
   };
 
+  const handleRunHomeworkCorrection = async (work, provider) => {
+      if (!work?.subId) return;
+      setHomeworkCorrection({ title: work.title || 'Devoir', provider, loading: true, result: null, error: '' });
+      setHomeworkCorrectionLoading(provider);
+      try {
+          const response = await fetch(`/api/homework/submission/${encodeURIComponent(work.subId)}/correction/${provider}`, { method: 'POST' });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data?.error || 'La correction n’a pas pu être générée.');
+          setHomeworkCorrection({ title: work.title || 'Devoir', provider, loading: false, result: data.result, error: '' });
+      } catch (error) {
+          setHomeworkCorrection({ title: work.title || 'Devoir', provider, loading: false, result: null, error: error.message || 'Erreur de correction.' });
+      } finally {
+          setHomeworkCorrectionLoading('');
+      }
+  };
+
   const handleSaveCorrection = async () => {
       if (!editorData) return;
       await fetch(`/api/homework/submission/${editingSub}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(editorData) });
@@ -1428,6 +1446,26 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                     {w.isDone && (
                                         <div className={`inline-flex mt-2 px-2 py-1 rounded-full border text-[9px] font-black ${antiCheatTone(w.antiCheat).chip}`}>
                                             {antiCheatTone(w.antiCheat).label}
+                                        </div>
+                                    )}
+                                    {w.isDone && w.subId && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={Boolean(homeworkCorrectionLoading)}
+                                                onClick={() => void handleRunHomeworkCorrection(w, 'gemini')}
+                                                className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[10px] font-black text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                            >
+                                                {homeworkCorrectionLoading === 'gemini' ? 'Gemini…' : '✨ Correction Gemini'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={Boolean(homeworkCorrectionLoading)}
+                                                onClick={() => void handleRunHomeworkCorrection(w, 'didakbot')}
+                                                className="rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-[10px] font-black text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
+                                            >
+                                                {homeworkCorrectionLoading === 'didakbot' ? 'Didak’bot…' : '🤖 Correction Didak’bot'}
+                                            </button>
                                         </div>
                                     )}
                                     {w.draftDoc?.docUrl && (
@@ -2964,6 +3002,34 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                         <button type="button" disabled={preparingPronote} onClick={() => void preparePronoteImport()} className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-50">
                             {preparingPronote ? 'Préparation…' : '📤 Préparer le lot Pronote'}
                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {homeworkCorrection && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Correction IA du devoir">
+                <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+                    <div className={`flex items-start justify-between gap-4 border-b p-5 ${homeworkCorrection.provider === 'gemini' ? 'border-indigo-200 bg-indigo-600' : 'border-cyan-200 bg-cyan-700'}`}>
+                        <div>
+                            <div className="text-lg font-black text-white">{homeworkCorrection.provider === 'gemini' ? '✨ Correction Gemini' : '🤖 Correction Didak’bot'}</div>
+                            <p className="mt-1 text-xs font-semibold text-white/80">{homeworkCorrection.title} · résultat indicatif, aucune note n’est modifiée</p>
+                        </div>
+                        <button type="button" onClick={() => setHomeworkCorrection(null)} className="text-3xl font-black leading-none text-white" aria-label="Fermer">×</button>
+                    </div>
+                    <div className="overflow-y-auto p-5">
+                        {homeworkCorrection.loading ? (
+                            <div className="rounded-xl bg-slate-50 p-6 text-center font-bold text-slate-500">Correction en cours…</div>
+                        ) : homeworkCorrection.error ? (
+                            <div className="rounded-xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">{homeworkCorrection.error}</div>
+                        ) : typeof homeworkCorrection.result === 'string' ? (
+                            <div className="whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-800">{homeworkCorrection.result}</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {homeworkCorrection.result?.grade && <div className="inline-flex rounded-lg bg-indigo-50 px-3 py-1.5 font-black text-indigo-800">Appréciation : {homeworkCorrection.result.grade}</div>}
+                                <div className="whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-800">{homeworkCorrection.result?.feedback_fond || JSON.stringify(homeworkCorrection.result, null, 2)}</div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
