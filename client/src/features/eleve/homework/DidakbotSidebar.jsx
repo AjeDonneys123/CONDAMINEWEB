@@ -12,17 +12,26 @@ export default function DidakbotSidebar({
   const [copiedName, setCopiedName] = useState(false);
   const [copiedEssay, setCopiedEssay] = useState(false);
 
+  const studentFullName = useMemo(() => {
+    return String(user?.name || user?.username || `${user?.prenom || user?.firstName || ''} ${user?.nom || user?.lastName || ''}`.trim() || 'Élève').trim();
+  }, [user]);
+
+  const assignment = useMemo(() => {
+    const studentId = String(user?._id || user?.id || '');
+    return (homework?.didakbotAssignments || []).find(item => String(item.studentId) === studentId) || null;
+  }, [homework?.didakbotAssignments, user?._id, user?.id]);
+
   const cleanUrl = useMemo(() => {
+    if (assignment?.sessionCode) {
+      const pseudo = assignment.studentName || studentFullName;
+      return `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(assignment.sessionCode)}&pseudo=${encodeURIComponent(pseudo)}`;
+    }
     let raw = String(homework?.didakbotUrl || '').trim();
     const match = raw.match(/src=["'](.*?)["']/);
     if (match && match[1]) raw = match[1];
     if (raw.startsWith('//')) raw = 'https:' + raw;
     return raw;
-  }, [homework?.didakbotUrl]);
-
-  const studentFullName = useMemo(() => {
-    return String(user?.name || user?.username || `${user?.prenom || ''} ${user?.nom || ''}`.trim() || 'Élève').trim();
-  }, [user]);
+  }, [assignment, homework?.didakbotUrl, studentFullName]);
 
   const handleCopyName = async () => {
     if (!studentFullName) return;

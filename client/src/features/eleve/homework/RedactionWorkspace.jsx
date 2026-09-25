@@ -1277,11 +1277,16 @@ Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place
         }
 
         openAddNotesModal();
+        if (homework?.didakbotUrl) setShowDidakbotPanel(true);
         setAiCopiedToast(true);
         if (copiedOk) {
-            showToast("📋 Devoir copié ! Collez-le dans Didak'bot.");
+            showToast(homework?.didakbotUrl
+                ? "📋 Devoir copié et Didak'bot ouvert : collez-le, puis prenez vos notes avant de fermer."
+                : "📋 Devoir copié ! Collez-le dans votre assistant IA.");
         } else {
-            showToast("ℹ️ Devoir prêt à être collé dans Didak'bot.");
+            showToast(homework?.didakbotUrl
+                ? "ℹ️ Didak'bot est ouvert : copiez votre devoir puis collez-le dans le chat."
+                : "ℹ️ Devoir prêt à être collé dans votre assistant IA.");
         }
     };
 
@@ -1298,17 +1303,6 @@ Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place
         setEditingNoteText('');
         setEditingChatText('');
         setIsNotesFocusMode(true);
-    };
-
-    const handleToggleDidakbot = () => {
-        setShowDidakbotPanel(prev => {
-            const next = !prev;
-            if (next) {
-                // Quand le bot s'ouvre, la page pour prendre des notes sur l'IA s'ouvre aussi
-                openAddNotesModal();
-            }
-            return next;
-        });
     };
 
     const openEditNotesModal = (block) => {
@@ -1874,22 +1868,13 @@ Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place
                             type="button"
                             onClick={handleCopyForAI}
                             className="conda-btn-ia-copy"
-                            title="Consulter l'IA pour obtenir de nouveaux conseils et enrichir votre devoir"
+                            title={homework?.didakbotUrl
+                                ? "Copie votre travail, ouvre Didak'bot et affiche la prise de notes"
+                                : "Consulter l’IA pour obtenir de nouveaux conseils et enrichir votre devoir"}
                         >
                             <span>📋</span>
-                            <span>Consulter l'IA pour perfectionner</span>
+                            <span>{homework?.didakbotUrl ? "Copier le devoir et ouvrir le chatbot" : "Consulter l'IA pour perfectionner"}</span>
                         </button>
-                        {homework?.didakbotUrl && (
-                            <button
-                                type="button"
-                                className={`conda-btn-ia-didakbot ${showDidakbotPanel ? 'is-open' : ''}`}
-                                onClick={handleToggleDidakbot}
-                                title={showDidakbotPanel ? "Masquer le volet Chatbot" : "Ouvrir le chatbot Didak'bot dans le volet latéral"}
-                            >
-                                <span>🤖</span>
-                                <span>{showDidakbotPanel ? 'Masquer Chatbot' : 'Ouvrir Chatbot'}</span>
-                            </button>
-                        )}
                     </div>
                 </section>
             )}
@@ -2204,23 +2189,13 @@ Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place
                                 type="button"
                                 className="conda-btn-ia-copy"
                                 onClick={handleCopyForAI}
-                                title="Copie l'ensemble de votre travail (brouillon et devoir rédigé) pour le soumettre à l'IA"
+                                title={homework?.didakbotUrl
+                                    ? "Copie votre travail, ouvre Didak'bot et affiche la prise de notes"
+                                    : "Copie l'ensemble de votre travail pour le soumettre à l'IA"}
                             >
                                 <span>📋</span>
-                                <span>Copier mon devoir pour l'IA</span>
+                                <span>{homework?.didakbotUrl ? "Copier le devoir et ouvrir le chatbot" : "Copier mon devoir pour l'IA"}</span>
                             </button>
-
-                            {homework?.didakbotUrl && (
-                                <button
-                                    type="button"
-                                    className={`conda-btn-ia-didakbot ${showDidakbotPanel ? 'is-open' : ''}`}
-                                    onClick={handleToggleDidakbot}
-                                    title={showDidakbotPanel ? "Masquer le volet Chatbot" : "Ouvrir le chatbot Didak'bot dans le volet latéral"}
-                                >
-                                    <span>🤖</span>
-                                    <span>{showDidakbotPanel ? 'Masquer Chatbot' : 'Chatbot'}</span>
-                                </button>
-                            )}
 
                             {/* Window Toggle Buttons */}
                             <div className="flex items-center gap-2 border-l border-slate-700/80 pl-2">

@@ -229,6 +229,14 @@ const Models = {
         isEnabled: { type: Boolean, default: true },
         todoClassrooms: { type: [String], default: [] },
         didakbotUrl: { type: String, default: '' },
+        didakbotBotId: { type: Number, default: null },
+        didakbotAssignments: [{
+            studentId: { type: String, required: true },
+            studentName: { type: String, default: '' },
+            sessionId: { type: Number },
+            sessionCode: { type: String, required: true },
+            chatbotId: { type: Number }
+        }],
         date: { type: Date, default: Date.now }
     }),
 

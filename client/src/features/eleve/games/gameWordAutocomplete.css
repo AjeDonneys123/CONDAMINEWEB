@@ -1,0 +1,178 @@
+/* gameWordAutocomplete.css - Menu déroulant dictionnaire pour Zombie & Starship */
+
+.game-autocomplete-anchor {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  max-width: 480px;
+}
+
+.s-boss-interface .game-autocomplete-anchor {
+  max-width: 360px;
+}
+
+.game-autocomplete-anchor input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.game-autocomplete-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: rgba(15, 23, 42, 0.97);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  z-index: 9999;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: inherit;
+  animation: gameAutocompleteFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+
+.game-autocomplete-dropdown.opens-downward {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+.game-autocomplete-dropdown.opens-upward {
+  bottom: calc(100% + 8px);
+  top: auto;
+}
+
+@keyframes gameAutocompleteFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.game-autocomplete-header {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 5px 8px 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+.game-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.game-autocomplete-item:hover,
+.game-autocomplete-item.is-selected {
+  outline: none;
+}
+
+.game-autocomplete-item mark {
+  background: transparent;
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.game-autocomplete-empty {
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
+  font-style: italic;
+  user-select: none;
+}
+
+.game-autocomplete-hint-key {
+  font-size: 0.65rem;
+  font-weight: 800;
+  opacity: 0.75;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Thème Zombie (Vert / Lime / Émeraude) */
+.theme-zombie .game-autocomplete-dropdown {
+  border: 2px solid #22c55e;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 18px rgba(34, 197, 94, 0.35);
+}
+.theme-zombie .game-autocomplete-item mark {
+  color: #4ade80;
+}
+.theme-zombie .game-autocomplete-item:hover,
+.theme-zombie .game-autocomplete-item.is-selected {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.28) 0%, rgba(16, 185, 129, 0.18) 100%);
+  border-color: #22c55e;
+  color: #ffffff;
+  transform: translateX(3px);
+}
+.theme-zombie .game-autocomplete-item.is-selected .game-autocomplete-hint-key {
+  background: #22c55e;
+  color: #052e16;
+  border-color: #4ade80;
+}
+
+/* Thème Starship (Violet / Cyan / Néon) */
+.theme-starship .game-autocomplete-dropdown {
+  border: 2px solid #a855f7;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 20px rgba(168, 85, 247, 0.4);
+}
+.theme-starship .game-autocomplete-item mark {
+  color: #38bdf8;
+}
+.theme-starship .game-autocomplete-item:hover,
+.theme-starship .game-autocomplete-item.is-selected {
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.32) 0%, rgba(56, 189, 248, 0.22) 100%);
+  border-color: #38bdf8;
+  color: #ffffff;
+  transform: translateX(3px);
+}
+.theme-starship .game-autocomplete-item.is-selected .game-autocomplete-hint-key {
+  background: #38bdf8;
+  color: #082f49;
+  border-color: #7dd3fc;
+}
+
+/* Scrollbar personnalisée */
+.game-autocomplete-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.game-autocomplete-dropdown::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+.game-autocomplete-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 4px;
+}

@@ -234,6 +234,8 @@ export default function StudioDistributionSidebar({
         }
     };
 
+    const clearSelectedClasses = () => setDistribution({});
+
     const isClassSelected = !!distribution[viewingClass];
     const cfg = distribution[viewingClass];
     
@@ -295,6 +297,14 @@ export default function StudioDistributionSidebar({
                     disabled={loading || availableClasses.length === 0}
                 >
                     TOUS
+                </button>
+                <button
+                    className="v84-classes-select-all-btn"
+                    onClick={clearSelectedClasses}
+                    disabled={loading || Object.keys(distribution).length === 0}
+                    title="Désélectionner toutes les classes"
+                >
+                    AUCUNE
                 </button>
             </div>
             <div className="v84-classes-tabs">

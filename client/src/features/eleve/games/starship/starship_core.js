@@ -1,7 +1,7 @@
-// @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
 import { GameProgression } from '../mainGames';
 import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
 import { installCoordinateTouchRouter, protectGameSurface } from '../protectedGameTouch';
+import { buildGameDictionary, attachGameWordAutocomplete } from '../gameWordAutocomplete';
 
 export function initStarshipGame(root, api, onExit) {
     const removeSurfaceProtection = protectGameSurface(root);
@@ -202,6 +202,7 @@ export function initStarshipGame(root, api, onExit) {
 
     const handleBossInput = () => {
         if (isPaused) return;
+        autocomplete.hide();
         const qData = questionsList[currentQIndex];
         const correctTxt = qData.options[qData.a];
         if (normalize(els.bossInput.value) === normalize(correctTxt)) {
@@ -332,9 +333,13 @@ export function initStarshipGame(root, api, onExit) {
         if (score >= 2) {
             els.bossUI.style.display = 'flex';
             els.bossInput.value = '';
-            setTimeout(() => els.bossInput.focus(), 50);
+            setTimeout(() => {
+                els.bossInput.focus();
+                autocomplete.show();
+            }, 50);
             startBossPhase();
         } else {
+            autocomplete.hide();
             els.bossUI.style.display = 'none';
             startInvaderPhase();
         }
@@ -406,6 +411,12 @@ export function initStarshipGame(root, api, onExit) {
         event.preventDefault();
         mobileActions[button.dataset.gameCode]?.();
     }));
+    const gameDictionary = buildGameDictionary(api.level, api.gameData);
+    const autocomplete = attachGameWordAutocomplete(els.bossInput, gameDictionary, {
+        theme: 'theme-starship',
+        onSubmit: () => handleBossInput()
+    });
+
     els.bossInput.onkeydown = (e) => {
         e.stopPropagation();
         if(e.key === 'Enter') handleBossInput();
@@ -430,6 +441,7 @@ export function initStarshipGame(root, api, onExit) {
 
     return { destroy: () => {
         cancelAnimationFrame(frameId); clearInterval(spawnInterval); clearTimeout(invaderStartTimeout); clearInterval(loopWatchdog);
+        autocomplete.destroy();
         ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.removeEventListener(type, wakeGameLoop));
         root.removeEventListener('touchstart', wakeGameLoop);
         stopMobileHold(); removeMobileRouter(); resizeObserver.disconnect(); removeSurfaceProtection(); shipAnimator.destroy(); document.removeEventListener('keydown', handleKey);

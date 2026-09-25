@@ -1,6 +1,6 @@
-// @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
 import { createStudioSpriteAnimator } from '../studioSpriteAnimator';
 import { installCoordinateTouchRouter, protectGameSurface, protectNativeTouchZone } from '../protectedGameTouch';
+import { buildGameDictionary, attachGameWordAutocomplete } from '../gameWordAutocomplete';
 
 export function initZombieGame(root, api, onExit) {
     const removeSurfaceProtection = protectGameSurface(root);
@@ -116,6 +116,12 @@ export function initZombieGame(root, api, onExit) {
     root.querySelector('.z-quit-btn').onclick = onExit;
     
     // GESTION INPUT BOSS
+    const gameDictionary = buildGameDictionary(api.level, api.gameData);
+    const autocomplete = attachGameWordAutocomplete(els.input, gameDictionary, {
+        theme: 'theme-zombie',
+        onSubmit: () => handleInputAnswer()
+    });
+
     els.validateBtn.onclick = () => handleInputAnswer();
     els.input.onkeydown = (e) => {
         // Empêche les commandes globales des jeux de capturer la barre d'espace.
@@ -180,7 +186,10 @@ export function initZombieGame(root, api, onExit) {
             els.choices.style.display = 'none';
             els.inputArea.style.display = 'flex';
             els.input.value = '';
-            setTimeout(() => els.input.focus(), 50);
+            setTimeout(() => {
+                els.input.focus();
+                autocomplete.show();
+            }, 50);
             
             // TRANSFORMATION VISUELLE BOSS
             els.zombieEmoji.innerText = "👹";
@@ -192,6 +201,7 @@ export function initZombieGame(root, api, onExit) {
             zombieSpeed = baseSpeed * 0.5; // 50% moins vite
         } else {
             // MODE NORMAL
+            autocomplete.hide();
             els.inputArea.style.display = 'none';
             els.choices.style.display = 'grid';
             
@@ -238,6 +248,7 @@ export function initZombieGame(root, api, onExit) {
 
     const handleInputAnswer = () => {
         if (isPaused) return;
+        autocomplete.hide();
         const qData = questionsList[currentQIndex];
         const correctTxt = qData.options[qData.a]; 
         
@@ -357,6 +368,7 @@ export function initZombieGame(root, api, onExit) {
     return { destroy: () => {
         cancelAnimationFrame(frameId);
         clearInterval(loopWatchdog);
+        autocomplete.destroy();
         ['focus', 'pageshow', 'resize', 'orientationchange'].forEach((type) => window.removeEventListener(type, wakeGameLoop));
         root.removeEventListener('touchstart', wakeGameLoop);
         removeChoicesRouter(); removeSurfaceProtection(); heroAnimator.destroy(); zombieAnimator.destroy();
