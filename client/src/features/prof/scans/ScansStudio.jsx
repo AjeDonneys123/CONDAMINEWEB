@@ -117,8 +117,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const loadSessions = async () => {
         const params = new URLSearchParams();
         if (teacherId) params.set('teacherId', teacherId);
-        if (normalizedGlobalClassId && !isDesktopMode) params.set('classId', normalizedGlobalClassId);
-        if (isDesktopMode) params.set('includeUnassigned', '1');
+        params.set('includeUnassigned', '1');
         const res = await fetch(`/api/scans/sessions?${params.toString()}`);
         const data = await res.json();
         setSessions(data);
@@ -1130,10 +1129,13 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     };
 
     const visibleSessions = sessions.filter((session) => {
-        if (isDesktopMode) return true;
-        const sessionClassId = String(session?.classId || '').trim();
-        if (sessionClassId) return sessionClassId === normalizedGlobalClassId;
-        return isDesktopMode;
+        if (!normalizedGlobalClassId) return true;
+        const sessionClassId = String(session?.classId?._id || session?.classId || '').trim();
+        const sessionClassName = String(session?.className || '').trim().toLocaleLowerCase('fr');
+        const activeClassName = String(globalClass || '').trim().toLocaleLowerCase('fr');
+        const matchesId = sessionClassId === normalizedGlobalClassId;
+        const matchesName = Boolean(sessionClassName && activeClassName && sessionClassName === activeClassName);
+        return matchesId || matchesName;
     });
 
     return (
