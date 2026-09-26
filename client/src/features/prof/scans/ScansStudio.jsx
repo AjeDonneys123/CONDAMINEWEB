@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-export default function ScansStudio({ user, globalClass, globalClassId, classes = [], launchIntent = null }) {
+export default function ScansStudio({ user, globalClass, globalClassId, classes = [], launchIntent = null, correctionWorkspace = false }) {
     const [sessions, setSessions] = useState([]);
     const [activeSession, setActiveSession] = useState(null);
     const [view, setView] = useState('list'); 
@@ -30,6 +30,13 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const [selectedGradingStudentId, setSelectedGradingStudentId] = useState('');
     const [gradingLoading, setGradingLoading] = useState(false);
     const [savingGradeKey, setSavingGradeKey] = useState('');
+    const [batchScan, setBatchScan] = useState(null);
+    const [batchStudentName, setBatchStudentName] = useState('');
+    const [batchNumber, setBatchNumber] = useState(1);
+    const [batchPrompt, setBatchPrompt] = useState('');
+    const [batchPages, setBatchPages] = useState([]);
+    const [batchPublishing, setBatchPublishing] = useState(false);
+    const [batchStudentChoices, setBatchStudentChoices] = useState([]);
     const [isDesktopMode, setIsDesktopMode] = useState(() => {
         if (typeof window === 'undefined') return true;
         const ua = navigator?.userAgent || '';
@@ -41,6 +48,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const canvasRef = useRef(null);
     const queueTimersRef = useRef({});
     const localQueueRef = useRef([]);
+    const batchPageIndexRef = useRef(1);
     const handledLaunchIntentRef = useRef('');
     const teacherId = user?.id || user?._id || '';
     const normalizedGlobalClassId = String(globalClassId || '').trim();
@@ -289,13 +297,80 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
             const id = Date.now() + Math.floor(Math.random() * 1000);
             const item = { blob, url, id, status: view === 'scan' ? 'pending' : 'draft' };
             setLocalQueue(prev => [...prev, item]);
-            if (view === 'scan' && activeSession?._id) {
+            if (view === 'scan' && batchScan) {
+                void uploadBatchPage(item);
+            } else if (view === 'scan' && activeSession?._id) {
                 const timer = setTimeout(() => {
                     handleUploadSingle(id, activeSession._id, 'COPY');
                 }, 2200);
                 queueTimersRef.current[id] = timer;
             }
         }, 'image/jpeg', 0.9);
+    };
+
+    const uploadBatchPage = async (item) => {
+        const formData = new FormData();
+        formData.append('file', item.blob, `scan_${Date.now()}.jpg`);
+        formData.append('sessionId', batchScan.studentSessionId);
+        formData.append('pageIndex', String(batchPageIndexRef.current++));
+        formData.append('assignmentInstanceId', batchScan.assignmentId);
+        formData.append('homeworkNumber', '1');
+        formData.append('studentName', batchStudentName || `Élève ${batchNumber}`);
+        const chosenStudent = batchStudentChoices.find((student) => `${student.firstName || ''} ${student.lastName || ''}`.trim().toLocaleLowerCase('fr') === String(batchStudentName || '').trim().toLocaleLowerCase('fr'));
+        if (chosenStudent?._id) formData.append('studentId', chosenStudent._id);
+        formData.append('classId', normalizedGlobalClassId);
+        formData.append('className', globalClass || '');
+        formData.append('teacherId', teacherId);
+        try {
+            const res = await fetch('/api/scans/upload-classroom', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok || !data.scan) throw new Error(data.error || 'Échec de l’envoi');
+            setBatchPages((prev) => [...prev, data.scan]);
+            setLocalQueue((prev) => prev.filter((x) => x.id !== item.id));
+            URL.revokeObjectURL(item.url);
+        } catch (error) {
+            setLocalQueue((prev) => prev.map((x) => x.id === item.id ? { ...x, status: 'error' } : x));
+            setStatus(error.message || 'Échec de l’envoi');
+        }
+    };
+
+    const finishStudentBatch = async (advance = true) => {
+        if (!batchScan) return;
+        const form = new FormData();
+        form.append('assignmentName', batchScan.title);
+        form.append('correctionPrompt', batchPrompt);
+        await fetch(`/api/classroom/scans/session/${encodeURIComponent(batchScan.studentSessionId)}/meta`, { method: 'POST', body: form });
+        if (!advance) {
+            setBatchScan(null);
+            setBatchPages([]);
+            setView('list');
+            await loadSessions();
+            return;
+        }
+        const next = batchNumber + 1;
+        setBatchNumber(next);
+        setBatchStudentName(`Élève ${next}`);
+        setBatchPages([]);
+        batchPageIndexRef.current = 1;
+        setBatchScan((prev) => ({ ...prev, studentSessionId: `${prev.assignmentId}_${next}` }));
+    };
+
+    const publishBatchForAI = async () => {
+        if (!batchScan) return;
+        setBatchPublishing(true);
+        try {
+            const params = new URLSearchParams({ classId: normalizedGlobalClassId, limit: '200' });
+            const listRes = await fetch(`/api/classroom/scans?${params}`);
+            const listData = await listRes.json();
+            const scanIds = (listData.scans || []).filter((scan) => scan.assignmentInstanceId === batchScan.assignmentId).map((scan) => scan._id);
+            if (!scanIds.length) throw new Error('Aucune page de devoir à publier.');
+            const shareRes = await fetch('/api/classroom/scans/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scanIds, className: globalClass }) });
+            const share = await shareRes.json();
+            if (!shareRes.ok || !share.url) throw new Error(share.error || 'Publication impossible.');
+            await navigator.clipboard.writeText(share.url).catch(() => {});
+            setStatus(`Devoir publié pour l’IA : ${share.url}`);
+        } catch (error) { setStatus(error.message || 'Publication impossible.'); }
+        finally { setBatchPublishing(false); }
     };
 
     const handleUploadSingle = async (id, sessionId, type) => {
@@ -672,6 +747,22 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
         }
     };
 
+    const startStudentBatch = () => {
+        const title = String(prompt('Titre du devoir à scanner :') || '').trim();
+        if (!title) return;
+        const assignmentId = `teacher_scan_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        setBatchNumber(1);
+        setBatchStudentName('Élève 1');
+        setBatchPrompt('');
+        setBatchPages([]);
+        batchPageIndexRef.current = 1;
+        setBatchScan({ title, assignmentId, studentSessionId: `${assignmentId}_1` });
+        fetch('/api/admin/students').then((res) => res.ok ? res.json() : []).then((rows) => setBatchStudentChoices(Array.isArray(rows) ? rows.filter((student) => !normalizedGlobalClassId || String(student.classId || '') === normalizedGlobalClassId || (student.assignedGroups || []).some((id) => String(id?._id || id) === normalizedGlobalClassId)) : [])).catch(() => setBatchStudentChoices([]));
+        setActiveSession({ _id: `${assignmentId}_1`, title, subjectUrls: [], copyUrls: [] });
+        setView('scan');
+        setWorkspaceCollapsed(false);
+    };
+
     const createSession = async (isManualOnly = false) => {
         const title = String(prompt(isManualOnly ? "Titre du devoir manuel :" : "Titre de l'évaluation :") || '').trim();
         if (!title) return;
@@ -709,7 +800,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
     const renderWorkspace = (session) => {
         const uploaded = view === 'sujets' ? (session.subjectUrls || []) : (session.copyUrls || []);
         return (
-            <div className={`scan-workspace-inline animate-in view-${view}`}>
+            <div className={`scan-workspace-inline animate-in view-${view} ${batchScan ? 'is-batch-workspace' : ''}`}>
                 {loading && (
                     <div className="scan-loading-overlay">
                         <div className="scan-spinner"></div>
@@ -728,6 +819,8 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                         <span className="ws-subtitle">{view.toUpperCase()}</span>
                     </button>
                     <div className="workspace-actions">
+                        {batchScan && <input aria-label="Élève photographié" list="scan-student-options" className="scan-student-name-input" value={batchStudentName} onChange={(e) => setBatchStudentName(e.target.value)} />}
+                        {batchScan && <datalist id="scan-student-options">{batchStudentChoices.map((student) => <option key={student._id} value={`${student.firstName || ''} ${student.lastName || ''}`.trim()} />)}</datalist>}
                         <button onClick={() => { setActiveSession(session); setView('sujets'); setWorkspaceCollapsed(false); }} className="act-btn btn-sujet">Sujets</button>
                         <button onClick={() => { setActiveSession(session); setView('scan'); setWorkspaceCollapsed(false); }} className="act-btn btn-scan">Scan</button>
                         <button onClick={() => { setActiveSession(session); setView('results'); setWorkspaceCollapsed(false); }} className="act-btn btn-results">Résultats</button>
@@ -750,7 +843,12 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                 B
                             </button>
                         )}
-                        <button onClick={() => { setView('list'); setActiveSession(null); setWorkspaceCollapsed(false); }} className="act-btn btn-delete">✕</button>
+                        {batchScan ? (
+                            <>
+                                <button type="button" onClick={() => void finishStudentBatch(true)} className="act-btn btn-next-student" disabled={localQueue.some((item) => item.status === 'uploading')}>Élève suivant →</button>
+                                <button type="button" onClick={() => { void (async () => { await finishStudentBatch(false); await publishBatchForAI(); })(); }} className="act-btn btn-publish-scan" disabled={batchPublishing || localQueue.some((item) => item.status === 'uploading')}>Terminer & publier</button>
+                            </>
+                        ) : <button onClick={() => { setView('list'); setActiveSession(null); setWorkspaceCollapsed(false); }} className="act-btn btn-delete">✕</button>}
                     </div>
                     {localQueue.length > 0 && (
                         <button onClick={handleUploadQueue} className="ws-save-btn">SAUVEGARDER ({localQueue.length})</button>
@@ -761,6 +859,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                     <div className="workspace-content">
                         {(view === 'sujets' || view === 'scan') && (
                             <div className="camera-view">
+                                {batchScan && <div className="scan-batch-tools"><strong>{batchScan.title} · Série {batchNumber} · {batchPages.length} page(s)</strong><label>Consigne de correction du devoir<textarea value={batchPrompt} onChange={(e) => setBatchPrompt(e.target.value)} placeholder="Critères, attentes, barème et remarques à transmettre à l’IA…" /></label></div>}
                                 <div className="cam-wrapper">
                                     <video
                                         ref={videoRef}
@@ -830,6 +929,7 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                             {selectedAssetUrls.includes(url) && <div className="capture-selected-badge">Sélectionnée</div>}
                                         </div>
                                     ))}
+                                    {batchPages.map((page, idx) => <div key={page._id} className="capture-thumb uploaded"><img src={page.imageUrl} alt={`Page ${idx + 1} de ${batchStudentName}`} /></div>)}
                                     {uploaded.length === 0 && (
                                         <div className="capture-empty">
                                             {view === 'sujets' ? 'Aucun sujet enregistré.' : 'Aucune copie enregistrée.'}
@@ -1040,18 +1140,19 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
         <div className="scan-page animate-in fade-in">
             <div className="flex justify-between items-center mb-10">
                 <div>
-                    <h2 className="text-4xl font-black text-slate-800 uppercase tracking-tighter">Correction Vision 📸</h2>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Scanner et corriger via le Drive Pro</p>
+                    <h2 className="text-4xl font-black text-slate-800 uppercase tracking-tighter">{correctionWorkspace ? 'Corriger les devoirs ✍️' : 'Correction Vision 📸'}</h2>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{correctionWorkspace ? 'Lancer la correction IA ou importer une correction préparée dans ChatGPT' : 'Scanner et corriger via le Drive Pro'}</p>
                     {globalClass && <p className="scan-class-context">Classe active: {globalClass}</p>}
                 </div>
-                <div className="scan-create-actions">
+                {!correctionWorkspace && <div className="scan-create-actions">
+                    <button onClick={startStudentBatch} className="scan-create-btn student-batch">📸 NOUVEAU DEVOIR PAR ÉLÈVE</button>
                     <button onClick={() => createSession(false)} className="scan-create-btn primary">
                         + NOUVELLE SESSION
                     </button>
                     <button onClick={() => createSession(true)} className="scan-create-btn manual">
                         ✋ MANUEL
                     </button>
-                </div>
+                </div>}
             </div>
 
             <div className="sessions-list">
@@ -1074,8 +1175,8 @@ export default function ScansStudio({ user, globalClass, globalClassId, classes 
                                         </button>
                                     </div>
                                     <div className="session-card-actions">
-                                        {!s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>}
-                                        {!s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>}
+                                        {!correctionWorkspace && !s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>}
+                                        {!correctionWorkspace && !s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>}
                                         {!s.isManualOnly && <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>}
                                         <button onClick={() => openManualGrading(s)} className="act-btn btn-quick-grade">Manuel</button>
                                         {!s.isManualOnly && <button

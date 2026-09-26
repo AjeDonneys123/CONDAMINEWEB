@@ -95,6 +95,64 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     const [didakbotCreating, setDidakbotCreating] = useState(false);
     const [didakbotCreateError, setDidakbotCreateError] = useState('');
     const [didakbotCreateSuccess, setDidakbotCreateSuccess] = useState('');
+    const [didakbotEditorOpen, setDidakbotEditorOpen] = useState(false);
+    const [didakbotDraft, setDidakbotDraft] = useState(null);
+    const [didakbotEditorMode, setDidakbotEditorMode] = useState('create');
+    const [didakbotLoadingExisting, setDidakbotLoadingExisting] = useState(false);
+    const [didakbotPostTrace, setDidakbotPostTrace] = useState([]);
+
+    const postDidakbotConfig = async (botConfig, className, stage, editShareLink = '') => {
+        const editQuery = editShareLink ? `&edit=${encodeURIComponent(editShareLink)}` : '';
+        const url = `https://novapeda.eu/didakbot3.php?page=create${editQuery}`;
+        const body = new URLSearchParams({ action: 'save_chatbot', data: JSON.stringify(botConfig) });
+        const traceId = `${Date.now()}-${Math.random()}`;
+        const safeConfig = { ...botConfig, user_key: '[masquée]' };
+        const trace = {
+            id: traceId,
+            stage,
+            className,
+            url,
+            method: 'POST',
+            request: { action: 'save_chatbot', data: safeConfig },
+            status: 'En cours…'
+        };
+        setDidakbotPostTrace(current => [trace, ...current].slice(0, 8));
+        console.info('[Didakbot save_chatbot] POST', { url, method: 'POST', action: 'save_chatbot', data: safeConfig, className, stage });
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body
+        });
+        const result = await response.json();
+        setDidakbotPostTrace(current => current.map(item => item.id === traceId
+            ? { ...item, status: `${response.status} ${response.statusText || ''}`.trim(), response: result }
+            : item));
+        console.info('[Didakbot save_chatbot] réponse', { className, stage, httpStatus: response.status, result });
+        return { response, result };
+    };
+
+    const getDidakbotConfig = async (shareLink) => {
+        const url = `https://novapeda.eu/didakbot3.php?page=create&edit=${encodeURIComponent(shareLink)}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ action: 'get_chatbot', share_link: shareLink })
+        });
+        const result = await response.json();
+        if (!response.ok || result?.success !== true) {
+            throw new Error(result?.error || result?.message || 'Didak’bot n’a pas renvoyé la configuration du bot.');
+        }
+        let config = result.chatbot || result.bot || result.config || result.data || result;
+        if (typeof config === 'string') {
+            try { config = JSON.parse(config); } catch (_) {}
+        }
+        if (!config || typeof config !== 'object' || ![
+            'name', 'welcome_message', 'system_prompt', 'pedagogical_approach', 'behavioral_rules'
+        ].some(field => Object.prototype.hasOwnProperty.call(config, field))) {
+            throw new Error('La réponse Didak’bot ne contient pas les champs de configuration attendus.');
+        }
+        return config;
+    };
 
     const handleSaveCreatorKey = async (val) => {
         const clean = String(val || '').trim().toUpperCase();
@@ -117,13 +175,76 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         }
     };
 
+    const buildDidakbotDraft = () => {
+        const level = formData.levels?.[activeLevelIdx] || {};
+        const prompt = [
+            "Tu es un assistant pédagogique bienveillant. Guide l'élève par des questions et des indices, sans rédiger le devoir complet à sa place.",
+            formData.title ? `Sujet du devoir : ${formData.title}` : '',
+            formData.content ? `Consigne principale : ${formData.content}` : '',
+            level.instruction ? `Consignes complémentaires : ${level.instruction}` : '',
+            level.aiHints ? `Pistes pédagogiques : ${level.aiHints}` : ''
+        ].filter(Boolean).join('\n\n');
+        return {
+            name: `${String(formData.title || 'Assistant pédagogique').trim()} — chatbot`.slice(0, 80),
+            language: 'Français',
+            welcome_message: `Bonjour ! Je suis le tuteur du devoir « ${formData.title || 'Assistant pédagogique'} ». Comment puis-je t'aider à avancer ?`,
+            role: 'Assistant pédagogique',
+            image_url: '',
+            expertise_domain: String(formData.promptTopic || '').trim(),
+            system_prompt: prompt,
+            pedagogical_approach: 'Méthode socratique et guidage par le questionnement. Valoriser l’apprentissage par l’erreur et la progression.',
+            behavioral_rules: 'Ton bienveillant, stimulant et rigoureux. Ne pas rédiger le devoir à la place de l’élève. Terminer par une question ou une action concrète.',
+            knowledge_limits: 'Rester dans le sujet et les consignes de ce devoir. Signaler les incertitudes.',
+            model: 'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
+            verbosity: 'normal',
+            max_lines: '10',
+            context_material: '',
+            is_collaborative: false,
+            track_conversations: true,
+            max_sessions: '30',
+            allow_student_files: false,
+            context_only: false,
+            accessibility_buttons: true
+        };
+    };
+
+    const openDidakbotEditor = async (mode = 'create') => {
+        setDidakbotEditorMode(mode);
+        setDidakbotCreateError('');
+        setDidakbotCreateSuccess('');
+        setDidakbotEditorOpen(true);
+        if (mode !== 'edit') {
+            setDidakbotDraft(buildDidakbotDraft());
+            setDidakbotLoadingExisting(false);
+            return;
+        }
+        const linkedBot = formData.didakbotClassBots?.find(bot => bot.shareLink);
+        if (!linkedBot) {
+            setDidakbotDraft(null);
+            setDidakbotCreateError("Aucun chatbot lié avec un lien de partage. Crée d’abord le bot modèle et enregistre le devoir.");
+            return;
+        }
+        setDidakbotDraft(null);
+        setDidakbotLoadingExisting(true);
+        try {
+            const config = await getDidakbotConfig(linkedBot.shareLink);
+            const loadedConfig = { ...buildDidakbotDraft(), ...config };
+            setDidakbotDraft(loadedConfig);
+            setFormData(current => ({ ...current, didakbotTemplate: loadedConfig }));
+        } catch (error) {
+            setDidakbotCreateError(error?.message || "Impossible de charger la configuration du chatbot existant.");
+        } finally {
+            setDidakbotLoadingExisting(false);
+        }
+    };
+
     const handleCreateDidakbot = async () => {
         const cleanKey = String(creatorKey || '').trim().toUpperCase();
         if (!cleanKey) {
             setDidakbotCreateError("Saisissez d'abord votre clé créateur Didak'bot.");
             return;
         }
-        if (!selectedClassNames.length) {
+        if (didakbotEditorMode !== 'edit' && !selectedBotClassGroups.length) {
             setDidakbotCreateError('Sélectionnez au moins une classe avant de créer les chatbots.');
             return;
         }
@@ -131,62 +252,64 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         setDidakbotCreating(true);
         setDidakbotCreateError('');
         setDidakbotCreateSuccess('');
-        const selectedClassKeys = new Set(selectedClassNames.map(normalizeClassName));
+        const baseClassGroup = selectedBotClassGroups[0];
+        if (didakbotEditorMode === 'edit') {
+            const linkedBots = Array.isArray(formData.didakbotClassBots) ? formData.didakbotClassBots : [];
+            if (!linkedBots.length) {
+                setDidakbotCreateError("Aucun chatbot n'est encore lié à ce devoir. Utilisez d'abord « Créer un chatbot ».");
+                setDidakbotCreating(false);
+                return;
+            }
+            try {
+                for (const bot of linkedBots) {
+                    if (!bot.shareLink) throw new Error(`Le lien du chatbot de ${bot.className || 'la classe'} est manquant ; modification annulée.`);
+                    const classGroup = selectedBotClassGroups.find(group => normalizeClassName(group.className) === normalizeClassName(bot.className));
+                    const students = classGroup?.students || getClassRoster(bot.className);
+                    const { context_material, ...editableConfig } = didakbotDraft;
+                    const botConfig = {
+                        user_key: cleanKey,
+                        ...editableConfig,
+                        share_link: bot.shareLink,
+                        name: `${String(editableConfig.name || formData.title || 'Assistant pédagogique').trim()} — ${bot.className}`.slice(0, 80),
+                        target_audience: bot.className,
+                        system_prompt: [editableConfig.system_prompt, context_material ? `Documents et contexte de référence :\n${context_material}` : ''].filter(Boolean).join('\n\n'),
+                        max_sessions: String(Math.max(Number(editableConfig.max_sessions) || 30, students.length + 5))
+                    };
+                    const { response, result } = await postDidakbotConfig(botConfig, bot.className, 'mise à jour du chatbot existant', bot.shareLink);
+                    if (!response.ok || result?.success !== true) {
+                        throw new Error(result?.error || result?.message || `Didak’bot n’a pas confirmé la mise à jour de ${bot.className}.`);
+                    }
+                }
+                setFormData(current => ({ ...current, didakbotTemplate: didakbotDraft }));
+                setDidakbotCreateSuccess(`${linkedBots.length} chatbot(s) mis à jour en place ; aucun nouveau bot créé.`);
+                setDidakbotEditorOpen(false);
+            } catch (error) {
+                setDidakbotCreateError(error?.message || "Impossible de modifier les chatbots Didak'bot.");
+            } finally {
+                setDidakbotCreating(false);
+            }
+            return;
+        }
+        const selectedClassKeys = new Set([normalizeClassName(baseClassGroup.className)]);
         let createdBots = (formData.didakbotClassBots || [])
             .filter(bot => selectedClassKeys.has(normalizeClassName(bot.className)));
         try {
-            const level = formData.levels?.[activeLevelIdx] || {};
-            const instructions = [
-                "Tu es un assistant pédagogique bienveillant. Guide l'élève par des questions et des indices, sans rédiger le devoir complet à sa place.",
-                formData.title ? `Sujet du devoir : ${formData.title}` : '',
-                formData.content ? `Consigne principale : ${formData.content}` : '',
-                level.instruction ? `Consignes complémentaires : ${level.instruction}` : '',
-                level.aiHints ? `Pistes pédagogiques : ${level.aiHints}` : ''
-            ].filter(Boolean).join('\n\n');
             const normalizeName = (value) => normalizeClassName(value);
-            for (const className of selectedClassNames) {
+            for (const classGroup of [baseClassGroup]) {
+                const { className, students } = classGroup;
                 const existing = createdBots.find(bot => normalizeName(bot.className) === normalizeName(className) && bot.chatbotId && bot.shareLink);
-                if (existing) continue;
-
-                const classDistribution = distribution[className] || {};
-                const subsetIds = new Set((classDistribution.studentIds || []).map(String));
-                const classStudentCount = allStudents.filter(student => {
-                    const studentClass = normalizeName(student.currentClass || student.className || student.classroom || '');
-                    if (studentClass !== normalizeName(className)) return false;
-                    return subsetIds.size === 0 || subsetIds.has(String(student._id || student.id || ''));
-                }).length;
-                const effectiveStudentCount = Math.max(classStudentCount, subsetIds.size);
-                const botName = `${String(formData.title || 'Assistant pédagogique').trim()} — ${className}`.slice(0, 80);
+                if (existing && didakbotEditorMode !== 'edit') continue;
+                const { context_material, ...editableConfig } = didakbotDraft;
                 const botConfig = {
                     user_key: cleanKey,
                     share_link: null,
-                    name: botName,
-                    welcome_message: `Bonjour ! Je suis le tuteur du devoir « ${formData.title || botName} » pour la classe ${className}. Comment puis-je t'aider à avancer ?`,
-                    role: 'Assistant pédagogique',
-                    image_url: '',
+                    ...editableConfig,
+                    name: `${String(editableConfig.name || formData.title || 'Assistant pédagogique').trim()} — ${className}`.slice(0, 80),
                     target_audience: className,
-                    expertise_domain: String(formData.promptTopic || '').trim(),
-                    system_prompt: `${instructions}\n\nClasse concernée : ${className}.`,
-                    pedagogical_approach: 'Méthode socratique : guider par des questions et des indices, puis aider à vérifier les arguments.',
-                    behavioral_rules: 'Être bienveillant, précis et rigoureux. Ne pas fournir directement un devoir complet à rendre.',
-                    knowledge_limits: 'Rester dans le sujet et les consignes de ce devoir. Signaler les incertitudes.',
-                    verbosity: 'normal',
-                    max_lines: '10',
-                    is_collaborative: false,
-                    language: 'Français',
-                    model: 'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
-                    track_conversations: true,
-                    max_sessions: String(Math.max(30, effectiveStudentCount + 5)),
-                    allow_student_files: false,
-                    context_only: false,
-                    accessibility_buttons: true
+                    system_prompt: [editableConfig.system_prompt, context_material ? `Documents et contexte de référence :\n${context_material}` : ''].filter(Boolean).join('\n\n'),
+                    max_sessions: String(Math.max(Number(editableConfig.max_sessions) || 30, students.length + 5))
                 };
-                const response = await fetch('https://novapeda.eu/didakbot3.php?page=create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-                    body: new URLSearchParams({ action: 'save_chatbot', data: JSON.stringify(botConfig) })
-                });
-                const result = await response.json();
+                const { response, result } = await postDidakbotConfig(botConfig, className, 'bot modèle');
                 if (!response.ok || result?.success !== true || !result?.chatbot_id || !result?.share_link) {
                     throw new Error(result?.error || result?.message || `Didak'bot n'a pas confirmé la création pour ${className}.`);
                 }
@@ -200,6 +323,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                 setFormData(current => ({
                     ...current,
                     didakbotClassBots: createdBots,
+                    didakbotTemplate: didakbotDraft,
                     didakbotUrl: createdBots[0]?.url || bot.url,
                     didakbotBotId: String(createdBots[0]?.chatbotId || bot.chatbotId)
                 }));
@@ -207,10 +331,12 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             setFormData(current => ({
                 ...current,
                 didakbotClassBots: createdBots,
+                didakbotTemplate: didakbotDraft,
                 didakbotUrl: createdBots[0]?.url || current.didakbotUrl,
                 didakbotBotId: String(createdBots[0]?.chatbotId || current.didakbotBotId || '')
             }));
-            setDidakbotCreateSuccess(`${createdBots.length} chatbot(s), un par classe, prêts. Enregistrez le devoir pour attribuer les sessions aux élèves.`);
+            setDidakbotCreateSuccess(`Bot modèle créé pour ${baseClassGroup.className}. Les clones des autres classes seront créés à l’enregistrement du devoir.`);
+            setDidakbotEditorOpen(false);
         } catch (error) {
             setDidakbotCreateError(error?.message || "Impossible de créer le chatbot Didak'bot.");
         } finally {
@@ -252,6 +378,37 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     // 5. HANDLERS
     const handleInput = (f, v) => setFormData(p => ({ ...p, [f]: v }));
     const selectedClassNames = Object.keys(distribution || {});
+    const getClassRoster = (className, cfg = distribution[className]) => {
+        const classObj = allClasses.find(item => normalizeClassName(item.name) === normalizeClassName(className));
+        const selectedIds = new Set((cfg?.studentIds || []).map(String));
+        return allStudents.filter(student => {
+            const id = String(student?._id || student?.id || '');
+            const studentClass = normalizeClassName(student.currentClass || '');
+            const sameClass = studentClass === normalizeClassName(className);
+            const inGroup = classObj?.type === 'GROUP' && (student.assignedGroups || []).some(group => String(group?._id || group?.id || group) === String(classObj._id || classObj.id));
+            if (!sameClass && !inGroup) return false;
+            return !selectedIds.size || selectedIds.has(id);
+        });
+    };
+    const getHomeroomName = (student, fallback) => {
+        const raw = String(student.currentClass || student.className || student.classroom || fallback || '').trim();
+        const normalized = normalizeClassName(raw);
+        const baseClass = normalized.match(/^([1-6][A-Z])(?=\s|$)/)?.[1];
+        return baseClass || raw;
+    };
+    const selectedBotClassGroups = (() => {
+        const roster = new Map();
+        selectedClassNames.forEach(className => {
+            getClassRoster(className).forEach(student => {
+                const botClassName = getHomeroomName(student, className);
+                const key = normalizeClassName(botClassName);
+                if (!key) return;
+                if (!roster.has(key)) roster.set(key, { className: botClassName, students: new Map() });
+                roster.get(key).students.set(String(student._id || student.id), student);
+            });
+        });
+        return [...roster.values()].map(group => ({ ...group, students: [...group.students.values()] }));
+    })();
     const canMarkDnb = selectedClassNames.some(isTroisiemeClass);
     const canMarkSecondeTraining = selectedClassNames.some(isSecondeClass);
     const assessmentLabel = formData.assessmentKind === 'dnb'
@@ -418,11 +575,36 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                 groups[key].classrooms.push(cls);
             });
 
-            const classBots = Array.isArray(formData.didakbotClassBots) && formData.didakbotClassBots.length
+            let classBots = Array.isArray(formData.didakbotClassBots) && formData.didakbotClassBots.length
                 ? formData.didakbotClassBots
                 : (formData.didakbotUrl && formData.didakbotBotId
                     ? [{ className: selectedClassNames[0] || '', chatbotId: Number(formData.didakbotBotId), url: formData.didakbotUrl }]
                     : []);
+            if (classBots.length && formData.didakbotTemplate && !formData.isPunishment) {
+                for (const classGroup of selectedBotClassGroups) {
+                    if (classBots.some(bot => normalizeClassName(bot.className) === normalizeClassName(classGroup.className))) continue;
+                    const { context_material, ...template } = formData.didakbotTemplate;
+                    const botConfig = {
+                        user_key: String(creatorKey || '').trim().toUpperCase(),
+                        share_link: null,
+                        ...template,
+                        name: `${String(template.name || formData.title || 'Assistant pédagogique').trim()} — ${classGroup.className}`.slice(0, 80),
+                        target_audience: classGroup.className,
+                        system_prompt: [template.system_prompt, context_material ? `Documents et contexte de référence :\n${context_material}` : ''].filter(Boolean).join('\n\n'),
+                        max_sessions: String(Math.max(Number(template.max_sessions) || 30, classGroup.students.length + 5))
+                    };
+                    const { response, result } = await postDidakbotConfig(botConfig, classGroup.className, 'clone au moment de l’enregistrement');
+                    if (!response.ok || result?.success !== true || !result?.chatbot_id || !result?.share_link) {
+                        throw new Error(result?.error || result?.message || `Impossible de cloner le chatbot pour ${classGroup.className}.`);
+                    }
+                    classBots = [...classBots, {
+                        className: classGroup.className,
+                        chatbotId: Number(result.chatbot_id),
+                        shareLink: String(result.share_link),
+                        url: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(result.share_link)}&iframe=1`
+                    }];
+                }
+            }
             const sessionsByBot = new Map();
             if (classBots.length && !formData.isPunishment) {
                 if (!creatorKey) throw new Error("Pour attribuer un chat par élève, renseignez la clé créateur Didak'bot.");
@@ -460,14 +642,15 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     teacherId: user.id || user._id
                 };
                 if (classBots.length && !formData.isPunishment) {
-                    const classNames = new Set(grp.classrooms.map(normalizeClassName));
                     const selectedIds = new Set((grp.assignedStudents || []).map(String));
-                    const recipients = allStudents.filter(student => {
+                    const recipientsById = new Map();
+                    grp.classrooms.forEach(className => {
+                        getClassRoster(className, { studentIds: grp.isAllClass ? [] : grp.assignedStudents })
+                            .forEach(student => recipientsById.set(String(student._id || student.id), student));
+                    });
+                    const recipients = [...recipientsById.values()].filter(student => {
                         const id = String(student?._id || student?.id || '');
-                        if (!id) return false;
-                        if (!grp.isAllClass) return selectedIds.has(id);
-                        const studentClass = normalizeClassName(student.currentClass || student.className || student.classroom || '');
-                        return classNames.has(studentClass);
+                        return id && (grp.isAllClass || selectedIds.has(id));
                     });
                     if (recipients.length === 0) {
                         throw new Error(`Aucun élève trouvé pour ${grp.classrooms.join(', ')}. Impossible d'attribuer les chats.`);
@@ -478,7 +661,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     payload.didakbotUrl = classBots[0].url || formData.didakbotUrl;
                     payload.didakbotAssignments = recipients.map(student => {
                         const studentId = String(student._id || student.id);
-                        const studentClassName = normalizeClassName(student.currentClass || student.className || student.classroom || (grp.classrooms.length === 1 ? grp.classrooms[0] : ''));
+                        const studentClassName = normalizeClassName(getHomeroomName(student, grp.classrooms[0] || ''));
                         const bot = classBots.find(item => normalizeClassName(item.className) === studentClassName)
                             || (classBots.length === 1 ? classBots[0] : null);
                         if (!bot) throw new Error(`Aucun chatbot n'est associé à la classe de ${student.fullName || student.name || studentId}.`);
@@ -526,6 +709,14 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     };
 
     const currentLvl = formData.levels[activeLevelIdx];
+    const botDraft = didakbotDraft || buildDidakbotDraft();
+    const didakbotTextFields = [
+        ['name', 'Nom du chatbot'], ['language', 'Langue'], ['welcome_message', 'Message de bienvenue'], ['role', 'Rôle'],
+        ['image_url', 'URL de l’image'], ['expertise_domain', 'Domaine d’expertise'],
+        ['system_prompt', 'Instruction système / prompt'], ['pedagogical_approach', 'Approche pédagogique'],
+        ['behavioral_rules', 'Règles comportementales'], ['knowledge_limits', 'Limites et cadre de connaissances'],
+        ['context_material', 'Documents / contexte de référence'], ['max_sessions', 'Nombre de sessions (minimum)']
+    ];
 
     return (
         <div className="v84-hw-container">
@@ -587,11 +778,19 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                             <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                     type="button"
-                                    onClick={handleCreateDidakbot}
-                                    disabled={didakbotCreating || !creatorKey}
+                                    onClick={() => openDidakbotEditor('create')}
+                                    disabled={didakbotCreating}
                                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 disabled:opacity-50 text-white font-black text-xs shadow-sm transition"
                                 >
-                                    {didakbotCreating ? 'Création en cours…' : '✨ Créer le chatbot depuis ce devoir'}
+                                    ✨ Créer un chatbot
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => openDidakbotEditor('edit')}
+                                    disabled={didakbotCreating || !(formData.didakbotClassBots || []).length}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-cyan-50 border border-cyan-300 text-cyan-900 font-black text-xs shadow-sm transition"
+                                >
+                                    ✏️ Modifier les chatbots liés
                                 </button>
                                 <a
                                     href="https://novapeda.eu/didakbot3.php"
@@ -685,6 +884,24 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                             >
                                 {didakbotCreateError || didakbotCreateSuccess}
                             </div>
+                        )}
+
+                        {didakbotPostTrace.length > 0 && (
+                            <details className="rounded-xl border border-slate-300 bg-white p-3 text-xs">
+                                <summary className="cursor-pointer font-black text-slate-700">Voir les POST Didak’bot envoyés ({didakbotPostTrace.length})</summary>
+                                <div className="mt-3 max-h-96 space-y-3 overflow-auto">
+                                    {didakbotPostTrace.map(trace => (
+                                        <section key={trace.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                            <div className="mb-2 flex flex-wrap justify-between gap-2 font-bold text-slate-700">
+                                                <span>{trace.stage} · {trace.className}</span><span>{trace.status}</span>
+                                            </div>
+                                            <div className="mb-1 text-[10px] text-slate-500">POST {trace.url} · clé créateur masquée</div>
+                                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-900 p-3 text-[10px] text-emerald-100">{JSON.stringify(trace.request, null, 2)}</pre>
+                                            {trace.response !== undefined && <><div className="mb-1 mt-2 font-bold text-slate-600">Réponse serveur</div><pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-900 p-3 text-[10px] text-cyan-100">{JSON.stringify(trace.response, null, 2)}</pre></>}
+                                        </section>
+                                    ))}
+                                </div>
+                            </details>
                         )}
 
                         <div className="space-y-1.5">
@@ -1107,6 +1324,61 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     onSave={handleSave}
                 />
             </div>
+
+            {didakbotEditorOpen && (
+                <div className="fixed inset-0 z-[30000] bg-slate-950/70 p-3 sm:p-6 flex items-center justify-center" onClick={() => !didakbotCreating && setDidakbotEditorOpen(false)}>
+                    <section className="w-full max-w-6xl max-h-[94vh] overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col" onClick={event => event.stopPropagation()}>
+                        <header className="flex items-center justify-between gap-4 bg-cyan-800 px-5 py-4 text-white">
+                            <div><h2 className="text-lg font-black">Configuration du chatbot — {didakbotEditorMode === 'edit' ? 'modifier' : 'créer'}</h2><p className="text-xs text-cyan-100">{didakbotEditorMode === 'edit' ? 'La configuration actuelle du bot lié est chargée depuis Didak’bot. Les modifications seront appliquées aux bots liés à ce devoir.' : 'Cette étape crée un seul bot modèle. Les copies par classe seront créées quand vous enregistrerez le devoir.'}</p></div>
+                            <button type="button" className="rounded-lg px-3 py-2 text-xl hover:bg-white/10" onClick={() => setDidakbotEditorOpen(false)} disabled={didakbotCreating}>✕</button>
+                        </header>
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            {didakbotLoadingExisting ? (
+                                <div className="p-8 text-center text-sm font-bold text-slate-600">Chargement de la configuration du bot existant…</div>
+                            ) : didakbotDraft ? <div className="p-5 space-y-3">
+                                <h3 className="text-xs font-black uppercase tracking-wide text-slate-600">Informations et instructions pédagogiques</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {didakbotTextFields.map(([field, label]) => (
+                                        <label key={field} className={`block text-xs font-bold text-slate-700 ${['welcome_message', 'system_prompt', 'pedagogical_approach', 'behavioral_rules', 'knowledge_limits', 'context_material'].includes(field) ? 'md:col-span-2' : ''}`}>
+                                            {label}
+                                            {['welcome_message', 'system_prompt', 'pedagogical_approach', 'behavioral_rules', 'knowledge_limits', 'context_material'].includes(field) ? (
+                                                <textarea rows={field === 'system_prompt' || field === 'context_material' ? 6 : 3} className="mt-1 w-full resize-y rounded-xl border border-slate-200 p-3 font-medium text-slate-800 focus:border-cyan-500 focus:outline-none" value={botDraft[field] || ''} onChange={event => setDidakbotDraft(current => ({ ...current, [field]: event.target.value }))} />
+                                            ) : (
+                                                <input type={field === 'max_sessions' ? 'number' : 'text'} min={field === 'max_sessions' ? 1 : undefined} className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 font-medium text-slate-800 focus:border-cyan-500 focus:outline-none" value={botDraft[field] || ''} onChange={event => setDidakbotDraft(current => ({ ...current, [field]: event.target.value }))} />
+                                            )}
+                                        </label>
+                                    ))}
+                                    <label className="block text-xs font-bold text-slate-700">Modèle
+                                        <select className="mt-1 w-full rounded-xl border border-slate-200 p-2.5" value={botDraft.model || ''} onChange={event => setDidakbotDraft(current => ({ ...current, model: event.target.value }))}>
+                                            <option value="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8">Llama 4 Maverick 17B</option>
+                                            <option value="mistralai/Mistral-Small-3.2-24B-Instruct-2506">Mistral Small 3.2</option>
+                                        </select>
+                                    </label>
+                                    <label className="block text-xs font-bold text-slate-700">Verbosité
+                                        <select className="mt-1 w-full rounded-xl border border-slate-200 p-2.5" value={botDraft.verbosity || 'normal'} onChange={event => setDidakbotDraft(current => ({ ...current, verbosity: event.target.value }))}><option value="concise">Concise</option><option value="normal">Normale</option><option value="detailed">Détaillée</option></select>
+                                    </label>
+                                    <label className="block text-xs font-bold text-slate-700">Nombre maximal de lignes
+                                        <input type="number" min="1" max="100" className="mt-1 w-full rounded-xl border border-slate-200 p-2.5" value={botDraft.max_lines || 10} onChange={event => setDidakbotDraft(current => ({ ...current, max_lines: event.target.value }))} />
+                                    </label>
+                                </div>
+                                <h3 className="pt-2 text-xs font-black uppercase tracking-wide text-slate-600">Options avancées</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {[
+                                        ['is_collaborative', 'Mode collaboratif'], ['track_conversations', 'Suivi des conversations'],
+                                        ['allow_student_files', 'Autoriser les fichiers élèves'], ['context_only', 'Réponses basées uniquement sur les documents'],
+                                        ['accessibility_buttons', 'Activer les boutons d’inclusivité']
+                                    ].map(([field, label]) => <label key={field} className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 text-xs font-semibold"><input type="checkbox" checked={Boolean(botDraft[field])} onChange={event => setDidakbotDraft(current => ({ ...current, [field]: event.target.checked }))} />{label}</label>)}
+                                </div>
+                                {(didakbotCreateError || didakbotCreateSuccess) && <div role="status" className={`rounded-xl border p-3 text-xs font-bold ${didakbotCreateError ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{didakbotCreateError || didakbotCreateSuccess}</div>}
+                            </div> : didakbotCreateError ? <div role="alert" className="m-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{didakbotCreateError}</div> : null}
+                        </div>
+                        <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-200 p-4">
+                            <button type="button" className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600" onClick={() => setDidakbotEditorOpen(false)} disabled={didakbotCreating}>Annuler</button>
+                            <button type="button" className="rounded-xl bg-cyan-700 px-5 py-2 text-xs font-black text-white disabled:opacity-50" onClick={handleCreateDidakbot} disabled={didakbotCreating || didakbotLoadingExisting || !didakbotDraft || !creatorKey || (didakbotEditorMode === 'edit' ? !formData.didakbotClassBots?.length : !selectedBotClassGroups.length)}>{didakbotCreating ? (didakbotEditorMode === 'edit' ? 'Mise à jour…' : 'Création…') : didakbotEditorMode === 'edit' ? 'Mettre à jour les chatbots' : 'Créer le chatbot modèle'}</button>
+                        </footer>
+                    </section>
+                </div>
+            )}
 
             {previewAsset && (
                 <div className="hw-preview-modal" onClick={closePreview}>

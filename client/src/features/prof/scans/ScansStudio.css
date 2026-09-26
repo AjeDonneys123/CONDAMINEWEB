@@ -8,6 +8,19 @@
 .scan-create-btn:hover { transform: translateY(-2px); }
 .scan-create-btn.primary { background: #4f46e5; }
 .scan-create-btn.manual { background: #f59e0b; }
+.scan-create-btn.student-batch { background: #0891b2; }
+.scan-student-name-input { min-width: 180px; max-width: 260px; padding: 9px 12px; border: 2px solid #bae6fd; border-radius: 12px; color: #0f172a; font-size: 13px; font-weight: 900; }
+.btn-next-student { background: #0f766e; color: white; }
+.btn-publish-scan { background: #4f46e5; color: white; }
+.scan-batch-tools { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 14px 18px; border-radius: 16px; background: #ecfeff; color: #155e75; font-weight: 900; }
+.scan-batch-tools label { display: flex; flex: 1; flex-direction: column; gap: 6px; max-width: 700px; font-size: 12px; }
+.scan-batch-tools textarea { min-height: 64px; padding: 10px 12px; border: 1px solid #a5f3fc; border-radius: 10px; resize: vertical; color: #0f172a; font-weight: 600; }
+.scan-workspace-inline.is-batch-workspace { position: fixed; inset: 0; z-index: 10060; display: flex; flex-direction: column; margin: 0; border: 0; border-radius: 0; background: #f8fafc; }
+.is-batch-workspace .workspace-header { position: sticky; top: 0; z-index: 3; flex: 0 0 auto; }
+.is-batch-workspace .workspace-content { flex: 1; min-height: 0; overflow: auto; }
+.is-batch-workspace .camera-view { min-height: 100%; }
+.is-batch-workspace .cam-wrapper { min-height: min(70vh, 800px); }
+.is-batch-workspace .cam-video { width: 100%; height: 100%; object-fit: contain; background: #020617; }
 
 .session-card {
     background: white;

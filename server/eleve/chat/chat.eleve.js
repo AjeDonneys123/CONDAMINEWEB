@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const AIEngine = require('../../core/ai.engine');
-const { Student, LearningModule, GptInboxMessage } = require('../../prof/models/prof.models');
+const { Student, LearningModule, GptInboxMessage, Homework } = require('../../prof/models/prof.models');
 
 const router = express.Router();
 
@@ -13,6 +13,56 @@ router.use(rateLimit({
     legacyHeaders: false,
     message: { error: 'Trop de messages. Attends une minute avant de recommencer.' }
 }));
+
+router.post('/didakbot', async (req, res) => {
+    const sessionCode = String(req.body?.sessionCode || '').trim();
+    const pseudo = String(req.body?.pseudo || '').trim().slice(0, 160);
+    const studentId = String(req.body?.studentId || '').trim();
+    const fields = req.body?.fields && typeof req.body.fields === 'object' ? req.body.fields : {};
+    const action = String(fields.action || '').trim();
+    if (!sessionCode || !pseudo || !mongoose.Types.ObjectId.isValid(studentId) || !['join_session', 'get_messages', 'send_message'].includes(action)) {
+        return res.status(400).json({ success: false, error: 'Requête ChatIA invalide.' });
+    }
+    try {
+        const assigned = await Homework.exists({ didakbotAssignments: { $elemMatch: { sessionCode, studentId } } });
+        if (!assigned) return res.status(403).json({ success: false, error: 'Cette session ChatIA ne t’est pas attribuée.' });
+
+        const url = new URL('https://novapeda.eu/didakbot3.php');
+        url.searchParams.set('session', sessionCode);
+        url.searchParams.set('pseudo', pseudo);
+        const controller = new AbortController();
+        // Didak'bot génère la réponse pendant send_message : la génération peut
+        // dépasser largement le délai des actions join_session/get_messages.
+        const timeoutMs = action === 'send_message' ? 120000 : 20000;
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        const startedAt = Date.now();
+        try {
+            const upstream = await fetch(url.toString(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                body: new URLSearchParams(Object.entries(fields).map(([key, value]) => [key, String(value ?? '')])),
+                signal: controller.signal
+            });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok || data?.success !== true) {
+                console.error('[ChatIA Didakbot upstream failure]', {
+                    action,
+                    status: upstream.status,
+                    success: data?.success,
+                    error: String(data?.error || data?.message || '').slice(0, 300),
+                    durationMs: Date.now() - startedAt
+                });
+                return res.status(502).json({ success: false, error: data?.error || data?.message || `Didak’bot a répondu ${upstream.status}.` });
+            }
+            return res.json(data);
+        } finally {
+            clearTimeout(timeout);
+        }
+    } catch (error) {
+        console.error('[ChatIA Didakbot proxy]', error?.name || '', error?.message || error);
+        return res.status(502).json({ success: false, error: error?.name === 'AbortError' ? 'Didak’bot met trop de temps à répondre. Réessaie.' : 'CondaWeb ne parvient pas à joindre Didak’bot.' });
+    }
+});
 
 const cleanHistory = (history) => (Array.isArray(history) ? history : [])
     .slice(-12)

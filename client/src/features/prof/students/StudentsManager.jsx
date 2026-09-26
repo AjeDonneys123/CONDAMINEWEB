@@ -82,6 +82,8 @@ export default function StudentsManager({ globalClassId }) {
   const [viewingWork, setViewingWork] = useState(null);
   const [homeworkCorrection, setHomeworkCorrection] = useState(null);
   const [homeworkCorrectionLoading, setHomeworkCorrectionLoading] = useState('');
+  const [classHomeworkModal, setClassHomeworkModal] = useState(null);
+  const [classCorrectionProvider, setClassCorrectionProvider] = useState('');
   const [ficheBoardActivity, setFicheBoardActivity] = useState(null);
   const [ficheBoardEditing, setFicheBoardEditing] = useState(null);
   const [ficheBoardSaving, setFicheBoardSaving] = useState(false);
@@ -845,6 +847,62 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
           if (res.ok) setEditorData(await res.json());
       } catch(e) {}
       setEditorLoading(false);
+  };
+
+  const openClassHomework = async (homework) => {
+      setClassHomeworkModal({ homework, loading: true, error: '', copies: [], completed: 0, provider: '' });
+      const rows = students.map((student) => {
+          const sid = extractId(student._id);
+          const studentName = norm(`${student.firstName || ''} ${student.lastName || ''}`);
+          const status = trackingData[`${sid}_${extractId(homework._id)}`]
+              || trackingData[`${sid}_TITLE_${norm(homework.title)}`]
+              || trackingData[`${studentName}_TITLE_${norm(homework.title)}`];
+          return { student, subId: status?.subId || '', submission: null, result: null, resultError: '' };
+      });
+      try {
+          const copies = await Promise.all(rows.map(async (row) => {
+              if (!row.subId) return row;
+              try {
+                  const response = await fetch(`/api/homework/submission/${encodeURIComponent(row.subId)}`);
+                  const data = await response.json().catch(() => ({}));
+                  if (!response.ok) throw new Error(data?.error || 'Lecture impossible');
+                  return { ...row, submission: data };
+              } catch (error) {
+                  return { ...row, resultError: error.message || 'Copie inaccessible.' };
+              }
+          }));
+          setClassHomeworkModal((current) => current ? { ...current, loading: false, copies } : current);
+      } catch (error) {
+          setClassHomeworkModal((current) => current ? { ...current, loading: false, error: error.message || 'Chargement des copies impossible.' } : current);
+      }
+  };
+
+  const handleRunClassCorrections = async (provider) => {
+      if (!classHomeworkModal || classCorrectionProvider) return;
+      const copies = classHomeworkModal.copies.filter((row) => row.subId && row.submission?.content);
+      if (!copies.length) return;
+      setClassCorrectionProvider(provider);
+      setClassHomeworkModal((current) => current ? { ...current, provider, completed: 0 } : current);
+      let completed = 0;
+      for (const row of copies) {
+          try {
+              const response = await fetch(`/api/homework/submission/${encodeURIComponent(row.subId)}/correction/${provider}`, { method: 'POST' });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data?.error || 'Correction impossible.');
+              setClassHomeworkModal((current) => current ? {
+                  ...current,
+                  copies: current.copies.map((item) => item.subId === row.subId ? { ...item, result: data.result, resultError: '' } : item)
+              } : current);
+          } catch (error) {
+              setClassHomeworkModal((current) => current ? {
+                  ...current,
+                  copies: current.copies.map((item) => item.subId === row.subId ? { ...item, result: null, resultError: error.message || 'Correction impossible.' } : item)
+              } : current);
+          }
+          completed += 1;
+          setClassHomeworkModal((current) => current ? { ...current, completed } : current);
+      }
+      setClassCorrectionProvider('');
   };
 
   const handleRunHomeworkCorrection = async (work, provider) => {
@@ -2465,7 +2523,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                         return (
                                             <div className="mt-2 flex flex-wrap gap-1.5">
                                                 {submittedHomeworks.map(({ act, status }) => (
-                                                    <button key={`homework-${extractId(act._id)}-${status.subId}`} type="button" onClick={() => setViewingStudent(s)} title={`Ouvrir le devoir rendu : ${act.title}`} className="rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[9px] font-black text-emerald-700 hover:bg-emerald-200">
+                                                    <button key={`homework-${extractId(act._id)}-${status.subId}`} type="button" onClick={() => void openClassHomework(act)} title={`Ouvrir les copies de toute la classe : ${act.title}`} className="rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[9px] font-black text-emerald-700 hover:bg-emerald-200">
                                                         📄 {act.title} · RENDU
                                                     </button>
                                                 ))}
@@ -3023,7 +3081,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
         )}
 
         {homeworkCorrection && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Correction IA du devoir">
+            <div className="fixed inset-0 z-[31000] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Correction IA du devoir">
                 <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
                     <div className={`flex items-start justify-between gap-4 border-b p-5 ${homeworkCorrection.provider === 'gemini' ? 'border-indigo-200 bg-indigo-600' : 'border-cyan-200 bg-cyan-700'}`}>
                         <div>
@@ -3046,6 +3104,58 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+        )}
+
+        {classHomeworkModal && (
+            <div className="fixed inset-0 z-[32000] flex items-center justify-center bg-slate-950/75 p-4" role="dialog" aria-modal="true" aria-label="Copies du devoir pour la classe">
+                <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-emerald-200 bg-emerald-700 p-5 text-white">
+                        <div>
+                            <h2 className="text-lg font-black">📄 {classHomeworkModal.homework?.title || 'Devoir'} · {className}</h2>
+                            <p className="mt-1 text-xs font-semibold text-white/80">Copies et versions enregistrées pour tous les élèves de la classe</p>
+                        </div>
+                        <button type="button" onClick={() => !classCorrectionProvider && setClassHomeworkModal(null)} className="text-3xl font-black leading-none" aria-label="Fermer">×</button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 p-4">
+                        <button type="button" disabled={classHomeworkModal.loading || Boolean(classCorrectionProvider) || !classHomeworkModal.copies.some((row) => row.submission?.content)} onClick={() => void handleRunClassCorrections('gemini')} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+                            {classCorrectionProvider === 'gemini' ? `⏳ Gemini ${classHomeworkModal.completed}/${classHomeworkModal.copies.filter((row) => row.submission?.content).length}` : '✨ Corriger toute la classe avec Gemini'}
+                        </button>
+                        <button type="button" disabled={classHomeworkModal.loading || Boolean(classCorrectionProvider) || !classHomeworkModal.copies.some((row) => row.submission?.content)} onClick={() => void handleRunClassCorrections('didakbot')} className="rounded-xl bg-cyan-700 px-4 py-2 text-xs font-black text-white hover:bg-cyan-800 disabled:opacity-50">
+                            {classCorrectionProvider === 'didakbot' ? `⏳ Didak’bot ${classHomeworkModal.completed}/${classHomeworkModal.copies.filter((row) => row.submission?.content).length}` : '🤖 Corriger toute la classe avec Didak’bot'}
+                        </button>
+                        <span className="ml-auto text-xs font-bold text-slate-500">{classHomeworkModal.copies.filter((row) => row.submission).length} copie(s) rendue(s) · {classHomeworkModal.copies.length} élève(s)</span>
+                    </div>
+                    <div className="space-y-3 overflow-y-auto p-4">
+                        {classHomeworkModal.loading && <div className="p-8 text-center font-bold text-slate-500">Chargement des copies de la classe…</div>}
+                        {!classHomeworkModal.loading && classHomeworkModal.error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{classHomeworkModal.error}</div>}
+                        {!classHomeworkModal.loading && classHomeworkModal.copies.map((row) => {
+                            const copyText = String(row.submission?.content || row.submission?.draftContent || row.submission?.finalText || '').trim();
+                            return (
+                                <article key={extractId(row.student._id)} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <h3 className="font-black text-slate-800">{row.student.firstName} {row.student.lastName}</h3>
+                                        {!row.subId ? <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">PAS ENCORE RENDU</span> : (
+                                            <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black text-emerald-700">COPIE ENREGISTRÉE</span>
+                                        )}
+                                    </div>
+                                    {row.resultError && <div className="mt-2 rounded-lg bg-red-50 p-2 text-xs font-bold text-red-700">{row.resultError}</div>}
+                                    {copyText && <details className="mt-3">
+                                        <summary className="cursor-pointer text-xs font-black text-emerald-800">Voir la copie enregistrée</summary>
+                                        <div className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">{copyText}</div>
+                                    </details>}
+                                    {row.submission?.draftContent && <details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-indigo-700">Dernière version du brouillon</summary><div className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-xl bg-indigo-50 p-3 text-xs">{row.submission.draftContent}</div></details>}
+                                    {row.submission?.aiConversationLog && <details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-slate-600">Échange IA enregistré</summary><div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs">{row.submission.aiConversationLog}</div></details>}
+                                    {row.result && <div className={`mt-3 rounded-xl border p-3 ${classHomeworkModal.provider === 'gemini' ? 'border-indigo-200 bg-indigo-50' : 'border-cyan-200 bg-cyan-50'}`}>
+                                        <div className="mb-1 text-[10px] font-black uppercase text-slate-500">{classHomeworkModal.provider === 'gemini' ? 'Correction Gemini' : 'Correction Didak’bot'}</div>
+                                        {typeof row.result === 'string' ? <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{row.result}</div> : <><div className="text-sm font-black text-slate-800">{row.result.grade ? `Appréciation : ${row.result.grade}` : ''}</div><div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{row.result.feedback_fond || JSON.stringify(row.result, null, 2)}</div></>}
+                                    </div>}
+                                </article>
+                            );
+                        })}
+                    </div>
+                    <div className="flex justify-end border-t border-slate-200 p-4"><button type="button" disabled={Boolean(classCorrectionProvider)} onClick={() => setClassHomeworkModal(null)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700 disabled:opacity-50">Fermer</button></div>
                 </div>
             </div>
         )}

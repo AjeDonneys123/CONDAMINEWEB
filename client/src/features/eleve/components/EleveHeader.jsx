@@ -171,6 +171,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
             {hasDilMode && <button onClick={() => onTabChange('dil')} className={`tab-item ${activeTab === 'dil' ? 'tab-active' : ''}`}>🌍 DIL</button>}
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
             <button onClick={() => onTabChange('chat')} className={`tab-item ${activeTab === 'chat' ? 'tab-active' : ''}`}>🔎 RECHERCHE</button>
+            <button onClick={() => onTabChange('chatia')} className={`tab-item ${activeTab === 'chatia' ? 'tab-active' : ''}`}>🤖 CHATIA</button>
         </div>
 
         {/* Stats à Droite (Simple et discret) */}

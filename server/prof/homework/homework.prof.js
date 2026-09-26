@@ -8,6 +8,8 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const fetch = require('node-fetch');
+const HomeworkAI = require('../../domains/homework/experts/homework.ai');
 
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 
@@ -148,6 +150,76 @@ router.get('/submission/:id', async (req, res) => {
         if (!sub) return res.status(404).json({ error: "Copie introuvable" });
         res.json(sub);
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/submission/:id/correction/:provider', async (req, res) => {
+    try {
+        const provider = String(req.params.provider || '').toLowerCase();
+        if (!['gemini', 'didakbot'].includes(provider)) return res.status(400).json({ error: 'Correcteur inconnu.' });
+        const submission = await Submission.findById(req.params.id).lean();
+        if (!submission) return res.status(404).json({ error: 'Copie introuvable.' });
+        const homework = await Homework.findById(submission.homeworkId).lean();
+        if (!homework) return res.status(404).json({ error: 'Devoir introuvable.' });
+        const level = homework.levels?.[Number(submission.levelIndex) || 0] || {};
+        const answer = String(submission.content || submission.finalText || submission.draftContent || '').trim();
+        if (!answer) return res.status(400).json({ error: 'La copie de cet élève est vide.' });
+        const processContext = [
+            submission.studentNotes ? `Notes de l’élève :\n${submission.studentNotes}` : '',
+            submission.draftContent ? `Brouillon / dernière version :\n${submission.draftContent}` : '',
+            submission.aiConversationLog ? `Échange avec l’IA :\n${submission.aiConversationLog}` : ''
+        ].filter(Boolean).join('\n\n');
+
+        if (provider === 'gemini') {
+            const result = await HomeworkAI.analyze(answer, level.instruction || homework.title || '', [level.aiHints || '', processContext].filter(Boolean).join('\n\n'));
+            if (!result) return res.status(502).json({ error: 'Gemini n’a pas pu corriger cette copie.' });
+            return res.json({ provider, result });
+        }
+
+        const assignment = (homework.didakbotAssignments || []).find((item) => String(item.studentId) === String(submission.studentId));
+        const bot = (homework.didakbotClassBots || []).find((item) => Number(item.chatbotId) === Number(assignment?.chatbotId))
+            || (homework.didakbotClassBots || [])[0];
+        const rawUrlValue = String(bot?.url || homework.didakbotUrl || '');
+        const rawUrl = rawUrlValue.match(/src=["']([^"']+)/i)?.[1] || rawUrlValue;
+        let shareLink = String(bot?.shareLink || '').trim();
+        if (!shareLink && rawUrl) {
+            try { shareLink = new URL(rawUrl, 'https://novapeda.eu').searchParams.get('bot') || ''; }
+            catch (_) { shareLink = ''; }
+        }
+        if (!shareLink) return res.status(400).json({ error: 'Aucun chatbot Didak’bot n’est associé à ce devoir.' });
+
+        const userMessage = [
+            `Copie à corriger :\n${answer}`,
+            processContext
+        ].filter(Boolean).join('\n\n');
+        const systemPrompt = [
+            'Tu es un correcteur pédagogique pour un devoir scolaire.',
+            'Évalue le travail en respectant précisément la consigne et les critères du professeur.',
+            'Donne un retour structuré, avec les réussites, les points à améliorer et une appréciation ou note si les critères le permettent.',
+            'Ne réécris pas le devoir à la place de l’élève.',
+            `Devoir : ${homework.title || ''}`,
+            `Consigne : ${level.instruction || homework.promptTopic || homework.title || ''}`,
+            `Critères du professeur : ${level.aiHints || 'Aucun critère complémentaire fourni.'}`
+        ].join('\n\n');
+        const upstream = await fetch(`https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(shareLink)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({
+                action: 'chat_completion',
+                model: 'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
+                system_prompt: systemPrompt,
+                messages: JSON.stringify([{ role: 'user', content: userMessage }]),
+                user_message: userMessage
+            })
+        });
+        const data = await upstream.json().catch(() => ({}));
+        if (!upstream.ok || data?.success !== true || !data?.response) {
+            return res.status(502).json({ error: data?.error || 'Didak’bot n’a pas renvoyé de correction.' });
+        }
+        return res.json({ provider, result: data.response });
+    } catch (error) {
+        console.error('[Homework correction] Error:', error?.message || error);
+        return res.status(502).json({ error: error?.message || 'La correction IA a échoué.' });
+    }
 });
 
 router.put('/submission/:id', async (req, res) => {

@@ -22,7 +22,7 @@ const TrainingManager = lazy(() => import('./training/TrainingManager'));
 export default function ProfPage({ user, onLogout }) {
   const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
   const isPhone = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769;
-  const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'studio', 'students', 'admin', 'training'];
+  const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'corriger', 'studio', 'students', 'admin', 'training'];
   const urlParams = new URLSearchParams(window.location.search);
   const requestedTab = String(urlParams.get('profTab') || '').trim();
   const requestedClassId = String(urlParams.get('classId') || '').trim();
@@ -68,7 +68,7 @@ export default function ProfPage({ user, onLogout }) {
         const isDeveloper = freshProfile?.isDeveloper === true;
         setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper }));
         const preferredTab = String(uiState?.lastProfTab || freshProfile?.lastProfTab || '').trim();
-        if (allowedTabs.includes(preferredTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students', 'training'].includes(preferredTab))) {
+        if (allowedTabs.includes(preferredTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'corriger', 'students', 'training'].includes(preferredTab))) {
             const blockedForRole = (!isDeveloper && (preferredTab === 'studio' || preferredTab === 'admin'));
             if (!blockedForRole) setTab(preferredTab);
         }
@@ -155,7 +155,7 @@ export default function ProfPage({ user, onLogout }) {
   };
 
   useEffect(() => {
-    if (requestedTab && allowedTabs.includes(requestedTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students', 'training'].includes(requestedTab))) {
+    if (requestedTab && allowedTabs.includes(requestedTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'corriger', 'students', 'training'].includes(requestedTab))) {
       const blockedForRole = (!liveUser.isDeveloper && (requestedTab === 'studio' || requestedTab === 'admin'));
       if (!blockedForRole) setTab(requestedTab);
     }
@@ -205,6 +205,7 @@ export default function ProfPage({ user, onLogout }) {
                 {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} launchIntent={scanLaunchIntent} />}
+                {tab === 'corriger' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} correctionWorkspace />}
                 {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
                 {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
                 {tab === 'training' && <TrainingManager globalClassId={selectedClassId} globalClass={currentClassName} user={liveUser} />}

@@ -11,6 +11,7 @@ const ControlRecoveryList = lazy(() => import('./controlRecovery/ControlRecovery
 const LearningList = lazy(() => import('./learning/LearningList'));
 const HomeworkList = lazy(() => import('./homework/HomeworkList'));
 const EleveChatWorkspace = lazy(() => import('./chat/EleveChatWorkspace'));
+const EleveChatIa = lazy(() => import('./chat/EleveChatIa'));
 const EleveCoursesList = lazy(() => import('./courses/EleveCoursesList'));
 const ExamTrainingHub = lazy(() => import('./training/ExamTrainingHub'));
 const DilWorkspace = lazy(() => import('./dil/DilWorkspace'));
@@ -248,6 +249,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 />
               )}
               {tab === 'chat' && <EleveChatWorkspace user={freshUser} onQuit={() => setTab('status')} />}
+              {tab === 'chatia' && <EleveChatIa user={freshUser} />}
               {tab === 'training' && <ExamTrainingHub user={freshUser} canCalibrate={Boolean(onBackToProf) && freshUser?.isVisitorPreview !== true} />}
               {tab === 'dil' && (freshUser?.isDil === true || freshUser?.isVisitorPreview === true) && <DilWorkspace user={freshUser} />}
               {tab === 'jeux' && (
