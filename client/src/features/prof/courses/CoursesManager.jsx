@@ -3334,6 +3334,13 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
 
     const openGoogleSlidesExternal = async (course, requestedSlideIndex = projectedSlideIndex, preOpenedWindow = null) => {
         if (!course) return;
+        if (globalClassId) {
+            void fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/bridge-plan`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ visible: true })
+            }).catch(() => {});
+        }
         setError('');
         const total = Math.max(1, slideManifest.length || 1);
         const targetSlideIndex = Math.min(

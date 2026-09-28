@@ -37,8 +37,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
-    const [placementStudent, setPlacementStudent] = useState(null);
-    const [placementMode, setPlacementMode] = useState(false);
     
     // Scan & Photos Classe / Élève
     const [classroomInfo, setClassroomInfo] = useState(null);
@@ -349,6 +347,11 @@ export default function ClassroomManager({ globalClassId, user }) {
         } catch(e) {}
     };
     const handleDragStart = (e, sId) => {
+        if (!isSwapMode || String(swapSource?._id || '') !== String(sId)) {
+            e.preventDefault();
+            setDraggingId(null);
+            return;
+        }
         setDraggingId(sId);
         e.dataTransfer.setData("text/plain", String(sId));
         e.dataTransfer.effectAllowed = "move";
@@ -366,11 +369,13 @@ export default function ClassroomManager({ globalClassId, user }) {
         e.preventDefault();
         setDragOverCell(null);
         const sId = draggingId || e.dataTransfer.getData("text/plain");
-        if (!sId) return;
+        if (!sId || !isSwapMode || String(swapSource?._id || '') !== String(sId)) return;
         const movedStudent = students.find(s => String(s._id) === String(sId));
         if (!movedStudent) return;
         if (movedStudent.seatX === x && movedStudent.seatY === y) {
             setDraggingId(null);
+            setSwapSource(null);
+            setIsSwapMode(false);
             return;
         }
         const oldX = movedStudent.seatX;
@@ -408,6 +413,8 @@ export default function ClassroomManager({ globalClassId, user }) {
             } catch(err) { loadData(); }
         }
         setDraggingId(null);
+        setSwapSource(null);
+        setIsSwapMode(false);
     };
     const handleFileSelect = async (e) => {
         const file = e.target.files[0];
@@ -536,7 +543,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
     const adjustClassScores = async (delta) => {
         if (classScoreBusy || !globalClassId || !myId) return;
-        const safeDelta = Number(delta) < 0 ? -1 : 1;
+        const safeDelta = Number(delta) < 0 ? -0.5 : 0.5;
         setClassScoreBusy(true);
         try {
             const response = await fetch(`/api/classroom/${globalClassId}/adjust-all-scores`, {
@@ -554,7 +561,6 @@ export default function ClassroomManager({ globalClassId, user }) {
             setClassScoreBusy(false);
         }
     };
-    const addClassScorePoint = () => adjustClassScores(1);
     const getCrossCountdownLabel = (stu) => {
         const stats = getMyStats(stu);
         const crosses = Math.max(0, Number(stats?.crosses || 0));
@@ -568,38 +574,8 @@ export default function ClassroomManager({ globalClassId, user }) {
         const weeksLeft = Math.ceil(daysLeft / 7);
         return `${weeksLeft}`;
     };
-    const handleSwapStudents = async (a, b) => {
-        if (!a || !b || String(a._id) === String(b._id)) return;
-        const aX = a.seatX, aY = a.seatY;
-        const bX = b.seatX, bY = b.seatY;
-        if (aX === undefined || aY === undefined || bX === undefined || bY === undefined) return;
-
-        // Optimistic UI
-        setStudents(prev => prev.map(s => {
-            if (String(s._id) === String(a._id)) return { ...s, seatX: bX, seatY: bY };
-            if (String(s._id) === String(b._id)) return { ...s, seatX: aX, seatY: aY };
-            return s;
-        }));
-
-        try {
-            await fetch('/api/classroom/move', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ studentId: a._id, x: bX, y: bY })
-            });
-            await fetch('/api/classroom/move', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ studentId: b._id, x: aX, y: aY })
-            });
-            await loadData();
-        } catch (e) {
-            loadData();
-        }
-    };
-
     const startStudentLongPress = (student, event) => {
-        if (!student?._id || frenchMode || placementStudent || (event?.button !== undefined && event.button !== 0)) return;
+        if (!student?._id || frenchMode || (event?.button !== undefined && event.button !== 0)) return;
         window.clearTimeout(studentLongPressTimerRef.current);
         studentLongPressTriggeredRef.current = '';
         studentLongPressTimerRef.current = window.setTimeout(() => {
@@ -608,7 +584,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             setIsSwapMode(true);
             setSwapSource(student);
             if (navigator.vibrate) navigator.vibrate(35);
-        }, 550);
+        }, 2000);
     };
 
     const stopStudentLongPress = () => {
@@ -620,16 +596,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         event?.stopPropagation?.();
         if (studentLongPressTriggeredRef.current === String(student?._id || '')) {
             studentLongPressTriggeredRef.current = '';
-            return;
-        }
-        if (placementMode) {
-            if (!placementStudent?._id) {
-                setPlacementStudent(student);
-            } else if (String(placementStudent._id) === String(student?._id || '')) {
-                setPlacementStudent(null);
-            } else if (Number.isFinite(Number(student?.seatX)) && Number.isFinite(Number(student?.seatY))) {
-                handlePlaceStudentToCell(Number(student.seatX), Number(student.seatY));
-            }
             return;
         }
         handleOpenStudent(student);
@@ -738,23 +704,6 @@ export default function ClassroomManager({ globalClassId, user }) {
             const id = String(stu?._id || '');
             if (!id) return;
             setFrenchStudentIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
-            return;
-        }
-        if (placementStudent && String(placementStudent?._id || '') === String(stu?._id || '')) {
-            setPlacementStudent(null);
-        }
-        if (isSwapMode) {
-            if (!swapSource) {
-                setSwapSource(stu);
-                return;
-            }
-            if (String(swapSource._id) === String(stu._id)) {
-                setSwapSource(null);
-                return;
-            }
-            handleSwapStudents(swapSource, stu);
-            setSwapSource(null);
-            setIsSwapMode(false);
             return;
         }
         setSelectedStudent(stu);
@@ -1202,42 +1151,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         } catch(e) { console.error("Erreur API", e); loadData(); }
     };
 
-    const moveStudentTo = async (sid, x, y, swapSid = null, swapX = null, swapY = null) => {
-        try {
-            const body = { studentId: sid, x, y };
-            if (swapSid && Number.isInteger(swapX) && Number.isInteger(swapY)) {
-                body.swapStudentId = swapSid;
-                body.swapX = swapX;
-                body.swapY = swapY;
-            }
-            await fetch('/api/classroom/move', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
-            });
-            await loadData();
-        } catch(e){}
-    };
-    const handlePlaceStudentToCell = async (x, y) => {
-        if (!placementStudent?._id) return;
-        const targetStudent = students.find((s) => s.seatX === x && s.seatY === y && String(s._id) !== String(placementStudent._id));
-        if (targetStudent) {
-            const oldX = placementStudent.seatX;
-            const oldY = placementStudent.seatY;
-            setStudents(prev => prev.map(s => {
-                if (String(s._id) === String(placementStudent._id)) return { ...s, seatX: x, seatY: y };
-                if (String(s._id) === String(targetStudent._id)) return { ...s, seatX: oldX, seatY: oldY };
-                return s;
-            }));
-            await moveStudentTo(placementStudent._id, x, y, targetStudent._id, oldX, oldY);
-        } else {
-            setStudents(prev => prev.map(s => String(s._id) === String(placementStudent._id) ? { ...s, seatX: x, seatY: y } : s));
-            await moveStudentTo(placementStudent._id, x, y);
-        }
-        setPlacementStudent(null);
-        setPlanFinder('');
-    };
-
     if (!globalClassId) return <div className="p-10 text-center text-slate-400 font-black">SÉLECTIONNEZ UNE CLASSE</div>;
 
     const renderGrid = () => {
@@ -1250,36 +1163,13 @@ export default function ClassroomManager({ globalClassId, user }) {
                 cells.push(
                     <div
                         key={`${x}-${y}`}
-                        className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''} ${placementStudent ? 'placement-mode' : ''}`}
+                        className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`}
                         style={{ gridColumn: x + 1, gridRow: y + 1 }}
                         onDragOver={(e) => handleDragOver(e, x, y)}
                         onDrop={(e) => handleDrop(e, x, y)}
-                        onClick={() => {
-                            if (placementStudent) {
-                                handlePlaceStudentToCell(x, y);
-                                return;
-                            }
-                            if (swapSource) {
-                                if (student && String(student._id) !== String(swapSource._id)) {
-                                    const oldX = swapSource.seatX;
-                                    const oldY = swapSource.seatY;
-                                    setStudents(prev => prev.map(s => {
-                                        if (String(s._id) === String(swapSource._id)) return { ...s, seatX: x, seatY: y };
-                                        if (String(s._id) === String(student._id)) return { ...s, seatX: oldX, seatY: oldY };
-                                        return s;
-                                    }));
-                                    moveStudentTo(swapSource._id, x, y, student._id, oldX, oldY);
-                                } else if (!student) {
-                                    setStudents(prev => prev.map(s => String(s._id) === String(swapSource._id) ? { ...s, seatX: x, seatY: y } : s));
-                                    moveStudentTo(swapSource._id, x, y);
-                                }
-                                setSwapSource(null);
-                                setIsSwapMode(false);
-                            }
-                        }}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${String(placementStudent?._id || '') === String(student._id) ? 'placement-selected' : ''} ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
@@ -1418,9 +1308,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     const aStats = getActivityStats(s);
                     const aTotals = getActivityTotals(s);
                     const isPlaced = Number.isFinite(Number(s?.seatX)) && Number.isFinite(Number(s?.seatY));
-                    const isPlacementActive = String(placementStudent?._id || '') === String(s._id || '');
                     return (
-                        <div key={s._id} className={`plan-match-row ${isPlacementActive ? 'placing' : ''}`}>
+                        <div key={s._id} className="plan-match-row">
                             <div className="plan-match-info" onPointerDown={(event) => startStudentLongPress(s, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, s)}>
                                 <span className="plan-match-name">{s.lastName} {getDisplayName(s)}</span>
                                 <span className="plan-match-stats">
@@ -1435,13 +1324,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 </span>
                             </div>
                             <div className="plan-match-actions">
-                                <button
-                                    className={`btn-list-action btn-place ${isPlacementActive ? 'active' : ''}`}
-                                    onClick={() => setPlacementStudent((prev) => String(prev?._id || '') === String(s._id || '') ? null : s)}
-                                    title="Placer dans le plan"
-                                >
-                                    {isPlacementActive ? 'OK' : 'Placer'}
-                                </button>
                                 <button className="btn-list-action btn-x" {...scoreHoldProps(s, -0.5)}>-0.5</button>
                                 <button className="btn-list-action btn-v" {...scoreHoldProps(s, 0.5)}>+0.5</button>
                                 <button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button>
@@ -1532,8 +1414,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     >
                         {voiceListening ? '🎙️ ON' : '🎙️'}
                     </button>
-                    <button className="class-score-btn negative" onClick={() => void adjustClassScores(-1)} disabled={classScoreBusy}>−1C</button>
-                    <button className="class-score-btn" onClick={addClassScorePoint} disabled={classScoreBusy}>+1C</button>
+                    <button className="class-score-btn negative" onClick={() => void adjustClassScores(-0.5)} disabled={classScoreBusy}>−0.5</button>
+                    <button className="class-score-btn" onClick={() => void adjustClassScores(0.5)} disabled={classScoreBusy}>+0.5</button>
                     <button className="cm-header-scan-btn" onClick={() => handleOpenScanCapture(null)} title="Scanner un travail (vidéo)">📷 SCAN</button>
                     <button className="cm-header-images-btn" onClick={() => handleOpenScanGallery(null)} title="Galerie d'images de la classe">🖼️ IMAGES</button>
                 </div>
