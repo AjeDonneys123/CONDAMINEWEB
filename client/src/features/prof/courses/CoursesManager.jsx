@@ -3861,7 +3861,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                         <div className="active-course-shelf-item" key={course._id}>
                                             <button type="button" className="active-course-present" onClick={() => openPresentation(course)}>
                                                 <span>{course.title}</span>
-                                                <strong>PRÉSENTER</strong>
+                                                <small>Présenter</small>
                                             </button>
                                             <button
                                                 type="button"
