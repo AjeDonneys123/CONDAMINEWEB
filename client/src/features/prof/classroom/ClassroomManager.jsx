@@ -37,6 +37,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
+    const [placementMode, setPlacementMode] = useState(false);
     
     // Scan & Photos Classe / Élève
     const [classroomInfo, setClassroomInfo] = useState(null);
