@@ -214,6 +214,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const behaviorRepeatBusyRef = useRef(false);
     const studentLongPressTimerRef = useRef(null);
     const studentLongPressTriggeredRef = useRef('');
+    const suppressStudentClickUntilRef = useRef(0);
     
     const myId = user ? (user._id || user.id) : null;
     const isPunishmentLate = (student) => {
@@ -420,6 +421,11 @@ export default function ClassroomManager({ globalClassId, user }) {
         stopStudentLongPress();
         const activeDrag = seatDragRef.current;
         if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+        if (activeDrag.moved) {
+            event.preventDefault();
+            event.stopPropagation();
+            suppressStudentClickUntilRef.current = Date.now() + 700;
+        }
         const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-seat-x][data-seat-y]');
         const dropTarget = target
             ? { x: Number(target.dataset.seatX), y: Number(target.dataset.seatY) }
@@ -643,6 +649,10 @@ export default function ClassroomManager({ globalClassId, user }) {
 
     const handleStudentCardClick = (event, student) => {
         event?.stopPropagation?.();
+        if (Date.now() < suppressStudentClickUntilRef.current) {
+            suppressStudentClickUntilRef.current = 0;
+            return;
+        }
         if (studentLongPressTriggeredRef.current === String(student?._id || '')) {
             studentLongPressTriggeredRef.current = '';
             return;
