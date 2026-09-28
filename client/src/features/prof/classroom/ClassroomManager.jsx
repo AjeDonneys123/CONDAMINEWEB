@@ -37,7 +37,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
-    const [placementMode, setPlacementMode] = useState(false);
     
     // Scan & Photos Classe / Élève
     const [classroomInfo, setClassroomInfo] = useState(null);
@@ -73,6 +72,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
+    const [dragPosition, setDragPosition] = useState(null);
+    const seatDragRef = useRef(null);
 
     // Projection miroir au tableau (contrôle depuis le smartphone)
     const [classPlanProjected, setClassPlanProjected] = useState(false);
@@ -347,34 +348,13 @@ export default function ClassroomManager({ globalClassId, user }) {
             await loadData();
         } catch(e) {}
     };
-    const handleDragStart = (e, sId) => {
-        if (!isSwapMode || String(swapSource?._id || '') !== String(sId)) {
-            e.preventDefault();
-            setDraggingId(null);
-            return;
-        }
-        setDraggingId(sId);
-        e.dataTransfer.setData("text/plain", String(sId));
-        e.dataTransfer.effectAllowed = "move";
-    };
-    const handleDragOver = (e, x, y) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        setDragOverCell(`${x}-${y}`);
-    };
-    const handleDragEnd = () => {
-        setDraggingId(null);
-        setDragOverCell(null);
-    };
-    const handleDrop = async (e, x, y) => {
-        e.preventDefault();
-        setDragOverCell(null);
-        const sId = draggingId || e.dataTransfer.getData("text/plain");
+    const commitStudentDrop = async (sId, x, y) => {
         if (!sId || !isSwapMode || String(swapSource?._id || '') !== String(sId)) return;
         const movedStudent = students.find(s => String(s._id) === String(sId));
         if (!movedStudent) return;
         if (movedStudent.seatX === x && movedStudent.seatY === y) {
             setDraggingId(null);
+            setDragPosition(null);
             setSwapSource(null);
             setIsSwapMode(false);
             return;
@@ -390,7 +370,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 return s;
             }));
             try {
-                await fetch('/api/classroom/move', {
+                const response = await fetch('/api/classroom/move', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -402,20 +382,55 @@ export default function ClassroomManager({ globalClassId, user }) {
                         swapY: oldY
                     })
                 });
+                if (!response.ok) throw new Error('Échange de places impossible');
             } catch(err) { loadData(); }
         } else {
             setStudents(prev => prev.map(s => String(s._id) === String(sId) ? { ...s, seatX: x, seatY: y } : s));
             try {
-                await fetch('/api/classroom/move', {
+                const response = await fetch('/api/classroom/move', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ studentId: sId, x, y })
                 });
+                if (!response.ok) throw new Error('Déplacement impossible');
             } catch(err) { loadData(); }
         }
         setDraggingId(null);
+        setDragPosition(null);
         setSwapSource(null);
         setIsSwapMode(false);
+    };
+    const handleStudentPointerMove = (event) => {
+        const activeDrag = seatDragRef.current;
+        if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        if (!activeDrag.moved && Math.hypot(event.clientX - activeDrag.startX, event.clientY - activeDrag.startY) > 7) {
+            activeDrag.moved = true;
+        }
+        if (!activeDrag.moved) return;
+        setDragPosition(position => position ? { ...position, x: event.clientX, y: event.clientY } : position);
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-seat-x][data-seat-y]');
+        activeDrag.hoverTarget = target ? {
+            x: Number(target.dataset.seatX),
+            y: Number(target.dataset.seatY)
+        } : null;
+        setDragOverCell(target ? `${target.dataset.seatX}-${target.dataset.seatY}` : null);
+    };
+    const handleStudentPointerUp = (event) => {
+        stopStudentLongPress();
+        const activeDrag = seatDragRef.current;
+        if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-seat-x][data-seat-y]');
+        const dropTarget = target
+            ? { x: Number(target.dataset.seatX), y: Number(target.dataset.seatY) }
+            : activeDrag.hoverTarget;
+        seatDragRef.current = null;
+        setDragOverCell(null);
+        setDraggingId(null);
+        setDragPosition(null);
+        if (activeDrag.moved && dropTarget) {
+            void commitStudentDrop(activeDrag.studentId, dropTarget.x, dropTarget.y);
+        }
     };
     const handleFileSelect = async (e) => {
         const file = e.target.files[0];
@@ -579,13 +594,46 @@ export default function ClassroomManager({ globalClassId, user }) {
         if (!student?._id || frenchMode || (event?.button !== undefined && event.button !== 0)) return;
         window.clearTimeout(studentLongPressTimerRef.current);
         studentLongPressTriggeredRef.current = '';
+        const pointerId = event.pointerId;
+        const element = event.currentTarget;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const rect = element.getBoundingClientRect();
+        try { element.setPointerCapture(pointerId); } catch (_) {}
+        if (isSwapMode && String(swapSource?._id || '') === String(student._id)) {
+            event.preventDefault();
+            studentLongPressTriggeredRef.current = String(student._id);
+            seatDragRef.current = {
+                studentId: String(student._id), pointerId,
+                startX, startY, moved: false
+            };
+            setDraggingId(String(student._id));
+            setDragPosition({ x: startX, y: startY, width: rect.width, height: rect.height });
+            return;
+        }
         studentLongPressTimerRef.current = window.setTimeout(() => {
             studentLongPressTriggeredRef.current = String(student._id);
             setSelectedStudent(null);
             setIsSwapMode(true);
             setSwapSource(student);
+            seatDragRef.current = {
+                studentId: String(student._id), pointerId,
+                startX, startY, moved: false
+            };
+            setDraggingId(String(student._id));
+            setDragPosition({ x: startX, y: startY, width: rect.width, height: rect.height });
             if (navigator.vibrate) navigator.vibrate(35);
-        }, 2000);
+        }, 500);
+    };
+
+    const handleStudentPointerCancel = (event) => {
+        stopStudentLongPress();
+        if (seatDragRef.current?.pointerId === event.pointerId) {
+            seatDragRef.current = null;
+            setDragOverCell(null);
+            setDraggingId(null);
+            setDragPosition(null);
+        }
     };
 
     const stopStudentLongPress = () => {
@@ -1165,12 +1213,12 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div
                         key={`${x}-${y}`}
                         className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`}
+                        data-seat-x={x}
+                        data-seat-y={y}
                         style={{ gridColumn: x + 1, gridRow: y + 1 }}
-                        onDragOver={(e) => handleDragOver(e, x, y)}
-                        onDrop={(e) => handleDrop(e, x, y)}
                     >
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onDragEnd={handleDragEnd} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getStudentStateClass(student)} ${isTrainingStarLeader(student) ? 'has-training-leader' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''} ${frenchMode && frenchStudentIds.includes(String(student._id)) ? 'french-selected' : ''} ${isLowestScorePriority(student) ? 'lowest-score-priority' : ''}`} style={draggingId === student._id && dragPosition ? { position: 'fixed', left: dragPosition.x, top: dragPosition.y, width: dragPosition.width, height: dragPosition.height, transform: 'translate(-50%, -50%) scale(1.08)', zIndex: 9999, pointerEvents: 'none', opacity: 0.92 } : undefined} onPointerDown={(event) => startStudentLongPress(student, event)} onPointerMove={handleStudentPointerMove} onPointerUp={handleStudentPointerUp} onPointerCancel={handleStudentPointerCancel} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, student)} title={isLowestScorePriority(student) ? `Priorité interrogation orale (note : ${formatScore(getStudentEffectiveScore(student))})` : undefined}>
                                 {isTrainingStarLeader(student) && <div className="sc-training-leader" title="Meilleur total d’étoiles">★</div>}
                                 <div className="sc-training-stars" title="Étoiles gagnées en entraînement">⭐ {getStudentStars(student)}</div>
                                 {student.myNote && <div className="sc-note-badge">N</div>}
@@ -1311,7 +1359,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     const isPlaced = Number.isFinite(Number(s?.seatX)) && Number.isFinite(Number(s?.seatY));
                     return (
                         <div key={s._id} className="plan-match-row">
-                            <div className="plan-match-info" onPointerDown={(event) => startStudentLongPress(s, event)} onPointerUp={stopStudentLongPress} onPointerCancel={stopStudentLongPress} onPointerLeave={stopStudentLongPress} onClick={(event) => handleStudentCardClick(event, s)}>
+                            <div className="plan-match-info" onClick={(event) => handleStudentCardClick(event, s)}>
                                 <span className="plan-match-name">{s.lastName} {getDisplayName(s)}</span>
                                 <span className="plan-match-stats">
                                     Note {formatScore(getStudentScore(s))}
@@ -1446,16 +1494,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR N</button>
-                            <button
-                                className={`plan-cols-toggle plan-place-toggle ${placementMode ? 'active' : ''}`}
-                                aria-pressed={placementMode}
-                                onClick={() => {
-                                    const nextMode = !placementMode;
-                                    setPlacementMode(nextMode);
-                                    if (!nextMode) setPlacementStudent(null);
-                                }}
-                                title={placementMode ? 'Désactiver le placement : un clic ouvre la fiche élève' : 'Activer le placement : sélectionner un élève puis cliquer sa case'}
-                            >PLACER</button>
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button
@@ -1477,11 +1515,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                     )}
                     {frenchMode && <div className="french-mode-hint">🇫🇷 Clique un élève dans le plan, puis écris ou dicte le mot / l’expression à ajouter à sa liste personnelle.</div>}
                     {renderFrenchAssignmentPanel()}
-                    {placementStudent && (
-                        <div className="placement-hint">
-                            Placement actif pour <strong>{placementStudent.lastName} {getDisplayName(placementStudent)}</strong>. Clique ensuite sur une case vide du plan.
-                        </div>
-                    )}
                     {renderPlanMatchesList()}
                     <div className="cm-toolbar hidden md:flex">
                         <button className="cm-btn purple" onClick={() => setImportPanelOpen((open) => !open)}>📥 IMPORTER UN PLAN</button>

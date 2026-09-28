@@ -331,11 +331,6 @@
 
 /* CELLULES PC */
 .grid-cell-wrapper { position: relative; transition: border-right 0.2s; width: var(--cell-size); height: var(--cell-size); min-width: var(--cell-size); min-height: var(--cell-size); }
-.grid-cell-wrapper.placement-mode:hover .grid-cell-empty {
-    border-color: #2563eb;
-    background: #dbeafe;
-    color: #1d4ed8;
-}
 .grid-cell-wrapper.has-separator { border-right: 5px solid #1e293b; padding-right: 15px; margin-right: -15px; z-index: 5; }
 .grid-cell-empty { 
     background: #ffffff; 
@@ -367,16 +362,12 @@
 }
 
 /* STUDENT CARD */
-.student-card-drag { background: white; color: #0f172a !important; border-radius: 12px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 2px solid #f1f5f9; cursor: grab; user-select: none; position: relative; height: 100%; width: 100%; transition: transform 0.1s; overflow: hidden; container-type: inline-size; }
+.student-card-drag { background: white; color: #0f172a !important; border-radius: 12px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 2px solid #f1f5f9; cursor: grab; user-select: none; touch-action: none; position: relative; height: 100%; width: 100%; transition: transform 0.1s; overflow: hidden; container-type: inline-size; }
 .student-card-drag:active { cursor: grabbing; transform: scale(1.05); z-index: 10; }
 .student-card-drag.swap-source { background: #2563eb !important; border-color: #1d4ed8 !important; color: #fff !important; box-shadow: 0 0 0 4px rgba(37, 99, 235, .35), 0 6px 14px rgba(37, 99, 235, .3) !important; }
 .student-card-drag.swap-source .sc-name,
 .student-card-drag.swap-source .sc-lastname-initial,
 .student-card-drag.swap-source .sc-grades { color: #fff !important; }
-.student-card-drag.placement-selected { background: #2563eb !important; border-color: #1d4ed8 !important; color: #fff !important; box-shadow: 0 0 0 4px rgba(37, 99, 235, .35), 0 6px 14px rgba(37, 99, 235, .3) !important; }
-.student-card-drag.placement-selected .sc-name,
-.student-card-drag.placement-selected .sc-lastname-initial,
-.student-card-drag.placement-selected .sc-grades { color: #fff !important; }
 .student-card-drag.finder-hit {
     border: 3px solid #dc2626;
     background: #fff1f2;

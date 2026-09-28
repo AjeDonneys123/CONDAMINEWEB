@@ -1505,7 +1505,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
     try {
         const { classId } = req.params;
         const teacherId = String(req.body?.teacherId || '').trim();
-        const delta = Number(req.body?.delta) < 0 ? -1 : 1;
+        const delta = Number(req.body?.delta) < 0 ? -0.5 : 0.5;
         if (!teacherId) return res.status(400).json({ error: 'Professeur requis' });
 
         const [{ clsObj, students: classStudents }, cls] = await Promise.all([
@@ -1546,7 +1546,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         const now = new Date();
         const alert = {
             id: `${now.getTime()}-class-${Math.random().toString(36).slice(2, 8)}`,
-            message: delta < 0 ? 'Toute la classe : −1 par élève' : 'Toute la classe : +1 par élève',
+            message: delta < 0 ? 'Toute la classe : −0,5 par élève' : 'Toute la classe : +0,5 par élève',
             type: delta < 0 ? 'negative' : 'positive',
             createdAt: now
         };
