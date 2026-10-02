@@ -628,6 +628,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [aiConversationText, setAiConversationText] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [submittedResult, setSubmittedResult] = useState(null);
+    const [selectedTopic, setSelectedTopic] = useState('');
     const [showProgressionGuide, setShowProgressionGuide] = useState(true);
     const [showPreFinalWarning, setShowPreFinalWarning] = useState(false);
 
@@ -646,7 +647,19 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
     // Homework configuration
     const minTimeMinutes = Number(homework?.minTimeMinutes || 25);
-    const topicText = String(homework?.promptTopic || homework?.levels?.[0]?.instruction || homework?.title || 'Sujet de rédaction');
+    const topicSource = homework?.promptTopic || homework?.levels?.[0]?.instruction || '';
+    const topicOptions = String(topicSource)
+        .replace(/<br\s*\/?\s*>/gi, '\n')
+        .replace(/\\n/g, '\n')
+        .split(/\r?\n|(?=(?:19|20)\d{2}\s*[–—-]\s*)/)
+        .map((topic) => topic.trim())
+        .filter(Boolean);
+    useEffect(() => {
+        const storageKey = `conda_hw_topic_${String(homework?._id || '')}_${String(user?._id || user?.id || '')}`;
+        const savedTopic = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : '';
+        setSelectedTopic(topicOptions.includes(savedTopic) ? savedTopic : (topicOptions[0] || ''));
+    }, [homework?._id, homework?.promptTopic, homework?.levels?.[0]?.instruction]);
+    const topicText = String(selectedTopic || homework?.levels?.[0]?.instruction || homework?.title || 'Sujet de rédaction');
 
     const getStorageKey = () => {
         const sid = String(user?._id || user?.id || '');
@@ -1253,17 +1266,8 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
 
         const studentFullName = String(user?.name || user?.username || `${user?.prenom || ''} ${user?.nom || ''}`.trim() || 'Élève').trim();
 
-        const aiPromptHeader = `Sujet du devoir : "${topicText || homework?.title || 'Devoir'}"
-Élève : ${studentFullName}
-
-Consignes pour le Tuteur Didak'bot (Histoire-Géographie 2nde) :
-1. AVIS GÉNÉRAL :
-   - Si le travail est en cours ou perfectible : commence par "C'est bien, il te reste une bonne marge de progression !" et propose 2 ou 3 axes d'amélioration méthodologiques concrets (méthode AEI : Affirmer, Expliquer, Illustrer, équilibre du plan, notions clés).
-   - Si le travail est déjà solide : commence par "Excellente base, ton travail est déjà solide !" et propose 1 ou 2 pistes d'approfondissement historique (historiens de référence, faits précis).
-
-2. RÈGLES STRICTES :
-   ⛔ INTERDICTION ABSOLUE : Ne donne JAMAIS d'exemple rédigé ni de paragraphe que l'élève pourrait recopier. Guide sa réflexion par des questions, mais ne rédige RIEN à sa place.
-   ⛔ Ne dis JAMAIS "c'est parfait, tu n'as plus rien à faire". En Histoire, il y a toujours une nuance à apporter.`;
+        const aiPromptHeader = `Sujet choisi : "${topicText || homework?.title || 'Devoir'}"
+Élève : ${studentFullName}`;
 
         const preparedEssay = injectParagraphZwnj(injectSentenceSpacing(injectHomoglyphs(cleanEssay)));
 
@@ -1272,8 +1276,7 @@ Consignes pour le Tuteur Didak'bot (Histoire-Géographie 2nde) :
 --- MON TRAVAIL RÉDIGÉ SUR CONDAMINEWEB (BROUILLON & DEVOIR) : ---
 ${watermark}${preparedEssay}
 
-${aiNotesText.trim() ? `--- MES DERNIÈRES NOTES DE CONSEILS : ---\n${aiNotesText.trim()}\n\n` : ''}Consignes pour Didak'bot :
-Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place.`;
+${aiNotesText.trim() ? `--- MES DERNIÈRES NOTES DE CONSEILS : ---\n${aiNotesText.trim()}\n\n` : ''}Analyse cette version en suivant tes consignes pédagogiques permanentes. Donne-moi des pistes pour améliorer mon propre travail, sans le rédiger à ma place.`;
 
         const modeLabel = 'Brouillon & Devoir';
 
@@ -1664,7 +1667,7 @@ Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place
                     {(submittedResult.grade || currentGrade) && (
                         <div className="bg-gradient-to-r from-indigo-950/60 via-slate-900 to-indigo-950/60 border-2 border-indigo-500/50 rounded-2xl p-5 text-center shadow-lg">
                             <div className="text-xs font-black uppercase tracking-widest text-indigo-300">
-                                🎯 Note d'Évaluation Progressive IA
+                                {homework?.assessmentKind === 'training_ia' ? '🚀 Note symbolique d’entraînement — hors moyenne' : '🎯 Note d’Évaluation Progressive IA'}
                             </div>
                             <div className="text-4xl font-black text-indigo-200 my-1 drop-shadow-md">
                                 {submittedResult.grade || currentGrade} <span className="text-xl font-bold text-indigo-400">/ 20</span>
@@ -1858,8 +1861,25 @@ Analyse mon travail selon les règles ci-dessus sans jamais rédiger à ma place
             <section className="conda-redaction-topic-banner">
                 <div className="conda-redaction-topic-label">
                     <span>📌</span>
-                    <span>Sujet de la Rédaction</span>
+                    <span>{topicOptions.length > 1 ? 'Choisis ton sujet de rédaction' : 'Sujet de la Rédaction'}</span>
                 </div>
+                {topicOptions.length > 1 && (
+                    <div className="flex flex-wrap gap-2 mt-3 mb-3" role="group" aria-label="Choisir un sujet de rédaction">
+                        {topicOptions.map((topic, index) => (
+                            <button
+                                key={`${index}-${topic}`}
+                                type="button"
+                                onClick={() => {
+                                    setSelectedTopic(topic);
+                                    const storageKey = `conda_hw_topic_${String(homework?._id || '')}_${String(user?._id || user?.id || '')}`;
+                                    window.localStorage.setItem(storageKey, topic);
+                                }}
+                                aria-pressed={topicText === topic}
+                                className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition ${topicText === topic ? 'border-cyan-400 bg-cyan-500/20 text-white shadow' : 'border-slate-600 bg-slate-800/70 text-slate-200 hover:border-cyan-500'}`}
+                            >{topic}</button>
+                        ))}
+                    </div>
+                )}
                 <p className="conda-redaction-topic-text">{topicText}</p>
             </section>
 

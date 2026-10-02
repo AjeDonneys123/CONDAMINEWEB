@@ -44,6 +44,11 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [scanGalleryOpen, setScanGalleryOpen] = useState(false);
     const [scanTargetStudent, setScanTargetStudent] = useState(null);
     const [studentIdsWithScans, setStudentIdsWithScans] = useState([]);
+    const [studentVocabularyView, setStudentVocabularyView] = useState('');
+    const [studentVocabulary, setStudentVocabulary] = useState([]);
+    const [studentVocabularyBusy, setStudentVocabularyBusy] = useState(false);
+    const [studentVocabularyError, setStudentVocabularyError] = useState('');
+    const [studentVocabularyDraft, setStudentVocabularyDraft] = useState('');
 
     const handleOpenScanCapture = (targetStudent = null) => {
         setScanTargetStudent(targetStudent || selectedStudent || null);
@@ -53,6 +58,50 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleOpenScanGallery = (targetStudent = null) => {
         setScanTargetStudent(targetStudent || selectedStudent || null);
         setScanGalleryOpen(true);
+    };
+
+    const loadStudentVocabulary = async (student) => {
+        const studentId = String(student?._id || student?.id || '');
+        if (!studentId) return;
+        setStudentVocabularyView('list');
+        setStudentVocabularyBusy(true);
+        setStudentVocabularyError('');
+        try {
+            const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`);
+            const data = await response.json().catch(() => []);
+            if (!response.ok) throw new Error(data?.error || 'Impossible de charger les mots.');
+            setStudentVocabulary(Array.isArray(data) ? data : []);
+        } catch (error) {
+            setStudentVocabularyError(error.message || 'Impossible de charger les mots.');
+        } finally {
+            setStudentVocabularyBusy(false);
+        }
+    };
+
+    const addStudentVocabulary = async () => {
+        const french = studentVocabularyDraft.trim();
+        const studentId = String(selectedStudent?._id || selectedStudent?.id || '');
+        if (!french || !studentId || studentVocabularyBusy) return;
+        setStudentVocabularyBusy(true);
+        setStudentVocabularyError('');
+        try {
+            const translationResponse = await fetch(`/api/eleve/dil/translate/fr-es?q=${encodeURIComponent(french)}`);
+            const translation = await translationResponse.json().catch(() => ({}));
+            if (!translationResponse.ok || !translation?.spanish) throw new Error(translation?.error || 'Traduction espagnole indisponible.');
+            const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ french, spanish: translation.spanish })
+            });
+            const saved = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(saved?.error || 'Enregistrement impossible.');
+            setStudentVocabulary((previous) => [saved, ...previous.filter((word) => String(word.french || '').toLocaleLowerCase() !== french.toLocaleLowerCase())]);
+            setStudentVocabularyDraft('');
+            setStudentVocabularyView('list');
+        } catch (error) {
+            setStudentVocabularyError(error.message || 'Enregistrement impossible.');
+        } finally {
+            setStudentVocabularyBusy(false);
+        }
     };
     
     const [showNoteInput, setShowNoteInput] = useState(false);
@@ -1692,6 +1741,10 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     {selectedGradeHas(selectedStudent, 'boardWarning') ? 'DÉSAVERTIR AU TABLEAU' : '⚠️ AVERTIR AU TABLEAU'}
                                 </button>
                             </div>
+                            <div className="student-scan-drawer-row student-vocabulary-actions">
+                                <button className="act-btn btn-vocabulary-add" onClick={() => { setStudentVocabularyDraft(''); setStudentVocabularyError(''); setStudentVocabularyView('add'); }}>＋ MOT</button>
+                                <button className="act-btn btn-vocabulary-list" onClick={() => loadStudentVocabulary(selectedStudent)}>📚 MES MOTS</button>
+                            </div>
                             <div className="student-scan-drawer-row">
                                 <button className="act-btn btn-scan-capture" onClick={() => handleOpenScanCapture(selectedStudent)}>
                                     📷 CAPTURE
@@ -1711,6 +1764,28 @@ export default function ClassroomManager({ globalClassId, user }) {
                     </>
                 )}
             </div>
+            {studentVocabularyView && (
+                <div className="student-vocabulary-overlay" onClick={(event) => { if (event.target === event.currentTarget) setStudentVocabularyView(''); }}>
+                    <section className="student-vocabulary-modal" role="dialog" aria-modal="true" aria-label="Vocabulaire français de l’élève">
+                        <header>
+                            <strong>{studentVocabularyView === 'add' ? 'Ajouter un mot ou une expression' : `Mes mots · ${selectedStudent ? `${getDisplayName(selectedStudent)} ${selectedStudent.lastName || ''}`.trim() : 'Élève'}`}</strong>
+                            <button type="button" onClick={() => setStudentVocabularyView('')}>×</button>
+                        </header>
+                        {studentVocabularyView === 'add' ? (
+                            <>
+                                <p>Le mot sera traduit en espagnol et proposé à l’élève dans son entraînement de français.</p>
+                                <input autoFocus value={studentVocabularyDraft} onChange={(event) => setStudentVocabularyDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addStudentVocabulary(); }} placeholder="Mot ou expression en français" />
+                                <button type="button" className="student-vocabulary-save" onClick={addStudentVocabulary} disabled={studentVocabularyBusy || !studentVocabularyDraft.trim()}>{studentVocabularyBusy ? 'Traduction…' : 'Ajouter à son vocabulaire'}</button>
+                            </>
+                        ) : (
+                            <div className="student-vocabulary-list">
+                                {studentVocabularyBusy ? <p>Chargement…</p> : studentVocabulary.length ? studentVocabulary.map((word) => <div key={word._id || word.french}><strong>{word.french}</strong><span>{word.spanish}</span></div>) : <p>Aucun mot enregistré pour cet élève.</p>}
+                            </div>
+                        )}
+                        {studentVocabularyError && <p className="student-vocabulary-error">{studentVocabularyError}</p>}
+                    </section>
+                </div>
+            )}
             {/* ===== MODAL NOTIFICATION ===== */}
             {notifModalOpen && (
                 <div className="notif-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNotifModalOpen(false); }}>

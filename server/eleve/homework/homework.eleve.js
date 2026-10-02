@@ -402,6 +402,11 @@ router.get('/list/:studentId', async (req, res) => {
         }).sort({ date: -1 }).lean();
         const homeworks = rawHomeworks.filter(hw => {
             if (isVisitor) return (hw.targetClassrooms || []).some((target) => String(target || '').match(/[1-6]/)?.[0] === visitorLevel);
+            // Les devoirs nommés pour une classe (ex. « 2A RQP… ») restent
+            // réservés à cette classe, même si leur ancienne liste de cibles
+            // ou leurs attributions individuelles contiennent d'autres classes.
+            const namedClass = String(hw.title || '').match(/^\s*([1-6][A-Z])(?=\s|[-:])/i)?.[1]?.toUpperCase();
+            if (namedClass && ![...classTargetKeys].some(target => target === namedClass || target.startsWith(namedClass))) return false;
             const assigned = (hw.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;
             if (!hw.isAllClass && !student.isTeacherPreview) return false;

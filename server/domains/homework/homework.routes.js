@@ -57,8 +57,13 @@ router.get('/all', asyncHandler(async (req, res) => {
 }));
 
 router.get('/submissions', asyncHandler(async (req, res) => {
-    const subs = await mongoose.model('Submission').find({}, 'studentId homeworkId grade createdAt').lean();
-    res.json(subs);
+    const subs = await mongoose.model('Submission').find({}, 'studentId homeworkId grade createdAt')
+        .populate('homeworkId', 'title assessmentKind')
+        .lean();
+    res.json(subs.map((submission) => ({
+        ...submission,
+        countsTowardAverage: submission.homeworkId?.assessmentKind !== 'training_ia'
+    })));
 }));
 
 router.get('/submission/:id', asyncHandler(async (req, res) => {

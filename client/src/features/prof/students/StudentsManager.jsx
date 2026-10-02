@@ -109,6 +109,8 @@ export default function StudentsManager({ globalClassId }) {
   const [manualGradeSaving, setManualGradeSaving] = useState(false);
   const [manualGradeError, setManualGradeError] = useState('');
   const [manualGradePromptCopied, setManualGradePromptCopied] = useState(false);
+  const [controlAbsenceBoardingId, setControlAbsenceBoardingId] = useState('');
+  const [controlAbsencesOnBoardId, setControlAbsencesOnBoardId] = useState('');
 
   const isCopyContested = (copy) => (copy?.answers || []).some((a) =>
     a.contestStatus === 'pending' || (a.blankResults || []).some((b) => b.contestStatus === 'pending')
@@ -249,6 +251,37 @@ export default function StudentsManager({ globalClassId }) {
       matched.push({ studentId: extractId(candidates[0].student._id), score: Math.round(normalizedScore * 100) / 100, student: candidates[0].student });
     });
     return { outOf, matched, errors };
+  };
+
+  const putControlAbsenteesOnBoard = async (control, absentStudents) => {
+    if (!globalClassId || !control?._id || !absentStudents.length || controlAbsenceBoardingId) return;
+    setControlAbsenceBoardingId(String(control._id));
+    try {
+      const classResponse = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}`);
+      const classroom = classResponse.ok ? await classResponse.json() : {};
+      const currentText = String(classroom?.classNotification?.text || '');
+      const marker = '📋 ÉLÈVES ABSENTS AU DEVOIR';
+      const baseText = currentText.includes(marker) ? currentText.split(marker)[0].trim() : currentText.trim();
+      const title = String(control.title || '').trim();
+      const documentedTitle = title && norm(title) !== norm('Notes dictées') ? title : '';
+      const lines = absentStudents.map((student) => {
+        const name = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+        return `- ${name} n’a pas fait le dernier devoir${documentedTitle ? ` sur « ${documentedTitle} »` : ''}.`;
+      });
+      const message = [baseText, marker, ...lines].filter(Boolean).join('\n');
+      const response = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/notification`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: message })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Envoi au tableau impossible.');
+      setControlAbsencesOnBoardId(String(control._id));
+    } catch (error) {
+      alert(error.message || 'Envoi au tableau impossible.');
+    } finally {
+      setControlAbsenceBoardingId('');
+    }
   };
 
   const createManualGradeControl = async () => {
@@ -875,6 +908,17 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       } catch (error) {
           setClassHomeworkModal((current) => current ? { ...current, loading: false, error: error.message || 'Chargement des copies impossible.' } : current);
       }
+  };
+
+  const openStudentHomeworkChat = (homework, student) => {
+      const studentId = extractId(student?._id || student?.id);
+      const assignment = (homework?.didakbotAssignments || []).find((item) => String(item.studentId) === String(studentId));
+      if (!assignment?.sessionCode) return;
+      const params = new URLSearchParams({
+          session: String(assignment.sessionCode),
+          pseudo: String(assignment.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim() || 'Élève')
+      });
+      window.open(`https://novapeda.eu/didakbot3.php?${params.toString()}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleRunClassCorrections = async (provider) => {
@@ -2256,6 +2300,13 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                 {assessmentControls.map(control => {
                     const hasControlContest = isControlContested(control);
                     const submissions = control.submissions || [];
+                    const isManualGradeControl = norm(control.subject || '') === norm('NOTE MANUELLE');
+                    const submittedStudentIds = new Set(submissions.map((copy) => extractId(copy.studentId)).filter(Boolean));
+                    const submittedStudentNames = new Set(submissions.map((copy) => norm(copy.studentName || '')).filter(Boolean));
+                    const absentStudents = isManualGradeControl ? students.filter((student) =>
+                        !submittedStudentIds.has(extractId(student._id))
+                        && !submittedStudentNames.has(norm(`${student.firstName || ''} ${student.lastName || ''}`))
+                    ) : [];
 
                     return (
                         <details
@@ -2263,7 +2314,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                             className={`border rounded-2xl p-3 mb-2 transition-all ${
                                 hasControlContest ? 'bg-amber-50/80 border-amber-300' : 'bg-white border-slate-200'
                             }`}
-                            open={hasControlContest}
+                            open={hasControlContest || absentStudents.length > 0}
                         >
                             <summary className="font-black cursor-pointer flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -2280,6 +2331,11 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                         {control.active !== false ? '🟢 Ouvert' : '🔒 Fermé'}
                                     </button>
                                     <span>{control.title} · {submissions.length} copie(s)</span>
+                                    {absentStudents.length > 0 && (
+                                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-900">
+                                            🔔 {absentStudents.length} absent(s)
+                                        </span>
+                                    )}
                                     {(control.alerts || []).length > 0 && (
                                         <div className="flex items-center gap-1">
                                             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded text-white ${control.active !== false ? 'bg-red-600 animate-pulse' : 'bg-rose-500'}`}>
@@ -2353,6 +2409,32 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                             </summary>
 
                             <div className="mt-3 space-y-2">
+                                {absentStudents.length > 0 && (
+                                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="mb-2 text-xs font-black text-amber-950">Élèves sans copie ({absentStudents.length}/{students.length})</div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {absentStudents.map((student) => (
+                                                    <span key={extractId(student._id)} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-sm">
+                                                        {student.firstName} {student.lastName}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            disabled={Boolean(controlAbsenceBoardingId)}
+                                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); void putControlAbsenteesOnBoard(control, absentStudents); }}
+                                            className="shrink-0 rounded-lg bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:opacity-60"
+                                        >
+                                            {controlAbsenceBoardingId === String(control._id)
+                                                ? 'Envoi…'
+                                                : controlAbsencesOnBoardId === String(control._id)
+                                                    ? '✓ Affichés au tableau'
+                                                    : '🔔 Mettre au tableau'}
+                                        </button>
+                                    </div>
+                                )}
                                 {submissions.length === 0 ? (
                                     <div className="text-xs text-slate-400 italic p-2">Aucune copie reçue pour ce contrôle.</div>
                                 ) : (
@@ -3017,7 +3099,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                             const preview = parseManualGrades();
                             return (
                                 <div className={`rounded-2xl border p-4 text-sm ${preview.errors.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-emerald-300 bg-emerald-50 text-emerald-950'}`}>
-                                    <div className="font-black">{preview.matched.length} élève(s) reconnu(s) sur {preview.outOf}</div>
+                                    <div className="font-black">{preview.matched.length} élève(s) reconnu(s) sur {students.length}</div>
                                     {preview.matched.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{preview.matched.map(row => <span key={row.studentId} className="rounded-full bg-white px-2 py-1 font-bold shadow-sm">{row.student.firstName} {row.student.lastName} : {row.score}</span>)}</div>}
                                     {preview.errors.length > 0 && <pre className="mt-3 whitespace-pre-wrap font-sans font-bold">{preview.errors.join('\n')}</pre>}
                                 </div>
@@ -3136,9 +3218,16 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                 <article key={extractId(row.student._id)} className="rounded-2xl border border-slate-200 bg-white p-4">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <h3 className="font-black text-slate-800">{row.student.firstName} {row.student.lastName}</h3>
-                                        {!row.subId ? <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">PAS ENCORE RENDU</span> : (
-                                            <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black text-emerald-700">COPIE ENREGISTRÉE</span>
-                                        )}
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {(classHomeworkModal.homework?.didakbotAssignments || []).some((item) => String(item.studentId) === String(extractId(row.student._id || row.student.id)) && item.sessionCode) && (
+                                                <button type="button" onClick={() => openStudentHomeworkChat(classHomeworkModal.homework, row.student)} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[10px] font-black text-cyan-800 hover:bg-cyan-100">
+                                                    🤖 Voir l’historique IA
+                                                </button>
+                                            )}
+                                            {!row.subId ? <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">PAS ENCORE RENDU</span> : (
+                                                <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black text-emerald-700">COPIE ENREGISTRÉE</span>
+                                            )}
+                                        </div>
                                     </div>
                                     {row.resultError && <div className="mt-2 rounded-lg bg-red-50 p-2 text-xs font-bold text-red-700">{row.resultError}</div>}
                                     {copyText && <details className="mt-3">

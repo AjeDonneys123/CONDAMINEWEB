@@ -119,21 +119,18 @@ export default function HomeworkList({
   };
 
   if (selectedHw) {
+    const trainingNotice = selectedHw.assessmentKind === 'training_ia' && (
+      <div className="mx-4 mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
+        🚀 Entraînement libre avec l’IA : ta note est symbolique et ne comptera pas dans la moyenne. Ton professeur recevra ta copie et ta note pour suivre tes progrès ; il pourra éventuellement t’accorder un bonus. Tu peux t’entraîner librement.
+      </div>
+    );
     if (isRedactionHw(selectedHw)) {
       return (
-        <RedactionWorkspace 
-          homework={selectedHw} 
-          user={user} 
-          onQuit={() => { setSelectedHw(null); loadData(); }} 
-        />
+        <>{trainingNotice}<RedactionWorkspace homework={selectedHw} user={user} onQuit={() => { setSelectedHw(null); loadData(); }} /></>
       );
     }
     return (
-      <HomeworkWorkspace 
-        homework={selectedHw} 
-        user={user} 
-        onQuit={() => { setSelectedHw(null); loadData(); }} 
-      />
+      <>{trainingNotice}<HomeworkWorkspace homework={selectedHw} user={user} onQuit={() => { setSelectedHw(null); loadData(); }} /></>
     );
   }
 

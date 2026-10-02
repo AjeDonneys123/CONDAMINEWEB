@@ -59,6 +59,8 @@ export default function StatusOverview({ user, onOpenActivity }) {
   }
 
   const disciplines = (data?.disciplines || []).filter((discipline) => {
+    const subject = String(discipline?.subject || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+    if (!/(HISTOIRE|HIST|GEOGRAPH|\bGEO\b|\bEMC\b|CIVIQUE)/.test(subject)) return false;
     if (Number(discipline?.activities?.total || 0) > 0) return true;
     return (discipline?.activities?.chapters || []).some((chapter) =>
       String(chapter?.chapterTitle || '').trim().toUpperCase() !== 'GÉNÉRAL'

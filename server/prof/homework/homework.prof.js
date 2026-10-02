@@ -126,9 +126,12 @@ router.get('/all', async (req, res) => {
 router.get('/submissions', async (req, res) => {
     try {
         const subs = await Submission.find({}, 'studentId homeworkId grade createdAt antiCheat')
-            .populate('homeworkId', 'title')
+            .populate('homeworkId', 'title assessmentKind')
             .lean();
-        res.json(subs);
+        res.json(subs.map((submission) => ({
+            ...submission,
+            countsTowardAverage: submission.homeworkId?.assessmentKind !== 'training_ia'
+        })));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -319,7 +322,7 @@ router.post('/', async (req, res) => {
         const data = { ...req.body };
         if (!data._id) delete data._id;
         if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
-        data.assessmentKind = ['', 'dnb', 'rqp', 'commentaire'].includes(String(data.assessmentKind || ''))
+        data.assessmentKind = ['', 'dnb', 'rqp', 'commentaire', 'training_ia'].includes(String(data.assessmentKind || ''))
             ? String(data.assessmentKind || '')
             : '';
         if (Array.isArray(data.levels)) {

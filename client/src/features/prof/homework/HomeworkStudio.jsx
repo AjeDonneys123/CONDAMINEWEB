@@ -177,12 +177,21 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
 
     const buildDidakbotDraft = () => {
         const level = formData.levels?.[activeLevelIdx] || {};
+        const writingTopics = String(formData.promptTopic || '').split(/\r?\n/).map(topic => topic.trim()).filter(Boolean);
+        const redactionGuidance = formData.mode === 'redaction' ? [
+            'Pour ce devoir de rédaction, accompagne l’élève dans l’amélioration de son propre texte : commence par un retour général adapté à son niveau, puis propose des pistes concrètes de méthode, de structure et de précision historique ou disciplinaire selon le sujet.',
+            'Si le travail est encore perfectible, valorise ce qui est engagé et propose 2 ou 3 axes d’amélioration. Si sa base est solide, propose 1 ou 2 approfondissements précis.',
+            'Ne rédige jamais à la place de l’élève : aucun exemple de paragraphe ou de texte réutilisable. Guide sa réflexion avec des questions, des indices et des actions concrètes. Ne déclare jamais qu’un travail est parfait ou qu’il n’a plus rien à améliorer.',
+            'Le sujet choisi et le texte de l’élève seront fournis dans chaque message. Respecte le sujet choisi et tes consignes internes sans redemander le sujet.'
+        ].join('\n\n') : '';
         const prompt = [
             "Tu es un assistant pédagogique bienveillant. Guide l'élève par des questions et des indices, sans rédiger le devoir complet à sa place.",
             formData.title ? `Sujet du devoir : ${formData.title}` : '',
+            writingTopics.length > 1 ? `Sujets proposés (l’élève en choisira un) :\n${writingTopics.map((topic, index) => `${index + 1}. ${topic}`).join('\n')}` : '',
             formData.content ? `Consigne principale : ${formData.content}` : '',
             level.instruction ? `Consignes complémentaires : ${level.instruction}` : '',
-            level.aiHints ? `Pistes pédagogiques : ${level.aiHints}` : ''
+            level.aiHints ? `Pistes pédagogiques : ${level.aiHints}` : '',
+            redactionGuidance
         ].filter(Boolean).join('\n\n');
         return {
             name: `${String(formData.title || 'Assistant pédagogique').trim()} — chatbot`.slice(0, 80),
@@ -190,10 +199,10 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             welcome_message: `Bonjour ! Je suis le tuteur du devoir « ${formData.title || 'Assistant pédagogique'} ». Comment puis-je t'aider à avancer ?`,
             role: 'Assistant pédagogique',
             image_url: '',
-            expertise_domain: String(formData.promptTopic || '').trim(),
+            expertise_domain: String(formData.title || 'Rédaction').trim(),
             system_prompt: prompt,
-            pedagogical_approach: 'Méthode socratique et guidage par le questionnement. Valoriser l’apprentissage par l’erreur et la progression.',
-            behavioral_rules: 'Ton bienveillant, stimulant et rigoureux. Ne pas rédiger le devoir à la place de l’élève. Terminer par une question ou une action concrète.',
+            pedagogical_approach: 'Questionnement progressif, adapté au niveau de l’élève et à l’objectif du devoir.',
+            behavioral_rules: 'Ton bienveillant et stimulant ; réponse claire et concise, terminée par une question ou une action concrète.',
             knowledge_limits: 'Rester dans le sujet et les consignes de ce devoir. Signaler les incertitudes.',
             model: 'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
             verbosity: 'normal',
@@ -417,6 +426,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             ? 'RQP'
             : formData.assessmentKind === 'commentaire'
                 ? 'Commentaire'
+                : formData.assessmentKind === 'training_ia'
+                    ? 'Entraînement IA — note symbolique'
                 : 'Devoir classique';
     const handleLevelInput = (idx, f, v) => {
         const lvls = [...formData.levels];
@@ -606,28 +617,127 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                 }
             }
             const sessionsByBot = new Map();
+            const recipientsByGroup = new Map();
             if (classBots.length && !formData.isPunishment) {
                 if (!creatorKey) throw new Error("Pour attribuer un chat par élève, renseignez la clé créateur Didak'bot.");
+                for (const [groupKey, grp] of Object.entries(groups)) {
+                    const selectedIds = new Set((grp.assignedStudents || []).map(String));
+                    const recipientsById = new Map();
+                    grp.classrooms.forEach(className => {
+                        getClassRoster(className, { studentIds: grp.isAllClass ? [] : grp.assignedStudents })
+                            .forEach(student => recipientsById.set(String(student._id || student.id), student));
+                    });
+                    recipientsByGroup.set(groupKey, [...recipientsById.values()].filter(student => {
+                        const id = String(student?._id || student?.id || '');
+                        return id && (grp.isAllClass || selectedIds.has(id));
+                    }));
+                }
                 for (const bot of classBots) {
                     const botId = Number(bot.chatbotId);
                     if (!Number.isInteger(botId) || botId <= 0) throw new Error(`L'identifiant Didak'bot de ${bot.className || 'la classe'} est invalide.`);
-                    const didakbotResponse = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ action: 'get_conversations', chatbot_id: String(botId), user_key: creatorKey })
-                    });
-                    const didakbotData = await didakbotResponse.json();
-                    if (!didakbotResponse.ok || didakbotData?.success !== true || !Array.isArray(didakbotData.sessions)) {
-                        throw new Error(`Didak'bot n'a pas renvoyé les sessions pour ${bot.className || botId}. Vérifiez la clé et l'identifiant du bot.`);
+                    const studentsNeedingSessions = [...new Map(Object.entries(groups).flatMap(([groupKey, grp]) =>
+                        (recipientsByGroup.get(groupKey) || []).filter(student => {
+                            const studentClassName = normalizeClassName(getHomeroomName(student, grp.classrooms[0] || ''));
+                            const selectedBot = classBots.find(item => normalizeClassName(item.className) === studentClassName)
+                                || (classBots.length === 1 ? classBots[0] : null);
+                            if (Number(selectedBot?.chatbotId) !== botId) return false;
+                            const studentId = String(student._id || student.id);
+                            const alreadyAssigned = (formData.didakbotAssignments || []).some(item =>
+                                String(item.studentId) === studentId && Number(item.chatbotId) === botId && item.sessionCode
+                            );
+                            return !alreadyAssigned;
+                        }).map(student => [String(student._id || student.id), student])
+                    ))].map(([, student]) => student);
+                    if (!studentsNeedingSessions.length) {
+                        sessionsByBot.set(botId, { available: [], cursor: 0, className: bot.className });
+                        continue;
                     }
+                    const loadBotSessions = async () => {
+                        const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({ action: 'get_conversations', chatbot_id: String(botId), user_key: creatorKey })
+                        });
+                        const data = await response.json();
+                        if (!response.ok || data?.success !== true || !Array.isArray(data.sessions)) {
+                            throw new Error(`Didak'bot n'a pas renvoyé les sessions pour ${bot.className || botId}. Vérifiez la clé et l'identifiant du bot.`);
+                        }
+                        return data.sessions;
+                    };
+                    let botSessions = await loadBotSessions();
                     const assignedCodes = new Set((formData.didakbotAssignments || [])
                         .filter(item => Number(item.chatbotId) === botId)
                         .map(item => String(item.sessionCode || '')));
+                    // Didak'bot renseigne parfois last_activity à la création d'une session vide.
+                    // Le nombre de messages est le signal fiable pour déterminer si elle peut être attribuée.
+                    const isEmptySession = session => Number(session.message_count || 0) === 0 && session.session_code && !assignedCodes.has(String(session.session_code));
+                    let availableSessions = botSessions.filter(isEmptySession);
+                    if (availableSessions.length < studentsNeedingSessions.length) {
+                        const template = formData.didakbotTemplate;
+                        const shareLink = String(bot.shareLink || '').trim();
+                        if (!template || !shareLink) {
+                            throw new Error(`Le bot ${bot.className || botId} a ${availableSessions.length} session(s) vide(s) pour ${studentsNeedingSessions.length} élève(s). Ouvrez « Modifier les chatbots liés » et augmentez le nombre de sessions du bot.`);
+                        }
+                        const currentMaxSessions = Number(template.max_sessions) || 30;
+                        const missingSessions = studentsNeedingSessions.length - availableSessions.length;
+                        const requiredMaxSessions = Math.max(
+                            currentMaxSessions + Math.max(1, missingSessions) + 5,
+                            botSessions.length + studentsNeedingSessions.length + 5
+                        );
+                        const { context_material, ...templateConfig } = template;
+                        const expandedConfig = {
+                            ...templateConfig,
+                            user_key: String(creatorKey || '').trim().toUpperCase(),
+                            share_link: shareLink,
+                            target_audience: bot.className || template.target_audience,
+                            system_prompt: [template.system_prompt, context_material ? `Documents et contexte de référence :\n${context_material}` : ''].filter(Boolean).join('\n\n'),
+                            max_sessions: String(requiredMaxSessions)
+                        };
+                        const { response: updateResponse, result: updateResult } = await postDidakbotConfig(expandedConfig, bot.className, 'augmentation des sessions vides du chatbot', shareLink);
+                        if (!updateResponse.ok || updateResult?.success !== true) {
+                            throw new Error(updateResult?.error || updateResult?.message || `Impossible d’augmenter la capacité du bot ${bot.className || botId}.`);
+                        }
+                        botSessions = await loadBotSessions();
+                        availableSessions = botSessions.filter(isEmptySession);
+                        if (availableSessions.length < studentsNeedingSessions.length) {
+                            throw new Error(`Après augmentation, le bot ${bot.className || botId} ne renvoie que ${availableSessions.length} session(s) vide(s) pour ${studentsNeedingSessions.length} élève(s). Vérifiez les sessions sur Didak’bot.`);
+                        }
+                        setFormData(current => ({ ...current, didakbotTemplate: { ...template, max_sessions: String(requiredMaxSessions) } }));
+                    }
                     sessionsByBot.set(botId, {
-                        available: didakbotData.sessions.filter(session => Number(session.message_count || 0) === 0 && !session.last_activity && session.session_code && !assignedCodes.has(String(session.session_code))),
+                        available: availableSessions,
                         cursor: 0,
                         className: bot.className
                     });
+                }
+            }
+
+            const allocatedSessionByStudentBot = new Map();
+            if (classBots.length && !formData.isPunishment) {
+                for (const bot of classBots) {
+                    const botId = Number(bot.chatbotId);
+                    const pool = sessionsByBot.get(botId);
+                    if (!pool) continue;
+                    const existingByStudent = new Map((formData.didakbotAssignments || []).map(item => [String(item.studentId), item]));
+                    const recipientsForBot = new Map();
+                    for (const [groupKey, grp] of Object.entries(groups)) {
+                        for (const student of recipientsByGroup.get(groupKey) || []) {
+                            const studentId = String(student._id || student.id);
+                            const studentClassName = normalizeClassName(getHomeroomName(student, grp.classrooms[0] || ''));
+                            const selectedBot = classBots.find(item => normalizeClassName(item.className) === studentClassName)
+                                || (classBots.length === 1 ? classBots[0] : null);
+                            if (Number(selectedBot?.chatbotId) !== botId) continue;
+                            const existing = existingByStudent.get(studentId);
+                            if (existing?.sessionCode && Number(existing.chatbotId) === botId) continue;
+                            recipientsForBot.set(studentId, student);
+                        }
+                    }
+                    if (pool.available.length < recipientsForBot.size) {
+                        throw new Error(`Didak’bot renvoie ${pool.available.length} session(s) vide(s) pour ${recipientsForBot.size} élève(s) distinct(s) à attribuer sur le bot ${bot.className || botId}.`);
+                    }
+                    for (const studentId of recipientsForBot.keys()) {
+                        allocatedSessionByStudentBot.set(`${studentId}:${botId}`, pool.available[pool.cursor++]);
+                    }
                 }
             }
 
@@ -642,16 +752,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     teacherId: user.id || user._id
                 };
                 if (classBots.length && !formData.isPunishment) {
-                    const selectedIds = new Set((grp.assignedStudents || []).map(String));
-                    const recipientsById = new Map();
-                    grp.classrooms.forEach(className => {
-                        getClassRoster(className, { studentIds: grp.isAllClass ? [] : grp.assignedStudents })
-                            .forEach(student => recipientsById.set(String(student._id || student.id), student));
-                    });
-                    const recipients = [...recipientsById.values()].filter(student => {
-                        const id = String(student?._id || student?.id || '');
-                        return id && (grp.isAllClass || selectedIds.has(id));
-                    });
+                    const recipients = recipientsByGroup.get(key) || [];
                     if (recipients.length === 0) {
                         throw new Error(`Aucun élève trouvé pour ${grp.classrooms.join(', ')}. Impossible d'attribuer les chats.`);
                     }
@@ -668,9 +769,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                         const botId = Number(bot.chatbotId);
                         const existing = existingByStudent.get(studentId);
                         if (existing?.sessionCode && Number(existing.chatbotId) === botId) return existing;
-                        const botSessions = sessionsByBot.get(botId);
-                        const session = botSessions?.available?.[botSessions.cursor++];
-                        if (!session) throw new Error(`Il n'y a pas assez de sessions vides sur le bot ${bot.className || botId} pour tous les élèves de cette classe.`);
+                        const session = allocatedSessionByStudentBot.get(`${studentId}:${botId}`);
+                        if (!session) throw new Error(`Aucune session n’a été réservée pour l’élève ${studentId} sur le bot ${bot.className || botId}.`);
                         const studentName = String(student.fullName || student.name || `${student.firstName || student.prenom || ''} ${student.lastName || student.nom || ''}`.trim() || 'Élève').trim();
                         return {
                             studentId,
@@ -986,16 +1086,22 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
 
                     {formData.mode === 'redaction' ? (
                         <div className="v84-hw-card bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                <span className="mr-2 text-[11px] font-black uppercase text-slate-400">Type d’entraînement</span>
+                                <button type="button" className={`v84-res-btn upload ${formData.assessmentKind === 'training_ia' ? 'bg-emerald-600 text-white border-emerald-700' : ''}`} onClick={() => handleInput('assessmentKind', formData.assessmentKind === 'training_ia' ? '' : 'training_ia')}>🚀 Entraînement IA</button>
+                                {formData.assessmentKind === 'training_ia' && <span className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Note symbolique, hors moyenne. La copie et la note restent transmises au professeur pour suivre les progrès ; un bonus peut éventuellement être attribué.</span>}
+                            </div>
                             <div>
                                 <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-2">
-                                    📌 Sujet de la Rédaction (Énoncé / Consigne principale)
+                                    📌 Sujets de rédaction (un sujet par ligne ; l’élève en choisira un)
                                 </label>
                                 <textarea
                                     className="w-full h-44 p-4 rounded-2xl border border-slate-200 bg-slate-50 font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition outline-none resize-y text-sm leading-relaxed"
-                                    placeholder="Exemple : Dans un développement argumenté d'une vingtaine de lignes, expliquez le fonctionnement de la démocratie athénienne au Ve siècle av. J.-C. et ses limites..."
+                                    placeholder={'Sujet 1 : La démocratie athénienne\nSujet 2 : La citoyenneté dans l’Antiquité\nSujet 3 : Les limites de la démocratie athénienne'}
                                     value={formData.promptTopic || ''}
                                     onChange={(e) => handleInput('promptTopic', e.target.value)}
                                 />
+                                <p className="mt-2 text-xs font-medium text-slate-500">Saisissez un sujet ou une consigne par ligne. L’élève sélectionnera son sujet avant de commencer ; celui-ci sera repris dans le message envoyé au chatbot.</p>
                             </div>
 
                             <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70">
@@ -1056,6 +1162,13 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                 >
                                     Devoir classique
                                 </button>
+                                <button
+                                    type="button"
+                                    className={`v84-res-btn upload ${formData.assessmentKind === 'training_ia' ? 'bg-emerald-600 text-white border-emerald-700' : ''}`}
+                                    onClick={() => handleInput('assessmentKind', formData.assessmentKind === 'training_ia' ? '' : 'training_ia')}
+                                >
+                                    Entraînement IA
+                                </button>
                                 {canMarkDnb && (
                                     <button
                                         type="button"
@@ -1101,6 +1214,11 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                     <span className="text-[11px] font-bold text-slate-400">Sélectionne une classe de 3e ou de 2de pour afficher les marquages spéciaux.</span>
                                 )}
                             </div>
+                            {formData.assessmentKind === 'training_ia' && (
+                                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
+                                    Entraînement libre avec l’IA : la note est symbolique et n’entre pas dans la moyenne. Le professeur recevra la copie et la note pour suivre les progrès ; il pourra éventuellement accorder un bonus.
+                                </div>
+                            )}
                     <div className="hw-level-tabs">
                         {formData.levels.map((lvl, idx) => (<div key={idx} onClick={() => setActiveLevelIdx(idx)} className={`hw-tab-btn ${activeLevelIdx === idx ? 'active' : ''}`}><span>Question {idx + 1}</span>{formData.levels.length > 1 && (<span className="hw-tab-delete" onClick={(e) => handleRemoveLevel(e, idx)}>✕</span>)}</div>))}
                         <button className="hw-tab-add" onClick={handleAddLevel}>+</button>
