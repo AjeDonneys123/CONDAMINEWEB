@@ -1884,12 +1884,14 @@ ${aiNotesText.trim() ? `--- MES DERNIÈRES NOTES DE CONSEILS : ---\n${aiNotesTex
             </section>
 
             {/* Mention d'avertissement en haut du devoir */}
-            <div className="conda-redaction-integrity-alert">
-                <span className="conda-alert-icon">⚠️</span>
-                <p className="conda-alert-text">
-                    <strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.
-                </p>
-            </div>
+            {homework?.assessmentKind !== 'training_ia' && (
+                <div className="conda-redaction-integrity-alert">
+                    <span className="conda-alert-icon">⚠️</span>
+                    <p className="conda-alert-text">
+                        <strong>Attention :</strong> S'il y a une trop grande différence de niveau entre votre travail final et votre prochain devoir, cette note ne sera pas prise en compte.
+                    </p>
+                </div>
+            )}
 
             {/* Continuous AI Perfection Banner (Displayed if previously submitted) */}
             {alreadySubmitted && (

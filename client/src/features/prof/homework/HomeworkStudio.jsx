@@ -1158,6 +1158,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                 <button
                                     type="button"
                                     className={`v84-res-btn upload ${formData.assessmentKind === '' ? 'bg-slate-900 text-white' : ''}`}
+                                    aria-pressed={formData.assessmentKind === ''}
+                                    style={formData.assessmentKind === '' ? { backgroundColor: '#334155', color: '#fff', borderColor: '#334155', boxShadow: '0 4px 12px rgba(51,65,85,.25)' } : undefined}
                                     onClick={() => handleInput('assessmentKind', '')}
                                 >
                                     Devoir classique
@@ -1165,6 +1167,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                 <button
                                     type="button"
                                     className={`v84-res-btn upload ${formData.assessmentKind === 'training_ia' ? 'bg-emerald-600 text-white border-emerald-700' : ''}`}
+                                    aria-pressed={formData.assessmentKind === 'training_ia'}
+                                    style={formData.assessmentKind === 'training_ia' ? { backgroundColor: '#059669', color: '#fff', borderColor: '#047857', boxShadow: '0 4px 12px rgba(5,150,105,.25)' } : undefined}
                                     onClick={() => handleInput('assessmentKind', formData.assessmentKind === 'training_ia' ? '' : 'training_ia')}
                                 >
                                     Entraînement IA
@@ -1173,6 +1177,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                     <button
                                         type="button"
                                         className={`v84-res-btn upload ${formData.assessmentKind === 'dnb' ? 'bg-violet-600 text-white border-violet-700' : ''}`}
+                                        aria-pressed={formData.assessmentKind === 'dnb'}
+                                        style={formData.assessmentKind === 'dnb' ? { backgroundColor: '#7c3aed', color: '#fff', borderColor: '#6d28d9', boxShadow: '0 4px 12px rgba(124,58,237,.25)' } : undefined}
                                         onClick={() => handleInput('assessmentKind', 'dnb')}
                                     >
                                         Définir en DNB
@@ -1183,6 +1189,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                         <button
                                             type="button"
                                             className={`v84-res-btn upload ${formData.assessmentKind === 'rqp' ? 'bg-blue-600 text-white border-blue-700' : ''}`}
+                                            aria-pressed={formData.assessmentKind === 'rqp'}
+                                            style={formData.assessmentKind === 'rqp' ? { backgroundColor: '#2563eb', color: '#fff', borderColor: '#1d4ed8', boxShadow: '0 4px 12px rgba(37,99,235,.25)' } : undefined}
                                             onClick={() => {
                                                 setFormData(prev => ({
                                                     ...prev,
@@ -1197,6 +1205,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                         <button
                                             type="button"
                                             className={`v84-res-btn upload ${formData.assessmentKind === 'commentaire' ? 'bg-emerald-600 text-white border-emerald-700' : ''}`}
+                                            aria-pressed={formData.assessmentKind === 'commentaire'}
+                                            style={formData.assessmentKind === 'commentaire' ? { backgroundColor: '#059669', color: '#fff', borderColor: '#047857', boxShadow: '0 4px 12px rgba(5,150,105,.25)' } : undefined}
                                             onClick={() => {
                                                 setFormData(prev => ({
                                                     ...prev,
