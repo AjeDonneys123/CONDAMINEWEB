@@ -1,7 +1,7 @@
 // CondaWeb Slides Bridge - Content Script injecté dans Google Slides (100% Trusted Types Compliant)
 
 (function () {
-  const BRIDGE_VERSION = '1.0.48';
+  const BRIDGE_VERSION = '1.0.52';
     // Older bridge versions stored `true` here.  Do not let that old marker
     // block an upgraded content script: it must replace the old click handler
     // without requiring the teacher to hunt for an extension reload.
@@ -377,18 +377,23 @@ function showPresentationUnlinkedBadge() {
         });
     }
 
-    // 3. La classe n'est volontairement plus reprise depuis le stockage de
-    // l'extension. Ce stockage est partagé par tous les onglets Google Slides
-    // et mélangeait par exemple 5A et 5D. La page CondaWeb qui ouvre Slides
-    // transmet désormais le couple précis cours + classe dans l'URL.
     function loadConfig() {
-        // Kept as a no-op for older initialization code.
+        return new Promise((resolve) => {
+            if (typeof chrome === 'undefined' || !chrome.storage?.local) return resolve();
+            chrome.storage.local.get(['activeClassId', 'activeClassName'], (data) => {
+                if (!chrome.runtime.lastError && data?.activeClassId) {
+                    activeClassId = String(data.activeClassId);
+                    activeClassName = String(data.activeClassName || '');
+                }
+                resolve();
+            });
+        });
     }
     let currentCourseId = '';
     let currentCourseTitle = '';
     let hasAutoConnected = false;
 
-    loadConfig();
+    const configLoaded = loadConfig();
     function onStorageChanged(changes, areaName) {
             // Intentionally ignored: a selection in the popup or another
             // Slides tab must never change this tab's classroom.
@@ -461,7 +466,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                     // CondaWeb page that launched the presentation, so two
                     // classes of the same level can never be mixed.
                     courseId: bridgeCourseId,
-                    classId: bridgeClassId
+                    classId: activeClassId || bridgeClassId
                 }
             });
     if (data?.ok && data.courseId) {
@@ -474,6 +479,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
                 const classChanged = Boolean(data.classId) && String(data.classId) !== activeClassId;
                 if (data.classId) activeClassId = String(data.classId);
                 if (data.className) activeClassName = String(data.className);
+                chrome.storage?.local?.set?.({ activeClassId, activeClassName });
                 isConnected = Boolean(activeClassId);
                 isWaitingForClass = !activeClassId;
                 hasAutoConnected = true;
@@ -857,6 +863,7 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         if (bridgeStopped || syncInFlight) return;
         syncInFlight = true;
         try {
+        await configLoaded;
         if (!hasAutoConnected && Date.now() >= nextAutoConnectAt) {
             const connected = await autoConnectPresentation();
             if (!connected && presentationAssociationMissing) {
@@ -872,6 +879,25 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         if (presentationAssociationMissing) {
             showPresentationUnlinkedBadge();
             return;
+        }
+
+        if (currentCourseId) {
+            try {
+                const shared = await callCondaApi(`/api/courses/presentation-remote/active?courseId=${encodeURIComponent(currentCourseId)}&light=1&live=${Date.now()}`);
+                const sharedClassId = String(shared?.remote?.classId || '');
+                const sharedClassName = String(shared?.remote?.className || '');
+                if (sharedClassId && sharedClassId !== activeClassId) {
+                    activeClassId = sharedClassId;
+                    activeClassName = sharedClassName;
+                    currentClassroomState = null;
+                    chrome.storage?.local?.set?.({ activeClassId, activeClassName });
+                    try {
+                        sessionStorage.setItem('condaManualClassId', activeClassId);
+                        sessionStorage.setItem('condaManualClassName', activeClassName);
+                    } catch (_) {}
+                    renderAllOverlays();
+                }
+            } catch (_) {}
         }
 
         if (!activeClassId) {

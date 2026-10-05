@@ -227,7 +227,7 @@ export default function ProfPage({ user, onLogout }) {
           ) : (
              <Suspense fallback={<div className="flex min-h-[400px] items-center justify-center font-black text-slate-400">CHARGEMENT DE L’ESPACE…</div>}>
                 {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
-                {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} />}
+                {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRemoteClassChange={setSelectedClassId} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} launchIntent={scanLaunchIntent} />}
                 {tab === 'corriger' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} correctionWorkspace />}

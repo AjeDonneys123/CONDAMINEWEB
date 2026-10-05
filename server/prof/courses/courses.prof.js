@@ -605,9 +605,14 @@ router.post('/wipe-scenes', async (req, res) => {
 router.get('/presentation-remote/active', async (req, res) => {
     try {
         const classId = String(req.query.classId || '').trim();
+        const courseId = String(req.query.courseId || '').trim();
+        const light = String(req.query.light || '') === '1';
         let course = null;
+        if (courseId) {
+            course = await Course.findOne({ _id: courseId, 'presentationRemote.active': true }).lean();
+        }
         if (classId) {
-            course = await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
+            course = course || await Course.findOne({ 'presentationRemote.classId': classId, 'presentationRemote.active': true })
                 .sort({ 'presentationRemote.updatedAt': -1 }).lean();
         }
         if (!course && classId) {
@@ -623,9 +628,9 @@ router.get('/presentation-remote/active', async (req, res) => {
                 .sort({ 'presentationRemote.updatedAt': -1 }).lean();
         }
         if (!course) return res.json({ ok: true, active: false });
-        const legacySequences = Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : [];
-        const legacyScenes = Array.isArray(course.presentationVideoScenes) ? course.presentationVideoScenes : [];
-        const videoSlides = Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : [];
+        const legacySequences = light ? [] : (Array.isArray(course.presentationVideoSequences) ? course.presentationVideoSequences : []);
+        const legacyScenes = light ? [] : (Array.isArray(course.presentationVideoScenes) ? course.presentationVideoScenes : []);
+        const videoSlides = light ? [] : (Array.isArray(course.presentationVideoSlides) ? course.presentationVideoSlides : []);
         const remote = course.presentationRemote || {};
         const requestedSlideNumber = Math.max(1, Number(remote.slideIndex || 0) + 1);
         let currentSlide = videoSlides.find((slide) => Number(slide?.slideNumber) === requestedSlideNumber);

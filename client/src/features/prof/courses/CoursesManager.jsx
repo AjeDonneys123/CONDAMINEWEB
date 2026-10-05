@@ -757,7 +757,7 @@ const mergeCourseForCurrentView = (currentCourse, serverCourse) => {
         : serverCourse;
 };
 
-export default function CoursesManager({ globalClass, globalClassId = '', globalLevel = '', user = {} }) {
+export default function CoursesManager({ globalClass, globalClassId = '', globalLevel = '', user = {}, onRemoteClassChange }) {
     const [courses, setCourses] = useState(() => readCachedCourses(globalClassId));
     const [courseSections, setCourseSections] = useState([]);
     const [loading, setLoading] = useState(() => readCachedCourses(globalClassId).length === 0);
@@ -1214,6 +1214,12 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         const interval = window.setInterval(poll, 1500);
         return () => window.clearInterval(interval);
     }, [globalClassId, playingCourse?._id]);
+
+    useEffect(() => {
+        const remoteClassId = String(presentationRemote?.remote?.classId || '');
+        if (!remoteClassId || remoteClassId === String(globalClassId || '')) return;
+        onRemoteClassChange?.(remoteClassId);
+    }, [presentationRemote?.remote?.classId, globalClassId, onRemoteClassChange]);
 
     useEffect(() => {
         const projectedClassId = String(presentationRemote?.remote?.classId || globalClassId || '');
