@@ -4,6 +4,44 @@ import './HomeworkStudio.css';
 import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
+const normalizeDidakbotSessionCode = (value) => String(value || '').trim().toUpperCase();
+
+const getDidakbotSessionMessageCount = (session = {}) => {
+    const explicitCounts = [
+        session.message_count,
+        session.messageCount,
+        session.messages_count,
+        session.messagesCount,
+        session.total_messages,
+        session.totalMessages,
+        session.nb_messages,
+        session.nbMessages
+    ].map(Number).filter((count) => Number.isFinite(count) && count > 0);
+    const hasConversationFlags = [
+        session.has_messages,
+        session.hasMessages,
+        session.has_conversation,
+        session.hasConversation,
+        session.has_chat,
+        session.hasChat
+    ].some((value) => value === true || value === 1 || String(value || '').toLowerCase() === 'true');
+    const dialogueField = /(message|conversation|history|dialogue|turn|transcript|^chat$)/i;
+    const countDialogue = (value, key = '') => {
+        if (dialogueField.test(key) && (typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim())))) {
+            return Math.max(0, Number(value));
+        }
+        if (Array.isArray(value)) return dialogueField.test(key) ? value.filter(Boolean).length : Math.max(0, ...value.map((entry) => countDialogue(entry, key)));
+        if (typeof value === 'string' && dialogueField.test(key)) {
+            try { return countDialogue(JSON.parse(value), key); } catch (_) { return value.trim() ? 1 : 0; }
+        }
+        if (!value || typeof value !== 'object') return 0;
+        const nestedCount = Math.max(0, ...Object.entries(value).map(([childKey, child]) => countDialogue(child, childKey)));
+        return nestedCount || (dialogueField.test(key) && Object.keys(value).length ? 1 : 0);
+    };
+    const embeddedCounts = [countDialogue(session)];
+    return Math.max(0, ...explicitCounts, hasConversationFlags ? 1 : 0, ...embeddedCounts);
+};
+
 const DEFAULT_HW_DATA = { 
     title: '', content: '', date: '', teacherId: null, 
     levels: [{ instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '', aiHintUrls: [], dnbSection: 'docs', dnbSubject: 'histoire' }],
@@ -100,6 +138,69 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     const [didakbotEditorMode, setDidakbotEditorMode] = useState('create');
     const [didakbotLoadingExisting, setDidakbotLoadingExisting] = useState(false);
     const [didakbotPostTrace, setDidakbotPostTrace] = useState([]);
+    const [didakbotSessionMessageCounts, setDidakbotSessionMessageCounts] = useState({});
+    const [didakbotSessionsLoading, setDidakbotSessionsLoading] = useState(false);
+    const [didakbotSessionsError, setDidakbotSessionsError] = useState('');
+
+    useEffect(() => {
+        const assignments = Array.isArray(formData.didakbotAssignments) ? formData.didakbotAssignments : [];
+        const classBots = Array.isArray(formData.didakbotClassBots) ? formData.didakbotClassBots : [];
+        const chatbotIds = [...new Set([
+            ...assignments.map((item) => Number(item?.chatbotId || formData.didakbotBotId)),
+            ...classBots.map((bot) => Number(bot?.chatbotId))
+        ].filter((id) => Number.isInteger(id) && id > 0))];
+        if (!creatorKey.trim() || !chatbotIds.length) {
+            setDidakbotSessionMessageCounts({});
+            setDidakbotSessionsError('');
+            return undefined;
+        }
+
+        let cancelled = false;
+        setDidakbotSessionsLoading(true);
+        setDidakbotSessionsError('');
+        const refreshSessionCounts = () => {
+            return Promise.all(chatbotIds.map(async (chatbotId) => {
+                try {
+                    const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'get_conversations', chatbot_id: String(chatbotId), user_key: creatorKey.trim() })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || data?.success !== true || !Array.isArray(data.sessions)) {
+                        return { chatbotId, error: String(data?.error || 'Accès refusé') };
+                    }
+                    return {
+                        chatbotId,
+                        counts: data.sessions.map((session) => [normalizeDidakbotSessionCode(session?.session_code || session?.sessionCode), getDidakbotSessionMessageCount(session)])
+                    };
+                } catch (_) {
+                    return { chatbotId, error: 'Connexion impossible' };
+                }
+            })).then((results) => {
+                if (cancelled) return;
+                const accessible = results.filter((result) => Array.isArray(result.counts));
+                const rejected = results.filter((result) => result.error);
+                if (accessible.length) {
+                    setDidakbotSessionMessageCounts((current) => ({ ...current, ...Object.fromEntries(accessible.flatMap((result) => result.counts)) }));
+                }
+                setDidakbotSessionsError(!accessible.length
+                    ? `Didak’bot refuse l’accès aux conversations des bots ${rejected.map((item) => item.chatbotId).join(', ')}. Vérifie la clé et les identifiants.`
+                    : (rejected.length ? `${rejected.length} bot(s) n’ont pas pu être vérifiés ; les autres sessions restent consultables.` : ''));
+        }).catch(() => {
+            if (!cancelled) setDidakbotSessionsError('Impossible de joindre Didak’bot pour vérifier les conversations.');
+        }).finally(() => {
+            if (!cancelled) setDidakbotSessionsLoading(false);
+        });
+        };
+        void refreshSessionCounts();
+        const refreshTimer = window.setInterval(refreshSessionCounts, 15000);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(refreshTimer);
+        };
+    }, [creatorKey, formData.didakbotAssignments, formData.didakbotClassBots, formData.didakbotBotId]);
 
     const postDidakbotConfig = async (botConfig, className, stage, editShareLink = '') => {
         const editQuery = editShareLink ? `&edit=${encodeURIComponent(editShareLink)}` : '';
@@ -217,6 +318,37 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         };
     };
 
+    const getLinkedDidakbotBots = () => {
+        const savedBots = Array.isArray(formData.didakbotClassBots)
+            ? formData.didakbotClassBots.filter(bot => bot?.chatbotId && bot?.shareLink)
+            : [];
+        if (savedBots.length) return savedBots;
+
+        // Older homework records kept a single bot only in didakbotUrl/didakbotBotId.
+        const legacyUrl = String(formData.didakbotUrl || '').trim();
+        const chatbotId = Number(formData.didakbotBotId);
+        if (!legacyUrl || !Number.isInteger(chatbotId) || chatbotId <= 0) return [];
+        let shareLink = '';
+        try {
+            shareLink = new URL(legacyUrl, window.location.origin).searchParams.get('bot') || '';
+        } catch (_) {}
+        if (!shareLink) {
+            const match = legacyUrl.match(/[?&]bot=([^&#]+)/);
+            if (match) {
+                try { shareLink = decodeURIComponent(match[1]); } catch (_) { shareLink = match[1]; }
+            }
+        }
+        if (!shareLink && /^[A-Z0-9]{12,24}$/i.test(legacyUrl)) shareLink = legacyUrl;
+        if (!shareLink) return [];
+
+        return [{
+            className: formData.targetClassrooms?.[0] || selectedClassNames[0] || 'Classe',
+            chatbotId,
+            shareLink,
+            url: legacyUrl
+        }];
+    };
+
     const openDidakbotEditor = async (mode = 'create') => {
         setDidakbotEditorMode(mode);
         setDidakbotCreateError('');
@@ -227,11 +359,15 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             setDidakbotLoadingExisting(false);
             return;
         }
-        const linkedBot = formData.didakbotClassBots?.find(bot => bot.shareLink);
+        const linkedBots = getLinkedDidakbotBots();
+        const linkedBot = linkedBots[0];
         if (!linkedBot) {
             setDidakbotDraft(null);
             setDidakbotCreateError("Aucun chatbot lié avec un lien de partage. Crée d’abord le bot modèle et enregistre le devoir.");
             return;
+        }
+        if (!formData.didakbotClassBots?.length) {
+            setFormData(current => ({ ...current, didakbotClassBots: linkedBots }));
         }
         setDidakbotDraft(null);
         setDidakbotLoadingExisting(true);
@@ -263,7 +399,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         setDidakbotCreateSuccess('');
         const baseClassGroup = selectedBotClassGroups[0];
         if (didakbotEditorMode === 'edit') {
-            const linkedBots = Array.isArray(formData.didakbotClassBots) ? formData.didakbotClassBots : [];
+            const linkedBots = getLinkedDidakbotBots();
             if (!linkedBots.length) {
                 setDidakbotCreateError("Aucun chatbot n'est encore lié à ce devoir. Utilisez d'abord « Créer un chatbot ».");
                 setDidakbotCreating(false);
@@ -401,9 +537,11 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     };
     const getHomeroomName = (student, fallback) => {
         const raw = String(student.currentClass || student.className || student.classroom || fallback || '').trim();
-        const normalized = normalizeClassName(raw);
-        const baseClass = normalized.match(/^([1-6][A-Z])(?=\s|$)/)?.[1];
-        return baseClass || raw;
+        // A class can appear under several workshop/group labels ("2A - groupe 1",
+        // "2A/AB DNL", etc.). Bots belong to the homeroom, so collapse those labels
+        // to the leading class code before creating bots or assigning sessions.
+        const baseClass = raw.toUpperCase().match(/^([1-6])\s*([A-Z])(?=$|[\s./_-])/);
+        return baseClass ? `${baseClass[1]}${baseClass[2]}` : raw;
     };
     const selectedBotClassGroups = (() => {
         const roster = new Map();
@@ -887,7 +1025,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                 <button
                                     type="button"
                                     onClick={() => openDidakbotEditor('edit')}
-                                    disabled={didakbotCreating || !(formData.didakbotClassBots || []).length}
+                                    disabled={didakbotCreating || !getLinkedDidakbotBots().length}
                                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-cyan-50 border border-cyan-300 text-cyan-900 font-black text-xs shadow-sm transition"
                                 >
                                     ✏️ Modifier les chatbots liés
@@ -1055,17 +1193,25 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                                 </div>
                             )}
                             {formData.didakbotAssignments.length > 0 && (
-                                <div className="mt-3 rounded-2xl border border-cyan-200 bg-white p-3 space-y-2">
-                                    <div className="text-[11px] font-black uppercase tracking-wider text-cyan-950">
-                                        Sessions élèves — accès prof
+                                    <div className="mt-3 rounded-2xl border border-cyan-200 bg-white p-3 space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="text-[11px] font-black uppercase tracking-wider text-cyan-950">Sessions élèves — accès prof</div>
+                                        {didakbotSessionsError && <div role="status" className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">{didakbotSessionsError}</div>}
                                     </div>
                                     {formData.didakbotAssignments.map((assignment) => {
                                         const chatUrl = `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(assignment.sessionCode || '')}&pseudo=${encodeURIComponent(assignment.studentName || 'Élève')}`;
+                                        const messageCount = didakbotSessionMessageCounts[normalizeDidakbotSessionCode(assignment.sessionCode)];
+                                        const hasMessages = Number(messageCount) > 0;
                                         return (
-                                            <div key={`${assignment.studentId}-${assignment.sessionCode}`} className="flex items-center justify-between gap-3 rounded-xl bg-cyan-50 px-3 py-2">
+                                            <div key={`${assignment.studentId}-${assignment.sessionCode}`} className={`didakbot-session-row flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${hasMessages ? 'has-messages' : ''}`}>
                                                 <div className="min-w-0">
                                                     <div className="truncate text-xs font-bold text-slate-800">{assignment.studentName || 'Élève'}</div>
-                                                    <div className="font-mono text-[10px] text-slate-500">Session : {assignment.sessionCode}</div>
+                                                    <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] text-slate-500">
+                                                        <span>Session : {assignment.sessionCode}</span>
+                                                        {hasMessages && <span className="didakbot-session-content-badge">CHAT RENSEIGNÉ · {messageCount} message{messageCount === 1 ? '' : 's'}</span>}
+                                                        {!hasMessages && messageCount === 0 && <span className="didakbot-session-empty-badge">CHAT VIDE</span>}
+                                                        {didakbotSessionsLoading && messageCount === undefined && <span>Vérification…</span>}
+                                                    </div>
                                                 </div>
                                                 <a
                                                     href={chatUrl}

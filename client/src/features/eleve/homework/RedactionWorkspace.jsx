@@ -636,6 +636,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
     const [alreadySubmitted, setAlreadySubmitted] = useState(false);
     const [lastSubmittedBonus, setLastSubmittedBonus] = useState(null);
     const [currentGrade, setCurrentGrade] = useState('');
+    const [teacherFeedback, setTeacherFeedback] = useState('');
     const [initialGrade, setInitialGrade] = useState('');
     const [revisedGrade, setRevisedGrade] = useState('');
     const [reevaluating, setReevaluating] = useState(false);
@@ -811,6 +812,7 @@ export default function RedactionWorkspace({ homework, user, onQuit }) {
                 const bonus = sub.examBonusPoints ?? sub.learningEfficiency?.examBonusPoints ?? null;
                 setLastSubmittedBonus(bonus);
                 if (sub.grade) setCurrentGrade(sub.grade);
+                if (sub.feedback && sub.feedback !== 'Brouillon sauvegardé automatiquement.') setTeacherFeedback(sub.feedback);
                 if (sub.initialGrade) setInitialGrade(sub.initialGrade);
                 if (sub.revisedGrade) setRevisedGrade(sub.revisedGrade);
 
@@ -1681,6 +1683,13 @@ ${aiNotesText.trim() ? `--- MES DERNIÈRES NOTES DE CONSEILS : ---\n${aiNotesTex
                                     Première note fixée à <strong>{submittedResult.grade || currentGrade}/20</strong>. Perfectionne ton devoir pour voir ta deuxième note s'ajouter (ex: 15-16) !
                                 </p>
                             )}
+                        </div>
+                    )}
+
+                    {teacherFeedback && (
+                        <div className="rounded-2xl border-2 border-indigo-400/50 bg-indigo-950/40 p-5 text-left shadow-lg">
+                            <div className="mb-2 text-[11px] font-black uppercase tracking-widest text-indigo-300">💬 Commentaire du professeur</div>
+                            <p className="whitespace-pre-line text-sm font-semibold leading-relaxed text-indigo-50">{teacherFeedback}</p>
                         </div>
                     )}
 

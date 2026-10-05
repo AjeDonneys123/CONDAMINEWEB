@@ -75,6 +75,11 @@
     display: flex; flex-direction: column; gap: 25px;
 }
 
+.didakbot-session-row { background: #ecfeff; border: 1px solid transparent; transition: background-color .18s ease, border-color .18s ease; }
+.didakbot-session-row.has-messages { background: #ffdfb8; border-color: #f97316; box-shadow: inset 5px 0 0 #f97316; }
+.didakbot-session-content-badge { border-radius: 999px; background: #f97316; color: #fff; padding: 3px 8px; font-family: Inter, sans-serif; font-size: 9px; font-weight: 900; }
+.didakbot-session-empty-badge { border-radius: 999px; background: #cffafe; color: #0e7490; padding: 2px 7px; font-family: Inter, sans-serif; font-size: 9px; font-weight: 900; }
+
 .hw-section-title {
     font-size: 0.7rem; font-weight: 950; text-transform: uppercase;
     color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 8px;

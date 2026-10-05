@@ -90,6 +90,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if ((c._id || c.id) === data.activeClassId) opt.selected = true;
                         classSelect.appendChild(opt);
                     });
+                    if (data.activeClassId && !Array.from(classSelect.options).some((option) => option.value === String(data.activeClassId))) {
+                        const selectedOption = document.createElement('option');
+                        selectedOption.value = String(data.activeClassId);
+                        selectedOption.textContent = data.activeClassName || 'Classe sélectionnée dans CondaWeb';
+                        selectedOption.selected = true;
+                        classSelect.appendChild(selectedOption);
+                    }
                     statusSpan.textContent = '';
                     const dot = document.createElement('span');
                     dot.className = 'status-dot';
@@ -139,6 +146,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         const activeClassId = classSelect.value;
         const activeClassName = classSelect.options[classSelect.selectedIndex]?.text || '';
         chrome.storage.local.set({ activeClassId, activeClassName });
+        void loadPronoteExports(activeClassId);
+    });
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local' || (!changes.activeClassId && !changes.activeClassName)) return;
+        const activeClassId = String(changes.activeClassId?.newValue || '');
+        if (!activeClassId || classSelect.value === activeClassId) return;
+        const optionExists = Array.from(classSelect.options).some((option) => option.value === activeClassId);
+        if (!optionExists) {
+            const option = document.createElement('option');
+            option.value = activeClassId;
+            option.textContent = String(changes.activeClassName?.newValue || 'Classe sélectionnée dans CondaWeb');
+            classSelect.appendChild(option);
+        }
+        classSelect.value = activeClassId;
         void loadPronoteExports(activeClassId);
     });
 

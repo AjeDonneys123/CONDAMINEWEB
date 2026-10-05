@@ -103,6 +103,13 @@ export default function DashboardFolder({ items, type, onSelect, onDelete }) {
                     {item.title}
                 </div>
 
+                {isDone && item.feedback && (
+                    <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm font-semibold leading-relaxed text-indigo-950">
+                        <span className="mr-1" aria-hidden="true">💬</span>
+                        {item.feedback}
+                    </div>
+                )}
+
                 {/* LIGNE 3 : STATUT */}
                 <div className="card-footer">
                     {isDone ? (

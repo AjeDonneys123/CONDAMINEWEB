@@ -69,7 +69,8 @@ export default function HomeworkList({
           return {
             ...hw,
             status: isRealDone ? 'done' : 'todo',
-            grade: s?.grade || ''
+            grade: s?.grade || '',
+            feedback: s?.feedback && s.feedback !== 'Brouillon sauvegardé automatiquement.' ? s.feedback : ''
           };
         }));
     } catch(e) { console.error("Err loading HW", e); }

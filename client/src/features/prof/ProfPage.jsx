@@ -51,6 +51,31 @@ export default function ProfPage({ user, onLogout }) {
     }
   }, [selectedClassId]);
 
+  useEffect(() => {
+    const onExtensionClassSelected = (event) => {
+      if (event.origin !== window.location.origin || event.source !== window) return;
+      const detail = event.data?.detail;
+      if (event.data?.type !== 'CONDA_EXTENSION_CLASS_SELECTED' || !detail?.classId) return;
+      const classId = String(detail.classId);
+      if (classes.some((item) => String(item._id) === classId) && classId !== String(selectedClassId)) {
+        setSelectedClassId(classId);
+      }
+    };
+    window.addEventListener('message', onExtensionClassSelected);
+    window.postMessage({ type: 'CONDAWEB_CLASS_SYNC_REQUEST' }, window.location.origin);
+    return () => window.removeEventListener('message', onExtensionClassSelected);
+  }, [classes, selectedClassId]);
+
+  useEffect(() => {
+    if (!uiStateHydrated || !selectedClassId) return;
+    const selectedClass = classes.find((item) => String(item._id) === String(selectedClassId));
+    if (!selectedClass) return;
+    window.postMessage({
+      type: 'CONDAWEB_CLASS_SELECTED',
+      detail: { classId: String(selectedClass._id), className: selectedClass.name || '' }
+    }, window.location.origin);
+  }, [classes, selectedClassId, uiStateHydrated]);
+
   const loadProfileAndClasses = async () => {
     setLoading(true);
     setFetchError(null);
