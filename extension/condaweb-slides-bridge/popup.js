@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const activeClassId = classSelect.value;
         const activeClassName = classSelect.options[classSelect.selectedIndex]?.text || '';
 
-        chrome.storage.local.set({ condaServerUrl, activeClassId, activeClassName, serverConfiguredByUser: true }, () => {
+        chrome.storage.local.set({ condaServerUrl, activeClassId, activeClassName, classSelectionOrigin: 'popup', serverConfiguredByUser: true }, () => {
             currentServerUrl = condaServerUrl.replace(/\/$/, '');
             void loadPronoteExports(activeClassId);
             saveBtn.textContent = '✓ Enregistré !';
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     classSelect.addEventListener('change', () => {
         const activeClassId = classSelect.value;
         const activeClassName = classSelect.options[classSelect.selectedIndex]?.text || '';
-        chrome.storage.local.set({ activeClassId, activeClassName });
+        chrome.storage.local.set({ activeClassId, activeClassName, classSelectionOrigin: 'popup' });
         void loadPronoteExports(activeClassId);
     });
 

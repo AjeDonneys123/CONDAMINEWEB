@@ -229,6 +229,99 @@
     color: #f1f5f9;
 }
 
+.conda-slide-pepito-toggle {
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 14px;
+    background: #0f766e;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(15, 118, 110, .35);
+    font-size: 12px;
+    font-weight: 950;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.conda-slide-pepito-toggle.active { background: #16a34a; }
+
+.conda-pepito-widget {
+    position: fixed !important;
+    top: 18px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 2147483645 !important;
+    width: min(1180px, 96vw) !important;
+    padding: 14px 20px 24px !important;
+    border: 3px solid #38bdf8 !important;
+    border-radius: 20px !important;
+    background: rgba(7, 17, 38, .98) !important;
+    color: #f8fafc !important;
+    box-shadow: 0 12px 38px rgba(0, 0, 0, .45) !important;
+    pointer-events: none !important;
+    box-sizing: border-box !important;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+.conda-pepito-widget.track-hidden {
+    padding: 0 !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+.conda-pepito-widget.track-hidden .conda-pepito-heading,
+.conda-pepito-widget.track-hidden .conda-pepito-cell,
+.conda-pepito-widget.track-hidden .conda-pepito-character {
+    visibility: hidden !important;
+}
+.conda-pepito-heading {
+    display: block !important;
+    margin-bottom: 12px !important;
+    color: #e0f2fe !important;
+    text-align: center !important;
+    font-size: 14px !important;
+    font-weight: 950 !important;
+}
+.conda-pepito-lane {
+    position: relative !important;
+    display: grid !important;
+    grid-template-columns: repeat(9, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    height: clamp(54px, 7vh, 76px) !important;
+}
+.conda-pepito-cell {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 3px solid #94a3b8 !important;
+    border-radius: 11px !important;
+    background: #334155 !important;
+    color: #fff !important;
+    font-size: clamp(24px, 3vw, 42px) !important;
+    font-weight: 950 !important;
+}
+.conda-pepito-cell.center { border-color: #facc15 !important; background: #713f12 !important; font-size: clamp(11px, 1.45vw, 18px) !important; }
+.conda-pepito-cell.plus { border-color: #22c55e !important; background: #14532d !important; color: #dcfce7 !important; font-size: clamp(10px, 1.3vw, 16px) !important; }
+.conda-pepito-cell.minus { border-color: #ef4444 !important; background: #7f1d1d !important; color: #fee2e2 !important; font-size: clamp(10px, 1.3vw, 16px) !important; }
+.conda-pepito-cell.occupied { background: #0369a1 !important; border-color: #7dd3fc !important; box-shadow: 0 0 18px rgba(56,189,248,.85), inset 0 0 14px rgba(125,211,252,.35) !important; color: transparent !important; }
+.conda-pepito-character {
+    position: absolute !important;
+    z-index: 2 !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 88px !important;
+    height: 88px !important;
+    object-fit: contain !important;
+    mix-blend-mode: normal !important;
+    transition: left .45s cubic-bezier(.2,.8,.2,1) !important;
+    filter: drop-shadow(0 3px 3px rgba(0,0,0,.45)) !important;
+}
+.conda-pepito-character.hopping { animation: conda-pepito-hop .38s ease-out; }
+@keyframes conda-pepito-hop {
+    0% { margin-top: 0; }
+    45% { margin-top: -18px; }
+    100% { margin-top: 0; }
+}
+
 /* Div flottante pour le Minuteur (déplaçable et redimensionnable) */
 .conda-slide-timer-widget {
     position: fixed !important;

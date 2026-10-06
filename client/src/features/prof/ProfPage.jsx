@@ -1,5 +1,5 @@
 // @signatures: ProfPage, getInitialUser, loadProfileAndClasses
-import React, { lazy, Suspense, useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
 import ConsoleReporter from './components/ConsoleReporter';
@@ -42,6 +42,8 @@ export default function ProfPage({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+  const pendingExtensionClassRef = useRef(null);
+  const classSyncRequestedRef = useRef(false);
 
   useEffect(() => {
     if (selectedClassId) {
@@ -57,24 +59,45 @@ export default function ProfPage({ user, onLogout }) {
       const detail = event.data?.detail;
       if (event.data?.type !== 'CONDA_EXTENSION_CLASS_SELECTED' || !detail?.classId) return;
       const classId = String(detail.classId);
-      if (classes.some((item) => String(item._id) === classId) && classId !== String(selectedClassId)) {
-        setSelectedClassId(classId);
-      }
+      pendingExtensionClassRef.current = detail;
+      if (!classes.some((item) => String(item._id) === classId)) return;
+      pendingExtensionClassRef.current = null;
+      setSelectedClassId((current) => String(current) === classId ? current : classId);
     };
     window.addEventListener('message', onExtensionClassSelected);
-    window.postMessage({ type: 'CONDAWEB_CLASS_SYNC_REQUEST' }, window.location.origin);
     return () => window.removeEventListener('message', onExtensionClassSelected);
-  }, [classes, selectedClassId]);
+  }, [classes]);
 
   useEffect(() => {
-    if (!uiStateHydrated || !selectedClassId) return;
-    const selectedClass = classes.find((item) => String(item._id) === String(selectedClassId));
+    if (classSyncRequestedRef.current) return;
+    classSyncRequestedRef.current = true;
+    window.postMessage({ type: 'CONDAWEB_CLASS_SYNC_REQUEST' }, window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingExtensionClassRef.current;
+    if (!pending?.classId) return;
+    const matchingClass = classes.find((item) => String(item._id) === String(pending.classId));
+    if (!matchingClass) {
+      if (classes.length) pendingExtensionClassRef.current = null;
+      return;
+    }
+    pendingExtensionClassRef.current = null;
+    setSelectedClassId((current) => String(current) === String(matchingClass._id) ? current : String(matchingClass._id));
+  }, [classes]);
+
+  const selectClassFromPhone = (classId) => {
+    const id = String(classId || '');
+    if (!id || id === String(selectedClassId)) return;
+    const selectedClass = classes.find((item) => String(item._id) === id);
     if (!selectedClass) return;
+    pendingExtensionClassRef.current = null;
+    setSelectedClassId(id);
     window.postMessage({
       type: 'CONDAWEB_CLASS_SELECTED',
-      detail: { classId: String(selectedClass._id), className: selectedClass.name || '' }
+      detail: { classId: String(selectedClass._id), className: selectedClass.name || '', teacherId: String(liveUser?._id || liveUser?.id || '') }
     }, window.location.origin);
-  }, [classes, selectedClassId, uiStateHydrated]);
+  };
 
   const loadProfileAndClasses = async () => {
     setLoading(true);
@@ -205,7 +228,7 @@ export default function ProfPage({ user, onLogout }) {
             ) : (
                 <>
                     {classes.map(c => (
-                        <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
+                        <button key={c._id} onClick={() => selectClassFromPhone(c._id)}
                                 className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap border-2 flex items-center gap-2 ${String(selectedClassId) === String(c._id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
                             {c.type === 'GROUP' ? '👥' : '🏫'} {c.name}
                             {c.level && <span className="bg-white/20 px-1 rounded text-[8px] opacity-70">{c.level}</span>}
@@ -227,7 +250,7 @@ export default function ProfPage({ user, onLogout }) {
           ) : (
              <Suspense fallback={<div className="flex min-h-[400px] items-center justify-center font-black text-slate-400">CHARGEMENT DE L’ESPACE…</div>}>
                 {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
-                {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRemoteClassChange={setSelectedClassId} />}
+                {tab === 'exposes' && <CoursesManager globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRemoteClassChange={selectClassFromPhone} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} launchIntent={scanLaunchIntent} />}
                 {tab === 'corriger' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} correctionWorkspace />}

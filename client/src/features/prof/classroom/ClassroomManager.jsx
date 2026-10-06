@@ -118,6 +118,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [actionFlash, setActionFlash] = useState('');
     const [classScoreBusy, setClassScoreBusy] = useState(false);
+    const [pepitoPosition, setPepitoPosition] = useState(0);
+    const [pepitoBusy, setPepitoBusy] = useState(false);
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
@@ -145,6 +147,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const data = await res.json().catch(() => ({}));
                 if (mounted && res.ok) {
                     setClassPlanProjected(data?.classPlanVisible === true);
+                    setPepitoPosition(Math.max(-4, Math.min(4, Number(data?.pepitoPosition) || 0)));
                     const serverNotif = data?.classNotification || null;
                     setActiveNotif(serverNotif);
                 }
@@ -612,7 +615,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             console.error(e);
         }
     };
-    const adjustClassScores = async (delta) => {
+    const adjustClassScores = async (delta, source = '') => {
         if (classScoreBusy || !globalClassId || !myId) return;
         const safeDelta = Number(delta) < 0 ? -0.5 : 0.5;
         setClassScoreBusy(true);
@@ -620,7 +623,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             const response = await fetch(`/api/classroom/${globalClassId}/adjust-all-scores`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ teacherId: myId, delta: safeDelta })
+                body: JSON.stringify({ teacherId: myId, delta: safeDelta, source })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Modification collective impossible');
@@ -630,6 +633,28 @@ export default function ClassroomManager({ globalClassId, user }) {
             alert(e.message || 'Modification collective impossible');
         } finally {
             setClassScoreBusy(false);
+        }
+    };
+    const movePepito = async (direction) => {
+        if (pepitoBusy) return;
+        if (!globalClassId || !myId) {
+            alert('Impossible de déplacer Pépito : la classe ou le compte professeur n’est pas encore chargé.');
+            return;
+        }
+        setPepitoBusy(true);
+        try {
+            const response = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/pepito/move`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId: myId, direction })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Déplacement de Pépito impossible');
+            setPepitoPosition(Number(data.position) || 0);
+            if (data.reachedReward) await adjustClassScores(data.delta, 'pepito');
+        } catch (error) {
+            alert(error.message || 'Déplacement de Pépito impossible');
+        } finally {
+            setPepitoBusy(false);
         }
     };
     const getCrossCountdownLabel = (stu) => {
@@ -1553,6 +1578,15 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 onClick={toggleFrenchMode}
                                 title="Mode français : choisis un élève puis ajoute un mot ou une expression"
                             >FR N</button>
+                            {/(?:^|\D)5\s*(?:e|ème|eme|[a-z])(?:\D|$)/i.test(String(classroomInfo?.name || classroomInfo?.level || '')) && (
+                                <div className="pepito-phone-control" aria-label="Déplacer Pépito pour la classe">
+                                    <button type="button" onClick={() => void movePepito(-1)} disabled={pepitoBusy} title="Faire reculer Pépito d’une case">←</button>
+                                    <span title={pepitoPosition === 0 ? 'Pépito est au départ' : `${Math.abs(pepitoPosition)} case(s) du côté ${pepitoPosition > 0 ? '+0,5' : '−0,5'}`}>
+                                        Pépito {pepitoPosition === 0 ? '· Départ' : `· ${pepitoPosition > 0 ? '+' : '−'}${Math.abs(pepitoPosition)}`}
+                                    </span>
+                                    <button type="button" onClick={() => void movePepito(1)} disabled={pepitoBusy} title="Faire avancer Pépito d’une case">→</button>
+                                </div>
+                            )}
                             {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                             {((frenchMode ? frenchExpression : planFinder).trim()) && (
                                 <button

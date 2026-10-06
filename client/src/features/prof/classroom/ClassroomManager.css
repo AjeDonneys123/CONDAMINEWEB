@@ -43,6 +43,36 @@
     opacity: 0.45;
     cursor: not-allowed;
 }
+.pepito-phone-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 5px;
+    border: 2px solid #99f6e4;
+    border-radius: 14px;
+    background: #f0fdfa;
+    color: #115e59;
+    font-size: .65rem;
+    font-weight: 900;
+}
+.pepito-phone-control button {
+    border: 0;
+    border-radius: 10px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 8px;
+    background: #0f766e;
+    color: #fff;
+    font-weight: 900;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pepito-phone-control button:disabled { opacity: .55; cursor: wait; }
+.pepito-phone-control span { min-width: 78px; text-align: center; white-space: nowrap; }
+@media (max-width: 900px) {
+    .pepito-phone-control { order: 20; flex-wrap: wrap; justify-content: center; width: 100%; }
+    .pepito-phone-control span { flex: 1 0 100%; order: -1; }
+}
 
 /* TOOLBAR */
 .cm-toolbar { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; background: white; padding: 10px; border-radius: 20px; border: 1px solid #e2e8f0; flex-wrap: wrap; }

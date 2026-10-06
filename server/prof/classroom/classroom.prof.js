@@ -400,6 +400,10 @@ router.get('/bridge-state/:classId', async (req, res) => {
             layout: { ...(classroom.layout || {}), cols: projectedPlan.cols, rows: projectedPlan.rows },
             classPlanVisible: classroom.classPlanVisible === true,
             classPoints: Number(classroom.classPoints ?? 10),
+            pepitoPosition: Math.max(-4, Math.min(4, Number(classroom.pepitoPosition) || 0)),
+            pepitoDisplayPosition: classroom.pepitoRewardAt && Date.now() - new Date(classroom.pepitoRewardAt).getTime() < 3500
+                ? Math.max(-4, Math.min(4, Number(classroom.pepitoRewardPosition) || 0))
+                : Math.max(-4, Math.min(4, Number(classroom.pepitoPosition) || 0)),
             activeStudentHighlight: classroom.activeStudentHighlight || '',
             activeStudentHighlightTime: classroom.activeStudentHighlightTime || null,
             activeStudentBonusAlert: classroom.activeStudentBonusAlert || '',
@@ -1506,6 +1510,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         const { classId } = req.params;
         const teacherId = String(req.body?.teacherId || '').trim();
         const delta = Number(req.body?.delta) < 0 ? -0.5 : 0.5;
+        const source = req.body?.source === 'pepito' ? 'pepito' : 'teacher';
         if (!teacherId) return res.status(400).json({ error: 'Professeur requis' });
 
         const [{ clsObj, students: classStudents }, cls] = await Promise.all([
@@ -1546,8 +1551,11 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         const now = new Date();
         const alert = {
             id: `${now.getTime()}-class-${Math.random().toString(36).slice(2, 8)}`,
-            message: delta < 0 ? 'Toute la classe : −0,5 par élève' : 'Toute la classe : +0,5 par élève',
+            message: source === 'pepito'
+                ? (delta < 0 ? 'Classe −0,5 · malus appliqué à toute la classe' : 'Classe +0,5 · bonus appliqué à toute la classe')
+                : (delta < 0 ? 'Toute la classe : −0,5 par élève' : 'Toute la classe : +0,5 par élève'),
             type: delta < 0 ? 'negative' : 'positive',
+            source,
             createdAt: now
         };
         cls.activeStudentBonusAlert = alert.message;
@@ -1558,6 +1566,28 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         await cls.save();
 
         res.json({ ok: true, adjustedStudents: studentDocs.length, appliedDelta: totalAppliedDelta, classPoints: cls.classPoints, alert });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:classId/pepito/move', async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const teacherId = String(req.body?.teacherId || '').trim();
+        const direction = Number(req.body?.direction) < 0 ? -1 : 1;
+        if (!teacherId) return res.status(400).json({ error: 'Professeur requis' });
+        const cls = await Classroom.findById(classId);
+        if (!cls) return res.status(404).json({ error: 'Classe introuvable' });
+        const nextPosition = Math.max(-4, Math.min(4, Number(cls.pepitoPosition || 0) + direction));
+        const reachedReward = Math.abs(nextPosition) === 4;
+        cls.pepitoPosition = reachedReward ? 0 : nextPosition;
+        if (reachedReward) {
+            cls.pepitoRewardPosition = nextPosition;
+            cls.pepitoRewardAt = new Date();
+        }
+        await cls.save();
+        res.json({ ok: true, position: cls.pepitoPosition, reachedReward, delta: reachedReward ? direction * 0.5 : 0 });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
