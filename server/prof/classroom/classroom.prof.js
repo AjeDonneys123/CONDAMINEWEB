@@ -378,11 +378,22 @@ router.get('/bridge-state/:classId', async (req, res) => {
                 await Classroom.updateOne({ _id: classroom._id }, { $set: { activeHourWarnings } });
             }
         }
+        const activePlanNumber = Number(classroom.activePlanNumber) === 2 ? 2 : 1;
+        const plan2SeatsById = new Map((classroom.seatPlan2 || []).map((seat) => [String(seat.studentId || ''), seat]));
+        const planStudentsSource = activePlanNumber === 2
+            ? students.map((student) => {
+                const seat = plan2SeatsById.get(String(student._id));
+                return { ...student, seatX: seat ? Number(seat.seatX) : null, seatY: seat ? Number(seat.seatY) : null };
+            })
+            : students;
+        const selectedPlanLayout = activePlanNumber === 2
+            ? (classroom.layout2?.toObject?.() || classroom.layout2 || classroom.layout?.toObject?.() || classroom.layout)
+            : (classroom.layout?.toObject?.() || classroom.layout);
         const projectedPlan = includePlan
-            ? buildBridgePlanStudents(classroom, students)
+            ? buildBridgePlanStudents({ layout: selectedPlanLayout }, planStudentsSource)
             : {
-                cols: Math.max(1, Number(classroom?.layout?.cols || 6)),
-                rows: Math.max(1, Number(classroom?.layout?.rows || 5)),
+                cols: Math.max(1, Number(selectedPlanLayout?.cols || 6)),
+                rows: Math.max(1, Number(selectedPlanLayout?.rows || 5)),
                 students: []
             };
         console.info('[CondaWeb bridge] état plan extension', {
@@ -397,7 +408,8 @@ router.get('/bridge-state/:classId', async (req, res) => {
         return res.json({
             _id: String(classroom._id || req.params.classId),
             name: classroom.name || '',
-            layout: { ...(classroom.layout || {}), cols: projectedPlan.cols, rows: projectedPlan.rows },
+            layout: { ...(selectedPlanLayout || {}), cols: projectedPlan.cols, rows: projectedPlan.rows },
+            activePlanNumber,
             classPlanVisible: classroom.classPlanVisible === true,
             classPoints: Number(classroom.classPoints ?? 10),
             pepitoPosition: Math.max(-4, Math.min(4, Number(classroom.pepitoPosition) || 0)),
@@ -439,10 +451,15 @@ router.put('/:classId/bridge-plan', async (req, res) => {
     try {
         const classroom = await Classroom.findById(req.params.classId);
         if (!classroom) return res.status(404).json({ error: 'Classe introuvable' });
-        classroom.classPlanVisible = Boolean(req.body?.visible);
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'visible')) {
+            classroom.classPlanVisible = Boolean(req.body.visible);
+        }
+        if ([1, 2].includes(Number(req.body?.activePlanNumber))) {
+            classroom.activePlanNumber = Number(req.body.activePlanNumber);
+        }
         await classroom.save();
-        console.info('[CondaWeb bridge] plan de classe', { classId: String(classroom._id), visible: classroom.classPlanVisible });
-        return res.json({ ok: true, classId: String(classroom._id), classPlanVisible: classroom.classPlanVisible });
+        console.info('[CondaWeb bridge] plan de classe', { classId: String(classroom._id), visible: classroom.classPlanVisible, activePlanNumber: classroom.activePlanNumber });
+        return res.json({ ok: true, classId: String(classroom._id), classPlanVisible: classroom.classPlanVisible, activePlanNumber: classroom.activePlanNumber || 1 });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }
@@ -945,6 +962,47 @@ router.get('/plan/:classId', async (req, res) => {
         if (!clsObj) return res.status(404).json({ error: "Classe/Groupe introuvable" });
         const className = clsObj?.name;
 
+        const planNumber = Number(req.query.plan) === 2 ? 2 : 1;
+        if (planNumber === 2) {
+            const classroomDoc = await Classroom.findById(classId);
+            const baseLayout = clsObj.layout || { cols: 6, rows: 5, separators: [] };
+            const planLayout = classroomDoc.layout2?.toObject?.() || classroomDoc.layout2 || baseLayout;
+            const cols2 = Math.max(2, Number(planLayout.cols || baseLayout.cols || 6));
+            let rows2 = Math.max(2, Number(planLayout.rows || baseLayout.rows || 5));
+            const currentStudentIds = new Set(students.map((student) => String(student._id)));
+            const seats2 = new Map();
+            const occupied2 = new Set();
+            (classroomDoc.seatPlan2 || []).forEach((seat) => {
+                const studentId = String(seat.studentId || '');
+                const x = Number(seat.seatX);
+                const y = Number(seat.seatY);
+                const key = `${x}-${y}`;
+                if (!currentStudentIds.has(studentId) || !Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= cols2 || y < 0 || occupied2.has(key)) return;
+                seats2.set(studentId, { studentId, seatX: x, seatY: y });
+                occupied2.add(key);
+            });
+            let nextSeat = 0;
+            for (const student of students) {
+                const studentId = String(student._id);
+                if (!seats2.has(studentId)) {
+                    while (occupied2.has(`${nextSeat % cols2}-${Math.floor(nextSeat / cols2)}`)) nextSeat += 1;
+                    const seatX = nextSeat % cols2;
+                    const seatY = Math.floor(nextSeat / cols2);
+                    seats2.set(studentId, { studentId, seatX, seatY });
+                    occupied2.add(`${seatX}-${seatY}`);
+                    nextSeat += 1;
+                    rows2 = Math.max(rows2, seatY + 1);
+                }
+                const seat = seats2.get(studentId);
+                student.seatX = seat.seatX;
+                student.seatY = seat.seatY;
+            }
+            classroomDoc.layout2 = { ...planLayout, cols: cols2, rows: rows2 };
+            classroomDoc.seatPlan2 = [...seats2.values()];
+            await classroomDoc.save();
+            clsObj.layout = classroomDoc.layout2.toObject?.() || classroomDoc.layout2;
+        }
+
         const cols = Math.max(2, Number(clsObj?.layout?.cols || 6));
         const defaultRows = Math.max(2, Number(clsObj?.layout?.rows || 5));
 
@@ -1147,6 +1205,9 @@ router.get('/plan/:classId', async (req, res) => {
                 myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || ""
             };
         });
+        if (planNumber === 2) {
+            return res.json({ planNumber: 2, layout: clsObj.layout, students: studentsWithIndicators });
+        }
         res.json(studentsWithIndicators);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1154,7 +1215,29 @@ router.get('/plan/:classId', async (req, res) => {
 // 4. ACTIONS UNITAIRES
 router.post('/move', async (req, res) => {
     try {
-        const { studentId, x, y, swapStudentId, swapX, swapY } = req.body;
+        const { studentId, x, y, swapStudentId, swapX, swapY, classId } = req.body;
+        if (Number(req.body?.planNumber) === 2) {
+            const classroom = await Classroom.findById(classId);
+            if (!classroom) return res.status(404).json({ error: 'Classe introuvable pour le plan 2' });
+            const seats = (classroom.seatPlan2 || []).map((seat) => ({
+                studentId: String(seat.studentId || ''),
+                seatX: Number(seat.seatX),
+                seatY: Number(seat.seatY)
+            }));
+            const movingSeat = seats.find((seat) => seat.studentId === String(studentId));
+            if (!movingSeat) return res.status(404).json({ error: 'Élève absent du plan 2' });
+            movingSeat.seatX = Number(x);
+            movingSeat.seatY = Number(y);
+            if (swapStudentId) {
+                const targetSeat = seats.find((seat) => seat.studentId === String(swapStudentId));
+                if (!targetSeat) return res.status(404).json({ error: 'Place cible absente du plan 2' });
+                targetSeat.seatX = Number(swapX);
+                targetSeat.seatY = Number(swapY);
+            }
+            classroom.seatPlan2 = seats;
+            await classroom.save();
+            return res.json({ ok: true, planNumber: 2 });
+        }
         await Student.findByIdAndUpdate(studentId, { seatX: x, seatY: y });
         if (swapStudentId && Number.isInteger(swapX) && Number.isInteger(swapY)) {
             await Student.findByIdAndUpdate(swapStudentId, { seatX: swapX, seatY: swapY });
@@ -1165,6 +1248,18 @@ router.post('/move', async (req, res) => {
 
 router.post('/layout', async (req, res) => {
     try {
+        if (Number(req.body?.planNumber) === 2) {
+            const classroom = await Classroom.findById(req.body.classId);
+            if (!classroom) return res.status(404).json({ error: 'Classe introuvable pour le plan 2' });
+            const current = classroom.layout2?.toObject?.() || classroom.layout2 || classroom.layout?.toObject?.() || classroom.layout || {};
+            classroom.layout2 = {
+                separators: Array.isArray(req.body.separators) ? req.body.separators : (current.separators || []),
+                cols: Number.isFinite(Number(req.body.cols)) ? Math.max(2, Number(req.body.cols)) : Number(current.cols || 6),
+                rows: Number.isFinite(Number(req.body.rows)) ? Math.max(2, Number(req.body.rows)) : Number(current.rows || 5)
+            };
+            await classroom.save();
+            return res.json({ ok: true, layout: classroom.layout2.toObject?.() || classroom.layout2 });
+        }
         const result = await ClassroomExpert.updateLayout(req.body.classId, req.body);
         res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }

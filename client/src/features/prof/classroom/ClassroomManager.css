@@ -18,6 +18,8 @@
 
 /* VIEW SWITCHER */
 .view-switcher { display: flex; gap: 5px; background: #e2e8f0; padding: 4px; border-radius: 12px; margin-bottom: 10px; }
+.phone-plan-switch { display: none; }
+.cm-local-projected-plan { display: none !important; }
 .view-btn { flex: 1; padding: 8px 15px; border-radius: 8px; border: none; cursor: pointer; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; color: #64748b; transition: all 0.2s; }
 .view-btn.active { background: white; color: #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 .voice-finder-btn {
@@ -624,6 +626,10 @@
     .cm-header { padding: 5px; margin-bottom: 0; background: white; border-bottom: 1px solid #e2e8f0; justify-content: space-between; gap: 6px; }
     .cm-title, .cm-toolbar { display: none; }
     .cm-header-center { flex: 1; min-width: 0; gap: 4px; }
+    .phone-plan-switch { display: inline-flex; flex: 0 0 auto; gap: 2px; padding: 3px; border-radius: 10px; background: #e2e8f0; }
+    .phone-plan-switch button { border: 0; border-radius: 7px; padding: 7px 8px; color: #475569; background: transparent; font-size: .62rem; font-weight: 900; white-space: nowrap; }
+    .phone-plan-switch button.active { color: #fff; background: #4f46e5; box-shadow: 0 2px 5px rgba(79,70,229,.25); }
+    .cm-projector-btn, .cm-header-scan-btn, .cm-header-images-btn { display: none !important; }
     .plan-finder-row {
         gap: 4px;
         padding: 6px;

@@ -22,7 +22,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [iaLoading, setIaLoading] = useState(false);
     const [importPanelOpen, setImportPanelOpen] = useState(false);
     const [sheetUrl, setSheetUrl] = useState('');
-    
+
     // UI STATES
     const [viewMode, setViewMode] = useState('PLAN');
     const [searchTerm, setSearchTerm] = useState("");
@@ -37,7 +37,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceListening, setVoiceListening] = useState(false);
-    
+
     // Scan & Photos Classe / Élève
     const [classroomInfo, setClassroomInfo] = useState(null);
     const [scanCaptureOpen, setScanCaptureOpen] = useState(false);
@@ -103,7 +103,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             setStudentVocabularyBusy(false);
         }
     };
-    
+
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [isEditingNickname, setIsEditingNickname] = useState(false);
     const [currentNote, setCurrentNote] = useState("");
@@ -120,6 +120,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [classScoreBusy, setClassScoreBusy] = useState(false);
     const [pepitoPosition, setPepitoPosition] = useState(0);
     const [pepitoBusy, setPepitoBusy] = useState(false);
+    const [activePlanNumber, setActivePlanNumber] = useState(1);
+    const planSwitchRequestRef = useRef(false);
     const penaltyLogRef = useRef({});
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
@@ -147,6 +149,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const data = await res.json().catch(() => ({}));
                 if (mounted && res.ok) {
                     setClassPlanProjected(data?.classPlanVisible === true);
+                    if (!planSwitchRequestRef.current) setActivePlanNumber(Number(data?.activePlanNumber) === 2 ? 2 : 1);
                     setPepitoPosition(Math.max(-4, Math.min(4, Number(data?.pepitoPosition) || 0)));
                     const serverNotif = data?.classNotification || null;
                     setActiveNotif(serverNotif);
@@ -160,6 +163,27 @@ export default function ClassroomManager({ globalClassId, user }) {
             window.clearInterval(interval);
         };
     }, [globalClassId]);
+
+    const selectActivePlan = async (planNumber) => {
+        const nextPlan = Number(planNumber) === 2 ? 2 : 1;
+        if (!globalClassId || nextPlan === activePlanNumber || planSwitchRequestRef.current) return;
+        planSwitchRequestRef.current = true;
+        const previousPlan = activePlanNumber;
+        setActivePlanNumber(nextPlan);
+        try {
+            const response = await fetch(`/api/classroom/${encodeURIComponent(globalClassId)}/bridge-plan`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ activePlanNumber: nextPlan })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Impossible de changer de plan');
+            setActivePlanNumber(Number(data.activePlanNumber) === 2 ? 2 : 1);
+        } catch (_) {
+            setActivePlanNumber(previousPlan);
+        } finally {
+            planSwitchRequestRef.current = false;
+        }
+    };
 
     const toggleTableauPlan = async () => {
         if (!globalClassId || togglingPlan) return;
@@ -267,7 +291,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const studentLongPressTimerRef = useRef(null);
     const studentLongPressTriggeredRef = useRef('');
     const suppressStudentClickUntilRef = useRef(0);
-    
+
     const myId = user ? (user._id || user.id) : null;
     const isPunishmentLate = (student) => {
         if (!student) return false;
@@ -284,20 +308,27 @@ export default function ClassroomManager({ globalClassId, user }) {
             if (resClass.ok) {
                 const clsInfo = await resClass.json();
                 setClassroomInfo(clsInfo);
-                if (clsInfo.layout) {
-                    setSeparators(clsInfo.layout.separators || []);
-                    setGridSize({ 
-                        cols: clsInfo.layout.cols || 6, 
-                        rows: clsInfo.layout.rows || 6 
+                const selectedLayout = activePlanNumber === 2 ? (clsInfo.layout2 || clsInfo.layout) : clsInfo.layout;
+                if (selectedLayout) {
+                    setSeparators(selectedLayout.separators || []);
+                    setGridSize({
+                        cols: selectedLayout.cols || 6,
+                        rows: selectedLayout.rows || 6
                     });
                 }
             }
-            const queryParams = myId ? `?teacherId=${myId}` : '';
+            const query = new URLSearchParams({ plan: String(activePlanNumber) });
+            if (myId) query.set('teacherId', String(myId));
+            const queryParams = `?${query.toString()}`;
             const res = await fetch(`/api/classroom/plan/${globalClassId}${queryParams}`);
-            
+
             if (res.ok) {
                 const data = await res.json();
-                const nextStudents = (Array.isArray(data) ? data : []).filter(s => s?.isTestAccount !== true && !/^test$/i.test(s?.lastName || ''));
+                const nextStudents = (Array.isArray(data) ? data : data?.students || []).filter(s => s?.isTestAccount !== true && !/^test$/i.test(s?.lastName || ''));
+                if (activePlanNumber === 2 && data?.layout) {
+                    setSeparators(data.layout.separators || []);
+                    setGridSize({ cols: Number(data.layout.cols) || 6, rows: Number(data.layout.rows) || 6 });
+                }
                 setStudents(nextStudents);
                 setSelectedStudent((current) => {
                     if (!current?._id) return current;
@@ -330,7 +361,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         }
     };
 
-    useEffect(() => { loadData(); }, [globalClassId, myId]);
+    useEffect(() => { loadData(); }, [globalClassId, myId, activePlanNumber]);
 
     // Tant que le plan est projeté, relire régulièrement le plan enregistré :
     // un déplacement fait depuis un autre appareil apparaît ainsi au tableau.
@@ -387,15 +418,15 @@ export default function ClassroomManager({ globalClassId, user }) {
         });
     };
 
-    const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, separators: newSeps }) }); } catch(e){} };
-    const changeGrid = async (dC, dR) => { 
+    const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, planNumber: activePlanNumber, separators: newSeps }) }); } catch(e){} };
+    const changeGrid = async (dC, dR) => {
         const newSize = { cols: Math.max(2, gridSize.cols + dC), rows: Math.max(2, gridSize.rows + dR) };
-        setGridSize(newSize); 
+        setGridSize(newSize);
         try {
             const response = await fetch('/api/classroom/layout', {
-                method: 'POST', 
-                headers: {'Content-Type':'application/json'}, 
-                body: JSON.stringify({ classId: globalClassId, cols: newSize.cols, rows: newSize.rows }) 
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ classId: globalClassId, planNumber: activePlanNumber, cols: newSize.cols, rows: newSize.rows })
             });
             if (!response.ok) throw new Error('Enregistrement du plan impossible');
             await loadData();
@@ -428,6 +459,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         studentId: sId,
+                        classId: globalClassId,
+                        planNumber: activePlanNumber,
                         x,
                         y,
                         swapStudentId: targetStudent._id,
@@ -443,7 +476,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const response = await fetch('/api/classroom/move', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ studentId: sId, x, y })
+                    body: JSON.stringify({ studentId: sId, classId: globalClassId, planNumber: activePlanNumber, x, y })
                 });
                 if (!response.ok) throw new Error('Déplacement impossible');
             } catch(err) { loadData(); }
@@ -1103,9 +1136,9 @@ export default function ClassroomManager({ globalClassId, user }) {
     }, [actionFlash]);
 
     useEffect(() => () => stopBehaviorRepeat(false), []);
-    
+
     // --- GESTION DES ACTIONS ---
-    const addBehavior = async (sid, type, extra = null, options = {}) => { 
+    const addBehavior = async (sid, type, extra = null, options = {}) => {
         if (!myId) return alert("Erreur: ID Professeur introuvable.");
         const keepDrawerOpen = Boolean(options.keepDrawerOpen);
         const skipFlash = Boolean(options.skipFlash);
@@ -1119,7 +1152,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             const newS = { ...s, behaviorRecords: [...(s.behaviorRecords || [])] };
             let rIdx = newS.behaviorRecords.findIndex(r => String(r.teacherId) === String(myId));
             if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, scores: [] }); rIdx = newS.behaviorRecords.length - 1; }
-            
+
             const r = { ...newS.behaviorRecords[rIdx] };
             let scores = Array.isArray(r.scores) && r.scores.length
                 ? r.scores.map(g => ({ ...g }))
@@ -1234,7 +1267,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             if (type === 'TOGGLE_INCOMPLETE') r.workIncomplete = !r.workIncomplete;
             r.scores = scores;
             if (type === 'SAVE_NICKNAME') newS.nickname = String(extra || '').trim();
-            
+
             // Mise à jour visuelle immédiate pour la punition supprimée
             if (type === 'REMOVE_PUNISHMENT') {
                 newS.punishmentStatus = 'NONE';
@@ -1260,9 +1293,9 @@ export default function ClassroomManager({ globalClassId, user }) {
         }
 
         try {
-            const res = await fetch('/api/classroom/behavior', { 
-                method: 'POST', 
-                headers: {'Content-Type':'application/json'}, 
+            const res = await fetch('/api/classroom/behavior', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({
                     studentId: sid,
                     type,
@@ -1530,7 +1563,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <div className="cm-local-back">FOND DE LA CLASSE (DERRIÈRE)</div>
                 </div>
             )}
-            
+
             <div className="cm-header">
                 <h2 className="cm-title md:block hidden">{viewMode === 'PLAN' ? 'MODE PLAN' : 'MODE LISTE'}</h2>
                 <div className="cm-header-center">
@@ -1538,7 +1571,10 @@ export default function ClassroomManager({ globalClassId, user }) {
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
                         <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A–Z</button>
                     </div>
-                    {renderProjectorButton()}
+                    <div className="phone-plan-switch" role="group" aria-label="Plan de classe actif">
+                        <button type="button" className={activePlanNumber === 1 ? 'active' : ''} onClick={() => void selectActivePlan(1)}>PLAN 1</button>
+                        <button type="button" className={activePlanNumber === 2 ? 'active' : ''} onClick={() => void selectActivePlan(2)}>PLAN 2</button>
+                    </div>
                     <button
                         className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
                         onClick={toggleVoiceFinder}
@@ -1549,11 +1585,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                     </button>
                     <button className="class-score-btn negative" onClick={() => void adjustClassScores(-0.5)} disabled={classScoreBusy}>−0.5</button>
                     <button className="class-score-btn" onClick={() => void adjustClassScores(0.5)} disabled={classScoreBusy}>+0.5</button>
-                    <button className="cm-header-scan-btn" onClick={() => handleOpenScanCapture(null)} title="Scanner un travail (vidéo)">📷 SCAN</button>
-                    <button className="cm-header-images-btn" onClick={() => handleOpenScanGallery(null)} title="Galerie d'images de la classe">🖼️ IMAGES</button>
                 </div>
             </div>
-            
+
             {viewMode === 'PLAN' ? (
                 <>
                     <div className="plan-finder-row">
@@ -1633,14 +1667,14 @@ export default function ClassroomManager({ globalClassId, user }) {
                             </div>
                         </div>
                     )}
-                    
+
                     <div className="grid-container custom-scrollbar">
                         <div className="grid-header-row" style={{ '--grid-cols': gridSize.cols, gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))` }}>{renderHeaders()}</div>
                         <div className="interactive-grid" style={{ '--grid-cols': gridSize.cols, '--grid-rows': effectivePlanRows, gridTemplateColumns: `repeat(${gridSize.cols}, var(--cell-size, 100px))`, gridTemplateRows: `repeat(${effectivePlanRows}, var(--cell-size, 100px))` }}>{renderGrid()}</div>
                     </div>
                 </>
             ) : renderList()}
-            
+
             <div className={`action-drawer ${selectedStudent && !frenchMode ? 'open' : ''} ${selectedStudent && (selectedGradeHas(selectedStudent, 'workIncomplete') || selectedGradeHas(selectedStudent, 'punishment')) ? 'work-incomplete-open' : ''} ${actionFlash ? `flash-${actionFlash}` : ''}`}>
                 {selectedStudent && !frenchMode && (
                     <>
