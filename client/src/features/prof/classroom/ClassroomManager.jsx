@@ -1584,6 +1584,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                     <span title={pepitoPosition === 0 ? 'Pépito est au départ' : `${Math.abs(pepitoPosition)} case(s) du côté ${pepitoPosition > 0 ? '+0,5' : '−0,5'}`}>
                                         Pépito {pepitoPosition === 0 ? '· Départ' : `· ${pepitoPosition > 0 ? '+' : '−'}${Math.abs(pepitoPosition)}`}
                                     </span>
+                                    <i className="pepito-phone-marker" aria-hidden="true" />
                                     <button type="button" onClick={() => void movePepito(1)} disabled={pepitoBusy} title="Faire avancer Pépito d’une case">→</button>
                                 </div>
                             )}
