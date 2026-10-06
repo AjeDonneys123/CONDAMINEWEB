@@ -137,7 +137,8 @@
     pointer-events: auto;
 }
 .conda-slide-plan-toggle,
-.conda-slide-control-add {
+.conda-slide-control-add,
+.conda-slide-class-toggle {
     border: 0;
     border-radius: 999px;
     padding: 10px 16px;
@@ -150,6 +151,8 @@
     cursor: pointer;
     white-space: nowrap;
 }
+.conda-slide-class-toggle { background: #0891b2; box-shadow: 0 8px 24px rgba(8, 145, 178, .35); }
+.conda-slide-class-toggle:hover { background: #0e7490; transform: translateY(-1px); }
 .conda-slide-plan-toggle {
     border: 0;
     border-radius: 999px;
@@ -819,6 +822,7 @@
     .conda-slide-control-dock { bottom: 12px; max-width: 94vw; gap: 5px; }
     .conda-slide-plan-toggle,
     .conda-slide-control-add,
+    .conda-slide-class-toggle,
     .conda-slide-timer-toggle,
     .conda-slide-notes-toggle { padding: 8px 10px; font-size: 10px; }
     .conda-bridge-badge { max-width: min(210px, 58vw) !important; padding: 7px 9px !important; font-size: 10px !important; }
