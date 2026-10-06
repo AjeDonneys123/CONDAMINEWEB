@@ -70,8 +70,9 @@
 .pepito-phone-control button:disabled { opacity: .55; cursor: wait; }
 .pepito-phone-control span { min-width: 78px; text-align: center; white-space: nowrap; }
 @media (max-width: 900px) {
-    .pepito-phone-control { order: 20; flex-wrap: wrap; justify-content: center; width: 100%; }
+    .pepito-phone-control { order: 20; flex-wrap: wrap; justify-content: space-between; gap: 10px 28px; width: 100%; }
     .pepito-phone-control span { flex: 1 0 100%; order: -1; }
+    .pepito-phone-control button { min-width: 48px; }
 }
 
 /* TOOLBAR */
