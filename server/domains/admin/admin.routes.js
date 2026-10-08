@@ -144,18 +144,32 @@ router.get('/teachers/:id', asyncHandler(async (req, res) => {
 
 router.post('/teachers/:id/didakbot-key', asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: "ID Invalide" });
-    const key = String(req.body?.key || '').trim().toUpperCase();
+    const submittedKeys = Array.isArray(req.body?.keys)
+        ? req.body.keys.slice(0, 20).map((item) => ({
+            name: String(item?.name || '').trim().slice(0, 60),
+            key: String(item?.key || '').trim().toUpperCase().slice(0, 160),
+            isDefault: item?.isDefault === true
+        })).filter((item) => item.name && item.key)
+        : null;
+    const fallbackKey = String(req.body?.key || '').trim().toUpperCase().slice(0, 160);
+    const didakbotKeys = submittedKeys || (fallbackKey ? [{ name: 'Clé principale', key: fallbackKey, isDefault: true }] : []);
+    if (didakbotKeys.length && !didakbotKeys.some((item) => item.isDefault)) didakbotKeys[0].isDefault = true;
+    if (didakbotKeys.filter((item) => item.isDefault).length > 1) {
+        let foundDefault = false;
+        didakbotKeys.forEach((item) => { if (item.isDefault && !foundDefault) foundDefault = true; else if (item.isDefault) item.isDefault = false; });
+    }
+    const key = didakbotKeys.find((item) => item.isDefault)?.key || didakbotKeys[0]?.key || '';
     const updated = await mongoose.model('Teacher').findByIdAndUpdate(
         req.params.id,
-        { $set: { didakbotKey: key } },
+        { $set: { didakbotKey: key, didakbotKeys } },
         { new: true }
     ) || await mongoose.model('Admin').findByIdAndUpdate(
         req.params.id,
-        { $set: { didakbotKey: key } },
+        { $set: { didakbotKey: key, didakbotKeys } },
         { new: true }
     );
     if (!updated) return res.status(404).json({ error: "Utilisateur introuvable" });
-    res.json({ ok: true, didakbotKey: key });
+    res.json({ ok: true, didakbotKey: key, didakbotKeys });
 }));
 
 // 6. Dump BDD (Pour le visualiseur BDD)

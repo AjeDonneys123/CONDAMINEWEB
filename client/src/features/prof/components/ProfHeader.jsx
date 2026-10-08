@@ -225,8 +225,9 @@ export default function ProfHeader({ user, onLogout }) {
           <DidakbotKeyModal
             user={user}
             onClose={() => setShowDidakbotModal(false)}
-            onKeyUpdated={(newKey) => {
+            onKeyUpdated={(newKey, keys) => {
               if (user) user.didakbotKey = newKey;
+              if (user) user.didakbotKeys = keys;
             }}
           />
         )}

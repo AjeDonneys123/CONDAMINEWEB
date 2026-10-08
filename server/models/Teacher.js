@@ -19,6 +19,7 @@ const TeacherSchema = new mongoose.Schema({
     isDeveloper: { type: Boolean, default: false },
     driveFolderId: { type: String },
     didakbotKey: { type: String, default: '' },
+    didakbotKeys: { type: [{ name: { type: String, trim: true }, key: { type: String, trim: true }, isDefault: { type: Boolean, default: false } }], default: [] },
     isTestAccount: { type: Boolean, default: false }
 }, { collection: 'teachers' });
 
