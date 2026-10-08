@@ -56,13 +56,18 @@ router.post('/:studentId/correct-expression', async (req, res) => {
     if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
     try {
         const raw = await AIEngine.ask(
-            `Corrige uniquement l’orthographe, la grammaire et la ponctuation de cette expression française. Garde le sens et le style de l’élève. N’ajoute aucune information.\nExpression : ${incorrectSentence}`,
-            'Tu es un correcteur de français bienveillant. Réponds uniquement en JSON strict au format {"correction":"expression corrigée"}.',
-            { route: 'eleve-dil', feature: 'french-expression-correction', temperature: 0, maxOutputTokens: 300, responseMimeType: 'application/json' }
+            `Corrige l’orthographe, la grammaire et la ponctuation de l’expression française ci-dessous. Garde son sens et son style, sans ajouter d’information. Réponds seulement par l’expression corrigée, sans explication, sans guillemets et sans préambule.\n\n${incorrectSentence}`,
+            'Tu es un correcteur de français. Ta réponse contient uniquement la version corrigée de l’expression.',
+            { route: 'eleve-dil', feature: 'french-expression-correction', temperature: 0, maxOutputTokens: 300 }
         );
-        const parsed = AIEngine.sanitizeJSON(raw);
-        const corrected = String(parsed?.correction || '').trim().replace(/\s+/g, ' ').slice(0, 500);
-        if (!corrected || !/[\p{L}]/u.test(corrected)) return res.status(502).json({ error: 'Le correcteur n’a pas fourni de correction exploitable.' });
+        let corrected = String(raw || '').trim()
+            .replace(/^```(?:text|markdown)?\s*/i, '').replace(/\s*```$/i, '')
+            .replace(/^(?:expression corrigée|correction)\s*:\s*/i, '')
+            .replace(/^[«“\"]|[»”\"]$/g, '')
+            .trim().replace(/\s+/g, ' ').slice(0, 500);
+        if (!corrected || corrected === '[]' || corrected === 'ERROR_KEY' || !/[\p{L}]/u.test(corrected)) {
+            return res.status(502).json({ error: corrected === 'ERROR_KEY' ? 'La clé API du correcteur est absente ou invalide.' : 'Le correcteur IA n’a pas renvoyé de texte. Réessaie dans un instant.' });
+        }
         let pair = await DilVocabulary.findOne({ studentId: student._id, exerciseType: 'correction', incorrectSentence });
         if (pair) {
             pair.french = corrected;
