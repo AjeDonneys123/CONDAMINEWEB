@@ -7,6 +7,7 @@ const tokenise = (text = '') => String(text || '').split(/(\s+|[^\p{L}\p{N}'’-
 const isWord = (value = '') => /[\p{L}]/u.test(value) && !/^\s+$/u.test(value);
 const expressionWords = (value = '') => String(value || '').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
 const normaliseExpressionWord = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normaliseExpressionSentence = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 const numberedTitle = (value = '') => /^(?:\d{1,2}\s*[.)-]\s+|(?:I|V|X){1,5}\s*[.)]\s+)[A-ZÀ-ÖØ-Ý]/.test(String(value || '').trim());
 const extractCentralDocument = (raw = '') => {
   const cleaned = String(raw || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
@@ -71,6 +72,7 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   const [newExpression, setNewExpression] = useState('');
   const [newExpressionBusy, setNewExpressionBusy] = useState(false);
   const [newExpressionError, setNewExpressionError] = useState('');
+  const [newExpressionCorrection, setNewExpressionCorrection] = useState('');
   const fileRef = useRef(null);
   const manualSpeechRef = useRef(null);
 
@@ -330,6 +332,18 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   const checkCorrectionAnswer = async (event) => {
     event.preventDefault();
     if (!current) return;
+    const legacyWordExercise = (current.incorrectWords || []).length > 0 && (current.focusWords || []).length > 0;
+    if (!legacyWordExercise) {
+      const answerText = String(correctionAnswers.phrase || '').trim().replace(/\s+/g, ' ');
+      if (normaliseExpressionSentence(answerText) !== normaliseExpressionSentence(current.french)) return setFeedback('Relis ta phrase et corrige les erreurs restantes.');
+      if (preview) return setFeedback('Bravo, la phrase est corrigée !');
+      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordId: current._id, answer: answerText }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.correct) return setFeedback('La réponse n’a pas pu être enregistrée.');
+      setFeedback('Bravo, la phrase est corrigée !');
+      window.setTimeout(() => { setTrainingIndex((value) => value + 1); loadWords(); }, 650);
+      return;
+    }
     const missingIndexes = tokenise(current.french).map((token, index) => ({ token, index }))
       .filter(({ token }) => isWord(token) && (current.focusWords || []).some((word) => normaliseExpressionWord(word) === normaliseExpressionWord(token)));
     const correct = missingIndexes.length > 0 && missingIndexes.every(({ token, index }) => normaliseExpressionWord(correctionAnswers[index]) === normaliseExpressionWord(token));
@@ -343,6 +357,8 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   };
   const renderCorrectionTraining = () => {
     if (!current) return null;
+    const legacyWordExercise = (current.incorrectWords || []).length > 0 && (current.focusWords || []).length > 0;
+    if (!legacyWordExercise) return <form className="dil-correction-exercise" onSubmit={checkCorrectionAnswer}><div className="dil-instruction">CORRIGE L’EXPRESSION</div><div className="dil-error-sentence">{current.incorrectSentence}</div><textarea className="dil-correction-answer" value={correctionAnswers.phrase || ''} onChange={(event) => setCorrectionAnswers((values) => ({ ...values, phrase: event.target.value }))} placeholder="Réécris l’expression correctement" aria-label="Expression corrigée" /><button type="submit">VÉRIFIER</button></form>;
     if (correctionPhase === 'identify') return <div className="dil-correction-exercise"><div className="dil-instruction">CLIQUE SUR LES MOTS INCORRECTS</div><div className="dil-error-sentence">{tokenise(current.incorrectSentence).map((token, index) => isWord(token) ? <button type="button" key={`${token}-${index}`} className={selectedIncorrectWords.some((word) => normaliseExpressionWord(word) === normaliseExpressionWord(token)) ? 'selected' : ''} onClick={() => toggleIncorrectWord(token)}>{token}</button> : <span key={index}>{token}</span>)}</div><button type="button" onClick={checkIncorrectSelection}>VÉRIFIER LES MOTS</button></div>;
     return <form className="dil-correction-exercise" onSubmit={checkCorrectionAnswer}><div className="dil-instruction">COMPLÈTE LA PHRASE CORRECTE</div><div className="dil-correct-sentence">{tokenise(current.french).map((token, index) => isWord(token) && (current.focusWords || []).some((word) => normaliseExpressionWord(word) === normaliseExpressionWord(token)) ? <input key={`${token}-${index}`} value={correctionAnswers[index] || ''} onChange={(event) => setCorrectionAnswers((values) => ({ ...values, [index]: event.target.value }))} aria-label={`Mot manquant ${index + 1}`} /> : <span key={index}>{token}</span>)}</div><button type="submit">VÉRIFIER LA PHRASE</button></form>;
   };
@@ -363,25 +379,19 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   const addStudentExpression = async (event) => {
     event.preventDefault();
     const french = String(newExpression || '').trim().replace(/\s+/g, ' ');
-    if (!french) return setNewExpressionError('Écris un mot ou une expression.');
+    if (!french) return setNewExpressionError('Écris une expression contenant une erreur.');
     setNewExpressionBusy(true);
     setNewExpressionError('');
+    setNewExpressionCorrection('');
     try {
-      if (preview || !studentId) {
-        const localWord = { _id: `preview_expression_${Date.now()}`, french, spanish: french, focusWords: [], mastered: false, createdAt: new Date().toISOString() };
-        setWords((previous) => [localWord, ...previous.filter((item) => normaliseExpressionWord(item.french) !== normaliseExpressionWord(french))]);
-      } else {
-        const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ french, spanish: french, focusWords: [] })
-        });
-        const saved = await response.json().catch(() => null);
-        if (!response.ok || !saved) throw new Error(saved?.error || 'Enregistrement impossible.');
-        setWords((previous) => [saved, ...previous.filter((item) => normaliseExpressionWord(item.french) !== normaliseExpressionWord(french))]);
-      }
+      if (preview || !studentId) throw new Error('Connecte-toi comme élève pour enregistrer cet exercice.');
+      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/correct-expression`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ incorrectSentence: french }) });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.pair) throw new Error(result?.error || 'Correction et enregistrement impossibles.');
+      setWords((previous) => [result.pair, ...previous.filter((item) => String(item._id) !== String(result.pair._id))]);
+      setNewExpressionCorrection(result.corrected || result.pair.french);
       setNewExpression('');
-      pronounceFrench(french);
+      pronounceFrench(result.corrected || result.pair.french);
     } catch (error) {
       setNewExpressionError(error.message || 'Enregistrement impossible.');
     } finally {
@@ -411,8 +421,10 @@ export default function DilWorkspace({ user, frenchMode = false }) {
       <h3>📚 Mes mots</h3>
       <p>Du moins connu au plus connu : les mots avec le plus d’erreurs sont proposés en premier.</p>
       {frenchMode && <form className="dil-add-expression" onSubmit={addStudentExpression}>
-        <label htmlFor="student-new-expression">Ajouter un mot ou une expression</label>
-        <div><input id="student-new-expression" value={newExpression} onChange={(event) => { setNewExpression(event.target.value); setNewExpressionError(''); }} placeholder="Ex. prendre son courage à deux mains" maxLength={120} /><button type="submit" disabled={newExpressionBusy || !newExpression.trim()}>{newExpressionBusy ? 'AJOUT…' : '+ AJOUTER'}</button></div>
+        <label htmlFor="student-new-expression">Ajouter une expression avec une erreur</label>
+        <p>Écris l’expression comme tu l’as rédigée, puis demande au correcteur de la corriger. La paire sera ajoutée à ton entraînement.</p>
+        <div><input id="student-new-expression" value={newExpression} onChange={(event) => { setNewExpression(event.target.value); setNewExpressionError(''); setNewExpressionCorrection(''); }} placeholder="Écris une expression à corriger" maxLength={500} /><button type="submit" disabled={newExpressionBusy || !newExpression.trim()}>{newExpressionBusy ? 'CORRECTION…' : 'CORRIGER'}</button></div>
+        {newExpressionCorrection && <div className="dil-correction-saved"><span>Correction ajoutée à ton entraînement :</span><b>{newExpressionCorrection}</b></div>}
         {newExpressionError && <small>{newExpressionError}</small>}
       </form>}
       {!wordsByNeed.length ? <p className="dil-empty">{frenchMode ? 'Ajoute ton premier mot ou une première phrase ci-dessus.' : 'Ajoute des mots dans l’onglet Traduction pour les retrouver ici.'}</p> : <div className="dil-my-words-list">{wordsByNeed.map((word) => <article key={word._id || word.french} className={Number(word.correctStreak || 0) >= 4 ? 'known' : ''}><div className="dil-word-main"><div className="dil-word-pair">{frenchMode ? <>🇫🇷 <b>{word.french}</b></> : <>🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></>}</div>{frenchMode && word.exerciseType !== 'correction' && <><p className="dil-focus-hint">Clique les mots que tu veux réviser en texte à trous.</p><div className="dil-focus-picker">{expressionWords(word.french).map((token, index) => { const selectedFocus = (word.focusWords || []).some((item) => normaliseExpressionWord(item) === normaliseExpressionWord(token)); return <button type="button" className={selectedFocus ? 'selected' : ''} onClick={() => toggleExpressionFocus(word, token)} key={`${token}-${index}`}>{selectedFocus ? '✓ ' : ''}{token}</button>; })}</div></>}{frenchMode && word.exerciseType === 'correction' && <p className="dil-focus-hint">🛠 Phrase à corriger : {word.incorrectSentence}</p>}{frenchMode && Array.isArray(word.focusWords) && word.focusWords.length > 0 && <div className="dil-focus-words">À écrire : {word.focusWords.join(' · ')}</div>}</div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><span className="wrong">✕ {Number(word.wrongCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
