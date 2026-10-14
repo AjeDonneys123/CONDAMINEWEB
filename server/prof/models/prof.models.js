@@ -189,12 +189,26 @@ const Models = {
     Classroom: getModel('Classroom', {
         name: String,
         level: String,
+        didakbotKey: { type: String, default: '' },
+        didakbotBots: { type: [{ chatbotId: String, shareLink: String, url: String, name: String, createdAt: { type: Date, default: Date.now } }], default: [] },
+        frenchHelpBotShareLink: { type: String, default: '' },
         type: { type: String, default: 'CLASS' },
         layout: { 
             separators: { type: [Number], default: [] },
             cols: { type: Number, default: 6 },
             rows: { type: Number, default: 5 }
         },
+        layout2: {
+            separators: { type: [Number], default: [2] },
+            cols: { type: Number, default: 5 },
+            rows: { type: Number, default: 5 }
+        },
+        seatPlan2: { type: [{
+            studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+            seatX: { type: Number, default: 0 },
+            seatY: { type: Number, default: 0 }
+        }], default: [] },
+        activePlanNumber: { type: Number, enum: [1, 2], default: 1 },
         classPoints: { type: Number, default: 10 },
         classPointsInitialized: { type: Boolean, default: false },
         pepitoPosition: { type: Number, default: 0 },
@@ -871,10 +885,13 @@ const Models = {
         focusWords: { type: [String], default: [] },
         exerciseType: { type: String, enum: ['vocabulary', 'correction'], default: 'vocabulary' },
         incorrectSentence: { type: String, default: '', trim: true },
+        grammarRule: { type: String, default: '', trim: true },
         incorrectWords: { type: [String], default: [] },
         correctCount: { type: Number, default: 0 },
         wrongCount: { type: Number, default: 0 },
         correctStreak: { type: Number, default: 0 },
+        sessionSuccessDates: { type: [String], default: [] },
+        dailyCorrectDate: { type: String, default: '' },
         mastered: { type: Boolean, default: false, index: true },
         lastCorrectAt: { type: Date, default: null }
     }),

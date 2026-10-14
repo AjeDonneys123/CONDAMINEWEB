@@ -2,13 +2,14 @@ const express = require('express');
 const multer = require('multer');
 const fetch = require('node-fetch');
 const mongoose = require('mongoose');
-const { Student, DilVocabulary } = require('../../prof/models/prof.models');
+const { Student, DilVocabulary, Classroom } = require('../../prof/models/prof.models');
 const AIEngine = require('../../core/ai.engine');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 const cleanWord = (value = '') => String(value || '').trim().replace(/\s+/g, ' ').slice(0, 500);
 const normalise = (value = '') => cleanWord(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const studyDateKey = (date = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 const cleanFocusWords = (value) => (Array.isArray(value) ? value : [])
     .map((word) => cleanWord(word).slice(0, 60))
     .filter((word) => /[\p{L}\p{N}]/u.test(word))
@@ -21,6 +22,18 @@ router.get('/:studentId/vocabulary', async (req, res) => {
     res.json(words);
 });
 
+router.get('/:studentId/french-help-bot', async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
+    const student = await Student.findById(req.params.studentId, '_id currentClass classId').lean();
+    if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
+    const classroom = student.classId
+        ? await Classroom.findById(student.classId, 'frenchHelpBotShareLink').lean()
+        : await Classroom.findOne({ name: new RegExp(`^\\s*${String(student.currentClass || '').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*$`, 'i') }, 'frenchHelpBotShareLink').lean();
+    const shareLink = String(classroom?.frenchHelpBotShareLink || '').trim();
+    if (!shareLink) return res.status(404).json({ error: 'Aucun chatbot d’aide au français n’est associé à ta classe.' });
+    return res.json({ url: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(shareLink)}&iframe=1` });
+});
+
 router.post('/:studentId/vocabulary', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
     const french = cleanWord(req.body?.french);
@@ -31,6 +44,7 @@ router.post('/:studentId/vocabulary', async (req, res) => {
     const focusWords = cleanFocusWords(req.body?.focusWords);
     const exerciseType = req.body?.exerciseType === 'correction' ? 'correction' : 'vocabulary';
     const incorrectSentence = exerciseType === 'correction' ? cleanWord(req.body?.incorrectSentence) : '';
+    const grammarRule = exerciseType === 'correction' ? cleanWord(req.body?.grammarRule) : '';
     const incorrectWords = exerciseType === 'correction' ? cleanFocusWords(req.body?.incorrectWords) : [];
     if (!french || !spanish || !/[\p{L}]/u.test(french)) return res.status(400).json({ error: 'Mot à traduire invalide.' });
     const student = await Student.findById(req.params.studentId, '_id isDil').lean();
@@ -41,11 +55,12 @@ router.post('/:studentId/vocabulary', async (req, res) => {
         existing.focusWords = focusWords;
         existing.exerciseType = exerciseType;
         existing.incorrectSentence = incorrectSentence;
+        existing.grammarRule = grammarRule;
         existing.incorrectWords = incorrectWords;
         await existing.save();
         return res.json(existing);
     }
-    res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish, focusWords, exerciseType, incorrectSentence, incorrectWords }));
+    res.status(201).json(await DilVocabulary.create({ studentId: student._id, french, spanish, focusWords, exerciseType, incorrectSentence, grammarRule, incorrectWords }));
 });
 
 router.post('/:studentId/correct-expression', async (req, res) => {
@@ -85,6 +100,28 @@ router.post('/:studentId/correct-expression', async (req, res) => {
     }
 });
 
+router.post('/:studentId/correction-pair', async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
+    const incorrectSentence = cleanWord(req.body?.incorrectSentence);
+    const correctedSentence = cleanWord(req.body?.correctedSentence);
+    const grammarRule = cleanWord(req.body?.grammarRule);
+    if (!incorrectSentence || !correctedSentence) return res.status(400).json({ error: 'Renseigne l’expression fausse et sa correction.' });
+    const student = await Student.findById(req.params.studentId, '_id').lean();
+    if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
+    let pair = await DilVocabulary.findOne({ studentId: student._id, exerciseType: 'correction', incorrectSentence });
+    if (pair) {
+        pair.french = correctedSentence;
+        pair.spanish = correctedSentence;
+        pair.focusWords = [];
+        pair.incorrectWords = [];
+        pair.grammarRule = grammarRule;
+    } else {
+        pair = new DilVocabulary({ studentId: student._id, french: correctedSentence, spanish: correctedSentence, exerciseType: 'correction', incorrectSentence, grammarRule, focusWords: [], incorrectWords: [] });
+    }
+    await pair.save();
+    return res.status(201).json({ pair });
+});
+
 router.delete('/:studentId/vocabulary/:wordId', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId) || !mongoose.Types.ObjectId.isValid(req.params.wordId)) {
         return res.status(400).json({ error: 'Mot ou élève invalide.' });
@@ -98,18 +135,26 @@ router.post('/:studentId/answer', async (req, res) => {
     const word = await DilVocabulary.findOne({ _id: req.body?.wordId, studentId: req.params.studentId });
     if (!word) return res.status(404).json({ error: 'Mot introuvable.' });
     const correct = normalise(req.body?.answer) === normalise(word.french);
+    const today = studyDateKey();
     if (correct) {
         word.correctCount = Number(word.correctCount || 0) + 1;
-        word.correctStreak = Number(word.correctStreak || 0) + 1;
-        word.mastered = Number(word.correctStreak || 0) >= 4;
+        const successDates = Array.from(new Set((word.sessionSuccessDates || []).map(String).filter(Boolean)));
+        if (word.dailyCorrectDate !== today) {
+            if (!successDates.includes(today)) successDates.push(today);
+            word.dailyCorrectDate = today;
+        }
+        word.sessionSuccessDates = successDates.slice(-3);
+        word.correctStreak = Math.min(3, word.sessionSuccessDates.length);
+        word.mastered = word.sessionSuccessDates.length >= 3;
         word.lastCorrectAt = new Date();
     } else {
         word.wrongCount = Number(word.wrongCount || 0) + 1;
-        word.correctStreak = 0;
-        word.mastered = false;
     }
     await word.save();
-    res.json({ correct, word });
+    const allWords = await DilVocabulary.find({ studentId: req.params.studentId }, 'mastered dailyCorrectDate sessionSuccessDates').lean();
+    const sessionComplete = allWords.length > 0 && allWords.every((item) => (item.sessionSuccessDates || []).length >= 3 || item.dailyCorrectDate === today);
+    const sessionNumber = Math.max(0, ...allWords.map((item) => Math.min(3, (item.sessionSuccessDates || []).length)));
+    res.json({ correct, word, sessionComplete, sessionNumber, studyDate: today });
 });
 
 // OCR.Space propose une offre gratuite. La clé de démonstration est volontairement

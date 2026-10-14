@@ -18,11 +18,12 @@ const ClassroomManager = lazy(() => import('./classroom/ClassroomManager'));
 const ScansStudio = lazy(() => import('./scans/ScansStudio'));
 const CoursesManager = lazy(() => import('./courses/CoursesManager'));
 const TrainingManager = lazy(() => import('./training/TrainingManager'));
+const ClassBotsStudio = lazy(() => import('./bots/ClassBotsStudio'));
 
 export default function ProfPage({ user, onLogout }) {
   const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
   const isPhone = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 769;
-  const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'corriger', 'studio', 'students', 'admin', 'training'];
+  const allowedTabs = ['activities', 'exposes', 'classroom', 'scans', 'corriger', 'bots', 'studio', 'students', 'admin', 'training'];
   const urlParams = new URLSearchParams(window.location.search);
   const requestedTab = String(urlParams.get('profTab') || '').trim();
   const requestedClassId = String(urlParams.get('classId') || '').trim();
@@ -116,7 +117,7 @@ export default function ProfPage({ user, onLogout }) {
         const isDeveloper = freshProfile?.isDeveloper === true;
         setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper }));
         const preferredTab = String(uiState?.lastProfTab || freshProfile?.lastProfTab || '').trim();
-        if (allowedTabs.includes(preferredTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'corriger', 'students', 'training'].includes(preferredTab))) {
+        if (allowedTabs.includes(preferredTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students', 'training'].includes(preferredTab))) {
             const blockedForRole = (!isDeveloper && (preferredTab === 'studio' || preferredTab === 'admin'));
             if (!blockedForRole) setTab(preferredTab);
         }
@@ -203,7 +204,7 @@ export default function ProfPage({ user, onLogout }) {
   };
 
   useEffect(() => {
-    if (requestedTab && allowedTabs.includes(requestedTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'corriger', 'students', 'training'].includes(requestedTab))) {
+    if (requestedTab && allowedTabs.includes(requestedTab) && (!isPhone || ['exposes', 'classroom', 'scans', 'students', 'training'].includes(requestedTab))) {
       const blockedForRole = (!liveUser.isDeveloper && (requestedTab === 'studio' || requestedTab === 'admin'));
       if (!blockedForRole) setTab(requestedTab);
     }
@@ -257,7 +258,8 @@ export default function ProfPage({ user, onLogout }) {
                 {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
                 {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
                 {tab === 'training' && <TrainingManager globalClassId={selectedClassId} globalClass={currentClassName} user={liveUser} />}
-                {tab === 'admin' && liveUser.isDeveloper && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
+                {tab === 'bots' && !isPhone && <ClassBotsStudio classId={selectedClassId} className={currentClassName} />}
+                {tab === 'admin' && liveUser.isDeveloper && <AdminDashboard user={liveUser} globalClass={currentClassName} onRefresh={loadProfileAndClasses} />}
              </Suspense>
           )}
         </div>

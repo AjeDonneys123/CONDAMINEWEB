@@ -8,6 +8,7 @@ const isWord = (value = '') => /[\p{L}]/u.test(value) && !/^\s+$/u.test(value);
 const expressionWords = (value = '') => String(value || '').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
 const normaliseExpressionWord = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const normaliseExpressionSentence = (value = '') => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+const studyDateKey = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const numberedTitle = (value = '') => /^(?:\d{1,2}\s*[.)-]\s+|(?:I|V|X){1,5}\s*[.)]\s+)[A-ZÀ-ÖØ-Ý]/.test(String(value || '').trim());
 const extractCentralDocument = (raw = '') => {
   const cleaned = String(raw || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
@@ -55,6 +56,8 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   const [words, setWords] = useState([]);
   const [trainingIndex, setTrainingIndex] = useState(0);
   const [answer, setAnswer] = useState('');
+  const [answerBusy, setAnswerBusy] = useState(false);
+  const [answerFeedback, setAnswerFeedback] = useState('');
   const [feedback, setFeedback] = useState('');
   const [correctionPhase, setCorrectionPhase] = useState('identify');
   const [selectedIncorrectWords, setSelectedIncorrectWords] = useState([]);
@@ -70,9 +73,16 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   const [manualListening, setManualListening] = useState(false);
   const [manualError, setManualError] = useState('');
   const [newExpression, setNewExpression] = useState('');
+  const [newCorrectedExpression, setNewCorrectedExpression] = useState('');
+  const [newExpressionRule, setNewExpressionRule] = useState('');
   const [newExpressionBusy, setNewExpressionBusy] = useState(false);
   const [newExpressionError, setNewExpressionError] = useState('');
   const [newExpressionCorrection, setNewExpressionCorrection] = useState('');
+  const [isFrenchAiOpen, setIsFrenchAiOpen] = useState(false);
+  const [frenchAiUrl, setFrenchAiUrl] = useState('');
+  const [frenchAiBusy, setFrenchAiBusy] = useState(false);
+  const [frenchAiError, setFrenchAiError] = useState('');
+  const [frenchAiCopyMessage, setFrenchAiCopyMessage] = useState('');
   const fileRef = useRef(null);
   const manualSpeechRef = useRef(null);
 
@@ -279,7 +289,9 @@ export default function DilWorkspace({ user, frenchMode = false }) {
       onEnd: () => { setManualListening(false); manualSpeechRef.current = null; }
     });
   };
-  const current = words[trainingIndex % Math.max(1, words.length)];
+  const today = studyDateKey();
+  const trainingQueue = words.filter((word) => (word.sessionSuccessDates || []).length < 3 && String(word.dailyCorrectDate || '') !== today);
+  const current = trainingQueue[trainingIndex % Math.max(1, trainingQueue.length)];
   useEffect(() => {
     setCorrectionPhase('identify');
     setSelectedIncorrectWords([]);
@@ -287,7 +299,7 @@ export default function DilWorkspace({ user, frenchMode = false }) {
     setFeedback('');
   }, [current?._id]);
   const learnedWords = useMemo(() => words
-    .filter((word) => Number(word.correctStreak || 0) >= 4)
+    .filter((word) => (word.sessionSuccessDates || []).length >= 3)
     .sort((left, right) => String(left.french || '').localeCompare(String(right.french || ''), 'fr')), [words]);
   const known = learnedWords.length;
   const addedThisHour = useMemo(() => {
@@ -304,13 +316,34 @@ export default function DilWorkspace({ user, frenchMode = false }) {
     return String(left.french || '').localeCompare(String(right.french || ''), 'fr');
   }), [words]);
   const hasTranscription = Boolean(String(documentTitle || text).trim());
+  const recordTrainingAttempt = async (submittedAnswer) => {
+    if (preview) { setFeedback('Mode aperçu : connecte-toi comme élève DIL pour enregistrer la réponse.'); return null; }
+    const expected = current?.french || '';
+    const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordId: current._id, answer: submittedAnswer }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || 'Réponse impossible à enregistrer.');
+    const refreshed = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, { cache: 'no-store' });
+    const updatedWords = refreshed.ok ? await refreshed.json() : words;
+    setWords(updatedWords);
+    const message = data.sessionComplete
+      ? `Session ${data.sessionNumber || 1} finie : entraînement terminé pour aujourd’hui.`
+      : data.correct ? `Juste ! ${Math.min(3, (data.word?.sessionSuccessDates || []).length)}/3 jours réussis.` : `Faux. Réponse correcte : « ${expected} ».${data.word?.grammarRule ? `\nRègle : ${data.word.grammarRule}` : ''}\nLe mot reviendra à la fin de la liste.`;
+    setFeedback(message);
+    setAnswerFeedback(message);
+    if (!data.sessionComplete) window.setTimeout(() => {
+      setAnswerFeedback('');
+      if (!data.correct) setTrainingIndex((value) => value + 1);
+    }, 700);
+    return data;
+  };
   const checkAnswer = async (event) => {
-    event.preventDefault(); if (!current) return;
-    if (preview) { setFeedback('Mode aperçu : connecte-toi comme élève DIL pour enregistrer la réponse.'); return; }
-    const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordId: current._id, answer }) });
-    const data = await response.json();
-    setFeedback(data.correct ? 'Bravo, mot connu !' : `Réessaie : la réponse est « ${current.french} ». `);
-    if (data.correct) { setAnswer(''); setTrainingIndex((value) => value + 1); loadWords(); }
+    event.preventDefault(); if (!current || answerBusy) return;
+    setAnswerBusy(true); setAnswerFeedback('');
+    try {
+      await recordTrainingAttempt(answer);
+      setAnswer('');
+    } catch (error) { setAnswerFeedback(error.message || 'Réponse impossible à enregistrer.'); }
+    finally { setAnswerBusy(false); }
   };
   const toggleIncorrectWord = (token) => {
     const key = normaliseExpressionWord(token);
@@ -331,29 +364,15 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   };
   const checkCorrectionAnswer = async (event) => {
     event.preventDefault();
-    if (!current) return;
+    if (!current || answerBusy) return;
     const legacyWordExercise = (current.incorrectWords || []).length > 0 && (current.focusWords || []).length > 0;
-    if (!legacyWordExercise) {
-      const answerText = String(correctionAnswers.phrase || '').trim().replace(/\s+/g, ' ');
-      if (normaliseExpressionSentence(answerText) !== normaliseExpressionSentence(current.french)) return setFeedback('Relis ta phrase et corrige les erreurs restantes.');
-      if (preview) return setFeedback('Bravo, la phrase est corrigée !');
-      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordId: current._id, answer: answerText }) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.correct) return setFeedback('La réponse n’a pas pu être enregistrée.');
-      setFeedback('Bravo, la phrase est corrigée !');
-      window.setTimeout(() => { setTrainingIndex((value) => value + 1); loadWords(); }, 650);
-      return;
-    }
-    const missingIndexes = tokenise(current.french).map((token, index) => ({ token, index }))
-      .filter(({ token }) => isWord(token) && (current.focusWords || []).some((word) => normaliseExpressionWord(word) === normaliseExpressionWord(token)));
-    const correct = missingIndexes.length > 0 && missingIndexes.every(({ token, index }) => normaliseExpressionWord(correctionAnswers[index]) === normaliseExpressionWord(token));
-    if (!correct) return setFeedback('Il reste une erreur dans la phrase correcte.');
-    if (preview) return setFeedback('Bravo, la phrase est corrigée !');
-    const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wordId: current._id, answer: current.french }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.correct) return setFeedback('La réponse n’a pas pu être enregistrée.');
-    setFeedback('Bravo, la phrase est corrigée !');
-    window.setTimeout(() => { setTrainingIndex((value) => value + 1); loadWords(); }, 650);
+    const answerText = legacyWordExercise
+      ? tokenise(current.french).map((token, index) => isWord(token) && (current.focusWords || []).some((word) => normaliseExpressionWord(word) === normaliseExpressionWord(token)) ? (correctionAnswers[index] || '') : token).join('')
+      : String(correctionAnswers.phrase || '').trim().replace(/\s+/g, ' ');
+    setAnswerBusy(true); setAnswerFeedback('');
+    try { await recordTrainingAttempt(answerText); }
+    catch (error) { setFeedback(error.message || 'Réponse impossible à enregistrer.'); }
+    finally { setAnswerBusy(false); }
   };
   const renderCorrectionTraining = () => {
     if (!current) return null;
@@ -378,25 +397,45 @@ export default function DilWorkspace({ user, frenchMode = false }) {
   };
   const addStudentExpression = async (event) => {
     event.preventDefault();
-    const french = String(newExpression || '').trim().replace(/\s+/g, ' ');
-    if (!french) return setNewExpressionError('Écris une expression contenant une erreur.');
-    setNewExpressionBusy(true);
-    setNewExpressionError('');
-    setNewExpressionCorrection('');
+    const incorrectSentence = String(newExpression || '').trim().replace(/\s+/g, ' ');
+    const correctedSentence = String(newCorrectedExpression || '').trim().replace(/\s+/g, ' ');
+    const grammarRule = String(newExpressionRule || '').trim().replace(/\s+/g, ' ');
+    if (!incorrectSentence) return setNewExpressionError('Écris l’expression avec son erreur.');
+    if (!correctedSentence) return setNewExpressionError('Écris la version corrigée de l’expression.');
+    setNewExpressionBusy(true); setNewExpressionError(''); setNewExpressionCorrection('');
     try {
       if (preview || !studentId) throw new Error('Connecte-toi comme élève pour enregistrer cet exercice.');
-      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/correct-expression`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ incorrectSentence: french }) });
+      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/correction-pair`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incorrectSentence, correctedSentence, grammarRule })
+      });
       const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.pair) throw new Error(result?.error || 'Correction et enregistrement impossibles.');
+      if (!response.ok || !result?.pair) throw new Error(result?.error || 'Enregistrement de la paire impossible.');
       setWords((previous) => [result.pair, ...previous.filter((item) => String(item._id) !== String(result.pair._id))]);
-      setNewExpressionCorrection(result.corrected || result.pair.french);
-      setNewExpression('');
-      pronounceFrench(result.corrected || result.pair.french);
-    } catch (error) {
-      setNewExpressionError(error.message || 'Enregistrement impossible.');
-    } finally {
-      setNewExpressionBusy(false);
+      setNewExpressionCorrection('Paire ajoutée à ton entraînement.');
+      setNewExpression(''); setNewCorrectedExpression(''); setNewExpressionRule('');
+      pronounceFrench(correctedSentence);
+    } catch (error) { setNewExpressionError(error.message || 'Enregistrement impossible.'); }
+    finally { setNewExpressionBusy(false); }
+  };
+  const askFrenchAi = async () => {
+    const incorrectSentence = String(newExpression || '').trim();
+    if (!incorrectSentence) return setNewExpressionError('Écris d’abord l’expression fausse à corriger.');
+    setNewExpressionError(''); setFrenchAiError(''); setFrenchAiCopyMessage(''); setFrenchAiUrl(''); setIsFrenchAiOpen(true); setFrenchAiBusy(true);
+    try {
+      await navigator.clipboard.writeText(incorrectSentence);
+      setFrenchAiCopyMessage('Expression copiée. Colle-la dans le chatbot pour demander la correction, puis recopie la réponse dans le champ vert.');
+    } catch (_) {
+      setFrenchAiCopyMessage('Copie automatique impossible : sélectionne et copie l’expression rouge avant de la coller dans le chatbot.');
     }
+    try {
+      if (!studentId || preview) throw new Error('Le chatbot est accessible depuis une session élève connectée.');
+      const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/french-help-bot`, { cache: 'no-store' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.url) throw new Error(result.error || 'Aucun chatbot d’aide au français n’est associé à ta classe.');
+      setFrenchAiUrl(result.url);
+    } catch (error) { setFrenchAiError(error.message); }
+    finally { setFrenchAiBusy(false); }
   };
 
   return <section className="dil-workspace">
@@ -421,19 +460,35 @@ export default function DilWorkspace({ user, frenchMode = false }) {
       <h3>📚 Mes mots</h3>
       <p>Du moins connu au plus connu : les mots avec le plus d’erreurs sont proposés en premier.</p>
       {frenchMode && <form className="dil-add-expression" onSubmit={addStudentExpression}>
-        <label htmlFor="student-new-expression">Ajouter une expression avec une erreur</label>
-        <p>Écris l’expression comme tu l’as rédigée, puis demande au correcteur de la corriger. La paire sera ajoutée à ton entraînement.</p>
-        <div><input id="student-new-expression" value={newExpression} onChange={(event) => { setNewExpression(event.target.value); setNewExpressionError(''); setNewExpressionCorrection(''); }} placeholder="Écris une expression à corriger" maxLength={500} /><button type="submit" disabled={newExpressionBusy || !newExpression.trim()}>{newExpressionBusy ? 'CORRECTION…' : 'CORRIGER'}</button></div>
-        {newExpressionCorrection && <div className="dil-correction-saved"><span>Correction ajoutée à ton entraînement :</span><b>{newExpressionCorrection}</b></div>}
+        <label htmlFor="student-new-expression">Ajouter une expression à corriger</label>
+        <p>Écris l’expression fausse, demande de l’aide au chatbot, puis reporte sa correction dans le champ vert. La paire sera ajoutée à ton entraînement.</p>
+        <label className="dil-expression-label-false" htmlFor="student-new-expression">Expression fausse</label>
+        <textarea className="dil-expression-false" id="student-new-expression" value={newExpression} onChange={(event) => { setNewExpression(event.target.value); setNewExpressionError(''); setNewExpressionCorrection(''); }} placeholder="Écris ici l’expression avec son erreur" maxLength={500} />
+        <div className="dil-expression-actions"><button type="button" onClick={askFrenchAi} disabled={!newExpression.trim() || frenchAiBusy}>{frenchAiBusy ? 'OUVERTURE…' : '🤖 DEMANDER IA'}</button><span>{frenchAiCopyMessage}</span></div>
+        <label className="dil-expression-label-correct" htmlFor="student-corrected-expression">Expression juste</label>
+        <textarea className="dil-expression-correct" id="student-corrected-expression" value={newCorrectedExpression} onChange={(event) => { setNewCorrectedExpression(event.target.value); setNewExpressionError(''); setNewExpressionCorrection(''); }} placeholder="Colle ou écris ici la version corrigée" maxLength={500} />
+        <label className="dil-expression-label-rule" htmlFor="student-expression-rule">Règle d’orthographe ou de grammaire (facultatif)</label>
+        <textarea className="dil-expression-rule" id="student-expression-rule" value={newExpressionRule} onChange={(event) => setNewExpressionRule(event.target.value)} placeholder="Ex. : Avec ‘être’, le participe passé s’accorde avec le sujet." maxLength={500} />
+        <button className="dil-save-correction-pair" type="submit" disabled={newExpressionBusy || !newExpression.trim() || !newCorrectedExpression.trim()}>{newExpressionBusy ? 'ENREGISTREMENT…' : 'AJOUTER À MON ENTRAÎNEMENT'}</button>
+        {newExpressionCorrection && <div className="dil-correction-saved">{newExpressionCorrection}</div>}
         {newExpressionError && <small>{newExpressionError}</small>}
       </form>}
-      {!wordsByNeed.length ? <p className="dil-empty">{frenchMode ? 'Ajoute ton premier mot ou une première phrase ci-dessus.' : 'Ajoute des mots dans l’onglet Traduction pour les retrouver ici.'}</p> : <div className="dil-my-words-list">{wordsByNeed.map((word) => <article key={word._id || word.french} className={Number(word.correctStreak || 0) >= 4 ? 'known' : ''}><div className="dil-word-main"><div className="dil-word-pair">{frenchMode ? <>🇫🇷 <b>{word.french}</b></> : <>🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></>}</div>{frenchMode && word.exerciseType !== 'correction' && <><p className="dil-focus-hint">Clique les mots que tu veux réviser en texte à trous.</p><div className="dil-focus-picker">{expressionWords(word.french).map((token, index) => { const selectedFocus = (word.focusWords || []).some((item) => normaliseExpressionWord(item) === normaliseExpressionWord(token)); return <button type="button" className={selectedFocus ? 'selected' : ''} onClick={() => toggleExpressionFocus(word, token)} key={`${token}-${index}`}>{selectedFocus ? '✓ ' : ''}{token}</button>; })}</div></>}{frenchMode && word.exerciseType === 'correction' && <p className="dil-focus-hint">🛠 Phrase à corriger : {word.incorrectSentence}</p>}{frenchMode && Array.isArray(word.focusWords) && word.focusWords.length > 0 && <div className="dil-focus-words">À écrire : {word.focusWords.join(' · ')}</div>}</div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><span className="wrong">✕ {Number(word.wrongCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
+      {!wordsByNeed.length ? <p className="dil-empty">{frenchMode ? 'Ajoute ton premier mot ou une première phrase ci-dessus.' : 'Ajoute des mots dans l’onglet Traduction pour les retrouver ici.'}</p> : <div className="dil-my-words-list">{wordsByNeed.map((word) => <article key={word._id || word.french} className={(word.sessionSuccessDates || []).length >= 3 ? 'known' : ''}><div className="dil-word-main"><div className="dil-word-pair">{frenchMode ? <>🇫🇷 <b>{word.french}</b></> : <>🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></>}</div><span className="dil-session-progress">{Math.min(3, (word.sessionSuccessDates || []).length)}/3 séances réussies</span>{frenchMode && word.exerciseType !== 'correction' && <><p className="dil-focus-hint">Clique les mots que tu veux réviser en texte à trous.</p><div className="dil-focus-picker">{expressionWords(word.french).map((token, index) => { const selectedFocus = (word.focusWords || []).some((item) => normaliseExpressionWord(item) === normaliseExpressionWord(token)); return <button type="button" className={selectedFocus ? 'selected' : ''} onClick={() => toggleExpressionFocus(word, token)} key={`${token}-${index}`}>{selectedFocus ? '✓ ' : ''}{token}</button>; })}</div></>}{frenchMode && word.exerciseType === 'correction' && <p className="dil-focus-hint">🛠 Phrase à corriger : {word.incorrectSentence}</p>}{frenchMode && Array.isArray(word.focusWords) && word.focusWords.length > 0 && <div className="dil-focus-words">À écrire : {word.focusWords.join(' · ')}</div>}</div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><span className="wrong">✕ {Number(word.wrongCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
     </div> : mode === 'learned' ? <div className="dil-card dil-my-words">
       <h3>🏆 Mots appris</h3>
-      <p>Un mot apparaît ici après 4 bonnes réponses consécutives, sans erreur.</p>
-      {!learnedWords.length ? <p className="dil-empty">Continue l’entraînement : il faut 4 bonnes réponses de suite pour apprendre un mot.</p> : <div className="dil-my-words-list">{learnedWords.map((word) => <article key={word._id || word.french} className="known"><div className="dil-word-pair">🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
+      <p>Un mot est appris après une réussite au cours de trois séances faites sur trois jours différents.</p>
+      {!learnedWords.length ? <p className="dil-empty">Réussis chaque mot pendant trois séances, sur trois jours différents, pour l’apprendre.</p> : <div className="dil-my-words-list">{learnedWords.map((word) => <article key={word._id || word.french} className="known"><div className="dil-word-pair">🇪🇸 <b>{word.spanish}</b><span>→</span> 🇫🇷 <b>{word.french}</b></div><div className="dil-word-results"><span className="correct">✓ {Number(word.correctCount || 0)}</span><button type="button" className="dil-pronounce" aria-label={`Réécouter ${word.french}`} onClick={() => pronounceFrench(word.french)}>🔊</button></div></article>)}</div>}
     </div> : <div className="dil-card dil-training">
-      {!current ? <p className="dil-empty">Traduis d’abord des mots dans l’onglet Traduction : ils apparaîtront ici.</p> : current.exerciseType === 'correction' ? <>{renderCorrectionTraining()}{feedback && <p className="dil-feedback">{feedback}</p>}</> : <form onSubmit={checkAnswer}><div className="dil-instruction">TRADUISEZ EN FRANÇAIS</div><div className="dil-spanish">{current.spanish}</div><input autoFocus value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Écris le mot français" /><button type="submit">VÉRIFIER</button>{feedback && <p className="dil-feedback">{feedback}</p>}</form>}
+      {!words.length ? <p className="dil-empty">Ajoute d’abord des mots dans l’onglet précédent : ils apparaîtront ici.</p> : !current ? <div className="dil-session-finished"><strong>Session {Math.max(1, ...words.map((word) => Math.min(3, (word.sessionSuccessDates || []).length)))} finie</strong><span>Entraînement terminé pour aujourd’hui. Reviens demain pour la prochaine séance.</span></div> : <><div className="dil-current-progress"><span>{Math.min(3, (current.sessionSuccessDates || []).length)}/3 séances réussies</span><span>Une réussite par jour · trois jours différents</span></div>{current.exerciseType === 'correction' ? <>{renderCorrectionTraining()}{(answerFeedback || feedback) && <p className="dil-feedback">{answerFeedback || feedback}</p>}</> : <form onSubmit={checkAnswer}><div className="dil-instruction">TRADUISEZ EN FRANÇAIS</div><div className="dil-spanish">{current.spanish}</div><input autoFocus value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Écris le mot français" disabled={answerBusy} /><button type="submit" disabled={answerBusy}>{answerBusy ? 'VÉRIFICATION…' : 'VÉRIFIER'}</button>{answerFeedback && <p className="dil-feedback">{answerFeedback}</p>}</form>}</>}
+    </div>}
+    {isFrenchAiOpen && <div className="dil-french-ai-overlay" role="presentation" onClick={() => setIsFrenchAiOpen(false)}>
+      <div className="dil-french-ai-dialog" role="dialog" aria-modal="true" aria-labelledby="dil-french-ai-title" onClick={(event) => event.stopPropagation()}>
+        <header><div><h2 id="dil-french-ai-title">🤖 Aide IA · Français</h2><p>Colle l’expression copiée dans le chatbot, puis reporte sa correction dans le champ vert.</p></div><button type="button" onClick={() => setIsFrenchAiOpen(false)} aria-label="Fermer le chatbot">×</button></header>
+        {frenchAiCopyMessage && <p className="dil-french-ai-copy-message">{frenchAiCopyMessage}</p>}
+        {frenchAiBusy && <p className="dil-french-ai-status">Chargement du chatbot…</p>}
+        {frenchAiError && <p className="dil-french-ai-error">{frenchAiError}</p>}
+        {frenchAiUrl && <iframe src={frenchAiUrl} title="Chatbot d’aide au français" allow="clipboard-read; clipboard-write" />}
+      </div>
     </div>}
   </section>;
 }

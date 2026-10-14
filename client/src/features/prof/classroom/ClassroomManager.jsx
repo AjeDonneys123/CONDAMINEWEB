@@ -33,6 +33,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [frenchKeywords, setFrenchKeywords] = useState([]);
     const [frenchErrorMode, setFrenchErrorMode] = useState(false);
     const [frenchCorrectExpression, setFrenchCorrectExpression] = useState("");
+    const [frenchGrammarRule, setFrenchGrammarRule] = useState("");
     const [frenchIncorrectWords, setFrenchIncorrectWords] = useState([]);
     const [frenchSaving, setFrenchSaving] = useState(false);
     const [voiceSupported, setVoiceSupported] = useState(false);
@@ -157,7 +158,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             } catch (_) {}
         };
         checkActiveRemote();
-        const interval = window.setInterval(checkActiveRemote, 1000);
+        const interval = window.setInterval(checkActiveRemote, 10000);
         return () => {
             mounted = false;
             window.clearInterval(interval);
@@ -367,7 +368,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     // un déplacement fait depuis un autre appareil apparaît ainsi au tableau.
     useEffect(() => {
         if (!classPlanProjected || !globalClassId) return undefined;
-        const interval = window.setInterval(() => void loadData(), 1500);
+        const interval = window.setInterval(() => void loadData(), 10000);
         return () => window.clearInterval(interval);
     }, [classPlanProjected, globalClassId, myId]);
 
@@ -907,6 +908,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                         focusWords: frenchKeywords,
                         exerciseType: frenchErrorMode ? 'correction' : 'vocabulary',
                         incorrectSentence: frenchErrorMode ? expression : '',
+                        grammarRule: frenchErrorMode ? frenchGrammarRule.trim() : '',
                         incorrectWords: frenchErrorMode ? frenchIncorrectWords : [],
                         source: 'teacher-french'
                     })
@@ -918,6 +920,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             setFrenchExpression('');
             setFrenchKeywords([]);
             setFrenchCorrectExpression('');
+            setFrenchGrammarRule('');
             setFrenchIncorrectWords([]);
             alert(`Ajouté à la liste de ${responses.length} élève${responses.length > 1 ? 's' : ''}.`);
         } catch (error) {
@@ -932,6 +935,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         setFrenchStudentIds([]);
         setFrenchErrorMode(false);
         setFrenchCorrectExpression('');
+        setFrenchGrammarRule('');
         setFrenchIncorrectWords([]);
         setVoiceListening(false);
         keepListeningRef.current = false;
@@ -972,6 +976,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 })}</div>}
                 {frenchErrorMode && !!frenchIncorrectWords.length && <small className="incorrect-summary">Mots incorrects : {frenchIncorrectWords.join(' · ')}</small>}
                 {frenchErrorMode && <div className="french-correct-sentence"><label>Phrase correcte</label><input value={frenchCorrectExpression} onChange={(event) => { setFrenchCorrectExpression(event.target.value); setFrenchKeywords([]); }} placeholder="Écris ici la phrase correcte…" /></div>}
+                {frenchErrorMode && <div className="french-correct-sentence"><label>Règle d’orthographe ou de grammaire (facultatif)</label><textarea value={frenchGrammarRule} onChange={(event) => setFrenchGrammarRule(event.target.value)} placeholder="Explique brièvement la règle à retenir…" maxLength={500} style={{ width: '100%', minHeight: 72, padding: 10, border: '1px solid #cbd5e1', borderRadius: 10, font: 'inherit', resize: 'vertical' }} /></div>}
                 {frenchErrorMode && !!correctWords.length && <div className="french-keyword-list correct">{correctWords.map((word, index) => {
                     const selected = frenchKeywords.some((item) => normaliseFrenchKeyword(item) === normaliseFrenchKeyword(word));
                     return <button type="button" key={`${word}-${index}`} className={selected ? 'selected' : ''} onClick={() => toggleFrenchKeyword(word)}>{selected ? '✓ ' : ''}{word}</button>;

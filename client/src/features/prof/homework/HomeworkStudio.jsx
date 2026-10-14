@@ -77,7 +77,7 @@ const normalizeClassName = (value = '') => String(value || '')
 const isTroisiemeClass = (value = '') => /^3/.test(normalizeClassName(value));
 const isSecondeClass = (value = '') => /^(2|2DE|SECONDE)/.test(normalizeClassName(value));
 
-export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses, globalClass }) {
+export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses, globalClass, globalClassId }) {
     
     // 1. ÉTATS DU DEVOIR
     const [formData, setFormData] = useState(() => {
@@ -141,6 +141,16 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     const [didakbotSessionMessageCounts, setDidakbotSessionMessageCounts] = useState({});
     const [didakbotSessionsLoading, setDidakbotSessionsLoading] = useState(false);
     const [didakbotSessionsError, setDidakbotSessionsError] = useState('');
+
+    useEffect(() => {
+        if (!globalClassId) return;
+        let active = true;
+        fetch(`/api/classroom/bots/${encodeURIComponent(globalClassId)}`, { cache: 'no-store' })
+            .then((response) => response.ok ? response.json() : null)
+            .then((result) => { if (active && result?.creatorKey) setCreatorKey(result.creatorKey); })
+            .catch(() => {});
+        return () => { active = false; };
+    }, [globalClassId]);
 
     useEffect(() => {
         const assignments = Array.isArray(formData.didakbotAssignments) ? formData.didakbotAssignments : [];
@@ -464,6 +474,12 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     shareLink: String(result.share_link),
                     url: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(result.share_link)}&iframe=1`
                 };
+                if (globalClassId) {
+                    await fetch(`/api/classroom/bots/${encodeURIComponent(globalClassId)}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chatbotId: bot.chatbotId, shareLink: bot.shareLink, url: bot.url, name: formData.title || `Chatbot ${className}` })
+                    });
+                }
                 createdBots = [...createdBots.filter(item => normalizeName(item.className) !== normalizeName(className)), bot];
                 setFormData(current => ({
                     ...current,

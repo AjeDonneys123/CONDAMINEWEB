@@ -5,8 +5,9 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
       activities: { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600', hideOnMobile: true },
       exposes: { id: 'exposes', label: '📚 COURS', color: 'bg-rose-600' },
       classroom: { id: 'classroom', label: '🎓 CLASSE', color: 'bg-emerald-600' },
-      scans: { id: 'scans', label: '📸 SCAN', color: 'bg-orange-500' },
-      corriger: { id: 'corriger', label: '✍️ CORRIGER', color: 'bg-teal-600' },
+      scans: { id: 'scans', label: '📸 SCAN', color: 'bg-orange-500', hideOnDesktop: true },
+      corriger: { id: 'corriger', label: '✍️ CORRIGER', color: 'bg-teal-600', hideOnMobile: true },
+      bots: { id: 'bots', label: '🤖 BOTS', color: 'bg-cyan-700', hideOnMobile: true },
       training: { id: 'training', label: '🏋️ ENTRAÎNEMENT', color: 'bg-indigo-500' },
       studio: { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600', hideOnMobile: true }, 
       students: { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
@@ -16,11 +17,11 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
   let tabs = [];
 
   if (user.isDeveloper) {
-      tabs = [allTabs.activities, allTabs.exposes, allTabs.classroom, allTabs.scans, allTabs.corriger, allTabs.training, allTabs.studio, allTabs.students, allTabs.admin];
+      tabs = [allTabs.activities, allTabs.exposes, allTabs.classroom, allTabs.scans, allTabs.corriger, allTabs.bots, allTabs.training, allTabs.studio, allTabs.students, allTabs.admin];
   } else if (user.role === 'admin') {
       tabs = [ { id: 'admin', label: '🛡️ ADMIN', color: 'bg-slate-800' } ];
   } else {
-      tabs = [allTabs.activities, allTabs.exposes, allTabs.classroom, allTabs.scans, allTabs.corriger, allTabs.training, allTabs.students];
+      tabs = [allTabs.activities, allTabs.exposes, allTabs.classroom, allTabs.scans, allTabs.corriger, allTabs.bots, allTabs.training, allTabs.students];
   }
   return (
     <div className="flex flex-col border-b sticky top-0 z-30 bg-white">
@@ -36,6 +37,7 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
                 font-black text-[10px] md:text-xs transition-all 
                 ${activeTab === t.id ? t.color + ' text-white shadow-md scale-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}
                 ${t.hideOnMobile ? 'hidden md:block' : ''} 
+                ${t.hideOnDesktop ? 'md:hidden' : ''}
             `}
         >
             {t.label}

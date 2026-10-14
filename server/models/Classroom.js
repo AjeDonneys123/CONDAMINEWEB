@@ -27,7 +27,10 @@ const ClassroomSchema = new mongoose.Schema({
     // possède son propre layout et ses propres places dans le document classe.
     layout2: { type: LayoutSchema, default: undefined },
     seatPlan2: { type: [Plan2SeatSchema], default: [] },
-    activePlanNumber: { type: Number, enum: [1, 2], default: 1 }
+    activePlanNumber: { type: Number, enum: [1, 2], default: 1 },
+    didakbotKey: { type: String, default: '' },
+    didakbotBots: { type: [{ chatbotId: String, shareLink: String, url: String, name: String, createdAt: { type: Date, default: Date.now } }], default: [] },
+    frenchHelpBotShareLink: { type: String, default: '' }
 }, { collection: 'classrooms' });
 
 module.exports = mongoose.models.Classroom || mongoose.model('Classroom', ClassroomSchema);

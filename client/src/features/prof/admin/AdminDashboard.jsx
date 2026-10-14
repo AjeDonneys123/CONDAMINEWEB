@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
-export default function AdminDashboard({ user, onRefresh }) {
+export default function AdminDashboard({ user, onRefresh, globalClass = '' }) {
     const isDeveloperBugMode = user?.isDeveloper === true;
     const [view, setView] = useState(isDeveloperBugMode ? 'bugs' : 'classes');
     const [items, setItems] = useState([]);
@@ -128,6 +128,21 @@ export default function AdminDashboard({ user, onRefresh }) {
         setFinderFirst(profile.firstName || '');
         setFinderSuggestions([]);
     };
+
+    useEffect(() => {
+        if (!isDeveloperBugMode || !globalClass) return;
+        const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const testStudent = finderPool.find((profile) => profile.type === 'student'
+            && (profile.isTestAccount || clean(profile.lastName || '') === 'test')
+            && clean(profile.className || '') === clean(globalClass));
+        if (testStudent) handleSelectConnectAs(testStudent);
+        else {
+            setSelectedConnectAs(null);
+            setFinderClass(globalClass);
+            setFinderLast('TEST');
+            setFinderFirst('');
+        }
+    }, [globalClass, finderPool, isDeveloperBugMode]);
 
     const handleConnectAs = async () => {
         const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');

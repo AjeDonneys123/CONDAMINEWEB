@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const fetch = require('node-fetch');
 const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress, ClassroomScan, ClassroomScanShare } = require('../models/prof.models');
 const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
 const multer = require('multer');
@@ -347,6 +348,145 @@ router.get('/debts/:classId', async (req, res) => {
 });
 
 // État léger et stable destiné à l'extension Google Slides.
+router.get('/bots/:classId', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId).lean();
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const creatorKey = String(classroom.didakbotKey || '').trim();
+        if (!creatorKey) return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey: '', frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), bots: [], warning: '' });
+        const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'get_chatbots', user_key: creatorKey })
+        });
+        const result = await response.json();
+        if (!response.ok || result?.success !== true || !Array.isArray(result.chatbots)) {
+            return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey, bots: [], warning: String(result?.error || result?.message || 'Didak’bot n’a pas accepté cette clé.') });
+        }
+        const seen = new Set();
+        const bots = result.chatbots.map((bot) => {
+            const shareLink = String(bot.share_link || '').trim();
+            const chatbotId = String(bot.id || bot.chatbot_id || '').trim();
+            return {
+                id: chatbotId || shareLink,
+                className: classroom.name,
+                chatbotId,
+                shareLink,
+                url: shareLink ? `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(shareLink)}` : '',
+                activityTitle: String(bot.name || 'Chatbot Didak’bot'),
+                role: String(bot.role || ''),
+                date: bot.created_at || null
+            };
+        }).filter((bot) => {
+            const identity = bot.chatbotId || bot.shareLink;
+            if (!identity || seen.has(identity)) return false;
+            seen.add(identity);
+            return true;
+        });
+        return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey, frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), bots, warning: '' });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Chargement des bots impossible.' }); }
+});
+
+router.get('/bots/:classId/:botId/conversations', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId, 'didakbotKey').lean();
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const creatorKey = String(classroom.didakbotKey || '').trim();
+        if (!creatorKey) return res.status(400).json({ error: 'Enregistrez d’abord la clé créateur de cette classe.' });
+        const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'get_conversations', chatbot_id: String(req.params.botId), user_key: creatorKey })
+        });
+        const result = await response.json();
+        if (!response.ok || result?.success !== true || !Array.isArray(result.sessions)) {
+            return res.status(502).json({ error: String(result?.error || result?.message || 'Didak’bot ne renvoie pas les conversations de ce bot.') });
+        }
+        const sessions = result.sessions.map((session) => {
+            const sessionCode = String(session.session_code || session.sessionCode || '').trim();
+            return {
+                id: String(session.id || sessionCode),
+                sessionCode,
+                pseudo: String(session.pseudo || session.student_name || session.studentName || ''),
+                messageCount: Number(session.message_count || session.messageCount || session.total_messages || 0),
+                updatedAt: session.updated_at || session.updatedAt || session.created_at || null,
+                url: sessionCode ? `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(sessionCode)}${session.pseudo || session.student_name ? `&pseudo=${encodeURIComponent(session.pseudo || session.student_name)}` : ''}` : ''
+            };
+        }).filter((session) => session.sessionCode);
+        return res.json({ sessions });
+    } catch (error) {
+        return res.status(502).json({ error: error.message || 'Chargement des conversations impossible.' });
+    }
+});
+
+router.put('/bots/:classId/french-help', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const shareLink = String(req.body?.shareLink || '').trim();
+        if (shareLink && !String(classroom.didakbotKey || '').trim()) return res.status(400).json({ error: 'Enregistrez la clé de cette classe avant de choisir son bot français.' });
+        classroom.frenchHelpBotShareLink = shareLink;
+        await classroom.save();
+        return res.json({ ok: true, shareLink });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Enregistrement du bot français impossible.' }); }
+});
+
+router.delete('/bots/:classId/:shareLink', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const creatorKey = String(classroom.didakbotKey || '').trim();
+        const shareLink = String(req.params.shareLink || '').trim();
+        if (!creatorKey) return res.status(400).json({ error: 'La clé créateur de cette classe est absente.' });
+        if (!shareLink) return res.status(400).json({ error: 'Identifiant de chatbot manquant.' });
+        const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'delete_chatbot', share_link: shareLink, user_key: creatorKey })
+        });
+        const result = await response.json();
+        if (!response.ok || result?.success !== true) {
+            return res.status(502).json({ error: String(result?.error || result?.message || 'Didak’bot n’a pas confirmé la suppression.') });
+        }
+        classroom.didakbotBots = (classroom.didakbotBots || []).filter((bot) => String(bot.shareLink || '') !== shareLink);
+        if (String(classroom.frenchHelpBotShareLink || '') === shareLink) classroom.frenchHelpBotShareLink = '';
+        await classroom.save();
+        return res.json({ ok: true, shareLink });
+    } catch (error) {
+        return res.status(502).json({ error: error.message || 'Suppression du chatbot impossible.' });
+    }
+});
+
+router.post('/bots/:classId', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const chatbotId = String(req.body?.chatbotId || '').trim();
+        const shareLink = String(req.body?.shareLink || '').trim();
+        if (!chatbotId && !shareLink) return res.status(400).json({ error: 'Identifiant du chatbot manquant.' });
+        const identity = chatbotId || shareLink;
+        const existing = (classroom.didakbotBots || []).find((bot) => String(bot.chatbotId || bot.shareLink) === identity);
+        const bot = existing || {};
+        bot.chatbotId = chatbotId;
+        bot.shareLink = shareLink;
+        bot.url = String(req.body?.url || '').trim();
+        bot.name = String(req.body?.name || '').trim().slice(0, 120);
+        if (!existing) classroom.didakbotBots.push(bot);
+        await classroom.save();
+        return res.json({ ok: true });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Ajout du chatbot impossible.' }); }
+});
+
+router.put('/bots/:classId', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        classroom.didakbotKey = String(req.body?.creatorKey || '').trim().toUpperCase().slice(0, 160);
+        await classroom.save();
+        return res.json({ ok: true, classId: String(classroom._id), creatorKey: classroom.didakbotKey });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Enregistrement de la clé impossible.' }); }
+});
+
 router.get('/bridge-state/:classId', async (req, res) => {
     try {
         const fallbackName = String(req.query.className || '').trim();
@@ -1206,7 +1346,28 @@ router.get('/plan/:classId', async (req, res) => {
             };
         });
         if (planNumber === 2) {
-            return res.json({ planNumber: 2, layout: clsObj.layout, students: studentsWithIndicators });
+            const plan2Layout = clsObj.layout2?.toObject?.()
+                || clsObj.layout2
+                || clsObj.layout?.toObject?.()
+                || clsObj.layout;
+            const cols = Math.max(2, Number(plan2Layout?.cols || 5));
+            const savedSeats = new Map((clsObj.seatPlan2 || []).map((seat) => [String(seat.studentId || ''), seat]));
+            let plan2Changed = false;
+            const plan2Students = studentsWithIndicators.map((student, index) => {
+                const saved = savedSeats.get(String(student._id));
+                if (saved) return { ...student, seatX: Number(saved.seatX), seatY: Number(saved.seatY) };
+                plan2Changed = true;
+                return { ...student, seatX: index % cols, seatY: Math.floor(index / cols) };
+            });
+            if (plan2Changed || !(clsObj.seatPlan2 || []).length) {
+                await Classroom.updateOne({ _id: clsObj._id }, {
+                    $set: {
+                        layout2: plan2Layout,
+                        seatPlan2: plan2Students.map((student) => ({ studentId: student._id, seatX: student.seatX, seatY: student.seatY }))
+                    }
+                });
+            }
+            return res.json({ planNumber: 2, layout: plan2Layout, students: plan2Students });
         }
         res.json(studentsWithIndicators);
     } catch (e) { res.status(500).json({ error: e.message }); }
