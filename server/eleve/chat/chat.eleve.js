@@ -55,8 +55,24 @@ const syncResearchDocuments = async (group) => {
     const classroom = await Classroom.findById(group.classId, 'didakbotKey researchBotShareLink didakbotBots').lean();
     const creatorKey = String(classroom?.didakbotKey || '').trim();
     const selectedBot = (classroom?.didakbotBots || []).find((bot) => String(bot.shareLink || '') === String(group.shareLink || ''));
-    const chatbotId = String(selectedBot?.chatbotId || group.chatbotId || '').trim();
-    if (!creatorKey || !chatbotId) return group;
+    let chatbotId = String(selectedBot?.chatbotId || group.chatbotId || '').trim();
+    if (!creatorKey) return group;
+    if (!chatbotId && group.shareLink) {
+        const botsResponse = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'get_chatbots', user_key: creatorKey })
+        });
+        const botsData = await botsResponse.json().catch(() => ({}));
+        const remoteBot = (Array.isArray(botsData?.chatbots) ? botsData.chatbots : []).find(
+            (bot) => String(bot?.share_link || '').trim() === String(group.shareLink || '').trim()
+        );
+        chatbotId = String(remoteBot?.id || remoteBot?.chatbot_id || '').trim();
+        if (chatbotId) {
+            group.chatbotId = chatbotId;
+            await group.save();
+        }
+    }
+    if (!chatbotId) return group;
     if (!group.sessionCode) {
         const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
             method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
