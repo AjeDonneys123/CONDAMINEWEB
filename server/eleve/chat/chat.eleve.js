@@ -119,7 +119,7 @@ const ensureResearchDidakSession = async (group) => {
     const joined = await postResearchDidakbot(group, { action: 'join_session', session_code: group.sessionCode, pseudo: group.sessionPseudo });
     group.didakSessionId = String(joined?.session?.session_id || joined?.session?.id || '');
     group.participantId = String(joined?.participant_id || joined?.participant?.id || '');
-    group.chatbotId = String(joined?.session?.chatbot_id || group.chatbotId || '');
+    group.chatbotId = String(joined?.session?.chatbot_id || joined?.session?.id || group.chatbotId || '');
     if (!group.didakSessionId || !group.participantId || !group.chatbotId) {
         throw new Error('Didakbot n’a pas renvoyé les identifiants attendus.');
     }
@@ -1056,7 +1056,7 @@ router.post('/research-group/:groupId/chat', async (req, res) => {
         return res.json({ ok: true, group });
     } catch (error) {
         console.error('Cyclopédia chat:', error.message);
-        return res.status(502).json({ error: 'Cyclopédia ne répond pas. Réessaie dans un instant.' });
+        return res.status(502).json({ error: `Cyclopédia ne répond pas : ${String(error.message || 'erreur inconnue').slice(0, 240)}` });
     }
 });
 
