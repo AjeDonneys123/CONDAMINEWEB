@@ -87,6 +87,8 @@ export default function EleveChatWorkspace({ user, onQuit }) {
   const [groupTopic, setGroupTopic] = useState('');
   const [groupNotes, setGroupNotes] = useState({});
   const [characterOpen, setCharacterOpen] = useState(false);
+  const [researchDraft, setResearchDraft] = useState('');
+  const [researchSending, setResearchSending] = useState(false);
   const notesSaveTimerRef = useRef(null);
 
   useEffect(() => {
@@ -133,6 +135,19 @@ export default function EleveChatWorkspace({ user, onQuit }) {
     setGroupNotes(next);
     window.clearTimeout(notesSaveTimerRef.current);
     notesSaveTimerRef.current = window.setTimeout(() => fetch(`/api/eleve/chat/research-group/${encodeURIComponent(group._id)}/notes`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, articleIndex: activeSource, notes: value }) }), 500);
+  };
+
+  const sendGroupMessage = async (messageOverride = '') => {
+    const message = String(messageOverride || researchDraft).trim();
+    if (!message || !group?._id || researchSending) return;
+    setResearchSending(true); setError('');
+    try {
+      const response = await fetch(`/api/eleve/chat/research-group/${encodeURIComponent(group._id)}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, message }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Cyclopédia ne répond pas.');
+      setGroup(data.group); setResearchDraft('');
+    } catch (sendError) { setError(sendError.message); }
+    finally { setResearchSending(false); }
   };
 
   useEffect(() => {
@@ -255,7 +270,8 @@ export default function EleveChatWorkspace({ user, onQuit }) {
   }
 
   if (!Array.isArray(group.documents) || group.documents.length < 3) {
-    return <div className="research-overlay"><header className="research-header"><div><div className="research-kicker">Groupe · {(group.members || []).map((member) => member.name).join(', ')}</div><h1>🔎 Cyclopédia · {group.topic || 'Recherche'}</h1></div><div className="research-header-actions"><button className="research-close" type="button" onClick={onQuit}>×</button></div></header><main className="research-bot-stage"><div className="research-sync-info"><b>Travaillez avec Cyclopédia</b><span>Dès que le plan est validé et que le bot produit trois articles nommés « ARTICLE 1 », « ARTICLE 2 » et « ARTICLE 3 », CondaWeb les distribue automatiquement à tout le groupe.</span></div><iframe title="Cyclopédia" src={group.botUrl || `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}`} /></main></div>;
+    const chatMessages = Array.isArray(group.chatMessages) ? group.chatMessages : [];
+    return <div className="research-overlay"><header className="research-header"><div><div className="research-kicker">Groupe · {(group.members || []).map((member) => member.name).join(', ')}</div><h1>🔎 Cyclopédia · {group.topic || 'Recherche'}</h1></div><div className="research-header-actions"><button className="research-close" type="button" onClick={onQuit}>×</button></div></header><main className="research-bot-stage"><div className="research-sync-info"><b>Construisez votre plan</b><span>Le sujet a été envoyé automatiquement. Répondez sous le mini-article ; lorsque le plan sera validé, les trois articles apparaîtront pour tout le groupe.</span></div><section className="research-inline-chat"><div className="research-inline-messages">{!chatMessages.length && <div className="research-inline-empty"><p>Cyclopédia n’a pas encore fourni l’introduction.</p><button type="button" disabled={researchSending} onClick={() => sendGroupMessage(`Notre sujet de recherche est : ${group.topic}. Présente le mini-article d’introduction et demande-nous de proposer un plan en trois axes.`)}>Relancer l’introduction</button></div>}{chatMessages.map((message) => <article key={message.id} className={message.role === 'user' ? 'student' : 'assistant'}><b>{message.role === 'user' ? 'Le groupe' : 'Cyclopédia'}</b><p>{message.content}</p></article>)}{researchSending && <article className="assistant"><b>Cyclopédia</b><p>Préparation de la réponse…</p></article>}</div>{error && <div className="research-error">{error}</div>}<div className="research-plan-entry"><label>Votre plan et vos questions</label><textarea value={researchDraft} onChange={(event) => setResearchDraft(event.target.value)} placeholder="I. …\nII. …\nIII. …\nNos questions : …" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendGroupMessage(); } }} /><button type="button" disabled={!researchDraft.trim() || researchSending} onClick={() => sendGroupMessage()}>{researchSending ? 'Envoi…' : 'Envoyer à Cyclopédia'}</button></div></section></main></div>;
   }
 
   if (Array.isArray(group.documents) && group.documents.length >= 3) {
