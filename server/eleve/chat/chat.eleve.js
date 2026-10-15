@@ -115,10 +115,14 @@ const postResearchDidakbot = async (group, fields) => {
 };
 
 const ensureResearchDidakSession = async (group) => {
-    if (group.didakSessionId && group.participantId) return group;
+    if (group.didakSessionId && group.participantId && group.chatbotId) return group;
     const joined = await postResearchDidakbot(group, { action: 'join_session', session_code: group.sessionCode, pseudo: group.sessionPseudo });
-    group.didakSessionId = String(joined?.session?.session_id || '');
-    group.participantId = String(joined?.participant_id || '');
+    group.didakSessionId = String(joined?.session?.session_id || joined?.session?.id || '');
+    group.participantId = String(joined?.participant_id || joined?.participant?.id || '');
+    group.chatbotId = String(joined?.session?.chatbot_id || group.chatbotId || '');
+    if (!group.didakSessionId || !group.participantId || !group.chatbotId) {
+        throw new Error('Didakbot n’a pas renvoyé les identifiants attendus.');
+    }
     const prior = (Array.isArray(joined?.messages) ? joined.messages : []).map((message) => ({
         id: String(message?.id || new mongoose.Types.ObjectId()),
         role: String(message?.role || 'assistant'),
@@ -132,7 +136,7 @@ const ensureResearchDidakSession = async (group) => {
 
 const sendResearchDidakMessage = async (group, content) => {
     await ensureResearchDidakSession(group);
-    const data = await postResearchDidakbot(group, {
+    const send = () => postResearchDidakbot(group, {
         action: 'send_message',
         session_id: group.didakSessionId,
         participant_id: group.participantId,
@@ -141,6 +145,16 @@ const sendResearchDidakMessage = async (group, content) => {
         pseudo: group.sessionPseudo,
         is_mention: 'true'
     });
+    let data;
+    try {
+        data = await send();
+    } catch (firstError) {
+        group.didakSessionId = '';
+        group.participantId = '';
+        await group.save();
+        await ensureResearchDidakSession(group);
+        data = await send();
+    }
     const now = new Date();
     group.chatMessages.push({ id: String(data.user_message_id || new mongoose.Types.ObjectId()), role: 'user', content, createdAt: now });
     const botResponse = String(data.bot_response || '').trim();
