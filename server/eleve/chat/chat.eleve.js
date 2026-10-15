@@ -2,13 +2,85 @@ const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const AIEngine = require('../../core/ai.engine');
-const { Student, LearningModule, GptInboxMessage, Homework } = require('../../prof/models/prof.models');
+const { Student, Classroom, LearningModule, GptInboxMessage, Homework } = require('../../prof/models/prof.models');
 
 const router = express.Router();
+
+const ResearchGroup = mongoose.models.ResearchGroup || mongoose.model('ResearchGroup', new mongoose.Schema({
+    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', index: true },
+    className: { type: String, default: '' },
+    topic: { type: String, default: '' },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+    memberIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+    members: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    shareLink: { type: String, default: '' },
+    chatbotId: { type: String, default: '' },
+    sessionPseudo: { type: String, default: '' },
+    sessionCode: { type: String, default: '' },
+    documents: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    notesByStudent: { type: mongoose.Schema.Types.Mixed, default: {} }
+}, { timestamps: true, collection: 'researchgroups' }));
+
+const parseCyclopediaDocuments = (messages = []) => {
+    const assistantText = (Array.isArray(messages) ? messages : [])
+        .filter((message) => String(message?.role || '').toLowerCase() !== 'user')
+        .map((message) => String(message?.content || message?.text || ''))
+        .join('\n\n');
+    const marker = /(?:^|\n)\s*(?:#{1,4}\s*)?(?:ARTICLE|DOCUMENT)\s*(?:N[°ºO.]?\s*)?([123])\s*[:.–-]?\s*/gimu;
+    const hits = [...assistantText.matchAll(marker)];
+    if (hits.length < 3) return [];
+    return hits.slice(0, 3).map((hit, index) => {
+        const content = assistantText.slice(hit.index + hit[0].length, hits[index + 1]?.index ?? assistantText.length).trim();
+        const lines = content.split('\n').map((line) => line.trim()).filter(Boolean);
+        const title = String(lines[0] || `Article ${index + 1}`).replace(/^#+\s*/, '').slice(0, 180);
+        const sourceLine = lines.find((line) => /^(?:auteur|date|source)\s*:/i.test(line)) || '';
+        return { index: index + 1, title, content, sourceNote: sourceLine };
+    }).filter((document) => document.content.length > 80);
+};
+
+const resolveResearchClass = async (student) => {
+    if (student?.classId && mongoose.Types.ObjectId.isValid(student.classId)) {
+        const byId = await Classroom.findById(student.classId).lean();
+        if (byId) return byId;
+    }
+    return Classroom.findOne({ name: String(student?.currentClass || '').trim().toUpperCase() }).lean();
+};
+
+const syncResearchDocuments = async (group) => {
+    if (Array.isArray(group.documents) && group.documents.length >= 3) return group;
+    const classroom = await Classroom.findById(group.classId, 'didakbotKey researchBotShareLink didakbotBots').lean();
+    const creatorKey = String(classroom?.didakbotKey || '').trim();
+    const selectedBot = (classroom?.didakbotBots || []).find((bot) => String(bot.shareLink || '') === String(group.shareLink || ''));
+    const chatbotId = String(selectedBot?.chatbotId || group.chatbotId || '').trim();
+    if (!creatorKey || !chatbotId) return group;
+    if (!group.sessionCode) {
+        const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'get_conversations', chatbot_id: chatbotId, user_key: creatorKey })
+        });
+        const data = await response.json().catch(() => ({}));
+        const session = (Array.isArray(data?.sessions) ? data.sessions : []).find((item) => String(item?.pseudo || item?.student_name || '').trim() === group.sessionPseudo);
+        if (session) group.sessionCode = String(session.session_code || session.sessionCode || '').trim();
+    }
+    if (!group.sessionCode) return group;
+    const url = new URL('https://novapeda.eu/didakbot3.php');
+    url.searchParams.set('session', group.sessionCode);
+    url.searchParams.set('pseudo', group.sessionPseudo);
+    const response = await fetch(url.toString(), {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams({ action: 'join_session', session_code: group.sessionCode, pseudo: group.sessionPseudo })
+    });
+    const data = await response.json().catch(() => ({}));
+    const documents = parseCyclopediaDocuments(data?.messages || []);
+    if (documents.length === 3) group.documents = documents;
+    await group.save();
+    return group;
+};
 
 router.use(rateLimit({
     windowMs: 60 * 1000,
     limit: 12,
+    skip: (req) => req.method === 'GET',
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Trop de messages. Attends une minute avant de recommencer.' }
@@ -91,6 +163,23 @@ const researchLevelProfile = (currentClass = '') => {
     if (/5/.test(value)) return { label: '5e', baseWords: '50 à 70', articleWords: '170 à 220', demand: 'trois questions assez larges dont les réponses nécessitent plusieurs informations' };
     if (/4/.test(value)) return { label: '4e', baseWords: '55 à 80', articleWords: '200 à 260', demand: 'plusieurs questions reliant causes, fonctionnement et conséquences' };
     return { label: '3e', baseWords: '65 à 90', articleWords: '230 à 300', demand: 'plusieurs questions problématisées reliant causes, acteurs et conséquences' };
+};
+
+const buildResearchTopicFallback = (topic = '', levelLabel = 'collège') => {
+    const safeTopic = String(topic || 'ce sujet').trim().slice(0, 300);
+    const article = `${safeTopic} s'inscrit dans une époque et un espace précis qu'il faut d'abord identifier. Son apparition ne dépend jamais d'une cause unique : le contexte, les acteurs et leurs choix jouent un rôle clé. Son fonctionnement et les événements décisifs qui lui sont liés permettent ensuite de comprendre son importance. Enfin, ses conséquences, les traces qu'il a laissées et les débats qu'il suscite encore méritent d'être confrontés à plusieurs documents.`;
+    return {
+        title: safeTopic,
+        article,
+        openThreads: [
+            { id: 'T1', excerpt: "une époque et un espace précis", angle: 'Situer précisément le sujet dans son contexte.' },
+            { id: 'T2', excerpt: "le contexte, les acteurs et leurs choix", angle: 'Rechercher les causes et le rôle des différents acteurs.' },
+            { id: 'T3', excerpt: "Son fonctionnement et les événements décisifs", angle: 'Expliquer les faits, les mécanismes et les moments importants.' },
+            { id: 'T4', excerpt: "ses conséquences, les traces qu'il a laissées", angle: 'Étudier les conséquences et les différentes interprétations.' }
+        ],
+        level: levelLabel,
+        generationProvider: 'local-fallback'
+    };
 };
 
 const askResearchJson = async ({ prompt, system, maxOutputTokens = 4096 }) => {
@@ -778,6 +867,84 @@ router.get('/status', (_req, res) => {
     });
 });
 
+router.get('/research-setup/:studentId', async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
+        const student = await Student.findById(req.params.studentId, 'firstName lastName nickname currentClass classId').lean();
+        if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
+        const classroom = await resolveResearchClass(student);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const query = student.classId ? { classId: student.classId } : { currentClass: student.currentClass };
+        const students = await Student.find(query, 'firstName lastName nickname').sort({ lastName: 1, firstName: 1 }).lean();
+        const activeGroup = await ResearchGroup.findOne({ memberIds: student._id }).sort({ updatedAt: -1 }).lean();
+        return res.json({
+            ok: true,
+            students: students.map((item) => ({ id: String(item._id), name: `${String(item.firstName || item.nickname || '').trim()} ${String(item.lastName || '').trim()}`.trim() })),
+            botReady: Boolean(classroom.researchBotShareLink),
+            activeGroup
+        });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Préparation de l’atelier impossible.' }); }
+});
+
+router.post('/research-group', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const requestedIds = [...new Set((Array.isArray(req.body?.memberIds) ? req.body.memberIds : []).map(String).filter(mongoose.Types.ObjectId.isValid))];
+        if (!mongoose.Types.ObjectId.isValid(studentId)) return res.status(400).json({ error: 'Élève invalide.' });
+        if (!requestedIds.includes(studentId)) requestedIds.unshift(studentId);
+        const owner = await Student.findById(studentId, 'firstName lastName nickname currentClass classId').lean();
+        if (!owner) return res.status(404).json({ error: 'Élève introuvable.' });
+        const classroom = await resolveResearchClass(owner);
+        if (!classroom?.researchBotShareLink) return res.status(400).json({ error: 'Le professeur doit d’abord choisir le bot Cyclopédia dans l’onglet Bots.' });
+        const query = owner.classId ? { _id: { $in: requestedIds }, classId: owner.classId } : { _id: { $in: requestedIds }, currentClass: owner.currentClass };
+        const members = await Student.find(query, 'firstName lastName nickname').lean();
+        if (!members.some((item) => String(item._id) === studentId)) return res.status(403).json({ error: 'Groupe invalide.' });
+        const bot = (classroom.didakbotBots || []).find((item) => String(item.shareLink || '') === String(classroom.researchBotShareLink || ''));
+        const group = await ResearchGroup.create({
+            classId: classroom._id,
+            className: classroom.name,
+            topic: String(req.body?.topic || '').trim().slice(0, 300),
+            ownerId: owner._id,
+            memberIds: members.map((item) => item._id),
+            members: members.map((item) => ({ id: String(item._id), name: `${String(item.firstName || item.nickname || '').trim()} ${String(item.lastName || '').trim()}`.trim() })),
+            shareLink: classroom.researchBotShareLink,
+            chatbotId: String(bot?.chatbotId || ''),
+            sessionPseudo: `CYCL-${String(new mongoose.Types.ObjectId()).slice(-8).toUpperCase()}`
+        });
+        group.sessionPseudo = `CYCL-${String(group._id).slice(-8).toUpperCase()}`;
+        await group.save();
+        return res.json({ ok: true, group, botUrl: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}` });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Création du groupe impossible.' }); }
+});
+
+router.get('/research-group/:groupId', async (req, res) => {
+    try {
+        const studentId = String(req.query?.studentId || '').trim();
+        if (!mongoose.Types.ObjectId.isValid(req.params.groupId) || !mongoose.Types.ObjectId.isValid(studentId)) return res.status(400).json({ error: 'Groupe invalide.' });
+        let group = await ResearchGroup.findOne({ _id: req.params.groupId, memberIds: studentId });
+        if (!group) return res.status(404).json({ error: 'Groupe introuvable.' });
+        try { group = await syncResearchDocuments(group); } catch (syncError) { console.warn('Cyclopédia sync:', syncError.message); }
+        const plain = group.toObject();
+        plain.botUrl = `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}`;
+        return res.json({ ok: true, group: plain });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Synchronisation du groupe impossible.' }); }
+});
+
+router.put('/research-group/:groupId/notes', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        const articleIndex = Math.max(1, Math.min(3, Number(req.body?.articleIndex || 1)));
+        const group = await ResearchGroup.findOne({ _id: req.params.groupId, memberIds: studentId });
+        if (!group) return res.status(404).json({ error: 'Groupe introuvable.' });
+        const notes = { ...(group.notesByStudent || {}) };
+        notes[studentId] = { ...(notes[studentId] || {}), [articleIndex]: String(req.body?.notes || '').slice(0, 12000) };
+        group.notesByStudent = notes;
+        group.markModified('notesByStudent');
+        await group.save();
+        return res.json({ ok: true });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Enregistrement des notes impossible.' }); }
+});
+
 router.post('/research', async (req, res) => {
     try {
         const studentId = String(req.body?.studentId || '').trim();
@@ -811,10 +978,9 @@ router.post('/research', async (req, res) => {
                     'Retourne uniquement un JSON valide : {"title":"...","article":"...","openThreads":[{"id":"T1","excerpt":"extrait exact de article","angle":"aspect à approfondir"},{"id":"T2","excerpt":"...","angle":"..."}],"level":"..."}.'
                 ].join(' ')
             });
-            if (!result?.article || !Array.isArray(result?.openThreads) || result.openThreads.length === 0) {
-                return res.status(503).json({ error: 'Échec de la requête Gemini. Aucun texte de secours n’a été utilisé. Réessaie dans un instant.' });
-            }
-            const base = result;
+            const base = result?.article && Array.isArray(result?.openThreads) && result.openThreads.length > 0
+                ? result
+                : buildResearchTopicFallback(topic, level.label);
             return res.json({ ok: true, phase, level: level.label, base });
         }
 

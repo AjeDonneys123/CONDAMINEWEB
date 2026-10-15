@@ -192,6 +192,7 @@ const Models = {
         didakbotKey: { type: String, default: '' },
         didakbotBots: { type: [{ chatbotId: String, shareLink: String, url: String, name: String, createdAt: { type: Date, default: Date.now } }], default: [] },
         frenchHelpBotShareLink: { type: String, default: '' },
+        researchBotShareLink: { type: String, default: '' },
         type: { type: String, default: 'CLASS' },
         layout: { 
             separators: { type: [Number], default: [] },

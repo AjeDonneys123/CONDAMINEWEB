@@ -80,6 +80,60 @@ export default function EleveChatWorkspace({ user, onQuit }) {
   const [notice, setNotice] = useState('');
   const [visibleSourceText, setVisibleSourceText] = useState('');
   const [uncoveredThreadIds, setUncoveredThreadIds] = useState([]);
+  const [researchSetup, setResearchSetup] = useState(null);
+  const [group, setGroup] = useState(null);
+  const [selectedMembers, setSelectedMembers] = useState([studentId]);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [groupTopic, setGroupTopic] = useState('');
+  const [groupNotes, setGroupNotes] = useState({});
+  const [characterOpen, setCharacterOpen] = useState(false);
+  const notesSaveTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!studentId) return undefined;
+    let active = true;
+    fetch(`/api/eleve/chat/research-setup/${encodeURIComponent(studentId)}`, { cache: 'no-store' })
+      .then(async (response) => { const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || 'Chargement impossible.'); return data; })
+      .then((data) => { if (!active) return; setResearchSetup(data); if (data.activeGroup) setGroup(data.activeGroup); })
+      .catch((loadError) => { if (active) setError(loadError.message); });
+    return () => { active = false; };
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!group?._id) return undefined;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/eleve/chat/research-group/${encodeURIComponent(group._id)}?studentId=${encodeURIComponent(studentId)}`, { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && active) {
+          setGroup(data.group);
+          setGroupNotes(data.group?.notesByStudent?.[studentId] || {});
+        }
+      } catch (_) {}
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 7000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [group?._id, studentId]);
+
+  const createResearchGroup = async () => {
+    setPending(true); setError('');
+    try {
+      const response = await fetch('/api/eleve/chat/research-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, memberIds: selectedMembers, topic: groupTopic }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Création du groupe impossible.');
+      setGroup({ ...data.group, botUrl: data.botUrl });
+    } catch (createError) { setError(createError.message); }
+    finally { setPending(false); }
+  };
+
+  const updateGroupNotes = (value) => {
+    const next = { ...groupNotes, [activeSource]: value };
+    setGroupNotes(next);
+    window.clearTimeout(notesSaveTimerRef.current);
+    notesSaveTimerRef.current = window.setTimeout(() => fetch(`/api/eleve/chat/research-group/${encodeURIComponent(group._id)}/notes`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, articleIndex: activeSource, notes: value }) }), 500);
+  };
 
   useEffect(() => {
     try {
@@ -194,6 +248,22 @@ export default function EleveChatWorkspace({ user, onQuit }) {
     setPhase('topic'); setTopic(''); setBase(null); setQuestions(''); setFeedback('');
     setDocuments(null); setActiveSource(1); setAnswers(EMPTY_ANSWERS); setReview(null); setNotesHtml(''); setError(''); setUncoveredThreadIds([]);
   };
+
+  if (!group) {
+    const candidates = (researchSetup?.students || []).filter((student) => student.name.toLocaleLowerCase('fr').includes(memberSearch.toLocaleLowerCase('fr')));
+    return <div className="research-overlay"><header className="research-header"><div><div className="research-kicker">Travail collaboratif</div><h1>🔎 Atelier Recherche</h1></div><div className="research-header-actions"><button className="research-close" type="button" onClick={onQuit}>×</button></div></header><main className="research-group-setup"><section><h2>Membres du groupe</h2><p>Sélectionne les élèves réellement présents. Vos trois articles seront ensuite partagés automatiquement.</p><input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Rechercher un élève…" className="research-member-search" /><div className="research-member-list">{candidates.map((student) => <label key={student.id}><input type="checkbox" disabled={student.id === studentId} checked={selectedMembers.includes(student.id)} onChange={() => setSelectedMembers((current) => current.includes(student.id) ? current.filter((id) => id !== student.id) : [...current, student.id])} /><span>{student.name}</span></label>)}</div><label className="research-topic-label">Sujet du groupe<input value={groupTopic} onChange={(event) => setGroupTopic(event.target.value)} placeholder="Ex. Cléopâtre" /></label>{!researchSetup?.botReady && <div className="research-error">Le professeur doit choisir le bot Cyclopédia dans l’onglet Bots.</div>}{error && <div className="research-error">{error}</div>}<button type="button" onClick={createResearchGroup} disabled={pending || !researchSetup?.botReady || !groupTopic.trim()}>{pending ? 'Création…' : 'Commencer avec Cyclopédia'}</button></section></main></div>;
+  }
+
+  if (!Array.isArray(group.documents) || group.documents.length < 3) {
+    return <div className="research-overlay"><header className="research-header"><div><div className="research-kicker">Groupe · {(group.members || []).map((member) => member.name).join(', ')}</div><h1>🔎 Cyclopédia · {group.topic || 'Recherche'}</h1></div><div className="research-header-actions"><button className="research-close" type="button" onClick={onQuit}>×</button></div></header><main className="research-bot-stage"><div className="research-sync-info"><b>Travaillez avec Cyclopédia</b><span>Dès que le plan est validé et que le bot produit trois articles nommés « ARTICLE 1 », « ARTICLE 2 » et « ARTICLE 3 », CondaWeb les distribue automatiquement à tout le groupe.</span></div><iframe title="Cyclopédia" src={group.botUrl || `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}`} /></main></div>;
+  }
+
+  if (Array.isArray(group.documents) && group.documents.length >= 3) {
+    const article = group.documents[activeSource - 1] || group.documents[0];
+    const noteText = String(groupNotes[activeSource] || '');
+    const filledLines = noteText.split('\n').filter((line) => line.trim().length > 2).length;
+    return <div className="research-overlay"><header className="research-header"><div><div className="research-kicker">Articles partagés · {(group.members || []).map((member) => member.name).join(', ')}</div><h1>📚 {group.topic}</h1></div><div className="research-header-actions"><button className="research-close" type="button" onClick={onQuit}>×</button></div></header><main className="research-shared-stage"><nav>{group.documents.map((document, index) => <button type="button" key={document.index || index} className={activeSource === index + 1 ? 'active' : ''} onClick={() => setActiveSource(index + 1)}>Article {index + 1}</button>)}</nav><div className="research-shared-grid"><article><div className="research-generated-label">Document partagé avec tout le groupe · une erreur volontaire s’y cache</div><h2>{article.title}</h2>{paragraphs(article.content).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{article.sourceNote && <footer>{article.sourceNote}</footer>}</article><aside><h2>📝 Mes notes personnelles</h2><p>Écris au moins quatre lignes avec tes propres mots.</p><textarea value={noteText} onChange={(event) => updateGroupNotes(event.target.value)} onPaste={blockImportedText} placeholder="1. Information importante…\n2. Date ou personnage…\n3. Explication…\n4. Erreur repérée…" />{notice && <div className="research-notice">{notice}</div>}<small>{filledLines}/4 lignes minimum</small></aside></div>{filledLines >= 4 && <div className={`research-character-drawer ${characterOpen ? 'open' : ''}`}><button type="button" onClick={() => setCharacterOpen((value) => !value)}>🎭 Parler au personnage</button>{characterOpen && <div><h3>Personnage bientôt disponible</h3><p>Le professeur pourra associer ici un personnage historique qui répondra depuis son point de vue.</p></div>}</div>}</main></div>;
+  }
 
   return (
     <div className="research-overlay">
