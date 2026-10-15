@@ -161,16 +161,23 @@ const sendResearchDidakMessage = async (group, content) => {
         pseudo: group.sessionPseudo,
         is_mention: 'true'
     });
-    let data;
-    try {
-        data = await send();
-    } catch (firstError) {
-        group.didakSessionId = '';
-        group.participantId = '';
-        await group.save();
-        await ensureResearchDidakSession(group);
-        data = await send();
+    let data = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 3 && !data; attempt += 1) {
+        try {
+            if (attempt > 0) {
+                await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+                group.didakSessionId = '';
+                group.participantId = '';
+                await group.save();
+                await ensureResearchDidakSession(group);
+            }
+            data = await send();
+        } catch (error) {
+            lastError = error;
+        }
     }
+    if (!data) throw lastError || new Error('Didakbot n’a pas répondu.');
     const now = new Date();
     group.chatMessages.push({ id: String(data.user_message_id || new mongoose.Types.ObjectId()), role: 'user', content, createdAt: now });
     const botResponse = String(data.bot_response || '').trim();
