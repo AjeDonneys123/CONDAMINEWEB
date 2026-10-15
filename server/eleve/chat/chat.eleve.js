@@ -144,7 +144,11 @@ const ensureResearchDidakSession = async (group) => {
         role: String(message?.role || 'assistant'),
         content: String(message?.content || message?.text || ''),
         createdAt: message?.created_at || new Date()
-    })).filter((message) => message.content);
+    })).filter((message, index, messages) => message.content && !(
+        index > 0
+        && messages[index - 1]?.role === message.role
+        && messages[index - 1]?.content.trim() === message.content.trim()
+    ));
     if (prior.length) group.chatMessages = prior;
     await group.save();
     return group;
@@ -161,23 +165,17 @@ const sendResearchDidakMessage = async (group, content) => {
         pseudo: group.sessionPseudo,
         is_mention: 'true'
     });
-    let data = null;
-    let lastError = null;
-    for (let attempt = 0; attempt < 3 && !data; attempt += 1) {
-        try {
-            if (attempt > 0) {
-                await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
-                group.didakSessionId = '';
-                group.participantId = '';
-                await group.save();
-                await ensureResearchDidakSession(group);
-            }
-            data = await send();
-        } catch (error) {
-            lastError = error;
-        }
+    let data;
+    try {
+        data = await send();
+    } catch (error) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        group.didakSessionId = '';
+        group.participantId = '';
+        await group.save();
+        await ensureResearchDidakSession(group);
+        throw error;
     }
-    if (!data) throw lastError || new Error('Didakbot n’a pas répondu.');
     const now = new Date();
     group.chatMessages.push({ id: String(data.user_message_id || new mongoose.Types.ObjectId()), role: 'user', content, createdAt: now });
     const botResponse = String(data.bot_response || '').trim();
