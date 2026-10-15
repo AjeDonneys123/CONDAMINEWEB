@@ -14,6 +14,7 @@ const ResearchGroup = mongoose.models.ResearchGroup || mongoose.model('ResearchG
     memberIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     members: { type: [mongoose.Schema.Types.Mixed], default: [] },
     shareLink: { type: String, default: '' },
+    historicalCharacterShareLink: { type: String, default: '' },
     chatbotId: { type: String, default: '' },
     sessionPseudo: { type: String, default: '' },
     sessionCode: { type: String, default: '' },
@@ -881,6 +882,7 @@ router.get('/research-setup/:studentId', async (req, res) => {
             ok: true,
             students: students.map((item) => ({ id: String(item._id), name: `${String(item.firstName || item.nickname || '').trim()} ${String(item.lastName || '').trim()}`.trim() })),
             botReady: Boolean(classroom.researchBotShareLink),
+            characterBotReady: Boolean(classroom.historicalCharacterBotShareLink),
             activeGroup
         });
     } catch (error) { return res.status(500).json({ error: error.message || 'Préparation de l’atelier impossible.' }); }
@@ -908,12 +910,13 @@ router.post('/research-group', async (req, res) => {
             memberIds: members.map((item) => item._id),
             members: members.map((item) => ({ id: String(item._id), name: `${String(item.firstName || item.nickname || '').trim()} ${String(item.lastName || '').trim()}`.trim() })),
             shareLink: classroom.researchBotShareLink,
+            historicalCharacterShareLink: String(classroom.historicalCharacterBotShareLink || ''),
             chatbotId: String(bot?.chatbotId || ''),
             sessionPseudo: `CYCL-${String(new mongoose.Types.ObjectId()).slice(-8).toUpperCase()}`
         });
         group.sessionPseudo = `CYCL-${String(group._id).slice(-8).toUpperCase()}`;
         await group.save();
-        return res.json({ ok: true, group, botUrl: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}` });
+        return res.json({ ok: true, group, botUrl: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}`, characterBotUrl: group.historicalCharacterShareLink ? `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.historicalCharacterShareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}-PERSO` : '' });
     } catch (error) { return res.status(500).json({ error: error.message || 'Création du groupe impossible.' }); }
 });
 
@@ -926,6 +929,7 @@ router.get('/research-group/:groupId', async (req, res) => {
         try { group = await syncResearchDocuments(group); } catch (syncError) { console.warn('Cyclopédia sync:', syncError.message); }
         const plain = group.toObject();
         plain.botUrl = `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.shareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}`;
+        plain.characterBotUrl = group.historicalCharacterShareLink ? `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.historicalCharacterShareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}-PERSO` : '';
         return res.json({ ok: true, group: plain });
     } catch (error) { return res.status(500).json({ error: error.message || 'Synchronisation du groupe impossible.' }); }
 });

@@ -31,7 +31,8 @@ const ClassroomSchema = new mongoose.Schema({
     didakbotKey: { type: String, default: '' },
     didakbotBots: { type: [{ chatbotId: String, shareLink: String, url: String, name: String, createdAt: { type: Date, default: Date.now } }], default: [] },
     frenchHelpBotShareLink: { type: String, default: '' },
-    researchBotShareLink: { type: String, default: '' }
+    researchBotShareLink: { type: String, default: '' },
+    historicalCharacterBotShareLink: { type: String, default: '' }
 }, { collection: 'classrooms' });
 
 module.exports = mongoose.models.Classroom || mongoose.model('Classroom', ClassroomSchema);

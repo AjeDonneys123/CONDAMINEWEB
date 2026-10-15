@@ -353,7 +353,7 @@ router.get('/bots/:classId', async (req, res) => {
         const classroom = await Classroom.findById(req.params.classId).lean();
         if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
         const creatorKey = String(classroom.didakbotKey || '').trim();
-        if (!creatorKey) return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey: '', frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), researchBotShareLink: String(classroom.researchBotShareLink || ''), bots: [], warning: '' });
+        if (!creatorKey) return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey: '', frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), researchBotShareLink: String(classroom.researchBotShareLink || ''), historicalCharacterBotShareLink: String(classroom.historicalCharacterBotShareLink || ''), bots: [], warning: '' });
         const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -383,7 +383,7 @@ router.get('/bots/:classId', async (req, res) => {
             seen.add(identity);
             return true;
         });
-        return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey, frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), researchBotShareLink: String(classroom.researchBotShareLink || ''), bots, warning: '' });
+        return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey, frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), researchBotShareLink: String(classroom.researchBotShareLink || ''), historicalCharacterBotShareLink: String(classroom.historicalCharacterBotShareLink || ''), bots, warning: '' });
     } catch (error) { return res.status(500).json({ error: error.message || 'Chargement des bots impossible.' }); }
 });
 
@@ -443,6 +443,18 @@ router.put('/bots/:classId/research', async (req, res) => {
     } catch (error) { return res.status(500).json({ error: error.message || 'Enregistrement du bot Cyclopédia impossible.' }); }
 });
 
+router.put('/bots/:classId/historical-character', async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.classId);
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const shareLink = String(req.body?.shareLink || '').trim();
+        if (shareLink && !String(classroom.didakbotKey || '').trim()) return res.status(400).json({ error: 'Enregistrez la clé de cette classe avant de choisir le personnage.' });
+        classroom.historicalCharacterBotShareLink = shareLink;
+        await classroom.save();
+        return res.json({ ok: true, shareLink });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Enregistrement du personnage historique impossible.' }); }
+});
+
 router.delete('/bots/:classId/:shareLink', async (req, res) => {
     try {
         const classroom = await Classroom.findById(req.params.classId);
@@ -463,6 +475,7 @@ router.delete('/bots/:classId/:shareLink', async (req, res) => {
         classroom.didakbotBots = (classroom.didakbotBots || []).filter((bot) => String(bot.shareLink || '') !== shareLink);
         if (String(classroom.frenchHelpBotShareLink || '') === shareLink) classroom.frenchHelpBotShareLink = '';
         if (String(classroom.researchBotShareLink || '') === shareLink) classroom.researchBotShareLink = '';
+        if (String(classroom.historicalCharacterBotShareLink || '') === shareLink) classroom.historicalCharacterBotShareLink = '';
         await classroom.save();
         return res.json({ ok: true, shareLink });
     } catch (error) {
