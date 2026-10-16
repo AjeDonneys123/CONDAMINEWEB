@@ -22,7 +22,8 @@ const ResearchGroup = mongoose.models.ResearchGroup || mongoose.model('ResearchG
     participantId: { type: String, default: '' },
     chatMessages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     documents: { type: [mongoose.Schema.Types.Mixed], default: [] },
-    notesByStudent: { type: mongoose.Schema.Types.Mixed, default: {} }
+    notesByStudent: { type: mongoose.Schema.Types.Mixed, default: {} },
+    closedAt: { type: Date, default: null }
 }, { timestamps: true, collection: 'researchgroups' }));
 
 const parseCyclopediaDocuments = (messages = []) => {
@@ -985,7 +986,7 @@ router.get('/research-setup/:studentId', async (req, res) => {
         if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
         const query = student.classId ? { classId: student.classId } : { currentClass: student.currentClass };
         const students = await Student.find(query, 'firstName lastName nickname').sort({ lastName: 1, firstName: 1 }).lean();
-        const activeGroup = await ResearchGroup.findOne({ memberIds: student._id }).sort({ updatedAt: -1 }).lean();
+        const activeGroup = await ResearchGroup.findOne({ memberIds: student._id, closedAt: null }).sort({ updatedAt: -1 }).lean();
         return res.json({
             ok: true,
             students: students.map((item) => ({ id: String(item._id), name: `${String(item.firstName || item.nickname || '').trim()} ${String(item.lastName || '').trim()}`.trim() })),
@@ -1064,6 +1065,18 @@ router.put('/research-group/:groupId/notes', async (req, res) => {
         await group.save();
         return res.json({ ok: true });
     } catch (error) { return res.status(500).json({ error: error.message || 'Enregistrement des notes impossible.' }); }
+});
+
+router.post('/research-group/:groupId/close', async (req, res) => {
+    try {
+        const studentId = String(req.body?.studentId || '').trim();
+        if (!mongoose.Types.ObjectId.isValid(studentId)) return res.status(400).json({ error: 'Élève invalide.' });
+        const group = await ResearchGroup.findOne({ _id: req.params.groupId, memberIds: studentId, closedAt: null });
+        if (!group) return res.status(404).json({ error: 'Recherche active introuvable.' });
+        group.closedAt = new Date();
+        await group.save();
+        return res.json({ ok: true });
+    } catch (error) { return res.status(500).json({ error: error.message || 'Fermeture impossible.' }); }
 });
 
 router.post('/research-group/:groupId/chat', async (req, res) => {

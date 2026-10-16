@@ -233,6 +233,30 @@ export default function EleveChatWorkspace({ user, onQuit }) {
     );
   };
 
+  const closeResearchGroup = async () => {
+    if (!group?._id || !window.confirm("Terminer cette recherche pour tout le groupe ? Les articles et les notes resteront enregistrés.")) return;
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/eleve/chat/research-group/${encodeURIComponent(group._id)}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Fermeture impossible.");
+      setGroup(null);
+      setGroupTopic("");
+      setSelectedMembers([studentId]);
+      setGroupNotes({});
+      setActiveSource(1);
+    } catch (closeError) {
+      setError(closeError.message);
+    } finally {
+      setPending(false);
+    }
+  };
+
   const sendGroupMessage = async (messageOverride = "") => {
     const message = String(messageOverride || researchDraft).trim();
     if (!message || !group?._id || researchSending) return;
@@ -682,12 +706,6 @@ export default function EleveChatWorkspace({ user, onQuit }) {
                   value={researchDraft}
                   onChange={(event) => setResearchDraft(event.target.value)}
                   placeholder="I. …\nII. …\nIII. …\nNos questions : …"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void sendGroupMessage();
-                    }
-                  }}
                 />
                 <button
                   type="button"
@@ -721,6 +739,9 @@ export default function EleveChatWorkspace({ user, onQuit }) {
             <h1>📚 {group.topic}</h1>
           </div>
           <div className="research-header-actions">
+            <button className="research-restart" type="button" onClick={closeResearchGroup} disabled={pending}>
+              Terminer cette recherche
+            </button>
             <button className="research-close" type="button" onClick={onQuit}>
               ×
             </button>
