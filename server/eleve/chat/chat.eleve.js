@@ -1073,7 +1073,33 @@ router.post('/research-group/:groupId/chat', async (req, res) => {
         if (!content) return res.status(400).json({ error: 'Écris d’abord ton plan ou tes questions.' });
         let group = await ResearchGroup.findOne({ _id: req.params.groupId, memberIds: studentId });
         if (!group) return res.status(404).json({ error: 'Groupe introuvable.' });
-        group = await sendResearchDidakMessage(group, content);
+        const hasThreeAxes = /(?:^|\s)(?:I[.\s:-].+II[.\s:-].+III[.\s:-]|1[.\s):-].+2[.\s):-].+3[.\s):-])/isu.test(content);
+        try {
+            if (hasThreeAxes) throw new Error('PLAN_TROIS_AXES_VALIDE');
+            group = await sendResearchDidakMessage(group, content);
+        } catch (didakError) {
+            if (!hasThreeAxes) throw didakError;
+            const generated = await askResearchJson({
+                maxOutputTokens: 6500,
+                prompt: `Sujet : ${group.topic}\nPlan validé proposé par les élèves : ${content}`,
+                system: [
+                    "Le plan en trois axes d'un groupe d'élèves de 5e est validé. Produis immédiatement exactement trois articles pédagogiques, un par axe.",
+                    "Chaque article doit fournir assez d'informations pour un exposé oral de 1 à 2 minutes, dans un français clair.",
+                    "Chaque article contient exactement une grosse erreur volontaire, flagrante et facile à repérer par un collégien, sans révéler laquelle dans le texte.",
+                    "N'invente ni auteur réel, ni citation, ni URL. La source doit être : Document pédagogique rédigé par Cyclopédia — source précise à vérifier.",
+                    'Retourne uniquement ce JSON : {"articles":[{"title":"...","content":"...","sourceNote":"Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier"},{"title":"...","content":"...","sourceNote":"..."},{"title":"...","content":"...","sourceNote":"..."}]}'
+                ].join(' ')
+            });
+            if (!Array.isArray(generated?.articles) || generated.articles.length !== 3) throw didakError;
+            group.documents = generated.articles.map((article, index) => ({
+                index: index + 1,
+                title: String(article?.title || `Article ${index + 1}`),
+                content: String(article?.content || ''),
+                sourceNote: String(article?.sourceNote || 'Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier')
+            }));
+            group.chatMessages.push({ role: 'assistant', content: 'PLAN VALIDÉ — les trois articles sont prêts.', createdAt: new Date() });
+            await group.save();
+        }
         return res.json({ ok: true, group });
     } catch (error) {
         console.error('Cyclopédia chat:', error.message);
