@@ -53,6 +53,18 @@ const resolveResearchClass = async (student) => {
     return Classroom.findOne({ name: String(student?.currentClass || '').trim().toUpperCase() }).lean();
 };
 
+const clearResearchDidakSession = async (group, creatorKey = '') => {
+    const sessionId = String(group?.didakSessionId || '').trim();
+    if (!sessionId) return false;
+    const url = new URL('https://novapeda.eu/didakbot3.php');
+    url.searchParams.set('action', 'clear_session');
+    url.searchParams.set('session_id', sessionId);
+    if (creatorKey) url.searchParams.set('user_key', creatorKey);
+    const response = await fetch(url.toString(), { method: 'GET' });
+    if (!response.ok) throw new Error(`Didak’bot clear_session HTTP ${response.status}`);
+    return true;
+};
+
 const syncResearchDocuments = async (group) => {
     if (Array.isArray(group.documents) && group.documents.length > 0) return group;
     const classroom = await Classroom.findById(group.classId, 'didakbotKey researchBotShareLink didakbotBots').lean();
@@ -86,13 +98,30 @@ const syncResearchDocuments = async (group) => {
         let session = sessions.find((item) => String(item?.pseudo || item?.student_name || '').trim() === group.sessionPseudo);
         if (!session) {
             const codes = sessions.map((item) => String(item?.session_code || item?.sessionCode || '').trim()).filter(Boolean);
-            const alreadyReserved = await ResearchGroup.distinct('sessionCode', { _id: { $ne: group._id }, sessionCode: { $in: codes } });
+            const alreadyReserved = await ResearchGroup.distinct('sessionCode', { _id: { $ne: group._id }, closedAt: null, sessionCode: { $in: codes } });
             const reserved = new Set(alreadyReserved.map(String));
             session = sessions.find((item) => {
                 const code = String(item?.session_code || item?.sessionCode || '').trim();
                 const count = Number(item?.message_count || item?.messageCount || item?.total_messages || 0);
                 return code && count === 0 && !reserved.has(code);
             });
+            if (!session) {
+                const reusable = await ResearchGroup.findOne({
+                    classId: group.classId,
+                    closedAt: { $ne: null },
+                    sessionCode: { $in: codes },
+                    didakSessionId: { $ne: '' }
+                }).sort({ closedAt: 1 });
+                if (reusable) {
+                    await clearResearchDidakSession(reusable, creatorKey);
+                    const reusableCode = String(reusable.sessionCode || '');
+                    session = sessions.find((item) => String(item?.session_code || item?.sessionCode || '').trim() === reusableCode);
+                    reusable.sessionCode = '';
+                    reusable.didakSessionId = '';
+                    reusable.participantId = '';
+                    await reusable.save();
+                }
+            }
         }
         if (session) {
             group.sessionCode = String(session.session_code || session.sessionCode || '').trim();
@@ -1029,7 +1058,10 @@ router.post('/research-group', async (req, res) => {
         await group.save();
         let syncedGroup = group;
         try { syncedGroup = await syncResearchDocuments(group); } catch (syncError) { console.warn('Cyclopédia allocation:', syncError.message); }
-        if (!syncedGroup.sessionCode) return res.status(409).json({ error: 'Aucune session Cyclopédia libre. Augmente le nombre maximum de sessions du bot puis réessaie.' });
+        if (!syncedGroup.sessionCode) {
+            await ResearchGroup.deleteOne({ _id: group._id });
+            return res.status(409).json({ error: 'Aucune session Cyclopédia libre. Termine une ancienne recherche ou augmente le nombre maximum de sessions du bot.' });
+        }
         try {
             syncedGroup = await sendResearchDidakMessage(syncedGroup, `Notre sujet de recherche est : ${syncedGroup.topic}. Présente maintenant le mini-article d’introduction et demande-nous de proposer un plan en trois axes.`);
         } catch (startError) {
@@ -1075,7 +1107,13 @@ router.post('/research-group/:groupId/close', async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(studentId)) return res.status(400).json({ error: 'Élève invalide.' });
         const group = await ResearchGroup.findOne({ _id: req.params.groupId, memberIds: studentId, closedAt: null });
         if (!group) return res.status(404).json({ error: 'Recherche active introuvable.' });
+        const classroom = await Classroom.findById(group.classId, 'didakbotKey').lean();
+        try { await clearResearchDidakSession(group, String(classroom?.didakbotKey || '').trim()); }
+        catch (clearError) { console.warn('Cyclopédia libération session:', clearError.message); }
         group.closedAt = new Date();
+        group.sessionCode = '';
+        group.didakSessionId = '';
+        group.participantId = '';
         await group.save();
         return res.json({ ok: true });
     } catch (error) { return res.status(500).json({ error: error.message || 'Fermeture impossible.' }); }
