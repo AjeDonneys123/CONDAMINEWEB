@@ -270,7 +270,12 @@ export default function EleveChatWorkspace({ user, onQuit }) {
   }
 
   if (!Array.isArray(group.documents) || group.documents.length < 3) {
-    const chatMessages = Array.isArray(group.chatMessages) ? group.chatMessages : [];
+    const rawChatMessages = Array.isArray(group.chatMessages) ? group.chatMessages : [];
+    const chatMessages = rawChatMessages.filter((message, index) => !(
+      index > 0
+      && rawChatMessages[index - 1]?.role === message.role
+      && String(rawChatMessages[index - 1]?.content || '').trim() === String(message.content || '').trim()
+    ));
     const introIndex = chatMessages.findIndex((message) => message.role !== 'user' && String(message.content || '').trim());
     const introduction = introIndex >= 0 ? chatMessages[introIndex] : null;
     const discussion = chatMessages.filter((message, index) => index !== introIndex && !(message.role === 'user' && /^Notre sujet de recherche est\s*:/i.test(String(message.content || ''))));
