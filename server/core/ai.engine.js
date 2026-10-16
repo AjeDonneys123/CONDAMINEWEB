@@ -143,6 +143,52 @@ const AIEngine = {
         }
     },
 
+    askStream: async (prompt, systemInstruction = "", options = {}) => {
+        await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
+        const apiKey = resolveGeminiApiKey();
+        if (!apiKey) throw new Error('GEMINI_API_KEY manquante');
+        const model = resolveGeminiModel();
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), Number(options?.timeoutMs || 90000));
+        let answer = '';
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: Array.isArray(prompt) ? prompt : [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: {
+                        temperature: Number(options?.temperature ?? 0.25),
+                        maxOutputTokens: Number(options?.maxOutputTokens ?? 1800)
+                    }
+                })
+            });
+            if (!response.ok) throw new Error(`GEMINI_STREAM_HTTP_${response.status}`);
+            let buffer = '';
+            for await (const chunk of response.body) {
+                buffer += chunk.toString('utf8');
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+                for (const event of events) {
+                    const payload = event.split('\n').find((line) => line.startsWith('data: '))?.slice(6);
+                    if (!payload) continue;
+                    const data = JSON.parse(payload);
+                    const text = (data.candidates?.[0]?.content?.parts || []).map((part) => part.text || '').join('');
+                    if (!text) continue;
+                    answer += text;
+                    await options.onText?.(answer, text);
+                }
+            }
+            if (!answer.trim()) throw new Error('EMPTY_STREAM_RESPONSE');
+            return answer.trim();
+        } finally {
+            clearTimeout(timeout);
+        }
+    },
+
     ask: async (prompt, systemInstruction = "", options = {}) => {
         const provider = String(options?.provider || process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         if (provider === 'albert') {

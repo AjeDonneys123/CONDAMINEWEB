@@ -23,6 +23,8 @@ const ResearchGroup = mongoose.models.ResearchGroup || mongoose.model('ResearchG
     chatMessages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     documents: { type: [mongoose.Schema.Types.Mixed], default: [] },
     notesByStudent: { type: mongoose.Schema.Types.Mixed, default: {} },
+    validatedPlan: { type: String, default: '' },
+    generatingArticles: { type: Boolean, default: false },
     closedAt: { type: Date, default: null }
 }, { timestamps: true, collection: 'researchgroups' }));
 
@@ -1079,6 +1081,90 @@ router.post('/research-group/:groupId/close', async (req, res) => {
     } catch (error) { return res.status(500).json({ error: error.message || 'Fermeture impossible.' }); }
 });
 
+const generateCyclopediaArticle = async (group, plan, articleIndex) => {
+    const sourceNote = 'Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier';
+    await ResearchGroup.updateOne(
+        { _id: group._id, 'documents.index': { $ne: articleIndex } },
+        { $push: { documents: { index: articleIndex, title: `Article ${articleIndex}`, content: '', sourceNote, status: 'generating' } } }
+    );
+    const raw = await AIEngine.askStream(
+        `Sujet : ${group.topic}\nPlan validé : ${plan}\nRédige uniquement l'article correspondant à l'axe ${articleIndex}.`,
+        [
+            `Tu produis l'article ${articleIndex} correspondant exactement à l'axe ${articleIndex} du plan.`,
+            "Écris d'abord TITRE: suivi d'un titre précis, puis CONTENU: suivi de l'article.",
+            "L'article contient 230 à 300 mots, dans un français clair pour des élèves de 5e.",
+            "Il contient exactement une grosse erreur volontaire, flagrante et facile à repérer, sans la signaler.",
+            "N'ajoute ni source, ni commentaire après l'article."
+        ].join(' '),
+        {
+            maxOutputTokens: 1800,
+            route: '/api/eleve/chat/research/articles',
+            feature: 'student-research-workshop',
+            onText: async (currentText) => {
+                const visible = currentText.includes('CONTENU:') ? currentText.split('CONTENU:').slice(1).join('CONTENU:').trimStart() : '';
+                await ResearchGroup.updateOne(
+                    { _id: group._id, 'documents.index': articleIndex },
+                    { $set: { 'documents.$.content': visible } }
+                );
+            }
+        }
+    );
+    const title = String(raw.match(/TITRE:\s*([^\n]+)/i)?.[1] || `Article ${articleIndex}`).trim();
+    const content = String(raw.split(/CONTENU:/i).slice(1).join('CONTENU:') || raw).trim();
+    if (!content) throw new Error(`ARTICLE_${articleIndex}_GENERATION_ECHOUEE`);
+    return {
+        index: articleIndex,
+        title,
+        content,
+        sourceNote,
+        status: 'complete'
+    };
+};
+
+const completeMissingResearchArticles = async (group, plan) => {
+    const present = new Set((group.documents || []).filter((document) => document.status !== 'error' && String(document.content || '').trim()).map((document) => Number(document.index)));
+    const missing = [1, 2, 3].filter((index) => !present.has(index));
+    try {
+        const results = await Promise.allSettled(missing.map(async (articleIndex) => {
+            const article = await generateCyclopediaArticle(group, plan, articleIndex);
+            await ResearchGroup.updateOne({ _id: group._id, 'documents.index': articleIndex }, { $set: { 'documents.$': article } });
+        }));
+        if (results.some((result) => result.status === 'rejected')) {
+            throw new Error('CERTAINS_ARTICLES_ONT_ECHOUE');
+        }
+        const refreshed = await ResearchGroup.findById(group._id);
+        refreshed.documents = [...refreshed.documents].sort((a, b) => Number(a.index) - Number(b.index));
+        refreshed.generatingArticles = false;
+        refreshed.markModified('documents');
+        await refreshed.save();
+        return refreshed;
+    } catch (error) {
+        await ResearchGroup.updateOne(
+            { _id: group._id },
+            { $set: { generatingArticles: false }, $pull: { documents: { status: 'generating' } } }
+        );
+        throw error;
+    }
+};
+
+router.post('/research-group/:groupId/articles/retry', async (req, res) => {
+    const studentId = String(req.body?.studentId || '').trim();
+    let group = await ResearchGroup.findOneAndUpdate(
+        { _id: req.params.groupId, memberIds: studentId, closedAt: null, generatingArticles: { $ne: true } },
+        { $set: { generatingArticles: true } },
+        { new: true }
+    );
+    if (!group) return res.status(202).json({ ok: true, pending: true });
+    try {
+        const fallbackPlan = [...(group.chatMessages || [])].reverse().find((message) => message.role === 'user')?.content || '';
+        group = await completeMissingResearchArticles(group, group.validatedPlan || fallbackPlan);
+        return res.json({ ok: true, group });
+    } catch (error) {
+        await ResearchGroup.updateOne({ _id: req.params.groupId }, { $set: { generatingArticles: false } });
+        return res.status(502).json({ error: 'Un article manque encore. CondaWeb réessaiera automatiquement.' });
+    }
+});
+
 router.post('/research-group/:groupId/chat', async (req, res) => {
     try {
         const studentId = String(req.body?.studentId || '').trim();
@@ -1093,30 +1179,10 @@ router.post('/research-group/:groupId/chat', async (req, res) => {
         } catch (didakError) {
             if (!hasThreeAxes) throw didakError;
             group.documents = [];
+            group.validatedPlan = content;
+            group.generatingArticles = true;
             await group.save();
-            await Promise.all([1, 2, 3].map(async (articleIndex) => {
-                const generated = await askResearchJson({
-                    maxOutputTokens: 1800,
-                    prompt: `Sujet : ${group.topic}\nPlan validé : ${content}\nRédige uniquement l'article correspondant à l'axe ${articleIndex}.`,
-                    system: [
-                        `Le plan en trois axes d'un groupe d'élèves de 5e est validé. Tu produis uniquement l'article ${articleIndex} sur l'axe correspondant.`,
-                        "L'article contient 230 à 300 mots, assez d'informations pour préparer un exposé oral de 1 à 2 minutes, dans un français clair.",
-                        "Il contient exactement une grosse erreur volontaire, flagrante et facile à repérer par un collégien, sans révéler laquelle dans le texte.",
-                        "N'invente ni auteur réel, ni citation, ni URL.",
-                        'Retourne uniquement ce JSON : {"title":"...","content":"...","sourceNote":"Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier"}'
-                    ].join(' ')
-                });
-                if (!generated?.content) throw didakError;
-                await ResearchGroup.updateOne({ _id: group._id }, { $push: { documents: {
-                    index: articleIndex,
-                    title: String(generated.title || `Article ${articleIndex}`),
-                    content: String(generated.content),
-                    sourceNote: String(generated.sourceNote || 'Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier')
-                } } });
-            }));
-            group = await ResearchGroup.findById(group._id);
-            group.documents = [...group.documents].sort((a, b) => Number(a.index) - Number(b.index));
-            group.markModified('documents');
+            group = await completeMissingResearchArticles(group, content);
             group.chatMessages.push({ role: 'assistant', content: 'PLAN VALIDÉ — les trois articles sont prêts.', createdAt: new Date() });
             await group.save();
         }

@@ -133,6 +133,7 @@ export default function EleveChatWorkspace({ user, onQuit }) {
   const [researchSending, setResearchSending] = useState(false);
   const notesSaveTimerRef = useRef(null);
   const researchMessagesRef = useRef(null);
+  const articleRepairRef = useRef("");
 
   useEffect(() => {
     if (!studentId) return undefined;
@@ -176,12 +177,12 @@ export default function EleveChatWorkspace({ user, onQuit }) {
       } catch (_) {}
     };
     void refresh();
-    const timer = window.setInterval(refresh, 7000);
+    const timer = window.setInterval(refresh, group?.generatingArticles ? 700 : 7000);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [group?._id, studentId]);
+  }, [group?._id, group?.generatingArticles, studentId]);
 
   const createResearchGroup = async () => {
     setPending(true);
@@ -292,6 +293,31 @@ export default function EleveChatWorkspace({ user, onQuit }) {
       container.scrollTop = container.scrollHeight;
     });
   }, [group?.chatMessages?.length, researchSending]);
+
+  useEffect(() => {
+    const documents = Array.isArray(group?.documents) ? group.documents : [];
+    if (!group?._id || documents.length === 0 || documents.length >= 3 || group.generatingArticles) return;
+    const repairKey = `${group._id}:${documents.map((document) => document.index).sort().join(",")}`;
+    if (articleRepairRef.current === repairKey) return;
+    articleRepairRef.current = repairKey;
+    let active = true;
+    fetch(`/api/eleve/chat/research-group/${group._id}/articles/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Reprise impossible");
+        return payload;
+      })
+      .then((payload) => {
+        if (active && payload.group) setGroup(payload.group);
+        if (payload.pending) articleRepairRef.current = "";
+      })
+      .catch(() => { articleRepairRef.current = ""; });
+    return () => { active = false; };
+  }, [group, studentId]);
 
   useEffect(() => {
     try {
