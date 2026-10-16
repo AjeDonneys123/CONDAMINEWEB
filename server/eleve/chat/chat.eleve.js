@@ -52,7 +52,7 @@ const resolveResearchClass = async (student) => {
 };
 
 const syncResearchDocuments = async (group) => {
-    if (Array.isArray(group.documents) && group.documents.length >= 3) return group;
+    if (Array.isArray(group.documents) && group.documents.length > 0) return group;
     const classroom = await Classroom.findById(group.classId, 'didakbotKey researchBotShareLink didakbotBots').lean();
     const creatorKey = String(classroom?.didakbotKey || '').trim();
     const selectedBot = (classroom?.didakbotBots || []).find((bot) => String(bot.shareLink || '') === String(group.shareLink || ''));
@@ -1092,24 +1092,31 @@ router.post('/research-group/:groupId/chat', async (req, res) => {
             group = await sendResearchDidakMessage(group, content);
         } catch (didakError) {
             if (!hasThreeAxes) throw didakError;
-            const generated = await askResearchJson({
-                maxOutputTokens: 3000,
-                prompt: `Sujet : ${group.topic}\nPlan validé proposé par les élèves : ${content}`,
-                system: [
-                    "Le plan en trois axes d'un groupe d'élèves de 5e est validé. Produis immédiatement exactement trois articles pédagogiques, un par axe.",
-                    "Chaque article contient 120 à 160 mots, suffisamment pour préparer un bref exposé oral, dans un français clair et dense.",
-                    "Chaque article contient exactement une grosse erreur volontaire, flagrante et facile à repérer par un collégien, sans révéler laquelle dans le texte.",
-                    "N'invente ni auteur réel, ni citation, ni URL. La source doit être : Document pédagogique rédigé par Cyclopédia — source précise à vérifier.",
-                    'Retourne uniquement ce JSON : {"articles":[{"title":"...","content":"...","sourceNote":"Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier"},{"title":"...","content":"...","sourceNote":"..."},{"title":"...","content":"...","sourceNote":"..."}]}'
-                ].join(' ')
-            });
-            if (!Array.isArray(generated?.articles) || generated.articles.length !== 3) throw didakError;
-            group.documents = generated.articles.map((article, index) => ({
-                index: index + 1,
-                title: String(article?.title || `Article ${index + 1}`),
-                content: String(article?.content || ''),
-                sourceNote: String(article?.sourceNote || 'Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier')
+            group.documents = [];
+            await group.save();
+            await Promise.all([1, 2, 3].map(async (articleIndex) => {
+                const generated = await askResearchJson({
+                    maxOutputTokens: 1800,
+                    prompt: `Sujet : ${group.topic}\nPlan validé : ${content}\nRédige uniquement l'article correspondant à l'axe ${articleIndex}.`,
+                    system: [
+                        `Le plan en trois axes d'un groupe d'élèves de 5e est validé. Tu produis uniquement l'article ${articleIndex} sur l'axe correspondant.`,
+                        "L'article contient 230 à 300 mots, assez d'informations pour préparer un exposé oral de 1 à 2 minutes, dans un français clair.",
+                        "Il contient exactement une grosse erreur volontaire, flagrante et facile à repérer par un collégien, sans révéler laquelle dans le texte.",
+                        "N'invente ni auteur réel, ni citation, ni URL.",
+                        'Retourne uniquement ce JSON : {"title":"...","content":"...","sourceNote":"Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier"}'
+                    ].join(' ')
+                });
+                if (!generated?.content) throw didakError;
+                await ResearchGroup.updateOne({ _id: group._id }, { $push: { documents: {
+                    index: articleIndex,
+                    title: String(generated.title || `Article ${articleIndex}`),
+                    content: String(generated.content),
+                    sourceNote: String(generated.sourceNote || 'Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier')
+                } } });
             }));
+            group = await ResearchGroup.findById(group._id);
+            group.documents = [...group.documents].sort((a, b) => Number(a.index) - Number(b.index));
+            group.markModified('documents');
             group.chatMessages.push({ role: 'assistant', content: 'PLAN VALIDÉ — les trois articles sont prêts.', createdAt: new Date() });
             await group.save();
         }

@@ -587,7 +587,7 @@ export default function EleveChatWorkspace({ user, onQuit }) {
     );
   }
 
-  if (!Array.isArray(group.documents) || group.documents.length < 3) {
+  if (!Array.isArray(group.documents) || group.documents.length === 0) {
     const rawChatMessages = Array.isArray(group.chatMessages)
       ? group.chatMessages
       : [];
@@ -722,8 +722,9 @@ export default function EleveChatWorkspace({ user, onQuit }) {
     );
   }
 
-  if (Array.isArray(group.documents) && group.documents.length >= 3) {
-    const article = group.documents[activeSource - 1] || group.documents[0];
+  if (Array.isArray(group.documents) && group.documents.length > 0) {
+    const availableDocuments = [...group.documents].sort((a, b) => Number(a.index) - Number(b.index));
+    const article = availableDocuments.find((document) => Number(document.index) === activeSource) || availableDocuments[0];
     const noteText = String(groupNotes[activeSource] || "");
     const filledLines = noteText
       .split("\n")
@@ -733,7 +734,7 @@ export default function EleveChatWorkspace({ user, onQuit }) {
         <header className="research-header">
           <div>
             <div className="research-kicker">
-              Articles partagés ·{" "}
+              Articles disponibles {availableDocuments.length}/3 ·{" "}
               {(group.members || []).map((member) => member.name).join(", ")}
             </div>
             <h1>📚 {group.topic}</h1>
@@ -749,14 +750,14 @@ export default function EleveChatWorkspace({ user, onQuit }) {
         </header>
         <main className="research-shared-stage">
           <nav>
-            {group.documents.map((document, index) => (
+            {availableDocuments.map((document, index) => (
               <button
                 type="button"
                 key={document.index || index}
-                className={activeSource === index + 1 ? "active" : ""}
-                onClick={() => setActiveSource(index + 1)}
+                className={activeSource === Number(document.index) ? "active" : ""}
+                onClick={() => setActiveSource(Number(document.index))}
               >
-                Article {index + 1}
+                Article {document.index || index + 1}
               </button>
             ))}
           </nav>
