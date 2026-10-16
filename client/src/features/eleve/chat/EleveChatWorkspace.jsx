@@ -712,7 +712,7 @@ export default function EleveChatWorkspace({ user, onQuit }) {
                   disabled={!researchDraft.trim() || researchSending}
                   onClick={() => sendGroupMessage()}
                 >
-                  {researchSending ? "Évaluation…" : "Faire évaluer"}
+                  {researchSending ? "Analyse en cours…" : "Faire évaluer"}
                 </button>
               </div>
             </section>

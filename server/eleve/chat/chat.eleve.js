@@ -1093,11 +1093,11 @@ router.post('/research-group/:groupId/chat', async (req, res) => {
         } catch (didakError) {
             if (!hasThreeAxes) throw didakError;
             const generated = await askResearchJson({
-                maxOutputTokens: 6500,
+                maxOutputTokens: 3000,
                 prompt: `Sujet : ${group.topic}\nPlan validé proposé par les élèves : ${content}`,
                 system: [
                     "Le plan en trois axes d'un groupe d'élèves de 5e est validé. Produis immédiatement exactement trois articles pédagogiques, un par axe.",
-                    "Chaque article doit fournir assez d'informations pour un exposé oral de 1 à 2 minutes, dans un français clair.",
+                    "Chaque article contient 120 à 160 mots, suffisamment pour préparer un bref exposé oral, dans un français clair et dense.",
                     "Chaque article contient exactement une grosse erreur volontaire, flagrante et facile à repérer par un collégien, sans révéler laquelle dans le texte.",
                     "N'invente ni auteur réel, ni citation, ni URL. La source doit être : Document pédagogique rédigé par Cyclopédia — source précise à vérifier.",
                     'Retourne uniquement ce JSON : {"articles":[{"title":"...","content":"...","sourceNote":"Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier"},{"title":"...","content":"...","sourceNote":"..."},{"title":"...","content":"...","sourceNote":"..."}]}'
