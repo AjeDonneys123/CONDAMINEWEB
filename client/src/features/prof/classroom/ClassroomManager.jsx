@@ -1865,7 +1865,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                             </>
                         ) : (
                             <div className="student-vocabulary-list">
-                                {studentVocabularyBusy ? <p>Chargement…</p> : studentVocabulary.length ? studentVocabulary.map((word) => <div key={word._id || word.french}><strong>{word.french}</strong><span>{word.spanish}</span></div>) : <p>Aucun mot enregistré pour cet élève.</p>}
+                                {studentVocabularyBusy ? <p>Chargement…</p> : studentVocabulary.length ? studentVocabulary.map((word) => <div key={word._id || word.french} className={word.exerciseType === 'correction' ? 'is-correction' : ''}><strong><small>{word.exerciseType === 'correction' ? 'Mot faux' : 'Français'}</small>{word.exerciseType === 'correction' ? word.incorrectSentence : word.french}</strong><span><small>{word.exerciseType === 'correction' ? 'Mot juste' : 'Traduction'}</small>{word.exerciseType === 'correction' ? word.french : word.spanish}</span></div>) : <p>Aucun mot enregistré pour cet élève.</p>}
                             </div>
                         )}
                         {studentVocabularyError && <p className="student-vocabulary-error">{studentVocabularyError}</p>}
