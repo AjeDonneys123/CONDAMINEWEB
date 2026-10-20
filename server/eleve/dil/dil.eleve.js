@@ -27,11 +27,16 @@ router.get('/:studentId/french-help-bot', async (req, res) => {
     const student = await Student.findById(req.params.studentId, '_id currentClass classId').lean();
     if (!student) return res.status(404).json({ error: 'Élève introuvable.' });
     const classroom = student.classId
-        ? await Classroom.findById(student.classId, 'frenchHelpBotShareLink').lean()
+        ? await Classroom.findById(student.classId, 'frenchHelpBotShareLink didakbotBots').lean()
         : await Classroom.findOne({ name: new RegExp(`^\\s*${String(student.currentClass || '').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*$`, 'i') }, 'frenchHelpBotShareLink').lean();
     const shareLink = String(classroom?.frenchHelpBotShareLink || '').trim();
     if (!shareLink) return res.status(404).json({ error: 'Aucun chatbot d’aide au français n’est associé à ta classe.' });
-    return res.json({ url: `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(shareLink)}&iframe=1` });
+    const bot = (classroom?.didakbotBots || []).find((item) => String(item?.shareLink || '').trim() === shareLink);
+    const personalSession = bot?.chatbotId ? await mongoose.connection.db.collection('studentbotsessions').findOne({ studentId: student._id, chatbotId: String(bot.chatbotId) }) : null;
+    const url = personalSession?.sessionCode
+        ? `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(personalSession.sessionCode)}&pseudo=${encodeURIComponent(personalSession.pseudo || 'Élève')}`
+        : `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(shareLink)}&iframe=1`;
+    return res.json({ url });
 });
 
 router.post('/:studentId/vocabulary', async (req, res) => {

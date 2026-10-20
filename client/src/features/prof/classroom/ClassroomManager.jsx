@@ -50,6 +50,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [studentVocabularyBusy, setStudentVocabularyBusy] = useState(false);
     const [studentVocabularyError, setStudentVocabularyError] = useState('');
     const [studentVocabularyDraft, setStudentVocabularyDraft] = useState('');
+    const [studentVocabularyCorrect, setStudentVocabularyCorrect] = useState('');
+    const [studentVocabularyExplanation, setStudentVocabularyExplanation] = useState('');
 
     const handleOpenScanCapture = (targetStudent = null) => {
         setScanTargetStudent(targetStudent || selectedStudent || null);
@@ -80,29 +82,40 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const addStudentVocabulary = async () => {
-        const french = studentVocabularyDraft.trim();
+        const incorrectSentence = studentVocabularyDraft.trim();
+        const correctedSentence = studentVocabularyCorrect.trim();
         const studentId = String(selectedStudent?._id || selectedStudent?.id || '');
-        if (!french || !studentId || studentVocabularyBusy) return;
+        if (!incorrectSentence || !correctedSentence || !studentId || studentVocabularyBusy) return;
         setStudentVocabularyBusy(true);
         setStudentVocabularyError('');
         try {
-            const translationResponse = await fetch(`/api/eleve/dil/translate/fr-es?q=${encodeURIComponent(french)}`);
-            const translation = await translationResponse.json().catch(() => ({}));
-            if (!translationResponse.ok || !translation?.spanish) throw new Error(translation?.error || 'Traduction espagnole indisponible.');
-            const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/vocabulary`, {
+            const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/correction-pair`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ french, spanish: translation.spanish })
+                body: JSON.stringify({ incorrectSentence, correctedSentence, grammarRule: studentVocabularyExplanation.trim() })
             });
             const saved = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(saved?.error || 'Enregistrement impossible.');
-            setStudentVocabulary((previous) => [saved, ...previous.filter((word) => String(word.french || '').toLocaleLowerCase() !== french.toLocaleLowerCase())]);
+            setStudentVocabulary((previous) => [saved.pair, ...previous.filter((word) => String(word.incorrectSentence || '').toLocaleLowerCase() !== incorrectSentence.toLocaleLowerCase())]);
             setStudentVocabularyDraft('');
+            setStudentVocabularyCorrect('');
+            setStudentVocabularyExplanation('');
             setStudentVocabularyView('list');
         } catch (error) {
             setStudentVocabularyError(error.message || 'Enregistrement impossible.');
         } finally {
             setStudentVocabularyBusy(false);
         }
+    };
+
+    const openStudentFrenchBot = async () => {
+        const studentId = String(selectedStudent?._id || selectedStudent?.id || '');
+        if (!studentId) return;
+        try {
+            const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/french-help-bot`);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.url) throw new Error(data.error || 'Bot français indisponible.');
+            window.open(data.url, '_blank', 'noopener,noreferrer');
+        } catch (error) { setStudentVocabularyError(error.message); }
     };
 
     const [showNoteInput, setShowNoteInput] = useState(false);
@@ -1816,7 +1829,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 </button>
                             </div>
                             <div className="student-scan-drawer-row student-vocabulary-actions">
-                                <button className="act-btn btn-vocabulary-add" onClick={() => { setStudentVocabularyDraft(''); setStudentVocabularyError(''); setStudentVocabularyView('add'); }}>＋ MOT</button>
+                                <button className="act-btn btn-vocabulary-add" onClick={() => { setStudentVocabularyDraft(''); setStudentVocabularyCorrect(''); setStudentVocabularyExplanation(''); setStudentVocabularyError(''); setStudentVocabularyView('add'); }}>＋ MOT</button>
                                 <button className="act-btn btn-vocabulary-list" onClick={() => loadStudentVocabulary(selectedStudent)}>📚 MES MOTS</button>
                             </div>
                             <div className="student-scan-drawer-row">
@@ -1847,9 +1860,8 @@ export default function ClassroomManager({ globalClassId, user }) {
                         </header>
                         {studentVocabularyView === 'add' ? (
                             <>
-                                <p>Le mot sera traduit en espagnol et proposé à l’élève dans son entraînement de français.</p>
-                                <input autoFocus value={studentVocabularyDraft} onChange={(event) => setStudentVocabularyDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addStudentVocabulary(); }} placeholder="Mot ou expression en français" />
-                                <button type="button" className="student-vocabulary-save" onClick={addStudentVocabulary} disabled={studentVocabularyBusy || !studentVocabularyDraft.trim()}>{studentVocabularyBusy ? 'Traduction…' : 'Ajouter à son vocabulaire'}</button>
+                                <div className="student-vocabulary-compact-fields"><label>Mot faux<input autoFocus value={studentVocabularyDraft} onChange={(event) => setStudentVocabularyDraft(event.target.value)} placeholder="Expression avec l’erreur" /></label><label>Mot juste<input value={studentVocabularyCorrect} onChange={(event) => setStudentVocabularyCorrect(event.target.value)} placeholder="Version corrigée" /></label><label>Explication <small>(facultatif)</small><textarea value={studentVocabularyExplanation} onChange={(event) => setStudentVocabularyExplanation(event.target.value)} placeholder="Règle ou courte explication" /></label></div>
+                                <div className="student-vocabulary-compact-actions"><button type="button" className="student-vocabulary-bot" onClick={openStudentFrenchBot}>🤖 Bot français</button><button type="button" className="student-vocabulary-save" onClick={addStudentVocabulary} disabled={studentVocabularyBusy || !studentVocabularyDraft.trim() || !studentVocabularyCorrect.trim()}>{studentVocabularyBusy ? 'Ajout…' : 'Ajouter'}</button></div>
                             </>
                         ) : (
                             <div className="student-vocabulary-list">
