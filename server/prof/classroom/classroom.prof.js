@@ -383,6 +383,10 @@ router.get('/bots/:classId', async (req, res) => {
             seen.add(identity);
             return true;
         });
+        await Classroom.updateOne(
+            { _id: classroom._id },
+            { $set: { didakbotBots: bots.map((bot) => ({ chatbotId: bot.chatbotId, shareLink: bot.shareLink, url: bot.url, name: bot.activityTitle })) } }
+        );
         return res.json({ classId: String(classroom._id), className: classroom.name, creatorKey, frenchHelpBotShareLink: String(classroom.frenchHelpBotShareLink || ''), researchBotShareLink: String(classroom.researchBotShareLink || ''), historicalCharacterBotShareLink: String(classroom.historicalCharacterBotShareLink || ''), bots, warning: '' });
     } catch (error) { return res.status(500).json({ error: error.message || 'Chargement des bots impossible.' }); }
 });

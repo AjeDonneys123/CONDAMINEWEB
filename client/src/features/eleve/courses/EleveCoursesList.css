@@ -160,6 +160,21 @@
   display: flex;
   justify-content: center;
   overflow: hidden;
+  text-decoration: none;
+}
+
+.eleve-course-open-link {
+  background: #2563eb;
+  border-radius: 12px;
+  color: #fff;
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  margin: 12px auto;
+  padding: 11px 16px;
+  text-align: center;
+  text-decoration: none;
+  width: fit-content;
 }
 
 .eleve-course-slide-frame img {

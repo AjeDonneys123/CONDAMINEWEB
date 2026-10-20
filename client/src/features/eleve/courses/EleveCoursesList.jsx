@@ -9,6 +9,18 @@ const buildSlidesThumbnailUrl = (presentationId = '', objectId = '', slideNumber
   return `/api/learning/slides/thumbnail?${params.toString()}`;
 };
 
+const extractPresentationId = (raw = '') => {
+  const value = String(raw || '').trim();
+  return value.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/)?.[1] || (/^[a-zA-Z0-9_-]+$/.test(value) ? value : '');
+};
+
+const buildSlidesReadUrl = (raw = '', objectId = '') => {
+  const presentationId = extractPresentationId(raw);
+  if (!presentationId) return '';
+  const slide = objectId ? `&slide=id.${encodeURIComponent(String(objectId))}` : '';
+  return `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/preview?rm=minimal${slide}`;
+};
+
 export default function EleveCoursesList({ user }) {
   const [courses, setCourses] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -25,6 +37,10 @@ export default function EleveCoursesList({ user }) {
     [courses, selectedId]
   );
   const activeSlide = slides[activeSlideIdx] || null;
+  const readUrl = buildSlidesReadUrl(
+    selectedCourse?.presentationId || selectedCourse?.embedUrl,
+    activeSlide?.objectId
+  );
 
   useEffect(() => {
     const studentId = user?._id || user?.id || '';
@@ -152,14 +168,17 @@ export default function EleveCoursesList({ user }) {
             </div>
 
             {selectedCourse?.embedUrl && (
+              <>
               <div className="eleve-course-slide-frame" style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: '72vh' }}>
                 <iframe
                   title={`Cours ${selectedCourse.title || ''}`}
-                  src={selectedCourse.embedUrl}
+                  src={readUrl || selectedCourse.embedUrl}
                   allowFullScreen
                   style={{ width: '100%', height: '100%', border: 0 }}
                 />
               </div>
+              {readUrl && <a className="eleve-course-open-link" href={readUrl} target="_blank" rel="noreferrer">Ouvrir la présentation en lecture ↗</a>}
+              </>
             )}
             {slidesLoading && <div className="eleve-courses-empty">Chargement des slides...</div>}
             {!slidesLoading && slidesError && <div className="eleve-courses-error">{slidesError}</div>}
@@ -175,12 +194,12 @@ export default function EleveCoursesList({ user }) {
                   >
                     ‹
                   </button>
-                  <div className="eleve-course-slide-frame">
+                  <a className="eleve-course-slide-frame" href={readUrl} target="_blank" rel="noreferrer" title="Ouvrir cette slide dans un nouvel onglet">
                     <img
                       src={buildSlidesThumbnailUrl(resolvedPresentationId || selectedCourse.presentationId, activeSlide.objectId, activeSlide.slideNumber)}
                       alt={`Slide ${activeSlide.slideNumber || activeSlideIdx + 1}`}
                     />
-                  </div>
+                  </a>
                   <button
                     type="button"
                     className="eleve-course-arrow"
@@ -194,6 +213,7 @@ export default function EleveCoursesList({ user }) {
                 <div className="eleve-course-slide-meta">
                   Slide {activeSlide.slideNumber || activeSlideIdx + 1} · {activeSlideIdx + 1}/{slides.length}
                 </div>
+                {readUrl && <a className="eleve-course-open-link" href={readUrl} target="_blank" rel="noreferrer">Ouvrir cette slide en lecture et copier son URL ↗</a>}
                 <div className="eleve-course-rail">
                   {slides.map((slide, idx) => (
                     <button

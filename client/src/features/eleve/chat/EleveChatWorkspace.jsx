@@ -315,7 +315,13 @@ export default function EleveChatWorkspace({ user, onQuit }) {
         if (active && payload.group) setGroup(payload.group);
         if (payload.pending) articleRepairRef.current = "";
       })
-      .catch(() => { articleRepairRef.current = ""; });
+      .catch(() => {
+        window.setTimeout(() => {
+          if (!active) return;
+          articleRepairRef.current = "";
+          setGroup((current) => current ? { ...current } : current);
+        }, 5000);
+      });
     return () => { active = false; };
   }, [group, studentId]);
 
@@ -538,6 +544,9 @@ export default function EleveChatWorkspace({ user, onQuit }) {
             <h1>🔎 Atelier Recherche</h1>
           </div>
           <div className="research-header-actions">
+            <button className="research-restart" type="button" onClick={closeResearchGroup} disabled={pending}>
+              Fermer cette recherche
+            </button>
             <button className="research-close" type="button" onClick={onQuit}>
               ×
             </button>
@@ -652,6 +661,9 @@ export default function EleveChatWorkspace({ user, onQuit }) {
             <h1>🔎 Cyclopédia · {group.topic || "Recherche"}</h1>
           </div>
           <div className="research-header-actions">
+            <button className="research-restart" type="button" onClick={closeResearchGroup} disabled={pending}>
+              Fermer cette recherche
+            </button>
             <button className="research-close" type="button" onClick={onQuit}>
               ×
             </button>

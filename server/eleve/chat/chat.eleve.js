@@ -28,6 +28,18 @@ const ResearchGroup = mongoose.models.ResearchGroup || mongoose.model('ResearchG
     closedAt: { type: Date, default: null }
 }, { timestamps: true, collection: 'researchgroups' }));
 
+const studentBotSessionSchema = new mongoose.Schema({
+    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', index: true },
+    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', index: true },
+    chatbotId: { type: String, required: true, index: true },
+    shareLink: { type: String, default: '' },
+    sessionCode: { type: String, required: true },
+    pseudo: { type: String, default: '' }
+}, { timestamps: true, collection: 'studentbotsessions' });
+studentBotSessionSchema.index({ studentId: 1, chatbotId: 1 }, { unique: true });
+studentBotSessionSchema.index({ chatbotId: 1, sessionCode: 1 }, { unique: true });
+const StudentBotSession = mongoose.models.StudentBotSession || mongoose.model('StudentBotSession', studentBotSessionSchema);
+
 const parseCyclopediaDocuments = (messages = []) => {
     const assistantText = (Array.isArray(messages) ? messages : [])
         .filter((message) => String(message?.role || '').toLowerCase() !== 'user')
@@ -53,6 +65,140 @@ const resolveResearchClass = async (student) => {
     return Classroom.findOne({ name: String(student?.currentClass || '').trim().toUpperCase() }).lean();
 };
 
+const findClassBotByShareLink = (classroom, shareLink) => {
+    const expected = String(shareLink || '').trim();
+    return (classroom?.didakbotBots || []).find((bot) => String(bot?.shareLink || '').trim() === expected) || null;
+};
+
+const ensureStudentBotSessions = async (classroom, students = []) => {
+    const creatorKey = String(classroom?.didakbotKey || '').trim();
+    const bots = Array.isArray(classroom?.didakbotBots) ? classroom.didakbotBots.filter((bot) => String(bot?.chatbotId || '').trim()) : [];
+    if (!creatorKey || !bots.length || !students.length) return [];
+    const assigned = [];
+    for (const bot of bots) {
+        const chatbotId = String(bot.chatbotId).trim();
+        const response = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'get_conversations', chatbot_id: chatbotId, user_key: creatorKey })
+        });
+        const data = await response.json().catch(() => ({}));
+        let sessions = Array.isArray(data?.sessions) ? data.sessions : [];
+        const used = new Set((await StudentBotSession.find({ chatbotId }, 'sessionCode').lean()).map((row) => String(row.sessionCode)));
+        const existingStudentIds = new Set((await StudentBotSession.find({ chatbotId, studentId: { $in: students.map((student) => student._id || student.id) } }, 'studentId').lean()).map((row) => String(row.studentId)));
+        const requiredNew = students.filter((student) => !existingStudentIds.has(String(student?._id || student?.id || ''))).length;
+        const availableCount = sessions.filter((session) => {
+            const code = String(session?.session_code || session?.sessionCode || '').trim();
+            return code && !used.has(code);
+        }).length;
+        if (availableCount < requiredNew && bot.shareLink) {
+            const editUrl = `https://novapeda.eu/didakbot3.php?page=create&edit=${encodeURIComponent(String(bot.shareLink))}`;
+            const configResponse = await fetch(editUrl, {
+                method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                body: new URLSearchParams({ action: 'get_chatbot', share_link: String(bot.shareLink) })
+            });
+            const configData = await configResponse.json().catch(() => ({}));
+            let config = configData?.chatbot || configData?.bot || configData?.config || configData?.data || configData;
+            if (typeof config === 'string') { try { config = JSON.parse(config); } catch (_) { config = {}; } }
+            const requiredCapacity = Math.max(Number(config?.max_sessions || 0), sessions.length + requiredNew - availableCount + 5, students.length + 5);
+            const expandedConfig = { ...config, user_key: creatorKey.toUpperCase(), share_link: String(bot.shareLink), max_sessions: String(requiredCapacity) };
+            const saveResponse = await fetch(editUrl, {
+                method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                body: new URLSearchParams({ action: 'save_chatbot', data: JSON.stringify(expandedConfig) })
+            });
+            const saveData = await saveResponse.json().catch(() => ({}));
+            if (!saveResponse.ok || saveData?.success !== true) throw new Error(String(saveData?.error || saveData?.message || `Impossible d’augmenter les sessions du bot ${bot.name || chatbotId}.`));
+            for (let refreshAttempt = 0; refreshAttempt < 5; refreshAttempt += 1) {
+                if (refreshAttempt > 0) await new Promise((resolve) => setTimeout(resolve, 750));
+                const reloadResponse = await fetch('https://novapeda.eu/didakbot3.php?page=manage', {
+                    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_conversations', chatbot_id: chatbotId, user_key: creatorKey })
+                });
+                const reloadData = await reloadResponse.json().catch(() => ({}));
+                if (Array.isArray(reloadData?.sessions)) sessions = reloadData.sessions;
+                const refreshedAvailable = sessions.filter((session) => {
+                    const code = String(session?.session_code || session?.sessionCode || '').trim();
+                    return code && !used.has(code);
+                }).length;
+                if (refreshedAvailable >= requiredNew) break;
+            }
+        }
+        for (const student of students) {
+            const studentId = String(student?._id || student?.id || '');
+            let allocation = await StudentBotSession.findOne({ studentId, chatbotId });
+            if (!allocation) {
+                const pseudo = `${String(student?.firstName || student?.nickname || 'ELEVE').trim()}-${studentId.slice(-6)}`;
+                const candidates = sessions.filter((session) => {
+                    const code = String(session?.session_code || session?.sessionCode || '').trim();
+                    return code && !used.has(code);
+                });
+                for (const free of candidates) {
+                    const sessionCode = String(free.session_code || free.sessionCode).trim();
+                    try {
+                        allocation = await StudentBotSession.create({ classId: classroom._id, studentId, chatbotId, shareLink: String(bot.shareLink || ''), sessionCode, pseudo });
+                        used.add(sessionCode);
+                        break;
+                    } catch (allocationError) {
+                        if (allocationError?.code !== 11000) throw allocationError;
+                        used.add(sessionCode);
+                        allocation = await StudentBotSession.findOne({ studentId, chatbotId });
+                        if (allocation) break;
+                    }
+                }
+                if (!allocation) throw new Error(`Aucune session libre pour le bot ${bot.name || chatbotId}.`);
+            }
+            if (allocation) assigned.push(allocation);
+        }
+    }
+    return assigned;
+};
+
+const useStudentResearchSession = async (group, studentId) => {
+    const classroom = await Classroom.findById(group.classId).lean();
+    const researchBot = findClassBotByShareLink(classroom, classroom?.researchBotShareLink || group.shareLink);
+    const chatbotId = String(researchBot?.chatbotId || group.chatbotId || '');
+    if (chatbotId && String(group.chatbotId || '') !== chatbotId) {
+        group.chatbotId = chatbotId;
+        group.didakSessionId = '';
+        group.participantId = '';
+    }
+    let allocation = await StudentBotSession.findOne({ studentId, chatbotId });
+    if (!allocation && group.shareLink) {
+        allocation = await StudentBotSession.findOne({ studentId, shareLink: String(group.shareLink || '').trim() });
+    }
+    if (!allocation && classroom && researchBot) {
+        const student = await Student.findById(studentId, 'firstName lastName nickname').lean();
+        if (student) {
+            await ensureStudentBotSessions(classroom, [student]);
+            allocation = await StudentBotSession.findOne({ studentId, chatbotId });
+        }
+    }
+    if (!allocation && group.sessionCode) {
+        allocation = await StudentBotSession.findOneAndUpdate(
+            { studentId, chatbotId },
+            {
+                $setOnInsert: {
+                    classId: group.classId,
+                    studentId,
+                    chatbotId,
+                    shareLink: String(group.shareLink || ''),
+                    sessionCode: String(group.sessionCode),
+                    pseudo: String(group.sessionPseudo || `ELEVE-${String(studentId).slice(-6)}`)
+                }
+            },
+            { new: true, upsert: true }
+        );
+    }
+    if (!allocation) throw new Error('SESSION_PERSONNELLE_CYCLOPEDIA_ABSENTE');
+    if (String(group.sessionCode || '') !== String(allocation.sessionCode || '')) {
+        group.sessionCode = allocation.sessionCode;
+        group.sessionPseudo = allocation.pseudo;
+        group.didakSessionId = '';
+        group.participantId = '';
+        await group.save();
+    }
+    return group;
+};
+
 const clearResearchDidakSession = async (group, creatorKey = '') => {
     const sessionId = String(group?.didakSessionId || '').trim();
     if (!sessionId) return false;
@@ -69,7 +215,7 @@ const syncResearchDocuments = async (group) => {
     if (Array.isArray(group.documents) && group.documents.length > 0) return group;
     const classroom = await Classroom.findById(group.classId, 'didakbotKey researchBotShareLink didakbotBots').lean();
     const creatorKey = String(classroom?.didakbotKey || '').trim();
-    const selectedBot = (classroom?.didakbotBots || []).find((bot) => String(bot.shareLink || '') === String(group.shareLink || ''));
+    const selectedBot = findClassBotByShareLink(classroom, group.shareLink);
     let chatbotId = String(selectedBot?.chatbotId || group.chatbotId || '').trim();
     if (!creatorKey) return group;
     if (!chatbotId && group.shareLink) {
@@ -162,12 +308,51 @@ const postResearchDidakbot = async (group, fields) => {
     } finally { clearTimeout(timeout); }
 };
 
+const askStudentResearchBot = async (group, studentId, content) => {
+    const classroom = await Classroom.findById(group.classId).lean();
+    const researchBot = findClassBotByShareLink(classroom, classroom?.researchBotShareLink || group.shareLink);
+    if (!researchBot?.chatbotId) throw new Error('BOT_CYCLOPEDIA_INTROUVABLE');
+    let allocation = await StudentBotSession.findOne({ studentId, chatbotId: String(researchBot.chatbotId) });
+    if (!allocation) {
+        const student = await Student.findById(studentId, 'firstName lastName nickname').lean();
+        if (student) await ensureStudentBotSessions(classroom, [student]);
+        allocation = await StudentBotSession.findOne({ studentId, chatbotId: String(researchBot.chatbotId) });
+    }
+    if (!allocation) throw new Error('SESSION_PERSONNELLE_CYCLOPEDIA_ABSENTE');
+    const context = {
+        sessionCode: allocation.sessionCode,
+        sessionPseudo: allocation.pseudo,
+        chatbotId: String(researchBot.chatbotId)
+    };
+    const joined = await postResearchDidakbot(context, { action: 'join_session', session_code: context.sessionCode, pseudo: context.sessionPseudo });
+    const sessionId = String(joined?.session?.session_id || joined?.session?.id || '');
+    const participantId = String(joined?.participant_id || joined?.participant?.id || '');
+    if (!sessionId || !participantId) throw new Error('SESSION_CYCLOPEDIA_INCOMPLETE');
+    const sent = await postResearchDidakbot(context, {
+        action: 'send_message', session_id: sessionId, participant_id: participantId,
+        chatbot_id: context.chatbotId, content, pseudo: context.sessionPseudo, is_mention: 'true'
+    });
+    return String(sent?.bot_response || '').trim();
+};
+
+const parseSingleCyclopediaArticle = (raw, articleIndex) => {
+    const text = String(raw || '').replace(/\*\*/g, '').trim();
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+    const title = String(text.match(/TITRE\s*:\s*([^\n]+)/i)?.[1] || text.match(/ARTICLE\s*\d*\s*[:.–-]?\s*([^\n]+)/i)?.[1] || lines.find((line) => !/^CONTENU\s*:/i.test(line)) || `Article ${articleIndex}`).replace(/^#+\s*/, '').trim();
+    const contentMatch = text.match(/CONTENU\s*:\s*([\s\S]+)/i);
+    const content = String(contentMatch?.[1] || lines.filter((line) => line !== title && !/^TITRE\s*:/i.test(line)).join('\n\n')).trim();
+    if (!content) throw new Error(`ARTICLE_${articleIndex}_VIDE`);
+    const sources = [['Éléonore Vassal', 'Les Royaumes du Nil', '2014'], ['Nassim Delcourt', 'Pouvoirs et légendes de l’Antiquité', '2008'], ['Clara Montfaucon', 'Destins du monde ancien', '2021']];
+    const [author, book, date] = sources[(articleIndex - 1) % sources.length];
+    return { index: articleIndex, title, content, sourceNote: `Auteur : ${author} · Livre : ${book} · Date : ${date} · Référence fictive pour s’entraîner à citer une source`, status: 'complete' };
+};
+
 const ensureResearchDidakSession = async (group) => {
     if (group.didakSessionId && group.participantId && group.chatbotId) return group;
     const joined = await postResearchDidakbot(group, { action: 'join_session', session_code: group.sessionCode, pseudo: group.sessionPseudo });
     group.didakSessionId = String(joined?.session?.session_id || joined?.session?.id || '');
     group.participantId = String(joined?.participant_id || joined?.participant?.id || '');
-    group.chatbotId = String(joined?.session?.chatbot_id || joined?.session?.id || group.chatbotId || '');
+    group.chatbotId = String(joined?.session?.chatbot_id || group.chatbotId || '');
     if (!group.didakSessionId || !group.participantId || !group.chatbotId) {
         throw new Error('Didakbot n’a pas renvoyé les identifiants attendus.');
     }
@@ -1017,6 +1202,8 @@ router.get('/research-setup/:studentId', async (req, res) => {
         if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
         const query = student.classId ? { classId: student.classId } : { currentClass: student.currentClass };
         const students = await Student.find(query, 'firstName lastName nickname').sort({ lastName: 1, firstName: 1 }).lean();
+        try { await ensureStudentBotSessions(classroom, students); }
+        catch (allocationError) { console.warn('Attribution sessions élève:', allocationError.message); }
         const activeGroup = await ResearchGroup.findOne({ memberIds: student._id, closedAt: null }).sort({ updatedAt: -1 }).lean();
         return res.json({
             ok: true,
@@ -1026,6 +1213,22 @@ router.get('/research-setup/:studentId', async (req, res) => {
             activeGroup
         });
     } catch (error) { return res.status(500).json({ error: error.message || 'Préparation de l’atelier impossible.' }); }
+});
+
+router.post('/provision-class-bot-sessions/:classId', async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.classId)) return res.status(400).json({ error: 'Classe invalide.' });
+        const classroom = await Classroom.findById(req.params.classId).lean();
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const students = await Student.find(
+            { $or: [{ classId: classroom._id }, { currentClass: String(classroom.name || '') }] },
+            'firstName lastName nickname'
+        ).lean();
+        const allocations = await ensureStudentBotSessions(classroom, students);
+        return res.json({ ok: true, studentCount: students.length, sessionCount: allocations.length });
+    } catch (error) {
+        return res.status(502).json({ error: error.message || 'Attribution des sessions impossible.' });
+    }
 });
 
 router.post('/research-group', async (req, res) => {
@@ -1039,9 +1242,18 @@ router.post('/research-group', async (req, res) => {
         const classroom = await resolveResearchClass(owner);
         if (!classroom?.researchBotShareLink) return res.status(400).json({ error: 'Le professeur doit d’abord choisir le bot Cyclopédia dans l’onglet Bots.' });
         const query = owner.classId ? { _id: { $in: requestedIds }, classId: owner.classId } : { _id: { $in: requestedIds }, currentClass: owner.currentClass };
-        const members = await Student.find(query, 'firstName lastName nickname').lean();
+        const memberRows = await Student.find(query, 'firstName lastName nickname').lean();
+        const memberById = new Map(memberRows.map((member) => [String(member._id), member]));
+        const members = requestedIds.map((id) => memberById.get(String(id))).filter(Boolean);
         if (!members.some((item) => String(item._id) === studentId)) return res.status(403).json({ error: 'Groupe invalide.' });
-        const bot = (classroom.didakbotBots || []).find((item) => String(item.shareLink || '') === String(classroom.researchBotShareLink || ''));
+        const bot = findClassBotByShareLink(classroom, classroom.researchBotShareLink);
+        if (!bot?.chatbotId) return res.status(409).json({ error: 'Le bot Cyclopédia sélectionné doit être resynchronisé dans l’onglet Bots.' });
+        const allocations = await ensureStudentBotSessions(classroom, members);
+        const ownerResearchSession = allocations.find((item) => String(item.studentId) === studentId && String(item.chatbotId) === String(bot.chatbotId))
+            || await StudentBotSession.findOne({ studentId, chatbotId: String(bot.chatbotId) });
+        const historicalBot = findClassBotByShareLink(classroom, classroom.historicalCharacterBotShareLink);
+        const ownerHistoricalSession = allocations.find((item) => String(item.studentId) === studentId && String(item.chatbotId) === String(historicalBot?.chatbotId || ''));
+        if (!ownerResearchSession) return res.status(409).json({ error: 'Aucune session Cyclopédia personnelle libre pour cet élève.' });
         const group = await ResearchGroup.create({
             classId: classroom._id,
             className: classroom.name,
@@ -1052,10 +1264,9 @@ router.post('/research-group', async (req, res) => {
             shareLink: classroom.researchBotShareLink,
             historicalCharacterShareLink: String(classroom.historicalCharacterBotShareLink || ''),
             chatbotId: String(bot?.chatbotId || ''),
-            sessionPseudo: `CYCL-${String(new mongoose.Types.ObjectId()).slice(-8).toUpperCase()}`
+            sessionPseudo: ownerResearchSession.pseudo,
+            sessionCode: ownerResearchSession.sessionCode
         });
-        group.sessionPseudo = `CYCL-${String(group._id).slice(-8).toUpperCase()}`;
-        await group.save();
         let syncedGroup = group;
         try { syncedGroup = await syncResearchDocuments(group); } catch (syncError) { console.warn('Cyclopédia allocation:', syncError.message); }
         if (!syncedGroup.sessionCode) {
@@ -1063,12 +1274,17 @@ router.post('/research-group', async (req, res) => {
             return res.status(409).json({ error: 'Aucune session Cyclopédia libre. Termine une ancienne recherche ou augmente le nombre maximum de sessions du bot.' });
         }
         try {
-            syncedGroup = await sendResearchDidakMessage(syncedGroup, `Notre sujet de recherche est : ${syncedGroup.topic}. Présente maintenant le mini-article d’introduction et demande-nous de proposer un plan en trois axes.`);
+            const firstStudentId = String(syncedGroup.memberIds?.[0] || syncedGroup.ownerId);
+            const introPrompt = `Notre sujet de recherche est : ${syncedGroup.topic}. Présente maintenant le mini-article d’introduction et demande-nous de proposer un plan en trois axes.`;
+            const introResponse = await askStudentResearchBot(syncedGroup, firstStudentId, introPrompt);
+            syncedGroup.chatMessages.push({ role: 'user', content: introPrompt, createdAt: new Date() });
+            if (introResponse) syncedGroup.chatMessages.push({ role: 'assistant', content: introResponse, createdAt: new Date() });
+            await syncedGroup.save();
         } catch (startError) {
             console.warn('Cyclopédia démarrage:', startError.message);
             return res.status(502).json({ error: 'Cyclopédia ne répond pas pour le moment. Le groupe a été créé : rouvre l’atelier pour réessayer.' });
         }
-        return res.json({ ok: true, group: syncedGroup, botUrl: `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(syncedGroup.sessionCode)}&pseudo=${encodeURIComponent(syncedGroup.sessionPseudo)}`, characterBotUrl: syncedGroup.historicalCharacterShareLink ? `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(syncedGroup.historicalCharacterShareLink)}&pseudo=${encodeURIComponent(syncedGroup.sessionPseudo)}-PERSO` : '' });
+        return res.json({ ok: true, group: syncedGroup, botUrl: `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(syncedGroup.sessionCode)}&pseudo=${encodeURIComponent(syncedGroup.sessionPseudo)}`, characterBotUrl: ownerHistoricalSession ? `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(ownerHistoricalSession.sessionCode)}&pseudo=${encodeURIComponent(ownerHistoricalSession.pseudo)}` : '' });
     } catch (error) { return res.status(500).json({ error: error.message || 'Création du groupe impossible.' }); }
 });
 
@@ -1078,10 +1294,14 @@ router.get('/research-group/:groupId', async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(req.params.groupId) || !mongoose.Types.ObjectId.isValid(studentId)) return res.status(400).json({ error: 'Groupe invalide.' });
         let group = await ResearchGroup.findOne({ _id: req.params.groupId, memberIds: studentId });
         if (!group) return res.status(404).json({ error: 'Groupe introuvable.' });
+        group = await useStudentResearchSession(group, studentId);
         try { group = await syncResearchDocuments(group); } catch (syncError) { console.warn('Cyclopédia sync:', syncError.message); }
         const plain = group.toObject();
         plain.botUrl = group.sessionCode ? `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(group.sessionCode)}&pseudo=${encodeURIComponent(group.sessionPseudo)}` : '';
-        plain.characterBotUrl = group.historicalCharacterShareLink ? `https://novapeda.eu/didakbot3.php?bot=${encodeURIComponent(group.historicalCharacterShareLink)}&pseudo=${encodeURIComponent(group.sessionPseudo)}-PERSO` : '';
+        const classroom = await Classroom.findById(group.classId, 'historicalCharacterBotShareLink didakbotBots').lean();
+        const historicalBot = findClassBotByShareLink(classroom, classroom?.historicalCharacterBotShareLink);
+        const historicalSession = historicalBot ? await StudentBotSession.findOne({ studentId, chatbotId: String(historicalBot.chatbotId || '') }) : null;
+        plain.characterBotUrl = historicalSession ? `https://novapeda.eu/didakbot3.php?session=${encodeURIComponent(historicalSession.sessionCode)}&pseudo=${encodeURIComponent(historicalSession.pseudo)}` : '';
         return res.json({ ok: true, group: plain });
     } catch (error) { return res.status(500).json({ error: error.message || 'Synchronisation du groupe impossible.' }); }
 });
@@ -1119,56 +1339,26 @@ router.post('/research-group/:groupId/close', async (req, res) => {
     } catch (error) { return res.status(500).json({ error: error.message || 'Fermeture impossible.' }); }
 });
 
-const generateCyclopediaArticle = async (group, plan, articleIndex) => {
-    const sourceNote = 'Auteur : Cyclopédia · Date : aujourd’hui · Source : Document pédagogique rédigé par Cyclopédia — source précise à vérifier';
-    await ResearchGroup.updateOne(
-        { _id: group._id, 'documents.index': { $ne: articleIndex } },
-        { $push: { documents: { index: articleIndex, title: `Article ${articleIndex}`, content: '', sourceNote, status: 'generating' } } }
-    );
-    const raw = await AIEngine.askStream(
-        `Sujet : ${group.topic}\nPlan validé : ${plan}\nRédige uniquement l'article correspondant à l'axe ${articleIndex}.`,
-        [
-            `Tu produis l'article ${articleIndex} correspondant exactement à l'axe ${articleIndex} du plan.`,
-            "Écris d'abord TITRE: suivi d'un titre précis, puis CONTENU: suivi de l'article.",
-            "L'article contient 230 à 300 mots, dans un français clair pour des élèves de 5e.",
-            "Il contient exactement une grosse erreur volontaire, flagrante et facile à repérer, sans la signaler.",
-            "N'ajoute ni source, ni commentaire après l'article."
-        ].join(' '),
-        {
-            maxOutputTokens: 1800,
-            route: '/api/eleve/chat/research/articles',
-            feature: 'student-research-workshop',
-            onText: async (currentText) => {
-                const visible = currentText.includes('CONTENU:') ? currentText.split('CONTENU:').slice(1).join('CONTENU:').trimStart() : '';
-                await ResearchGroup.updateOne(
-                    { _id: group._id, 'documents.index': articleIndex },
-                    { $set: { 'documents.$.content': visible } }
-                );
-            }
-        }
-    );
-    const title = String(raw.match(/TITRE:\s*([^\n]+)/i)?.[1] || `Article ${articleIndex}`).trim();
-    const content = String(raw.split(/CONTENU:/i).slice(1).join('CONTENU:') || raw).trim();
-    if (!content) throw new Error(`ARTICLE_${articleIndex}_GENERATION_ECHOUEE`);
-    return {
-        index: articleIndex,
-        title,
-        content,
-        sourceNote,
-        status: 'complete'
-    };
-};
-
 const completeMissingResearchArticles = async (group, plan) => {
     const present = new Set((group.documents || []).filter((document) => document.status !== 'error' && String(document.content || '').trim()).map((document) => Number(document.index)));
     const missing = [1, 2, 3].filter((index) => !present.has(index));
     try {
-        const results = await Promise.allSettled(missing.map(async (articleIndex) => {
-            const article = await generateCyclopediaArticle(group, plan, articleIndex);
-            await ResearchGroup.updateOne({ _id: group._id, 'documents.index': articleIndex }, { $set: { 'documents.$': article } });
+        const memberIds = (group.memberIds || []).map(String);
+        const generated = await Promise.all(missing.map(async (articleIndex) => {
+            const studentId = memberIds[(articleIndex - 1) % Math.max(1, memberIds.length)] || String(group.ownerId);
+            const raw = await askStudentResearchBot(
+                group,
+                studentId,
+                `Sujet : ${group.topic}\nPlan validé : ${plan}\nRédige uniquement l’article ${articleIndex}, correspondant à l’axe ${articleIndex}. Commence par TITRE: puis CONTENU:. Fais 230 à 300 mots et ajoute exactement une erreur volontaire sans la signaler.`
+            );
+            return parseSingleCyclopediaArticle(raw, articleIndex);
         }));
-        if (results.some((result) => result.status === 'rejected')) {
-            throw new Error('CERTAINS_ARTICLES_ONT_ECHOUE');
+        for (const article of generated) {
+            await ResearchGroup.updateOne(
+                { _id: group._id },
+                { $pull: { documents: { index: article.index } } }
+            );
+            await ResearchGroup.updateOne({ _id: group._id }, { $push: { documents: article } });
         }
         const refreshed = await ResearchGroup.findById(group._id);
         refreshed.documents = [...refreshed.documents].sort((a, b) => Number(a.index) - Number(b.index));
@@ -1194,8 +1384,12 @@ router.post('/research-group/:groupId/articles/retry', async (req, res) => {
     );
     if (!group) return res.status(202).json({ ok: true, pending: true });
     try {
+        group = await useStudentResearchSession(group, studentId);
         const fallbackPlan = [...(group.chatMessages || [])].reverse().find((message) => message.role === 'user')?.content || '';
         group = await completeMissingResearchArticles(group, group.validatedPlan || fallbackPlan);
+        if ((group.documents || []).filter((document) => String(document.content || '').trim()).length < 3) {
+            return res.status(502).json({ error: 'Un article manque encore. CondaWeb réessaiera automatiquement.' });
+        }
         return res.json({ ok: true, group });
     } catch (error) {
         await ResearchGroup.updateOne({ _id: req.params.groupId }, { $set: { generatingArticles: false } });
@@ -1212,17 +1406,29 @@ router.post('/research-group/:groupId/chat', async (req, res) => {
         if (!group) return res.status(404).json({ error: 'Groupe introuvable.' });
         const hasThreeAxes = /(?:^|\s)(?:I[.\s:-].+II[.\s:-].+III[.\s:-]|1[.\s):-].+2[.\s):-].+3[.\s):-])/isu.test(content);
         try {
-            if (hasThreeAxes) throw new Error('PLAN_TROIS_AXES_VALIDE');
-            group = await sendResearchDidakMessage(group, content);
+            if (!hasThreeAxes) {
+                const secondStudentId = String(group.memberIds?.[1] || group.memberIds?.[0] || group.ownerId);
+                const botResponse = await askStudentResearchBot(group, secondStudentId, content);
+                group.chatMessages.push({ role: 'user', content, createdAt: new Date() });
+                if (botResponse) group.chatMessages.push({ role: 'assistant', content: botResponse, createdAt: new Date() });
+                await group.save();
+            }
+            else {
+                group.documents = [];
+                group.validatedPlan = content;
+                group.generatingArticles = true;
+                const secondStudentId = String(group.memberIds?.[1] || group.memberIds?.[0] || group.ownerId);
+                const planResponse = await askStudentResearchBot(group, secondStudentId, content);
+                group.chatMessages.push({ role: 'user', content, createdAt: new Date() });
+                if (planResponse) group.chatMessages.push({ role: 'assistant', content: planResponse, createdAt: new Date() });
+                await group.save();
+                group = await completeMissingResearchArticles(group, content);
+                const completeCount = (group.documents || []).filter((document) => String(document.content || '').trim()).length;
+                group.chatMessages.push({ role: 'assistant', content: completeCount === 3 ? 'PLAN VALIDÉ — les trois articles sont prêts.' : `PLAN VALIDÉ — ${completeCount}/3 article(s) prêt(s), génération des autres en cours.`, createdAt: new Date() });
+                await group.save();
+            }
         } catch (didakError) {
-            if (!hasThreeAxes) throw didakError;
-            group.documents = [];
-            group.validatedPlan = content;
-            group.generatingArticles = true;
-            await group.save();
-            group = await completeMissingResearchArticles(group, content);
-            group.chatMessages.push({ role: 'assistant', content: 'PLAN VALIDÉ — les trois articles sont prêts.', createdAt: new Date() });
-            await group.save();
+            throw didakError;
         }
         return res.json({ ok: true, group });
     } catch (error) {
