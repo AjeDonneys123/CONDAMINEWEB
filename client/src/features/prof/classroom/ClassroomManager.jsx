@@ -85,16 +85,25 @@ export default function ClassroomManager({ globalClassId, user }) {
         const incorrectSentence = studentVocabularyDraft.trim();
         const correctedSentence = studentVocabularyCorrect.trim();
         const studentId = String(selectedStudent?._id || selectedStudent?.id || '');
-        if (!incorrectSentence || !correctedSentence || !studentId || studentVocabularyBusy) return;
+        const isLevelAddition = studentVocabularyView === 'level-add';
+        if (!incorrectSentence || !correctedSentence || (!isLevelAddition && !studentId) || studentVocabularyBusy) return;
         setStudentVocabularyBusy(true);
         setStudentVocabularyError('');
         try {
-            const response = await fetch(`/api/eleve/dil/${encodeURIComponent(studentId)}/correction-pair`, {
+            const response = await fetch(isLevelAddition ? '/api/eleve/dil/level/correction-pair' : `/api/eleve/dil/${encodeURIComponent(studentId)}/correction-pair`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ incorrectSentence, correctedSentence, grammarRule: studentVocabularyExplanation.trim() })
+                body: JSON.stringify({ classId: globalClassId, incorrectSentence, correctedSentence, grammarRule: studentVocabularyExplanation.trim() })
             });
             const saved = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(saved?.error || 'Enregistrement impossible.');
+            if (isLevelAddition) {
+                setStudentVocabularyDraft('');
+                setStudentVocabularyCorrect('');
+                setStudentVocabularyExplanation('');
+                setStudentVocabularyView('');
+                alert(`Expression ajoutée à ${saved.studentCount || 0} élève${saved.studentCount > 1 ? 's' : ''} du niveau ${saved.level || ''}.`);
+                return;
+            }
             setStudentVocabulary((previous) => [saved.pair, ...previous.filter((word) => String(word.incorrectSentence || '').toLocaleLowerCase() !== incorrectSentence.toLocaleLowerCase())]);
             setStudentVocabularyDraft('');
             setStudentVocabularyCorrect('');
@@ -1626,9 +1635,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 title={activeNotif ? `Notification active : ${activeNotif.text}` : 'Ajouter une notification (mémo devoirs)'}
                             >🔔{activeNotif ? ' !' : ''}</button>
                             <button
-                                className={`french-mode-btn ${frenchMode ? 'active' : ''}`}
-                                onClick={toggleFrenchMode}
-                                title="Mode français : choisis un élève puis ajoute un mot ou une expression"
+                                className="french-mode-btn"
+                                onClick={() => { setStudentVocabularyDraft(''); setStudentVocabularyCorrect(''); setStudentVocabularyExplanation(''); setStudentVocabularyError(''); setStudentVocabularyView('level-add'); }}
+                                title="Ajouter une expression à toutes les classes de ce niveau"
                             >FR N</button>
                             {/(?:^|\D)5\s*(?:e|ème|eme|[a-z])(?:\D|$)/i.test(String(classroomInfo?.name || classroomInfo?.level || '')) && (
                                 <div className="pepito-phone-control" aria-label="Déplacer Pépito pour la classe">
@@ -1855,11 +1864,12 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <div className="student-vocabulary-overlay" onClick={(event) => { if (event.target === event.currentTarget) setStudentVocabularyView(''); }}>
                     <section className="student-vocabulary-modal" role="dialog" aria-modal="true" aria-label="Vocabulaire français de l’élève">
                         <header>
-                            <strong>{studentVocabularyView === 'add' ? 'Ajouter un mot ou une expression' : `Mes mots · ${selectedStudent ? `${getDisplayName(selectedStudent)} ${selectedStudent.lastName || ''}`.trim() : 'Élève'}`}</strong>
+                            <strong>{studentVocabularyView === 'level-add' ? `Ajouter au niveau ${classroomInfo?.level || ''}` : studentVocabularyView === 'add' ? 'Ajouter un mot ou une expression' : `Mes mots · ${selectedStudent ? `${getDisplayName(selectedStudent)} ${selectedStudent.lastName || ''}`.trim() : 'Élève'}`}</strong>
                             <button type="button" onClick={() => setStudentVocabularyView('')}>×</button>
                         </header>
-                        {studentVocabularyView === 'add' ? (
+                        {studentVocabularyView === 'add' || studentVocabularyView === 'level-add' ? (
                             <>
+                                {studentVocabularyView === 'level-add' && <p className="student-vocabulary-level-note">Cette expression sera ajoutée à tous les élèves de toutes les classes de ce niveau.</p>}
                                 <div className="student-vocabulary-compact-fields"><label>Mot faux<input autoFocus value={studentVocabularyDraft} onChange={(event) => setStudentVocabularyDraft(event.target.value)} placeholder="Expression avec l’erreur" /></label><label>Mot juste<input value={studentVocabularyCorrect} onChange={(event) => setStudentVocabularyCorrect(event.target.value)} placeholder="Version corrigée" /></label><label>Explication <small>(facultatif)</small><textarea value={studentVocabularyExplanation} onChange={(event) => setStudentVocabularyExplanation(event.target.value)} placeholder="Règle ou courte explication" /></label></div>
                                 <div className="student-vocabulary-compact-actions"><button type="button" className="student-vocabulary-bot" onClick={openStudentFrenchBot}>🤖 Bot français</button><button type="button" className="student-vocabulary-save" onClick={addStudentVocabulary} disabled={studentVocabularyBusy || !studentVocabularyDraft.trim() || !studentVocabularyCorrect.trim()}>{studentVocabularyBusy ? 'Ajout…' : 'Ajouter'}</button></div>
                             </>

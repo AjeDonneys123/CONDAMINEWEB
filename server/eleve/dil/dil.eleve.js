@@ -16,6 +16,32 @@ const cleanFocusWords = (value) => (Array.isArray(value) ? value : [])
     .filter((word, index, list) => list.findIndex((item) => normalise(item) === normalise(word)) === index)
     .slice(0, 30);
 
+router.post('/level/correction-pair', async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(req.body?.classId)) return res.status(400).json({ error: 'Classe invalide.' });
+    const incorrectSentence = cleanWord(req.body?.incorrectSentence);
+    const correctedSentence = cleanWord(req.body?.correctedSentence);
+    const grammarRule = cleanWord(req.body?.grammarRule);
+    if (!incorrectSentence || !correctedSentence) return res.status(400).json({ error: 'Renseigne l’expression fausse et sa correction.' });
+    const classroom = await Classroom.findById(req.body.classId, 'level name').lean();
+    if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+    const level = cleanWord(classroom.level);
+    if (!level) return res.status(400).json({ error: 'Le niveau de cette classe n’est pas renseigné.' });
+    const escapedLevel = level.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const classrooms = await Classroom.find({ level: new RegExp(`^\\s*${escapedLevel}\\s*$`, 'i') }, '_id name').lean();
+    const classIds = classrooms.map((item) => item._id);
+    const classNames = classrooms.map((item) => item.name).filter(Boolean);
+    const students = await Student.find({ $or: [{ classId: { $in: classIds } }, { currentClass: { $in: classNames } }] }, '_id').lean();
+    if (!students.length) return res.status(404).json({ error: `Aucun élève trouvé pour le niveau ${level}.` });
+    await DilVocabulary.bulkWrite(students.map((student) => ({
+        updateOne: {
+            filter: { studentId: student._id, exerciseType: 'correction', incorrectSentence },
+            update: { $set: { french: correctedSentence, spanish: correctedSentence, grammarRule, focusWords: [], incorrectWords: [] }, $setOnInsert: { studentId: student._id, exerciseType: 'correction', incorrectSentence } },
+            upsert: true
+        }
+    })));
+    return res.status(201).json({ ok: true, level, classCount: classrooms.length, studentCount: students.length });
+});
+
 router.get('/:studentId/vocabulary', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.studentId)) return res.status(400).json({ error: 'Élève invalide.' });
     const words = await DilVocabulary.find({ studentId: req.params.studentId }).sort({ wrongCount: -1, correctCount: 1, createdAt: -1 }).lean();
