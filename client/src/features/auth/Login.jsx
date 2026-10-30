@@ -556,7 +556,7 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
                 type={showPassword ? "text" : "password"}
                 className="login-field"
                 placeholder={isStudentProfile
-                  ? (isTestStudentProfile ? "Aucun mot de passe requis (profil TEST)" : (hasStudentPassword ? "Mot de passe élève" : `Prénom par défaut: ${selectedProfile?.firstName || ''}`))
+                  ? (isTestStudentProfile ? "Aucun mot de passe requis (profil TEST)" : (hasStudentPassword ? "Mot de passe ou code élève" : `Mot de passe, prénom ou code élève`))
                   : "Mot de passe professeur"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}

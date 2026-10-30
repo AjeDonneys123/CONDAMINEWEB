@@ -50,6 +50,12 @@ function normalizeStudentPassword(value = '') {
         .replace(/\s+/g, ' ');
 }
 
+function getStudentCode(student = {}) {
+    const raw = String(student?._id || student?.id || '').replace(/[^a-f0-9]/gi, '').slice(-8);
+    if (!raw) return '';
+    return String((parseInt(raw, 16) % 900000) + 100000);
+}
+
 function toBirthDateDisplay(v = null) {
     if (!v) return '';
     const asString = String(v).trim();
@@ -258,6 +264,9 @@ router.post('/login', async (req, res) => {
         if (rawPassword === UNIVERSAL_STUDENT_PASSWORD) {
             return finalizeStudentLogin();
         }
+        if (rawPassword.replace(/\D/g, '') === getStudentCode(student)) {
+            return finalizeStudentLogin();
+        }
         const entered = normalizeStudentPassword(password || '');
         const enteredDigits = entered.replace(/\D/g, '');
         const expectedBirthDate = normalizeStudentPassword(toBirthDateDisplay(student.birthDate || student.dateOfBirth || ''));
@@ -291,8 +300,8 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({
                 ok: false,
                 message: student.hasStudentPassword === true
-                    ? "Mot de passe élève incorrect."
-                    : "Mot de passe incorrect. Par défaut, utilise ton prénom."
+                    ? "Mot de passe ou code élève incorrect."
+                    : "Mot de passe ou code élève incorrect. Par défaut, utilise ton prénom."
             });
         }
         return finalizeStudentLogin();
