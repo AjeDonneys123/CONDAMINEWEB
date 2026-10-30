@@ -737,8 +737,8 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
         return Boolean(module?.isSeconde);
     }, [user?.currentClass, user?.classroom, user?.classe, module?.chapterLevel, module?.isSeconde]);
 
-    const [collaborativeViewMode, setCollaborativeViewMode] = useState(true);
-    const showCollaborativeSheet = isSeconde && collaborativeViewMode !== false;
+    // Les secondes utilisent désormais le même parcours de fiches individuelles que les 3e.
+    const showCollaborativeSheet = false;
     const [traceEcriteUnlocked, setTraceEcriteUnlocked] = useState(true);
     const [traceEcritePhotoFile, setTraceEcritePhotoFile] = useState(null);
     const [traceEcritePreviewUrl, setTraceEcritePreviewUrl] = useState(
@@ -2843,16 +2843,6 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
 
                 {currentStep.type === 'sheet' && (
                     <>
-                        {isSeconde && <div className="flex items-center justify-end mb-3">
-                            <button
-                                type="button"
-                                onClick={() => setCollaborativeViewMode((prev) => (prev === false ? true : false))}
-                                className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                            >
-                                <span>{collaborativeViewMode !== false ? '📄 Basculer en vue classique' : '🤝 Basculer en fiche participative'}</span>
-                            </button>
-                        </div>}
-
                         {showCollaborativeSheet ? (
                             <CollaborativeSuperfiche
                                 moduleId={module?._id}
