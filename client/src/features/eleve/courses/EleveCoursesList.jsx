@@ -89,13 +89,12 @@ export default function EleveCoursesList({ user }) {
       setActiveSlideIdx(0);
       setResolvedPresentationId(String(presentationSource));
       try {
-        const limit = Math.max(0, Number(selectedCourse.publishedUntilSlide || 0));
         const res = await fetch('/api/learning/slides/manifest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             presentationUrl: presentationSource,
-            slideSelection: limit > 0 ? `1-${limit}` : ''
+            slideSelection: ''
           })
         });
         const data = await res.json();
@@ -159,7 +158,7 @@ export default function EleveCoursesList({ user }) {
                 <h3>{selectedCourse?.title || 'Cours'}</h3>
                 {selectedCourse?.description && <p>{selectedCourse.description}</p>}
               </div>
-              <span>{selectedCourse?.embedUrl ? 'Lecture' : `${slides.length} slide${slides.length > 1 ? 's' : ''}`}</span>
+              <span>{`${slides.length} slide${slides.length > 1 ? 's' : ''}`}</span>
             </div>
 
             {selectedCourse?.embedUrl && !slidesLoading && slides.length === 0 && (
@@ -194,6 +193,7 @@ export default function EleveCoursesList({ user }) {
                       src={buildSlidesThumbnailUrl(resolvedPresentationId || selectedCourse.presentationId, activeSlide.objectId, activeSlide.slideNumber)}
                       alt={`Slide ${activeSlide.slideNumber || activeSlideIdx + 1}`}
                     />
+                    <span className="eleve-course-play">▶<small>Lire la présentation</small></span>
                   </a>
                   <button
                     type="button"
