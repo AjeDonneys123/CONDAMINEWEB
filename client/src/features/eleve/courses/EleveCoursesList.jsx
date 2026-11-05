@@ -21,6 +21,13 @@ const buildSlidesReadUrl = (raw = '', objectId = '') => {
   return `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/present?start=false&loop=false&delayms=60000${slide}`;
 };
 
+const buildSlidesEmbedUrl = (raw = '', objectId = '') => {
+  const presentationId = extractPresentationId(raw);
+  if (!presentationId) return '';
+  const slide = objectId ? `#slide=id.${encodeURIComponent(String(objectId))}` : '';
+  return `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/embed?start=false&loop=false&delayms=60000${slide}`;
+};
+
 export default function EleveCoursesList({ user }) {
   const [courses, setCourses] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -188,12 +195,15 @@ export default function EleveCoursesList({ user }) {
                   >
                     ‹
                   </button>
-                  <a className="eleve-course-slide-frame" href={readUrl} target="_blank" rel="noreferrer" title="Ouvrir cette slide dans un nouvel onglet">
-                    <img
-                      src={buildSlidesThumbnailUrl(resolvedPresentationId || selectedCourse.presentationId, activeSlide.objectId, activeSlide.slideNumber)}
-                      alt={`Slide ${activeSlide.slideNumber || activeSlideIdx + 1}`}
+                  <div className="eleve-course-slide-frame">
+                    <iframe
+                      key={String(activeSlide.objectId || activeSlideIdx)}
+                      title={`Slide interactive ${activeSlide.slideNumber || activeSlideIdx + 1}`}
+                      src={buildSlidesEmbedUrl(resolvedPresentationId || selectedCourse.presentationId || selectedCourse.embedUrl, activeSlide.objectId)}
+                      allow="autoplay; fullscreen"
+                      allowFullScreen
                     />
-                  </a>
+                  </div>
                   <button
                     type="button"
                     className="eleve-course-arrow"

@@ -184,6 +184,12 @@
   width: 100%;
 }
 
+.eleve-course-slide-frame iframe {
+  border: 0;
+  height: 100%;
+  width: 100%;
+}
+
 .eleve-course-arrow {
   background: #2563eb;
   border: none;
