@@ -193,7 +193,6 @@ export default function EleveCoursesList({ user }) {
                       src={buildSlidesThumbnailUrl(resolvedPresentationId || selectedCourse.presentationId, activeSlide.objectId, activeSlide.slideNumber)}
                       alt={`Slide ${activeSlide.slideNumber || activeSlideIdx + 1}`}
                     />
-                    <span className="eleve-course-play">▶<small>Lire la présentation</small></span>
                   </a>
                   <button
                     type="button"
