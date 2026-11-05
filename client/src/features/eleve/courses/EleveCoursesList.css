@@ -152,6 +152,11 @@
   grid-template-columns: 48px minmax(0, 1fr) 48px;
 }
 
+/* Google ajoute sa barre de lecture sous la zone 16:9 de la diapositive. */
+.eleve-course-slide-stage .eleve-course-slide-frame {
+  aspect-ratio: 16 / 10;
+}
+
 .eleve-course-slide-frame {
   align-items: center;
   aspect-ratio: 16 / 9;
