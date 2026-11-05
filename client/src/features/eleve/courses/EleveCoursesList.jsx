@@ -17,8 +17,8 @@ const extractPresentationId = (raw = '') => {
 const buildSlidesReadUrl = (raw = '', objectId = '') => {
   const presentationId = extractPresentationId(raw);
   if (!presentationId) return '';
-  const slide = objectId ? `&slide=id.${encodeURIComponent(String(objectId))}` : '';
-  return `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/preview?rm=minimal${slide}`;
+  const slide = objectId ? `#slide=id.${encodeURIComponent(String(objectId))}` : '';
+  return `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/present?start=false&loop=false&delayms=60000${slide}`;
 };
 
 export default function EleveCoursesList({ user }) {
@@ -77,13 +77,8 @@ export default function EleveCoursesList({ user }) {
   }, [user?._id, user?.id, user?.isVisitorPreview, user?.currentClass]);
 
   useEffect(() => {
-    if (selectedCourse?.embedUrl) {
-      setSlides([]);
-      setSlidesError('');
-      setSlidesLoading(false);
-      return;
-    }
-    if (!selectedCourse?.presentationId) {
+    const presentationSource = selectedCourse?.presentationId || selectedCourse?.embedUrl || '';
+    if (!extractPresentationId(presentationSource)) {
       setSlides([]);
       return;
     }
@@ -92,21 +87,21 @@ export default function EleveCoursesList({ user }) {
       setSlidesLoading(true);
       setSlidesError('');
       setActiveSlideIdx(0);
-      setResolvedPresentationId(String(selectedCourse.presentationId || ''));
+      setResolvedPresentationId(String(presentationSource));
       try {
         const limit = Math.max(0, Number(selectedCourse.publishedUntilSlide || 0));
         const res = await fetch('/api/learning/slides/manifest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            presentationUrl: selectedCourse.presentationId,
+            presentationUrl: presentationSource,
             slideSelection: limit > 0 ? `1-${limit}` : ''
           })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Chargement des slides impossible.');
         if (!cancelled) {
-          setResolvedPresentationId(String(data?.presentationId || selectedCourse.presentationId || ''));
+          setResolvedPresentationId(String(data?.presentationId || presentationSource));
           setSlides(Array.isArray(data?.slides) ? data.slides : []);
         }
       } catch (loadError) {
@@ -167,7 +162,7 @@ export default function EleveCoursesList({ user }) {
               <span>{selectedCourse?.embedUrl ? 'Lecture' : `${slides.length} slide${slides.length > 1 ? 's' : ''}`}</span>
             </div>
 
-            {selectedCourse?.embedUrl && (
+            {selectedCourse?.embedUrl && !slidesLoading && slides.length === 0 && (
               <>
               <div className="eleve-course-slide-frame" style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: '72vh' }}>
                 <iframe
