@@ -597,12 +597,6 @@ export default function EleveChatWorkspace({ user, onQuit }) {
                 Le professeur doit choisir le bot Cyclopédia dans l’onglet Bots.
               </div>
             )}
-            {researchSetup?.botReady && !researchSetup?.characterBotReady && (
-              <div className="research-error">
-                Le professeur doit aussi choisir le bot « Personnage historique
-                ».
-              </div>
-            )}
             {error && <div className="research-error">{error}</div>}
             <button
               type="button"
@@ -610,7 +604,6 @@ export default function EleveChatWorkspace({ user, onQuit }) {
               disabled={
                 pending ||
                 !researchSetup?.botReady ||
-                !researchSetup?.characterBotReady ||
                 !groupTopic.trim()
               }
             >
@@ -824,7 +817,7 @@ export default function EleveChatWorkspace({ user, onQuit }) {
               <small>{filledLines}/4 lignes minimum</small>
             </aside>
           </div>
-          {filledLines >= 4 && (
+          {filledLines >= 4 && Boolean(group.characterBotUrl || group.historicalCharacterShareLink) && (
             <div
               className={`research-character-drawer ${characterOpen ? "open" : ""}`}
             >
