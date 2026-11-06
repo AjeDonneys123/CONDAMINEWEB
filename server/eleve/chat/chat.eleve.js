@@ -57,12 +57,40 @@ const parseCyclopediaDocuments = (messages = []) => {
     }).filter((document) => document.content.length > 80);
 };
 
-const resolveResearchClass = async (student) => {
-    if (student?.classId && mongoose.Types.ObjectId.isValid(student.classId)) {
-        const byId = await Classroom.findById(student.classId).lean();
-        if (byId) return byId;
+const detectResearchBot = (classroom) => {
+    const bots = Array.isArray(classroom?.didakbotBots) ? classroom.didakbotBots : [];
+    const configured = String(classroom?.researchBotShareLink || '').trim();
+    if (configured) {
+        const exact = bots.find((bot) => String(bot?.shareLink || '').trim() === configured);
+        if (exact) return exact;
     }
-    return Classroom.findOne({ name: String(student?.currentClass || '').trim().toUpperCase() }).lean();
+    return bots.find((bot) => {
+        const identity = [bot?.activityTitle, bot?.name, bot?.role, bot?.expertiseDomain]
+            .map((value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
+            .join(' ');
+        return /cyclopedia|recherche documentaire/.test(identity);
+    }) || null;
+};
+
+const normalizeResearchClass = (classroom) => {
+    if (!classroom) return null;
+    const researchBot = detectResearchBot(classroom);
+    if (!String(classroom.researchBotShareLink || '').trim() && researchBot?.shareLink) {
+        classroom.researchBotShareLink = String(researchBot.shareLink).trim();
+    }
+    return classroom;
+};
+
+const resolveResearchClass = async (student) => {
+    let byId = null;
+    if (student?.classId && mongoose.Types.ObjectId.isValid(student.classId)) {
+        byId = normalizeResearchClass(await Classroom.findById(student.classId).lean());
+        if (byId?.researchBotShareLink) return byId;
+    }
+    const className = String(student?.currentClass || byId?.name || '').trim();
+    const sameName = await Classroom.find({ name: { $regex: `^${className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }).lean();
+    const resolved = sameName.map(normalizeResearchClass);
+    return resolved.find((classroom) => classroom?.researchBotShareLink) || byId || resolved[0] || null;
 };
 
 const findClassBotByShareLink = (classroom, shareLink) => {
