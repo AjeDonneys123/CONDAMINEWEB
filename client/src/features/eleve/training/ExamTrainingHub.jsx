@@ -5450,6 +5450,35 @@ function DnbOffTopicReader({ onBack, storageKey = DNB_OFF_TOPIC_DRAFT_KEY, audie
   );
 }
 
+function RqpPlanBuilder({ points }) {
+  const emptyArgument = () => ({ explanation: '', pointIds: [] });
+  const [plan, setPlan] = useState({ I: { title: '', arguments: [emptyArgument(), emptyArgument()] }, II: { title: '', arguments: [emptyArgument(), emptyArgument()] } });
+  const placedIds = new Set(Object.values(plan).flatMap((part) => part.arguments.flatMap((argument) => argument.pointIds)));
+  const updateArgument = (partKey, argumentIndex, update) => setPlan((previous) => ({ ...previous, [partKey]: { ...previous[partKey], arguments: previous[partKey].arguments.map((argument, index) => index === argumentIndex ? { ...argument, ...update(argument) } : argument) } }));
+  const placePoint = (partKey, argumentIndex, pointId) => setPlan((previous) => {
+    const next = Object.fromEntries(Object.entries(previous).map(([key, part]) => [key, { ...part, arguments: part.arguments.map((argument) => ({ ...argument, pointIds: argument.pointIds.filter((id) => id !== pointId) })) }]));
+    next[partKey].arguments[argumentIndex].pointIds.push(pointId);
+    return next;
+  });
+  const pointById = Object.fromEntries(points.map((point) => [point.id, point]));
+  return <section className="mt-6 rounded-3xl border-2 border-blue-200 bg-blue-50 p-5">
+    <div className="text-[11px] font-black uppercase text-blue-600">Étape 2 · Construire le plan</div>
+    <h3 className="m-0 mt-1 text-xl font-black text-slate-900">Organise les arguments validés</h3>
+    <p className="text-sm font-bold text-blue-900">Glisse chaque connaissance à droite dans un argument à gauche, puis écris la phrase qui explique ce qu’elle démontre.</p>
+    <div className="mt-4 grid gap-5 lg:grid-cols-2">
+      <div className="space-y-4">{Object.entries(plan).map(([partKey, part]) => <article key={partKey} className="rounded-2xl border-2 border-blue-200 bg-white p-4">
+        <label className="flex items-center gap-3"><span className="text-xl font-black text-blue-700">{partKey}.</span><input value={part.title} onChange={(event) => setPlan((previous) => ({ ...previous, [partKey]: { ...previous[partKey], title: event.target.value } }))} placeholder="Titre de cette partie" className="w-full rounded-xl border-2 border-slate-200 p-3 text-sm font-bold outline-none focus:border-blue-400" /></label>
+        <div className="mt-3 space-y-3">{part.arguments.map((argument, argumentIndex) => <div key={argumentIndex} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); placePoint(partKey, argumentIndex, event.dataTransfer.getData('text/plain')); }} className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-3">
+          <div className="text-xs font-black text-blue-800">Argument {argumentIndex + 1}</div>
+          <textarea value={argument.explanation} onChange={(event) => updateArgument(partKey, argumentIndex, () => ({ explanation: event.target.value }))} placeholder="J’explique en une phrase pourquoi cet argument répond au sujet…" className="mt-2 min-h-[70px] w-full rounded-xl border border-blue-200 bg-white p-3 text-sm font-bold outline-none" />
+          <div className="mt-2 min-h-[54px] space-y-2">{argument.pointIds.length ? argument.pointIds.map((id) => <div key={id} className="rounded-lg bg-white p-2 text-xs font-bold text-slate-700 shadow-sm">{pointById[id]?.text}<button type="button" onClick={() => updateArgument(partKey, argumentIndex, (current) => ({ pointIds: current.pointIds.filter((item) => item !== id) }))} className="ml-2 text-red-600">Retirer</button></div>) : <div className="text-xs font-bold text-blue-400">Dépose ici les éléments du cours</div>}</div>
+        </div>)}</div>
+      </article>)}</div>
+      <aside className="rounded-2xl border-2 border-emerald-200 bg-white p-4"><div className="text-sm font-black text-emerald-800">Arguments sélectionnés et validés</div><div className="mt-3 space-y-2">{points.map((point) => <div key={point.id} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', point.id)} className={`cursor-grab rounded-xl border-2 p-3 text-sm font-bold ${placedIds.has(point.id) ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-emerald-300 bg-emerald-50 text-slate-800'}`}>{point.text}</div>)}</div></aside>
+    </div>
+  </section>;
+}
+
 function RqpRelevanceTrainer({ onBack }) {
   const [sheet, setSheet] = useState('');
   const [subjects, setSubjects] = useState([]);
@@ -5457,6 +5486,7 @@ function RqpRelevanceTrainer({ onBack }) {
   const [choices, setChoices] = useState({});
   const [disagreements, setDisagreements] = useState([]);
   const [justifications, setJustifications] = useState({});
+  const [explanationOpen, setExplanationOpen] = useState({});
   const [verdicts, setVerdicts] = useState([]);
   const [advice, setAdvice] = useState('');
   const [loading, setLoading] = useState('');
@@ -5479,24 +5509,27 @@ function RqpRelevanceTrainer({ onBack }) {
   };
 
   const evaluate = async () => {
-    if (!subject || subject.points.some((point) => !choices[point.id])) return setError('Classe chaque point avant de valider.');
+    if (!subject) return;
+    const effectiveChoices = Object.fromEntries(subject.points.map((point) => [point.id, choices[point.id] === 'in' ? 'in' : 'out']));
     setLoading('evaluate'); setError('');
     try {
-      const data = await post('evaluate', { sheet, subject: subject.question, points: subject.points, choices });
+      const data = await post('evaluate', { sheet, subject: subject.question, points: subject.points, choices: effectiveChoices, justifications });
+      setChoices(effectiveChoices);
       setDisagreements(data.disagreements || []);
-      if (!(data.disagreements || []).length) await finalVerdict({});
+      if (!(data.disagreements || []).length) await finalVerdict(justifications);
     } catch (requestError) { setError(requestError.message); } finally { setLoading(''); }
   };
 
   const finalVerdict = async (forcedJustifications = justifications) => {
     setLoading('verdict'); setError('');
     try {
-      const data = await post('verdict', { sheet, subject: subject.question, points: subject.points, choices, justifications: forcedJustifications });
+      const effectiveChoices = Object.fromEntries(subject.points.map((point) => [point.id, choices[point.id] === 'in' ? 'in' : 'out']));
+      const data = await post('verdict', { sheet, subject: subject.question, points: subject.points, choices: effectiveChoices, justifications: forcedJustifications });
       setVerdicts(data.verdicts || []); setAdvice(data.advice || ''); setDisagreements([]);
     } catch (requestError) { setError(requestError.message); } finally { setLoading(''); }
   };
 
-  const changeSubject = (index) => { setSubjectIndex(index); setChoices({}); setDisagreements([]); setJustifications({}); setVerdicts([]); setAdvice(''); setError(''); };
+  const changeSubject = (index) => { setSubjectIndex(index); setChoices({}); setDisagreements([]); setJustifications({}); setExplanationOpen({}); setVerdicts([]); setAdvice(''); setError(''); };
   const verdictById = Object.fromEntries(verdicts.map((item) => [item.pointId, item]));
   const disagreementById = Object.fromEntries(disagreements.map((item) => [item.pointId, item]));
 
@@ -5509,14 +5542,13 @@ function RqpRelevanceTrainer({ onBack }) {
     </div> : <>
       <div className="mt-5 flex flex-wrap gap-2">{subjects.map((item, index) => <button key={item.id} type="button" onClick={() => changeSubject(index)} className={`rounded-2xl px-4 py-3 text-xs font-black ${index === subjectIndex ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-800'}`}>Sujet {index + 1}</button>)}</div>
       <div className="mt-4 rounded-2xl border-2 border-violet-200 bg-violet-50 p-5"><div className="text-[10px] font-black uppercase text-violet-500">Sujet de RQP · les deux axes du plan sont dans la question</div><div className="mt-1 text-xl font-black text-slate-900">{subject?.question}</div></div>
-      <div className="mt-4 flex flex-wrap gap-3 text-xs font-black"><span className="rounded-full bg-emerald-100 px-4 py-2 text-emerald-800">✓ Vert : dans le sujet</span><span className="rounded-full bg-red-100 px-4 py-2 text-red-800">✕ Rouge : hors sujet</span><span className="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Classe tous les paragraphes de ta fiche</span></div>
+      <div className="mt-4 flex flex-wrap gap-3 text-xs font-black"><span className="rounded-full bg-emerald-100 px-4 py-2 text-emerald-800">✓ Clique pour sélectionner un élément utile</span><span className="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Les éléments non sélectionnés seront considérés hors sujet</span></div>
       <div className="mt-5 space-y-3">{subject?.points.map((point, index) => {
         const verdict = verdictById[point.id]; const disagreement = disagreementById[point.id];
         return <article key={point.id} className={`rounded-2xl border-2 p-4 ${verdict ? (verdict.correct ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50') : 'border-slate-200 bg-slate-50'}`}>
-          <div className="flex items-start gap-3"><div className="min-w-0 flex-1 text-sm font-bold leading-relaxed text-slate-800"><span className="mr-2 text-slate-400">{index + 1}.</span>{point.text}</div><div className="flex shrink-0 gap-2">
-            <button type="button" disabled={Boolean(verdicts.length)} onClick={() => setChoices((previous) => ({ ...previous, [point.id]: 'in' }))} title="Dans le sujet" className={`h-11 w-11 rounded-full border-4 text-lg ${choices[point.id] === 'in' ? 'border-emerald-800 bg-emerald-500 text-white' : 'border-emerald-300 bg-white text-emerald-600'}`}>✓</button>
-            <button type="button" disabled={Boolean(verdicts.length)} onClick={() => setChoices((previous) => ({ ...previous, [point.id]: 'out' }))} title="Hors sujet" className={`h-11 w-11 rounded-full border-4 text-lg ${choices[point.id] === 'out' ? 'border-red-800 bg-red-500 text-white' : 'border-red-300 bg-white text-red-600'}`}>✕</button>
-          </div></div>
+          <div className="flex items-start gap-3"><div className="min-w-0 flex-1 text-sm font-bold leading-relaxed text-slate-800"><span className="mr-2 text-slate-400">{index + 1}.</span>{point.text}</div><button type="button" disabled={Boolean(verdicts.length)} onClick={() => setChoices((previous) => ({ ...previous, [point.id]: previous[point.id] === 'in' ? 'out' : 'in' }))} title="Sélectionner comme utile" className={`h-11 w-11 shrink-0 rounded-full border-4 text-lg ${choices[point.id] === 'in' ? 'border-emerald-800 bg-emerald-500 text-white' : 'border-slate-300 bg-white text-slate-400'}`}>✓</button></div>
+          {!verdicts.length && choices[point.id] === 'in' && <button type="button" onClick={() => setExplanationOpen((previous) => ({ ...previous, [point.id]: !previous[point.id] }))} className="mt-2 rounded-xl bg-amber-100 px-3 py-2 text-[11px] font-black text-amber-800">{explanationOpen[point.id] ? 'Masquer l’explication' : '+ Expliquer un lien élaboré'}</button>}
+          {explanationOpen[point.id] && !disagreement && !verdicts.length && <textarea value={justifications[point.id] || ''} onChange={(event) => setJustifications((previous) => ({ ...previous, [point.id]: event.target.value }))} className="mt-2 min-h-[75px] w-full rounded-xl border-2 border-amber-300 bg-white p-3 text-sm font-bold outline-none" placeholder="J’explique le lien historique avec le sujet…" />}
           {disagreement && <label className="mt-3 block"><span className="text-[11px] font-black uppercase text-amber-700">Justifie — {disagreement.request}</span><textarea value={justifications[point.id] || ''} onChange={(event) => setJustifications((previous) => ({ ...previous, [point.id]: event.target.value }))} className="mt-1 min-h-[85px] w-full rounded-xl border-2 border-amber-300 bg-white p-3 text-sm font-bold outline-none" placeholder="Je maintiens mon choix parce que…" /></label>}
           {verdict && <div className={`mt-3 text-sm font-black ${verdict.correct ? 'text-emerald-700' : 'text-red-700'}`}>{verdict.correct ? '✓ Choix juste.' : `✕ Choix incorrect : ${verdict.expected === 'in' ? 'dans le sujet' : 'hors sujet'}.`} <span className="font-bold">{verdict.feedback}</span></div>}
         </article>;
@@ -5524,6 +5556,7 @@ function RqpRelevanceTrainer({ onBack }) {
       {!verdicts.length && !disagreements.length && <button type="button" disabled={loading} onClick={evaluate} className="mt-5 rounded-2xl bg-slate-900 px-6 py-4 text-sm font-black text-white disabled:opacity-40">{loading ? 'Analyse…' : 'Valider mes choix'}</button>}
       {disagreements.length > 0 && <button type="button" disabled={loading || disagreements.some((item) => !(justifications[item.pointId] || '').trim())} onClick={() => finalVerdict()} className="mt-5 rounded-2xl bg-amber-500 px-6 py-4 text-sm font-black text-white disabled:opacity-40">{loading ? 'Verdict en cours…' : 'Envoyer mes justifications'}</button>}
       {verdicts.length > 0 && <div className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-900"><strong>Conseil de Qwen :</strong> {advice}<div className="mt-2 font-black">Score : {verdicts.filter((item) => item.correct).length}/{verdicts.length}</div></div>}
+      {verdicts.length > 0 && <RqpPlanBuilder points={subject.points.filter((point) => choices[point.id] === 'in' && verdictById[point.id]?.correct && verdictById[point.id]?.expected === 'in')} />}
     </>}
     {error && <div className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-black text-red-700">{error}</div>}
   </section>;
