@@ -18,6 +18,8 @@ const resolveGeminiApiKey = () => {
 const resolveGeminiModel = () => String(process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
 const resolveAlbertApiKey = () => String(process.env.ALBERT_API_KEY || process.env.ALBERT_TOKEN || '').trim();
 const resolveAlbertBaseUrl = () => String(process.env.ALBERT_API_BASE_URL || 'https://albert.api.etalab.gouv.fr').trim().replace(/\/$/, '');
+const resolveGroqApiKey = () => String(process.env.GROQ_API_KEY || '').trim();
+const resolveGroqModel = () => String(process.env.GROQ_MODEL || 'qwen/qwen3.8-27b').trim();
 let cachedAlbertModel = '';
 
 const promptToText = (prompt) => Array.isArray(prompt)
@@ -143,6 +145,39 @@ const AIEngine = {
         }
     },
 
+    askGroq: async (prompt, systemInstruction = "", options = {}) => {
+        const apiKey = resolveGroqApiKey();
+        if (!apiKey) throw new Error('GROQ_API_KEY manquante');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), Number(options?.timeoutMs || 45000));
+        try {
+            const body = {
+                model: String(options?.model || resolveGroqModel()),
+                messages: [
+                    ...(String(systemInstruction || '').trim() ? [{ role: 'system', content: String(systemInstruction) }] : []),
+                    { role: 'user', content: promptToText(prompt) }
+                ],
+                temperature: Number(options?.temperature ?? 0.15),
+                max_tokens: Number(options?.maxOutputTokens ?? 2400)
+            };
+            if (options?.responseMimeType === 'application/json') body.response_format = { type: 'json_object' };
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+                signal: controller.signal,
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const detail = await response.text().catch(() => '');
+                throw new Error(`GROQ_HTTP_${response.status}: ${detail.slice(0, 400)}`);
+            }
+            const data = await response.json();
+            return String(data?.choices?.[0]?.message?.content || '').trim();
+        } finally {
+            clearTimeout(timeout);
+        }
+    },
+
     askStream: async (prompt, systemInstruction = "", options = {}) => {
         await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const apiKey = resolveGeminiApiKey();
@@ -193,6 +228,9 @@ const AIEngine = {
         const provider = String(options?.provider || process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         if (provider === 'albert') {
             return (await AIEngine.askAlbert(prompt, systemInstruction, options)) || "[]";
+        }
+        if (provider === 'groq' || provider === 'qwen') {
+            return (await AIEngine.askGroq(prompt, systemInstruction, options)) || "[]";
         }
         await assertAiWithinFreeTier({ teacherId: String(options?.teacherId || '').trim() });
         const apiKey = resolveGeminiApiKey();

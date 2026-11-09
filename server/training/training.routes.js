@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const TrainingConfig = require('../models/TrainingConfig');
+const AIEngine = require('../core/ai.engine');
 
 const router = express.Router();
 const upload = multer({
@@ -193,6 +194,68 @@ router.put('/rqp-off-topic', async (req, res) => {
     }
 });
 
+const cleanRqpText = (value, max = 30000) => String(value || '').trim().slice(0, max);
+const askRqpQwen = async (prompt, maxOutputTokens = 3000) => {
+    const raw = await AIEngine.ask(prompt, 'Tu es un professeur d’histoire-géographie de lycée. Tu entraînes à sélectionner uniquement les connaissances qui répondent exactement au sujet d’une RQP. Réponds en JSON strict, sans markdown.', {
+        provider: 'groq', temperature: 0.1, maxOutputTokens, responseMimeType: 'application/json'
+    });
+    const parsed = AIEngine.sanitizeJSON(raw);
+    if (!parsed) throw new Error('Réponse Qwen illisible');
+    return parsed;
+};
+
+router.post('/rqp-relevance/generate', async (req, res) => {
+    try {
+        const sheet = cleanRqpText(req.body?.sheet);
+        if (sheet.length < 180) return res.status(400).json({ error: 'Colle une fiche de révision plus complète.' });
+        const parsed = await askRqpQwen(`FICHE DE L'ÉLÈVE:\n${sheet}\n\nCrée 3 sujets de RQP distincts mais liés à cette fiche. Pour chaque sujet, fournis exactement 10 connaissances atomiques tirées ou fidèlement reformulées depuis la fiche : 5 à 7 répondent directement au sujet, les autres sont exactes mais hors sujet. Ne révèle pas lesquelles. Format: {"sheetTitle":"...","subjects":[{"id":"s1","question":"...","points":[{"id":"s1-p1","text":"..."}]}]}.`);
+        const subjects = (Array.isArray(parsed.subjects) ? parsed.subjects : []).slice(0, 3).map((subject, subjectIndex) => ({
+            id: `s${subjectIndex + 1}`,
+            question: cleanRqpText(subject?.question, 500),
+            points: (Array.isArray(subject?.points) ? subject.points : []).slice(0, 10).map((point, pointIndex) => ({ id: `s${subjectIndex + 1}-p${pointIndex + 1}`, text: cleanRqpText(point?.text, 700) }))
+        })).filter((subject) => subject.question && subject.points.length >= 6);
+        if (!subjects.length) throw new Error('Aucun sujet exploitable généré');
+        return res.json({ sheetTitle: cleanRqpText(parsed.sheettitle || 'Fiche de révision', 200), subjects, model: 'Qwen via Groq' });
+    } catch (error) {
+        return res.status(502).json({ error: error.message || 'Qwen ne répond pas.' });
+    }
+});
+
+router.post('/rqp-relevance/evaluate', async (req, res) => {
+    try {
+        const sheet = cleanRqpText(req.body?.sheet);
+        const subject = cleanRqpText(req.body?.subject, 700);
+        const points = Array.isArray(req.body?.points) ? req.body.points.slice(0, 14) : [];
+        const choices = req.body?.choices && typeof req.body.choices === 'object' ? req.body.choices : {};
+        const parsed = await askRqpQwen(`FICHE:\n${sheet}\nSUJET:\n${subject}\nPOINTS ET CHOIX DE L'ÉLÈVE (in=dans le sujet, out=hors sujet):\n${JSON.stringify(points.map((point) => ({ id: point.id, text: point.text, choice: choices[point.id] })))}\n\nÉvalue chaque choix selon la réponse directe au sujet, pas selon la simple exactitude de la connaissance. Ne révèle pas encore la bonne réponse. Retourne uniquement les identifiants contestés: {"disagreements":[{"pointId":"...","request":"Justifie précisément le lien avec les mots du sujet."}]}.`);
+        const validIds = new Set(points.map((point) => String(point.id)));
+        const disagreements = (Array.isArray(parsed.disagreements) ? parsed.disagreements : []).filter((item) => validIds.has(String(item?.pointid || item?.pointId))).map((item) => ({
+            pointId: String(item.pointid || item.pointId), request: cleanRqpText(item.request || 'Justifie ton choix en le reliant précisément au sujet.', 500)
+        }));
+        return res.json({ disagreements });
+    } catch (error) {
+        return res.status(502).json({ error: error.message || 'Évaluation indisponible.' });
+    }
+});
+
+router.post('/rqp-relevance/verdict', async (req, res) => {
+    try {
+        const sheet = cleanRqpText(req.body?.sheet);
+        const subject = cleanRqpText(req.body?.subject, 700);
+        const points = Array.isArray(req.body?.points) ? req.body.points.slice(0, 14) : [];
+        const choices = req.body?.choices && typeof req.body.choices === 'object' ? req.body.choices : {};
+        const justifications = req.body?.justifications && typeof req.body.justifications === 'object' ? req.body.justifications : {};
+        const parsed = await askRqpQwen(`FICHE:\n${sheet}\nSUJET:\n${subject}\nTRAVAIL:\n${JSON.stringify(points.map((point) => ({ id: point.id, text: point.text, choice: choices[point.id], justification: justifications[point.id] || '' })))}\n\nDonne le verdict final pour chaque point. expected vaut in si la connaissance aide directement à traiter le sujet, sinon out. Une justification pertinente peut expliquer le choix mais ne transforme pas une connaissance hors sujet. Format: {"verdicts":[{"pointId":"...","correct":true,"expected":"in","feedback":"explication brève"}],"advice":"conseil général"}.`);
+        const validIds = new Set(points.map((point) => String(point.id)));
+        const verdicts = (Array.isArray(parsed.verdicts) ? parsed.verdicts : []).filter((item) => validIds.has(String(item?.pointid || item?.pointId))).map((item) => ({
+            pointId: String(item.pointid || item.pointId), correct: Boolean(item.correct), expected: String(item.expected) === 'out' ? 'out' : 'in', feedback: cleanRqpText(item.feedback, 600)
+        }));
+        return res.json({ verdicts, advice: cleanRqpText(parsed.advice, 1000) });
+    } catch (error) {
+        return res.status(502).json({ error: error.message || 'Verdict indisponible.' });
+    }
+});
+
 
 // ─── DNB Document-method calibration (description d'image / présentation) ────
 // Previously saved only in the teacher's localStorage + IndexedDB.
@@ -296,4 +359,3 @@ router.put('/dnb-doc-method/:type', upload.array('images', 50), async (req, res)
 });
 
 module.exports = router;
-

@@ -5450,6 +5450,84 @@ function DnbOffTopicReader({ onBack, storageKey = DNB_OFF_TOPIC_DRAFT_KEY, audie
   );
 }
 
+function RqpRelevanceTrainer({ onBack }) {
+  const [sheet, setSheet] = useState('');
+  const [subjects, setSubjects] = useState([]);
+  const [subjectIndex, setSubjectIndex] = useState(0);
+  const [choices, setChoices] = useState({});
+  const [disagreements, setDisagreements] = useState([]);
+  const [justifications, setJustifications] = useState({});
+  const [verdicts, setVerdicts] = useState([]);
+  const [advice, setAdvice] = useState('');
+  const [loading, setLoading] = useState('');
+  const [error, setError] = useState('');
+  const subject = subjects[subjectIndex] || null;
+
+  const post = async (route, body) => {
+    const response = await fetch(`/api/training-config/rqp-relevance/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || 'Qwen ne répond pas.');
+    return data;
+  };
+
+  const generate = async () => {
+    setLoading('generate'); setError('');
+    try {
+      const data = await post('generate', { sheet });
+      setSubjects(data.subjects || []); setSubjectIndex(0); setChoices({}); setDisagreements([]); setJustifications({}); setVerdicts([]); setAdvice('');
+    } catch (requestError) { setError(requestError.message); } finally { setLoading(''); }
+  };
+
+  const evaluate = async () => {
+    if (!subject || subject.points.some((point) => !choices[point.id])) return setError('Classe chaque point avant de valider.');
+    setLoading('evaluate'); setError('');
+    try {
+      const data = await post('evaluate', { sheet, subject: subject.question, points: subject.points, choices });
+      setDisagreements(data.disagreements || []);
+      if (!(data.disagreements || []).length) await finalVerdict({});
+    } catch (requestError) { setError(requestError.message); } finally { setLoading(''); }
+  };
+
+  const finalVerdict = async (forcedJustifications = justifications) => {
+    setLoading('verdict'); setError('');
+    try {
+      const data = await post('verdict', { sheet, subject: subject.question, points: subject.points, choices, justifications: forcedJustifications });
+      setVerdicts(data.verdicts || []); setAdvice(data.advice || ''); setDisagreements([]);
+    } catch (requestError) { setError(requestError.message); } finally { setLoading(''); }
+  };
+
+  const changeSubject = (index) => { setSubjectIndex(index); setChoices({}); setDisagreements([]); setJustifications({}); setVerdicts([]); setAdvice(''); setError(''); };
+  const verdictById = Object.fromEntries(verdicts.map((item) => [item.pointId, item]));
+  const disagreementById = Object.fromEntries(disagreements.map((item) => [item.pointId, item]));
+
+  return <section className="mx-4 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[11px] font-black uppercase text-violet-600">RQP · Sélection des connaissances</div><h3 className="m-0 text-2xl font-black text-slate-900">Dans le sujet ou hors sujet ?</h3></div><button type="button" onClick={onBack} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600">← Retour</button></div>
+    {!subjects.length ? <div className="mt-5">
+      <div className="rounded-2xl bg-violet-50 p-4 text-sm font-bold text-violet-900">Colle ta fiche de révision complète. Qwen créera trois sujets et des connaissances à trier. Le but n’est pas de réciter tout le cours, mais de sélectionner ce qui répond précisément au sujet.</div>
+      <textarea value={sheet} onChange={(event) => setSheet(event.target.value)} placeholder="Colle ici ta fiche de révision…" className="mt-4 min-h-[260px] w-full resize-y rounded-2xl border-2 border-violet-200 p-4 text-sm font-medium leading-relaxed outline-none focus:border-violet-500" />
+      <button type="button" disabled={sheet.trim().length < 180 || loading} onClick={generate} className="mt-3 rounded-2xl bg-violet-600 px-6 py-4 text-sm font-black text-white disabled:opacity-40">{loading ? 'Qwen prépare les sujets…' : 'Créer mes sujets RQP'}</button>
+    </div> : <>
+      <div className="mt-5 flex flex-wrap gap-2">{subjects.map((item, index) => <button key={item.id} type="button" onClick={() => changeSubject(index)} className={`rounded-2xl px-4 py-3 text-xs font-black ${index === subjectIndex ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-800'}`}>Sujet {index + 1}</button>)}</div>
+      <div className="mt-4 rounded-2xl border-2 border-violet-200 bg-violet-50 p-5"><div className="text-[10px] font-black uppercase text-violet-500">Sujet de RQP</div><div className="mt-1 text-xl font-black text-slate-900">{subject?.question}</div></div>
+      <div className="mt-5 space-y-3">{subject?.points.map((point, index) => {
+        const verdict = verdictById[point.id]; const disagreement = disagreementById[point.id];
+        return <article key={point.id} className={`rounded-2xl border-2 p-4 ${verdict ? (verdict.correct ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50') : 'border-slate-200 bg-slate-50'}`}>
+          <div className="flex items-start gap-3"><div className="min-w-0 flex-1 text-sm font-bold leading-relaxed text-slate-800"><span className="mr-2 text-slate-400">{index + 1}.</span>{point.text}</div><div className="flex shrink-0 gap-2">
+            <button type="button" disabled={Boolean(verdicts.length)} onClick={() => setChoices((previous) => ({ ...previous, [point.id]: 'in' }))} title="Dans le sujet" className={`h-11 w-11 rounded-full border-4 text-lg ${choices[point.id] === 'in' ? 'border-emerald-800 bg-emerald-500 text-white' : 'border-emerald-300 bg-white text-emerald-600'}`}>✓</button>
+            <button type="button" disabled={Boolean(verdicts.length)} onClick={() => setChoices((previous) => ({ ...previous, [point.id]: 'out' }))} title="Hors sujet" className={`h-11 w-11 rounded-full border-4 text-lg ${choices[point.id] === 'out' ? 'border-red-800 bg-red-500 text-white' : 'border-red-300 bg-white text-red-600'}`}>✕</button>
+          </div></div>
+          {disagreement && <label className="mt-3 block"><span className="text-[11px] font-black uppercase text-amber-700">Justifie — {disagreement.request}</span><textarea value={justifications[point.id] || ''} onChange={(event) => setJustifications((previous) => ({ ...previous, [point.id]: event.target.value }))} className="mt-1 min-h-[85px] w-full rounded-xl border-2 border-amber-300 bg-white p-3 text-sm font-bold outline-none" placeholder="Je maintiens mon choix parce que…" /></label>}
+          {verdict && <div className={`mt-3 text-sm font-black ${verdict.correct ? 'text-emerald-700' : 'text-red-700'}`}>{verdict.correct ? '✓ Choix juste.' : `✕ Choix incorrect : ${verdict.expected === 'in' ? 'dans le sujet' : 'hors sujet'}.`} <span className="font-bold">{verdict.feedback}</span></div>}
+        </article>;
+      })}</div>
+      {!verdicts.length && !disagreements.length && <button type="button" disabled={loading} onClick={evaluate} className="mt-5 rounded-2xl bg-slate-900 px-6 py-4 text-sm font-black text-white disabled:opacity-40">{loading ? 'Analyse…' : 'Valider mes choix'}</button>}
+      {disagreements.length > 0 && <button type="button" disabled={loading || disagreements.some((item) => !(justifications[item.pointId] || '').trim())} onClick={() => finalVerdict()} className="mt-5 rounded-2xl bg-amber-500 px-6 py-4 text-sm font-black text-white disabled:opacity-40">{loading ? 'Verdict en cours…' : 'Envoyer mes justifications'}</button>}
+      {verdicts.length > 0 && <div className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-900"><strong>Conseil de Qwen :</strong> {advice}<div className="mt-2 font-black">Score : {verdicts.filter((item) => item.correct).length}/{verdicts.length}</div></div>}
+    </>}
+    {error && <div className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-black text-red-700">{error}</div>}
+  </section>;
+}
+
 function DnbParagraphFillActivity({ activity, onBack }) {
   const [answers, setAnswers] = useState({});
   const [checked, setChecked] = useState(false);
@@ -7311,7 +7389,7 @@ export default function ExamTrainingHub({ user, canCalibrate = false, isStudentV
             </button>
           </div>
         </div>
-        {openOffTopic ? (
+        {secondeRqpModule === 'selection-ia' ? <RqpRelevanceTrainer onBack={() => setSecondeRqpModule('home')} /> : openOffTopic ? (
           effectiveCanCalibrate ? (
             <DnbOffTopicCalibration
               audience="RQP"
@@ -7348,6 +7426,9 @@ export default function ExamTrainingHub({ user, canCalibrate = false, isStudentV
               </div>
               <button type="button" onClick={() => setSecondeRqpModule('hors-sujet')} className="rounded-2xl bg-amber-500 px-5 py-4 text-sm font-black text-white shadow-sm">S’entraîner au hors-sujet</button>
             </div>
+          </div>
+          <div className="mt-5 rounded-3xl border-2 border-violet-200 bg-violet-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4"><div><div className="text-[11px] font-black uppercase text-violet-600">Nouvel entraînement · Qwen via Groq</div><div className="text-xl font-black text-slate-900">Sélectionner les connaissances utiles à une RQP</div><p className="mt-1 max-w-2xl text-sm font-bold text-violet-900">Colle ta fiche, puis décide pour chaque connaissance si elle répond au sujet ou si elle est hors sujet. Qwen te demandera de justifier les choix qu’il conteste.</p></div><button type="button" onClick={() => setSecondeRqpModule('selection-ia')} className="rounded-2xl bg-violet-600 px-5 py-4 text-sm font-black text-white shadow-sm">Commencer l’entraînement IA</button></div>
           </div>
         </section>}
         {!isRqp && <section className="mx-4 rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
