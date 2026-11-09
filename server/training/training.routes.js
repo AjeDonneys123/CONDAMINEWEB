@@ -195,6 +195,13 @@ router.put('/rqp-off-topic', async (req, res) => {
 });
 
 const cleanRqpText = (value, max = 30000) => String(value || '').trim().slice(0, max);
+const splitRqpSheetParagraphs = (sheet) => {
+    const blocks = String(sheet || '').replace(/\r/g, '').split(/\n\s*\n+/).map((block) => block.trim()).filter(Boolean);
+    const paragraphs = blocks.flatMap((block) => block.length > 900
+        ? block.split(/\n+/).map((line) => line.trim()).filter(Boolean)
+        : [block]);
+    return paragraphs.map((text, index) => ({ id: `p${index + 1}`, text: cleanRqpText(text, 1400) }));
+};
 const askRqpQwen = async (prompt, maxOutputTokens = 3000) => {
     const raw = await AIEngine.ask(prompt, 'Tu es un professeur d’histoire-géographie de lycée. Tu entraînes à sélectionner uniquement les connaissances qui répondent exactement au sujet d’une RQP. Réponds en JSON strict, sans markdown.', {
         provider: 'groq', temperature: 0.1, maxOutputTokens, responseMimeType: 'application/json'
@@ -208,12 +215,14 @@ router.post('/rqp-relevance/generate', async (req, res) => {
     try {
         const sheet = cleanRqpText(req.body?.sheet);
         if (sheet.length < 180) return res.status(400).json({ error: 'Colle une fiche de révision plus complète.' });
-        const parsed = await askRqpQwen(`FICHE DE L'ÉLÈVE:\n${sheet}\n\nCrée 3 sujets de RQP distincts mais liés à cette fiche. Pour chaque sujet, fournis exactement 10 connaissances atomiques tirées ou fidèlement reformulées depuis la fiche : 5 à 7 répondent directement au sujet, les autres sont exactes mais hors sujet. Ne révèle pas lesquelles. Format: {"sheetTitle":"...","subjects":[{"id":"s1","question":"...","points":[{"id":"s1-p1","text":"..."}]}]}.`);
+        const points = splitRqpSheetParagraphs(sheet);
+        if (points.length < 2) return res.status(400).json({ error: 'Sépare ta fiche en plusieurs paragraphes avant de commencer.' });
+        const parsed = await askRqpQwen(`FICHE DE L'ÉLÈVE:\n${sheet}\n\nCrée exactement 3 sujets de RQP faciles, adaptés à une classe de seconde. Chaque sujet doit être une question claire qui contient explicitement les deux axes du plan grâce à « et », « tout en » ou « comment... pour... ». L'élève doit pouvoir répondre avec une partie des connaissances de la fiche, tandis que d'autres paragraphes seront hors sujet. Ne demande jamais de réciter tout le chapitre et ne propose ni plan, ni connaissances, ni correction. Exemples de forme attendue : « Comment la romanisation transforme-t-elle l'Empire romain et quelles sont ses limites ? » ; « Comment Auguste profite-t-il d'un contexte favorable à la paix pour imposer son pouvoir ? ». Format strict : {"sheetTitle":"...","subjects":[{"question":"..."},{"question":"..."},{"question":"..."}]}.`);
         const subjects = (Array.isArray(parsed.subjects) ? parsed.subjects : []).slice(0, 3).map((subject, subjectIndex) => ({
             id: `s${subjectIndex + 1}`,
             question: cleanRqpText(subject?.question, 500),
-            points: (Array.isArray(subject?.points) ? subject.points : []).slice(0, 10).map((point, pointIndex) => ({ id: `s${subjectIndex + 1}-p${pointIndex + 1}`, text: cleanRqpText(point?.text, 700) }))
-        })).filter((subject) => subject.question && subject.points.length >= 6);
+            points: points.map((point) => ({ id: `s${subjectIndex + 1}-${point.id}`, text: point.text }))
+        })).filter((subject) => subject.question);
         if (!subjects.length) throw new Error('Aucun sujet exploitable généré');
         return res.json({ sheetTitle: cleanRqpText(parsed.sheettitle || 'Fiche de révision', 200), subjects, model: 'Qwen via Groq' });
     } catch (error) {
@@ -225,7 +234,7 @@ router.post('/rqp-relevance/evaluate', async (req, res) => {
     try {
         const sheet = cleanRqpText(req.body?.sheet);
         const subject = cleanRqpText(req.body?.subject, 700);
-        const points = Array.isArray(req.body?.points) ? req.body.points.slice(0, 14) : [];
+        const points = Array.isArray(req.body?.points) ? req.body.points.slice(0, 80) : [];
         const choices = req.body?.choices && typeof req.body.choices === 'object' ? req.body.choices : {};
         const parsed = await askRqpQwen(`FICHE:\n${sheet}\nSUJET:\n${subject}\nPOINTS ET CHOIX DE L'ÉLÈVE (in=dans le sujet, out=hors sujet):\n${JSON.stringify(points.map((point) => ({ id: point.id, text: point.text, choice: choices[point.id] })))}\n\nÉvalue chaque choix selon la réponse directe au sujet, pas selon la simple exactitude de la connaissance. Ne révèle pas encore la bonne réponse. Retourne uniquement les identifiants contestés: {"disagreements":[{"pointId":"...","request":"Justifie précisément le lien avec les mots du sujet."}]}.`);
         const validIds = new Set(points.map((point) => String(point.id)));
@@ -242,7 +251,7 @@ router.post('/rqp-relevance/verdict', async (req, res) => {
     try {
         const sheet = cleanRqpText(req.body?.sheet);
         const subject = cleanRqpText(req.body?.subject, 700);
-        const points = Array.isArray(req.body?.points) ? req.body.points.slice(0, 14) : [];
+        const points = Array.isArray(req.body?.points) ? req.body.points.slice(0, 80) : [];
         const choices = req.body?.choices && typeof req.body.choices === 'object' ? req.body.choices : {};
         const justifications = req.body?.justifications && typeof req.body.justifications === 'object' ? req.body.justifications : {};
         const parsed = await askRqpQwen(`FICHE:\n${sheet}\nSUJET:\n${subject}\nTRAVAIL:\n${JSON.stringify(points.map((point) => ({ id: point.id, text: point.text, choice: choices[point.id], justification: justifications[point.id] || '' })))}\n\nDonne le verdict final pour chaque point. expected vaut in si la connaissance aide directement à traiter le sujet, sinon out. Une justification pertinente peut expliquer le choix mais ne transforme pas une connaissance hors sujet. Format: {"verdicts":[{"pointId":"...","correct":true,"expected":"in","feedback":"explication brève"}],"advice":"conseil général"}.`);
