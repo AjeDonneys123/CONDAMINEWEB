@@ -84,6 +84,38 @@ app.get(['/privacy-gpt', '/privacy'], (_req, res) => {
 </body>
 </html>`);
 });
+
+app.get('/ia/slide', (req, res) => {
+    const presentationId = String(req.query.presentationId || '').trim();
+    const objectId = String(req.query.objectId || '').trim();
+    const slideNumber = Math.max(1, Math.floor(Number(req.query.slideNumber || 1)));
+    const title = String(req.query.title || 'Cours CondaWeb').trim().slice(0, 180);
+    if (!/^[a-zA-Z0-9_-]+$/.test(presentationId)) return res.status(400).send('Présentation invalide');
+    const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const imageParams = new URLSearchParams({ presentationId, slideNumber: String(slideNumber) });
+    if (objectId) imageParams.set('pageObjectId', objectId);
+    const imageUrl = `${req.protocol}://${req.get('host')}/api/learning/slides/thumbnail?${imageParams.toString()}`;
+    const safeTitle = escapeHtml(title);
+    res.type('html').send(`<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle} — diapositive ${slideNumber}</title>
+  <meta name="description" content="Diapositive ${slideNumber} du cours ${safeTitle}, publiée pour créer une fiche de révision avec une IA." />
+  <meta property="og:title" content="${safeTitle} — diapositive ${slideNumber}" />
+  <meta property="og:image" content="${escapeHtml(imageUrl)}" />
+  <style>
+    body{margin:0;background:#f8fafc;color:#172033;font-family:system-ui,-apple-system,sans-serif}main{max-width:1200px;margin:0 auto;padding:32px 18px}header{margin-bottom:22px}h1{margin:0;font-size:clamp(26px,4vw,48px)}p{font-size:17px;line-height:1.55}.slide{display:block;width:100%;height:auto;border-radius:20px;box-shadow:0 20px 60px #0f172a26;background:#fff}.hint{margin-top:22px;padding:18px;border-radius:16px;background:#ede9fe;font-weight:700}.source{word-break:break-all;color:#475569;font-size:13px}
+  </style>
+</head>
+<body><main>
+  <header><div>COURS CONDAWEB · DIAPOSITIVE ${slideNumber}</div><h1>${safeTitle}</h1></header>
+  <img class="slide" src="${escapeHtml(imageUrl)}" alt="Diapositive ${slideNumber} du cours ${safeTitle}" />
+  <section class="hint"><strong>Instruction pour l’IA :</strong> analyse précisément l’image de cette diapositive, puis crée une fiche de révision fidèle, structurée et adaptée à un élève. N’ajoute aucune information absente sans la signaler.</section>
+  <p class="source">Image directe : <a href="${escapeHtml(imageUrl)}">${escapeHtml(imageUrl)}</a></p>
+</main></body></html>`);
+});
 app.get('/api/system/latest-commit', (req, res) => {
     try {
         const repoDir = path.resolve(__dirname, '..');

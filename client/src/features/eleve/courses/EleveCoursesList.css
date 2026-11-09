@@ -183,6 +183,27 @@
   width: fit-content;
 }
 
+.eleve-course-ai-link {
+  background: linear-gradient(135deg, #7c3aed, #2563eb);
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  margin: 10px auto;
+  padding: 12px 18px;
+}
+
+.eleve-course-copy-status {
+  color: #166534;
+  font-size: 12px;
+  font-weight: 900;
+  margin: 8px 0 12px;
+  text-align: center;
+}
+
 .eleve-course-slide-frame img {
   height: 100%;
   object-fit: contain;

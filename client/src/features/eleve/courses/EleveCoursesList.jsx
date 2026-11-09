@@ -38,6 +38,7 @@ export default function EleveCoursesList({ user }) {
   const [slidesLoading, setSlidesLoading] = useState(false);
   const [error, setError] = useState('');
   const [slidesError, setSlidesError] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
 
   const selectedCourse = useMemo(
     () => courses.find((course) => String(course._id) === String(selectedId)) || courses[0] || null,
@@ -48,6 +49,27 @@ export default function EleveCoursesList({ user }) {
     selectedCourse?.presentationId || selectedCourse?.embedUrl,
     activeSlide?.objectId
   );
+
+  const copySlideForAi = async () => {
+    if (!activeSlide) return;
+    const presentationId = extractPresentationId(resolvedPresentationId || selectedCourse?.presentationId || selectedCourse?.embedUrl);
+    if (!presentationId) return;
+    const params = new URLSearchParams({
+      presentationId,
+      objectId: String(activeSlide.objectId || ''),
+      slideNumber: String(activeSlide.slideNumber || activeSlideIdx + 1),
+      title: String(selectedCourse?.title || 'Cours')
+    });
+    const publicUrl = `${window.location.origin}/ia/slide?${params.toString()}`;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopyStatus('Lien copié : colle-le dans ChatGPT ou Gemini.');
+    } catch (_) {
+      window.prompt('Copie ce lien pour l’IA :', publicUrl);
+      setCopyStatus('Lien prêt à copier.');
+    }
+    window.setTimeout(() => setCopyStatus(''), 3500);
+  };
 
   useEffect(() => {
     const studentId = user?._id || user?.id || '';
@@ -218,6 +240,8 @@ export default function EleveCoursesList({ user }) {
                   Slide {activeSlide.slideNumber || activeSlideIdx + 1} · {activeSlideIdx + 1}/{slides.length}
                 </div>
                 {readUrl && <a className="eleve-course-open-link" href={readUrl} target="_blank" rel="noreferrer">Ouvrir cette slide en lecture et copier son URL ↗</a>}
+                <button type="button" className="eleve-course-ai-link" onClick={copySlideForAi}>✨ Prêt pour l’IA fiche</button>
+                {copyStatus && <div className="eleve-course-copy-status" role="status">{copyStatus}</div>}
                 <div className="eleve-course-rail">
                   {slides.map((slide, idx) => (
                     <button
