@@ -109,17 +109,16 @@ const NATIVE_EXERCISES = [
     },
     {
         id: 'geo-metropoles',
-        title: 'Repères · Métropoles et aires urbaines en France',
+        title: 'À faire · Contrôle dans 1 semaine · Aires urbaines et métropoles françaises',
         section: 'GEO',
         level: '3',
         type: 'local',
-        questionType: 'qcm',
+        questionType: 'targeted',
         images: [],
         content: {
-            question: "Quelle est la principale métropole française qui concentre les fonctions de commandement à l'échelle mondiale ?",
-            choices: ['Lyon', 'Marseille', 'Paris', 'Toulouse'],
-            correctIndex: 2,
-            explanation: "Paris est la ville primatiale et la seule métropole de rang mondial en France."
+            question: "Réalisez le schéma d'une aire urbaine puis localisez les douze métropoles demandées sur la carte de France.",
+            sampleAnswer: "Schéma : ville-centre, banlieues, couronne périurbaine, espaces ruraux ; pôle urbain ; aire urbaine ; mobilités quotidiennes, étalement urbain et voies rapides. Villes : Lille, Paris, Strasbourg, Rennes, Nantes, Bordeaux, Toulouse, Montpellier, Marseille–Aix-en-Provence, Nice, Grenoble et Lyon.",
+            guidelines: "Le schéma et les 12 localisations doivent être maîtrisés avant le contrôle, dans une semaine."
         }
     },
     {

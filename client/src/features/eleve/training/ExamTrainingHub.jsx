@@ -383,7 +383,7 @@ const DNB_GEO_METROPOLES = [
   { id: 'bordeaux', name: 'Bordeaux', x: 32.3, y: 51.6, label: 'right', labelDx: 3.8, labelDy: -1.1 },
   { id: 'toulouse', name: 'Toulouse', x: 45.9, y: 62.4, label: 'left', labelDx: -3.8, labelDy: -1.1 },
   { id: 'montpellier', name: 'Montpellier', x: 60.9, y: 63.2, label: 'left', labelDx: -4.2, labelDy: -1.1 },
-  { id: 'marseille', name: 'Marseille', x: 73, y: 65.3, label: 'left', labelDx: -4.2, labelDy: -1.1 },
+  { id: 'marseille-aix', name: 'Marseille–Aix-en-Provence', x: 73, y: 65.3, label: 'left', labelDx: -4.2, labelDy: -1.1 },
   { id: 'nice', name: 'Nice', x: 85.4, y: 61.6, label: 'left', labelDx: -4.2, labelDy: -1.1 },
   { id: 'lyon', name: 'Lyon', x: 68.8, y: 46.3, label: 'left', labelDx: -4.2, labelDy: -1.1 },
   { id: 'grenoble', name: 'Grenoble', x: 75.4, y: 50.9, label: 'left', labelDx: -4.2, labelDy: 1.8 },
@@ -3783,12 +3783,13 @@ function DnbGeoTerritoryDrawingGame({ revisionMode = false }) {
 }
 
 const URBAN_AREA_LEGEND = [
-  { key: 'center', label: 'ville centre', color: '#ff2a1f', expected: 'ville centre' },
+  { key: 'center', label: 'ville-centre', color: '#ff2a1f', expected: 'ville centre' },
   { key: 'suburbs', label: 'banlieues', color: '#fb923c', expected: 'banlieues' },
-  { key: 'periurban', label: 'zone périurbaine', color: '#fde68a', expected: 'zone periurbaine' },
-  { key: 'rural', label: 'espace rural', color: '#b9cf32', expected: 'espace rural' },
-  { key: 'sprawl', label: 'étalement urbain', color: '#ef4444', expected: 'etalement urbain' },
-  { key: 'commute', label: 'mobilités pendulaires', color: '#2563eb', expected: 'mobilites pendulaires' }
+  { key: 'periurban', label: 'couronne périurbaine', color: '#fde68a', expected: 'couronne periurbaine' },
+  { key: 'rural', label: 'espaces ruraux', color: '#9dd36f', expected: 'espaces ruraux' },
+  { key: 'commute', label: 'mobilités quotidiennes (migrations pendulaires)', color: '#1026a3', expected: 'mobilites quotidiennes' },
+  { key: 'sprawl', label: 'étalement urbain', color: '#f000d8', expected: 'etalement urbain' },
+  { key: 'roads', label: 'autoroutes / voies rapides', color: '#ff1f16', expected: 'autoroutes voies rapides' }
 ];
 
 function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
@@ -3805,6 +3806,11 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
     { id: 'revision-commute-1', type: 'double', x1: 24, y1: 37.5, x2: 43, y2: 37.5 },
     { id: 'revision-commute-2', type: 'double', x1: 57, y1: 37.5, x2: 76, y2: 37.5 }
   ] : []);
+  const [roads, setRoads] = useState(() => revisionMode ? [
+    { id: 'revision-road-1', x1: 4, y1: 11, x2: 96, y2: 62 },
+    { id: 'revision-road-2', x1: 19, y1: 73, x2: 88, y2: 4 },
+    { id: 'revision-road-3', x1: 50, y1: 2, x2: 50, y2: 73 }
+  ] : []);
   const [answers, setAnswers] = useState(() => revisionMode ? Object.fromEntries(URBAN_AREA_LEGEND.map((item) => [item.key, item.expected])) : {});
   const [checked, setChecked] = useState(false);
   const [activeDrag, setActiveDrag] = useState(null);
@@ -3816,7 +3822,8 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
     ...(circles.length >= 2 ? ['suburbs'] : []),
     ...(circles.length >= 3 ? ['periurban', 'rural'] : []),
     ...(arrows.some((arrow) => arrow.type === 'sprawl') ? ['sprawl'] : []),
-    ...(arrows.some((arrow) => arrow.type === 'double') ? ['commute'] : [])
+    ...(arrows.some((arrow) => arrow.type === 'double') ? ['commute'] : []),
+    ...(roads.length ? ['roads'] : [])
   ]);
   const visibleLegend = revisionMode ? URBAN_AREA_LEGEND : URBAN_AREA_LEGEND.filter((item) => visibleLegendKeys.has(item.key));
   const goodLegend = visibleLegend.filter((item) => normalizeAnswer(answers[item.key]) === normalizeAnswer(item.expected)).length;
@@ -3829,7 +3836,7 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
     && sortedCircles.every((circle) => Math.hypot(circle.cx - sortedCircles[0].cx, circle.cy - sortedCircles[0].cy) <= 8)
     && sortedCircles[0].rx <= sortedCircles[1].rx - 4
     && sortedCircles[1].rx <= sortedCircles[2].rx - 4;
-  const schemaReady = hasNestedCircles && arrows.some((arrow) => arrow.type === 'sprawl') && arrows.some((arrow) => arrow.type === 'double');
+  const schemaReady = hasNestedCircles && arrows.some((arrow) => arrow.type === 'sprawl') && arrows.some((arrow) => arrow.type === 'double') && roads.length > 0;
 
   const addCircle = () => {
     if (circles.length >= 3) return;
@@ -3867,10 +3874,23 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
     setChecked(false);
   };
 
+  const addRoad = () => {
+    const presets = [
+      { x1: 4, y1: 12, x2: 96, y2: 62 },
+      { x1: 18, y1: 73, x2: 88, y2: 4 },
+      { x1: 50, y1: 2, x2: 50, y2: 73 }
+    ];
+    const road = { id: `road-${Date.now()}`, ...presets[roads.length % presets.length] };
+    setRoads((prev) => [...prev, road]);
+    setActions((prev) => [...prev, { type: 'road', id: road.id }]);
+    setChecked(false);
+  };
+
   const removeLast = () => {
     const last = actions[actions.length - 1];
     if (!last) return;
     if (last.type === 'arrow') setArrows((prev) => prev.filter((arrow) => arrow.id !== last.id));
+    if (last.type === 'road') setRoads((prev) => prev.filter((road) => road.id !== last.id));
     if (last.type === 'circle') setCircles((prev) => prev.filter((circle) => circle.key !== last.id));
     setActions((prev) => prev.slice(0, -1));
     setChecked(false);
@@ -3904,7 +3924,7 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
     }));
   };
 
-  const arrowStroke = (type) => type === 'double' ? '#2563eb' : '#ef4444';
+  const arrowStroke = (type) => type === 'double' ? '#1026a3' : '#f000d8';
   const arrowMarker = (type, end) => type === 'double' || (type === 'sprawl' && end === 'end');
 
   return (
@@ -3918,12 +3938,13 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
           <button type="button" onClick={addCircle} disabled={nextCircle >= 3} className="rounded-2xl bg-red-500 px-4 py-3 text-xs font-black text-white disabled:opacity-40">Cercles</button>
           <button type="button" onClick={() => addArrow('sprawl')} className="rounded-2xl bg-red-500 px-4 py-3 text-xs font-black text-white">Étalement urbain</button>
           <button type="button" onClick={() => addArrow('double')} className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black text-white">Mobilités pendulaires</button>
+          <button type="button" onClick={addRoad} className="rounded-2xl bg-red-600 px-4 py-3 text-xs font-black text-white">Autoroute / voie rapide</button>
           <button type="button" onClick={removeLast} className="rounded-2xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700">Effacer dernier</button>
           <button type="button" onClick={() => setChecked(true)} className="rounded-2xl bg-emerald-500 px-4 py-3 text-xs font-black text-white">Valider</button>
         </div>}
       </div>
       <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
-        {revisionMode ? 'Observe les trois espaces emboîtés et les deux types de flux, puis mémorise la légende.' : 'Place les trois espaces, ajoute les flux, puis complète la légende qui apparaît sous le schéma.'}
+        {revisionMode ? 'Observe les trois espaces emboîtés, les flux et les voies rapides, puis mémorise la légende.' : 'À faire avant le contrôle : place les trois espaces, les flux et les voies rapides, puis complète la légende.'}
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_340px]">
         <div
@@ -3980,9 +4001,10 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
                 />}
               </g>
             ))}
+            {roads.map((road) => <line key={road.id} {...road} stroke="#ff1f16" strokeWidth="1.45" />)}
             {arrows.map((arrow) => {
               const stroke = arrowStroke(arrow.type);
-              const markerId = stroke === '#2563eb' ? 'urban-arrow-blue' : 'urban-arrow-red';
+              const markerId = stroke === '#1026a3' ? 'urban-arrow-blue' : 'urban-arrow-red';
               const startMarkerId = `${markerId}-start`;
               return (
                 <g key={arrow.id}>
@@ -4024,6 +4046,10 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
         </div>
         <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
           <div className="text-lg font-black text-slate-900">Légende</div>
+          <div className="mt-3 rounded-2xl bg-white p-3 text-xs font-black leading-6 text-slate-700">
+            Pôle urbain = ville-centre + banlieues<br />
+            Aire urbaine = pôle urbain + couronne périurbaine
+          </div>
           <div className="mt-4 space-y-3">
             {visibleLegend.length === 0 && (
               <div className="rounded-2xl bg-white p-4 text-sm font-black text-slate-400">Commence par ajouter les cercles.</div>
@@ -4049,7 +4075,7 @@ function DnbUrbanAreaSchemaGame({ revisionMode = false }) {
           </div>
           {checked && (
             <div className={`mt-4 rounded-2xl bg-white p-4 text-sm font-black ${schemaReady && goodLegend === visibleLegend.length ? 'text-emerald-700' : 'text-red-600'}`}>
-              Schéma : {schemaReady ? 'structure correcte' : 'les 3 cercles doivent être emboîtés et les flèches placées'}<br />
+              Schéma : {schemaReady ? 'structure correcte' : 'les 3 espaces doivent être emboîtés, avec les flux et une voie rapide'}<br />
               Légende : {goodLegend}/{visibleLegend.length}
             </div>
           )}
