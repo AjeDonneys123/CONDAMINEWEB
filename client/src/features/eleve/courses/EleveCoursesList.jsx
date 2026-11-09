@@ -56,8 +56,6 @@ export default function EleveCoursesList({ user }) {
     if (!presentationId) return;
     const params = new URLSearchParams({
       presentationId,
-      objectId: String(activeSlide.objectId || ''),
-      slideNumber: String(activeSlide.slideNumber || activeSlideIdx + 1),
       title: String(selectedCourse?.title || 'Cours')
     });
     const publicUrl = `${window.location.origin}/api/ia/slide?${params.toString()}`;
@@ -240,7 +238,7 @@ export default function EleveCoursesList({ user }) {
                   Slide {activeSlide.slideNumber || activeSlideIdx + 1} · {activeSlideIdx + 1}/{slides.length}
                 </div>
                 {readUrl && <a className="eleve-course-open-link" href={readUrl} target="_blank" rel="noreferrer">Ouvrir cette slide en lecture et copier son URL ↗</a>}
-                <button type="button" className="eleve-course-ai-link" onClick={copySlideForAi}>✨ Prêt pour l’IA fiche</button>
+                <button type="button" className="eleve-course-ai-link" onClick={copySlideForAi}>✨ Copier toute la présentation pour l’IA fiche</button>
                 {copyStatus && <div className="eleve-course-copy-status" role="status">{copyStatus}</div>}
                 <div className="eleve-course-rail">
                   {slides.map((slide, idx) => (
