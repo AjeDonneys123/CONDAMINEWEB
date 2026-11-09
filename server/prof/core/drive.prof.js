@@ -136,19 +136,19 @@ const ProfDrive = {
         const drive = google.drive({ version: 'v3', auth: oauth2Client });
         const existing = await drive.permissions.list({ fileId, fields: 'permissions(id,type,role,emailAddress)' });
         const permission = (existing?.data?.permissions || []).find(row => row.type === 'anyone');
-        if (permission?.role === 'writer') {
-            return { ok: true, fileId, role: 'writer', existing: true };
+        if (permission?.role === 'reader') {
+            return { ok: true, fileId, role: 'reader', existing: true };
         }
         if (permission?.id) {
-            await drive.permissions.update({ fileId, permissionId: permission.id, requestBody: { role: 'writer' } });
+            await drive.permissions.update({ fileId, permissionId: permission.id, requestBody: { role: 'reader' } });
         } else {
             await drive.permissions.create({
                 fileId,
-                requestBody: { type: 'anyone', role: 'writer', allowFileDiscovery: false },
+                requestBody: { type: 'anyone', role: 'reader', allowFileDiscovery: false },
                 fields: 'id,role,type,emailAddress'
             });
         }
-        return { ok: true, fileId, role: 'writer', existing: false };
+        return { ok: true, fileId, role: 'reader', existing: false };
     },
 
     getAuthUrl: () => {
@@ -306,7 +306,7 @@ const ProfDrive = {
         // Partage explicite pour éviter les 404 côté iframe élève.
         await drive.permissions.create({
             fileId: presentationId,
-            requestBody: { role: 'writer', type: 'anyone' }
+            requestBody: { role: 'reader', type: 'anyone', allowFileDiscovery: false }
         });
         return {
             presentationId,
@@ -408,7 +408,7 @@ const ProfDrive = {
             fileId: copyId,
             requestBody: {
                 type: 'anyone',
-                role: 'writer',
+                role: 'reader',
                 allowFileDiscovery: false
             },
             fields: 'id,role,type'
@@ -417,7 +417,7 @@ const ProfDrive = {
             presentationId: copyId,
             editUrl: `https://docs.google.com/presentation/d/${copyId}/edit`,
             publicReaderUrl: `https://docs.google.com/presentation/d/${copyId}/view`,
-            publicAccess: 'writer',
+            publicAccess: 'reader',
             startSlide: start,
             endSlide: end,
             slideCount: end - start + 1

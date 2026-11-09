@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
-const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress, ClassroomScan, ClassroomScanShare } = require('../models/prof.models');
+const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress, ClassroomScan, ClassroomScanShare, DilVocabulary } = require('../models/prof.models');
 const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
 const multer = require('multer');
 const path = require('path');
@@ -1271,13 +1271,15 @@ router.get('/plan/:classId', async (req, res) => {
             }
         }
 
-        const [hws, games, learnings, subs, progs] = await Promise.all([
+        const [hws, games, learnings, subs, progs, vocabularyOwners] = await Promise.all([
             Homework.find({ targetClassrooms: className, isPunishment: false, isEnabled: { $ne: false } }).lean(),
             GameLevel.find({ targetClassrooms: className, isEnabled: { $ne: false } }).lean(),
             LearningModule.find({ targetClassrooms: className, isEnabled: { $ne: false } }).lean(),
             Submission.find({}).lean(),
-            GameProgress.find({}).lean()
+            GameProgress.find({}).lean(),
+            DilVocabulary.find({ studentId: { $in: students.map((student) => student._id) } }, 'studentId').lean()
         ]);
+        const studentsWithFrenchVocabulary = new Set(vocabularyOwners.map((entry) => String(entry.studentId || '')));
         let nextLearningReference = learnings.reduce((max, learning) => Math.max(max, Number(learning.referenceNumber || 0)), 0) + 1;
         const missingLearningReferences = learnings
             .filter((learning) => Number(learning.referenceNumber || 0) < 1)
@@ -1372,6 +1374,7 @@ router.get('/plan/:classId', async (req, res) => {
                     ? 'yellow'
                     : (learningFullyValidated >= learningAssigned ? 'green' : 'orange'),
                 learningReferences: learningReferences.sort((a, b) => a.number - b.number),
+                hasFrenchVocabulary: studentsWithFrenchVocabulary.has(sId),
                 myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || ""
             };
         });
