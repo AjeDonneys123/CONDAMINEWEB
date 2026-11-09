@@ -60,7 +60,7 @@ export default function EleveCoursesList({ user }) {
       slideNumber: String(activeSlide.slideNumber || activeSlideIdx + 1),
       title: String(selectedCourse?.title || 'Cours')
     });
-    const publicUrl = `${window.location.origin}/ia/slide?${params.toString()}`;
+    const publicUrl = `${window.location.origin}/api/ia/slide?${params.toString()}`;
     try {
       await navigator.clipboard.writeText(publicUrl);
       setCopyStatus('Lien copié : colle-le dans ChatGPT ou Gemini.');

@@ -6,6 +6,7 @@ const path = require('path');
 const fetch = require('node-fetch');
 const { getAiGuardStatus } = require('./services/aiGuard.service');
 const AIEngine = require('./core/ai.engine');
+const ProfDrive = require('./prof/core/drive.prof');
 
 dotenv.config();
 const app = express();
@@ -85,7 +86,7 @@ app.get(['/privacy-gpt', '/privacy'], (_req, res) => {
 </html>`);
 });
 
-app.get('/ia/slide', (req, res) => {
+app.get(['/ia/slide', '/api/ia/slide'], async (req, res) => {
     const presentationId = String(req.query.presentationId || '').trim();
     const objectId = String(req.query.objectId || '').trim();
     const slideNumber = Math.max(1, Math.floor(Number(req.query.slideNumber || 1)));
@@ -96,6 +97,14 @@ app.get('/ia/slide', (req, res) => {
     if (objectId) imageParams.set('pageObjectId', objectId);
     const imageUrl = `${req.protocol}://${req.get('host')}/api/learning/slides/thumbnail?${imageParams.toString()}`;
     const safeTitle = escapeHtml(title);
+    let slideText = '';
+    try {
+        const manifest = await ProfDrive.getGoogleSlidesManifest(presentationId, [slideNumber], '', false);
+        const slide = (manifest?.slides || []).find((item) => !objectId || String(item?.objectId || '') === objectId) || manifest?.slides?.[0];
+        slideText = String(slide?.text || '').trim().slice(0, 20000);
+    } catch (error) {
+        console.warn('[ia/slide] Texte de la diapositive indisponible:', error.message);
+    }
     res.type('html').send(`<!doctype html>
 <html lang="fr">
 <head>
@@ -112,6 +121,7 @@ app.get('/ia/slide', (req, res) => {
 <body><main>
   <header><div>COURS CONDAWEB · DIAPOSITIVE ${slideNumber}</div><h1>${safeTitle}</h1></header>
   <img class="slide" src="${escapeHtml(imageUrl)}" alt="Diapositive ${slideNumber} du cours ${safeTitle}" />
+  <section class="hint"><strong>Texte extrait de la diapositive :</strong><p>${slideText ? escapeHtml(slideText) : 'Le texte n’a pas pu être extrait automatiquement. Analyse directement l’image ci-dessus.'}</p></section>
   <section class="hint"><strong>Instruction pour l’IA :</strong> analyse précisément l’image de cette diapositive, puis crée une fiche de révision fidèle, structurée et adaptée à un élève. N’ajoute aucune information absente sans la signaler.</section>
   <p class="source">Image directe : <a href="${escapeHtml(imageUrl)}">${escapeHtml(imageUrl)}</a></p>
 </main></body></html>`);
@@ -275,7 +285,6 @@ app.post('/api/system/ai-diagnostic', async (req, res) => {
 });
 
 // 3. PROXY RAW
-const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id', '/api/prof/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
