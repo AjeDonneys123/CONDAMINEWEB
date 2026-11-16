@@ -3289,7 +3289,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                 sequenceIndex: Math.max(0, Number(savedRemote.sequenceIndex || 0))
             }
         });
-        setPlayerMode('presentation');
+        setPlayerMode('edit');
         // Pré-remplissage instantané du manifest depuis le cache mémoire ou les slides natives (0ms de latence)
         const cachedManifest = slideManifestCacheRef.current.get(course?.slidesUrl)
             || (Array.isArray(course?.nativeSlides) && course.nativeSlides.length
@@ -3386,7 +3386,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                         classId: globalClassId,
                         courseId: course._id,
                         slideIndex: targetSlideIndex,
-                        playerMode: 'presentation'
+                        playerMode: 'edit'
                     })
                 }).catch(() => {});
             }
@@ -4021,11 +4021,11 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
                                     </a>
                                 )}
 
-                                {projectedSlidesUrl ? (
+                                {(playerMode === 'edit' ? editSlidesUrl : projectedSlidesUrl) ? (
                                     <iframe
-                                        key={`google-slides-embed-${extractPresentationId(playingCourse?.slidesUrl)}-${presentationReloadNonce}`}
-                                        src={projectedSlidesUrl}
-                                        title={playingCourse?.title || "Google Slides"}
+                                        key={`google-slides-${playerMode}-${extractPresentationId(playingCourse?.slidesUrl)}-${presentationReloadNonce}`}
+                                        src={playerMode === 'edit' ? editSlidesUrl : projectedSlidesUrl}
+                                        title={playerMode === 'edit' ? `Modifier ${playingCourse?.title || 'Google Slides'}` : (playingCourse?.title || "Google Slides")}
                                         className="google-slide-embed-frame"
                                         allow="autoplay; fullscreen"
                                         allowFullScreen
