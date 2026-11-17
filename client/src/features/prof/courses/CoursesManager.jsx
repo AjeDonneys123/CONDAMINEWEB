@@ -3358,25 +3358,27 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
         // 1. Calcul immédiat de l'URL Google Slides (0ms de latence, accès direct sans attendre)
         const directTargetUrl = getDirectGoogleSlidesUrl(course, editSlideObjectId, globalClassId);
 
-        // 2. Ouvrir immédiatement l'onglet ou rediriger preOpenedWindow
-        let editorWindow = preOpenedWindow;
-        if (directTargetUrl) {
-            if (editorWindow) {
-                try { editorWindow.location.replace(directTargetUrl); } catch (_) { editorWindow.location.href = directTargetUrl; }
-            } else {
-                editorWindow = window.open(directTargetUrl, '_blank', 'noopener,noreferrer');
-            }
-        }
+        // 2. Réserver immédiatement l'onglet pour éviter le blocage des popups,
+        // puis attendre que Drive ait réellement accordé le droit d'édition.
+        let editorWindow = preOpenedWindow || window.open('about:blank', '_blank');
+        if (editorWindow && !preOpenedWindow) editorWindow.opener = null;
 
         if (course?._id) writeLastCourseId(globalClassId, course._id);
 
-        // 3. Traiter l'autorisation et la synchro en arrière-plan sans bloquer l'ouverture
+        // 3. Accorder l'édition avant de charger Google Slides.
         try {
-            fetch(`/api/courses/${course._id}/editor-access`, {
+            const accessResponse = await fetch(`/api/courses/${course._id}/editor-access`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teacherEmail: user?.email || user?.mail || '' })
-            }).catch(() => {});
+            });
+            const accessData = await accessResponse.json().catch(() => ({}));
+            if (!accessResponse.ok) throw new Error(accessData?.error || 'Autorisation d’édition impossible');
+            if (editorWindow && directTargetUrl) {
+                try { editorWindow.location.replace(directTargetUrl); } catch (_) { editorWindow.location.href = directTargetUrl; }
+            } else if (directTargetUrl) {
+                window.open(directTargetUrl, '_blank', 'noopener,noreferrer');
+            }
 
             if (globalClassId) {
                 fetch(`/api/courses/${course._id}/presentation-remote/sync`, {
@@ -3392,7 +3394,10 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
             }
             setLastEditSlideNumber(targetSlideIndex + 1);
             setEditSlideNumberDraft('');
-        } catch (_) {}
+        } catch (accessError) {
+            try { editorWindow?.close(); } catch (_) {}
+            setError(accessError.message || 'Impossible d’ouvrir la présentation en édition.');
+        }
     };
 
     const togglePlayerMode = async () => {

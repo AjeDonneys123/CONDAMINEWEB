@@ -129,26 +129,36 @@ const ProfDrive = {
         }
     },
 
-    grantFileWriterAccess: async (fileRef = '') => {
+    grantFileWriterAccess: async (fileRef = '', writerEmail = '') => {
         if (!oauth2Client) throw new Error('Drive non connecté');
         const fileId = ProfDrive.extractSlidesPresentationId(fileRef) || String(fileRef || '').trim();
         if (!fileId) throw new Error('Présentation Google Slides introuvable');
+        const emailAddress = String(writerEmail || '').trim().toLowerCase();
+        if (!emailAddress) throw new Error('Adresse du professeur introuvable');
         const drive = google.drive({ version: 'v3', auth: oauth2Client });
         const existing = await drive.permissions.list({ fileId, fields: 'permissions(id,type,role,emailAddress)' });
-        const permission = (existing?.data?.permissions || []).find(row => row.type === 'anyone');
-        if (permission?.role === 'reader') {
-            return { ok: true, fileId, role: 'reader', existing: true };
+        const permissions = existing?.data?.permissions || [];
+        const publicPermission = permissions.find(row => row.type === 'anyone');
+        if (publicPermission?.id && publicPermission.role !== 'reader') {
+            await drive.permissions.update({ fileId, permissionId: publicPermission.id, requestBody: { role: 'reader' } });
+        } else if (!publicPermission?.id) {
+            await drive.permissions.create({ fileId, requestBody: { type: 'anyone', role: 'reader', allowFileDiscovery: false }, fields: 'id,role,type' });
         }
-        if (permission?.id) {
-            await drive.permissions.update({ fileId, permissionId: permission.id, requestBody: { role: 'reader' } });
+        const writerPermission = permissions.find(row => row.type === 'user' && String(row.emailAddress || '').toLowerCase() === emailAddress);
+        if (writerPermission?.role === 'owner' || writerPermission?.role === 'writer') {
+            return { ok: true, fileId, role: writerPermission.role, existing: true };
+        }
+        if (writerPermission?.id) {
+            await drive.permissions.update({ fileId, permissionId: writerPermission.id, requestBody: { role: 'writer' } });
         } else {
             await drive.permissions.create({
                 fileId,
-                requestBody: { type: 'anyone', role: 'reader', allowFileDiscovery: false },
+                requestBody: { type: 'user', role: 'writer', emailAddress },
+                sendNotificationEmail: false,
                 fields: 'id,role,type,emailAddress'
             });
         }
-        return { ok: true, fileId, role: 'reader', existing: false };
+        return { ok: true, fileId, role: 'writer', existing: false };
     },
 
     getAuthUrl: () => {

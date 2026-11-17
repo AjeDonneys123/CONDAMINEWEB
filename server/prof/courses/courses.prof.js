@@ -299,7 +299,7 @@ router.post('/:id/editor-access', async (req, res) => {
                 || await mongoose.model('Admin').findById(course.teacherId, 'email mail').lean();
         }
         const teacherEmail = String(teacher?.email || teacher?.mail || req.body?.teacherEmail || '').trim().toLowerCase();
-        const access = await ProfDrive.grantFileWriterAccess(course.presentationId || course.slidesUrl);
+        const access = await ProfDrive.grantFileWriterAccess(course.presentationId || course.slidesUrl, teacherEmail);
         res.json({ ...access, editUrl: `https://docs.google.com/presentation/d/${access.fileId}/edit?usp=sharing` });
     } catch (error) {
         res.status(Number(error?.response?.status || 500)).json({ error: error.message });
