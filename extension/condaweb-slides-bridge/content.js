@@ -1006,6 +1006,8 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
 
     let pepitoWidgetVisible = false;
     try { pepitoWidgetVisible = localStorage.getItem('condaPepitoVisible') === 'true'; } catch (_) {}
+    let controlDockVisible = true;
+    try { controlDockVisible = localStorage.getItem('condaControlDockVisible') !== 'false'; } catch (_) {}
     const isFifthGrade = () => /(?:^|\D)5\s*(?:e|ème|eme|[a-z])(?:\D|$)/i.test(String(activeClassName || ''));
     const canOfferPepito = () => {
         const { bridgeClassId } = getSlideInfo();
@@ -1105,6 +1107,28 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
             dock.className = 'conda-slide-control-dock';
             root.appendChild(dock);
         }
+        dock.classList.toggle('is-hidden', !controlDockVisible);
+
+        let visibilityButton = root.querySelector('.conda-slide-dock-visibility-toggle');
+        if (!visibilityButton) {
+            visibilityButton = document.createElement('button');
+            visibilityButton.type = 'button';
+            visibilityButton.className = 'conda-slide-dock-visibility-toggle';
+            root.appendChild(visibilityButton);
+        }
+        visibilityButton.textContent = controlDockVisible ? '◀ CACHER LA BARRE' : '▶ AFFICHER LA BARRE';
+        visibilityButton.title = controlDockVisible ? 'Masquer les boutons CondaWeb' : 'Afficher les boutons CondaWeb';
+        visibilityButton.setAttribute('aria-expanded', controlDockVisible ? 'true' : 'false');
+        visibilityButton.onclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            controlDockVisible = !controlDockVisible;
+            try { localStorage.setItem('condaControlDockVisible', String(controlDockVisible)); } catch (_) {}
+            dock.classList.toggle('is-hidden', !controlDockVisible);
+            visibilityButton.textContent = controlDockVisible ? '◀ CACHER LA BARRE' : '▶ AFFICHER LA BARRE';
+            visibilityButton.title = controlDockVisible ? 'Masquer les boutons CondaWeb' : 'Afficher les boutons CondaWeb';
+            visibilityButton.setAttribute('aria-expanded', controlDockVisible ? 'true' : 'false');
+        };
 
         let planButton = dock.querySelector('.conda-slide-plan-toggle');
         if (!planButton) {
