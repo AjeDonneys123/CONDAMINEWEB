@@ -4,6 +4,74 @@ let geminiReadyTabId = null;
 let lastGeminiStatus = "";
 let lastGeminiResponse = "";
 
+const openCaptureDb = () => new Promise((resolve, reject) => {
+  const request = indexedDB.open('conda-capture', 1);
+  request.onupgradeneeded = () => request.result.createObjectStore('settings');
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+const getCaptureDirectory = async () => {
+  const db = await openCaptureDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('settings').objectStore('settings').get('directory');
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const beginAreaCapture = async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  chrome.tabs.sendMessage(tab.id, { type: 'CONDA_CAPTURE_START' }, () => {
+    if (!chrome.runtime.lastError) return;
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['capture.js'] }, () => {
+      if (!chrome.runtime.lastError) chrome.tabs.sendMessage(tab.id, { type: 'CONDA_CAPTURE_START' }, () => {});
+    });
+  });
+};
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'capture-selection') void beginAreaCapture();
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'CONDA_CAPTURE_BEGIN') {
+    void beginAreaCapture();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message?.type === 'CONDA_CAPTURE_RECT' && sender.tab?.id) {
+    chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' }, (dataUrl) => {
+      if (chrome.runtime.lastError || !dataUrl) return;
+      chrome.tabs.sendMessage(sender.tab.id, { type: 'CONDA_CAPTURE_IMAGE', dataUrl, rect: message.rect });
+    });
+    return false;
+  }
+  if (message?.type === 'CONDA_CAPTURE_SAVE' && sender.tab?.id) {
+    const tabId = sender.tab.id;
+    void (async () => {
+      const filename = `Capture CondaWeb ${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
+      try {
+        const handle = await getCaptureDirectory();
+        if (!handle) throw new Error('NO_FOLDER');
+        const permission = await handle.queryPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') throw new Error('PERMISSION');
+        const file = await handle.getFileHandle(filename, { create: true });
+        const writable = await file.createWritable();
+        await writable.write(await (await fetch(message.dataUrl)).blob());
+        await writable.close();
+        chrome.tabs.sendMessage(tabId, { type: 'CONDA_CAPTURE_STATUS', text: `Capture enregistrée dans ${handle.name}.` });
+      } catch (_) {
+        chrome.downloads.download({ url: message.dataUrl, filename: `CondaWeb Captures/${filename}`, saveAs: true }, () => {});
+        chrome.tabs.sendMessage(tabId, { type: 'CONDA_CAPTURE_STATUS', text: 'Choisissez le dossier depuis l’extension ; la capture a été téléchargée.', error: true });
+      }
+    })();
+    return false;
+  }
+  return false;
+});
+
 function clampPositive(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;

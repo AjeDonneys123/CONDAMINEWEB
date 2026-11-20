@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "CondaWeb Élève",
-  "version": "0.2.0",
-  "description": "Extension élève CondaWeb pour utiliser Gemini directement dans les activités pédagogiques.",
+  "version": "0.3.0",
+  "description": "Extension élève CondaWeb pour utiliser Gemini et réaliser des captures d’écran par sélection.",
   "permissions": [
     "tabs",
     "storage",
     "scripting",
-    "sidePanel"
+    "sidePanel",
+    "activeTab",
+    "downloads"
   ],
   "host_permissions": [
     "http://localhost:5173/*",
@@ -41,6 +43,11 @@
         "gemini-page.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["capture.js"],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
@@ -56,6 +63,16 @@
     }
   ],
   "action": {
-    "default_title": "CondaWeb Élève"
+    "default_title": "CondaWeb Élève",
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "capture-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Capturer une zone de l’écran"
+    }
   }
 }
