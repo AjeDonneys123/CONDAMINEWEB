@@ -256,7 +256,7 @@ export default function ProfPage({ user, onLogout }) {
                 {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} launchIntent={scanLaunchIntent} />}
                 {tab === 'corriger' && <ScansStudio user={liveUser} globalClass={currentClassName} globalClassId={selectedClassId} classes={classes} correctionWorkspace />}
                 {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
-                {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
+                {tab === 'students' && <StudentsManager globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'training' && <TrainingManager globalClassId={selectedClassId} globalClass={currentClassName} user={liveUser} />}
                 {tab === 'bots' && !isPhone && <ClassBotsStudio classId={selectedClassId} className={currentClassName} />}
                 {tab === 'admin' && liveUser.isDeveloper && <AdminDashboard user={liveUser} globalClass={currentClassName} onRefresh={loadProfileAndClasses} />}

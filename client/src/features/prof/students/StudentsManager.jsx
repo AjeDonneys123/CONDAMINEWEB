@@ -61,7 +61,7 @@ const gradeToNumber = (raw = '') => {
   return map[txt] ?? 0;
 };
 
-export default function StudentsManager({ globalClassId }) {
+export default function StudentsManager({ globalClassId, user }) {
   const [students, setStudents] = useState([]);
   const [activities, setActivities] = useState([]);
   const [trackingData, setTrackingData] = useState({}); 
@@ -338,6 +338,26 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
     } catch (_) {
       setManualGradeError('Impossible de copier le prompt automatiquement. Autorisez le presse-papiers dans le navigateur.');
     }
+  };
+
+  const collectParticipationGrades = () => {
+    const teacherId = extractId(user?._id || user?.id);
+    const lines = students.map((student) => {
+      const records = Array.isArray(student?.behaviorRecords) ? student.behaviorRecords : [];
+      const stats = records.find((record) => teacherId && extractId(record?.teacherId) === teacherId) || records[0] || {};
+      const scores = Array.isArray(stats?.scores) ? stats.scores : [];
+      const selected = scores.find((score) => String(score?.id || '') === String(stats?.selectedScoreId || '')) || scores[scores.length - 1];
+      const value = Number(selected?.value ?? (Number(stats?.baseScore ?? 15) + (Number(stats?.bonuses || 0) * 0.5) - Number(stats?.crosses || 0)));
+      const name = `${String(student?.firstName || '').trim()} ${String(student?.lastName || '').trim()}`.trim();
+      return name && Number.isFinite(value) ? `${name} : ${Math.max(0, Math.min(20, value)).toLocaleString('fr-FR')}` : '';
+    }).filter(Boolean);
+    setManualGradeError('');
+    setManualGradeDraft((draft) => ({
+      ...draft,
+      title: draft.title.trim() || 'Note de participation',
+      outOf: '20',
+      text: lines.join('\n')
+    }));
   };
 
   const handleSaveControlScore = async () => {
@@ -3077,7 +3097,17 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                 <input type="number" min="1" max="100" step="0.5" value={manualGradeDraft.outOf} onChange={event => setManualGradeDraft(draft => ({ ...draft, outOf: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
                             </label>
                         </div>
-                        <label className="block text-xs font-black text-slate-700">Liste des notes
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs font-black text-slate-700">Liste des notes</span>
+                            <button
+                                type="button"
+                                onClick={collectParticipationGrades}
+                                className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800 transition hover:bg-sky-100"
+                            >
+                                🟦 Notes de participation
+                            </button>
+                        </div>
+                        <label className="block text-xs font-black text-slate-700">
                             <textarea
                                 value={manualGradeDraft.text}
                                 onChange={event => { setManualGradeError(''); setManualGradeDraft(draft => ({ ...draft, text: event.target.value })); }}
