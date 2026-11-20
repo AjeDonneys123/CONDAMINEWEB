@@ -373,11 +373,12 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const normalizeStudentName = (value) => norm(value).replace(/[^a-z0-9]/g, '');
     const roster = students.map((student) => ({
       student,
       keys: new Set([
-        norm(`${student.firstName || ''}${student.lastName || ''}`),
-        norm(`${student.lastName || ''}${student.firstName || ''}`)
+        normalizeStudentName(`${student.firstName || ''} ${student.lastName || ''}`),
+        normalizeStudentName(`${student.lastName || ''} ${student.firstName || ''}`)
       ])
     }));
     const errors = [];
@@ -386,7 +387,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       const separator = line.indexOf(':');
       if (separator < 1) { errors.push(`Ligne ${index + 1} : nom et deux-points manquants.`); return null; }
       const name = line.slice(0, separator).trim();
-      const candidates = roster.filter((row) => row.keys.has(norm(name)));
+      const candidates = roster.filter((row) => row.keys.has(normalizeStudentName(name)));
       if (candidates.length !== 1) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
       const student = candidates[0].student;
       const studentId = extractId(student._id);
