@@ -19,6 +19,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         pronoteStatus.className = `pronote-export-status ${kind}`.trim();
     };
 
+    const updatePronoteImportLabel = () => {
+        const selected = pronoteExports[Number(pronoteSelect.value)];
+        pronoteImportBtn.textContent = selected?.export?.mode === 'appreciations'
+            ? '💬 Importer les appréciations préparées'
+            : '📤 Importer les notes préparées';
+    };
+
     const loadPronoteExports = async (classId) => {
         const className = classSelect.options[classSelect.selectedIndex]?.text || 'cette classe';
         pronoteExports = [];
@@ -53,6 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 option.textContent = `${entry.export?.title || entry.title} · ${entry.export?.rows?.length || 0} ${itemLabel}`;
                 pronoteSelect.appendChild(option);
             });
+            updatePronoteImportLabel();
             setPronoteStatus(`${pronoteExports.length} lot(s) prêt(s) pour ${className}.`, 'ready');
         } catch (error) {
             empty.textContent = 'Lots Pronote indisponibles';
@@ -150,6 +158,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         void loadPronoteExports(activeClassId);
     });
 
+    pronoteSelect.addEventListener('change', updatePronoteImportLabel);
+
     chrome.storage.onChanged.addListener((changes, areaName) => {
         if (areaName !== 'local' || (!changes.activeClassId && !changes.activeClassName)) return;
         const activeClassId = String(changes.activeClassId?.newValue || '');
@@ -171,12 +181,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Préparez d’abord le lot depuis CondaWeb, dans Contrôles et contestations.');
             return;
         }
-        pronoteImportBtn.textContent = selected.export.mode === 'appreciations'
-            ? '💬 Importer les appréciations préparées'
-            : '📤 Importer les notes préparées';
+        updatePronoteImportLabel();
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id || !tab.url || /^chrome:\/\//.test(tab.url) || tab.url.includes('docs.google.com/presentation')) {
-            alert('Ouvrez Pronote sur la grille du devoir, puis relancez cet import.');
+            alert(selected.export.mode === 'appreciations'
+                ? 'Ouvrez dans Pronote la page des appréciations, cliquez sur une case de la colonne Appréciations, puis relancez cet import.'
+                : 'Ouvrez Pronote sur la grille du devoir, puis relancez cet import.');
             return;
         }
         try {
@@ -189,7 +199,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.close();
         } catch (error) {
             console.error('[CondaWeb Bridge] injection Pronote impossible', error);
-            alert('Impossible d’ouvrir l’aperçu sur cette page Pronote. Ouvrez la grille de saisie des notes et réessayez.');
+            alert(selected.export.mode === 'appreciations'
+                ? 'Impossible d’ouvrir l’import ici. Ouvrez la page des appréciations dans Pronote, cliquez sur une case de la colonne, puis réessayez.'
+                : 'Impossible d’ouvrir l’aperçu sur cette page Pronote. Ouvrez la grille de saisie des notes et réessayez.');
         }
     });
 

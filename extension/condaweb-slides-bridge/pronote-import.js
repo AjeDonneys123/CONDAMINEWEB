@@ -171,7 +171,7 @@
   };
 
   // Écriture d'une note dans la cellule avec simulation précise
-  const writeGradeToCell = async (gradeCell, grade) => {
+  const writeGradeToCell = async (gradeCell, grade, { textMode = false } = {}) => {
     gradeCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     await new Promise((r) => setTimeout(r, 40));
 
@@ -264,18 +264,22 @@
       return false;
     }
 
-    // Formatage avec virgule française (ex: 15,5)
-    const formattedGrade = String(grade).replace('.', ',');
+    // Les notes conservent le format français. Une appréciation reste un texte
+    // strictement identique à celui préparé dans CondaWeb.
+    const formattedGrade = textMode ? String(grade) : String(grade).replace('.', ',');
     const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
     descriptor?.set?.call(input, formattedGrade);
 
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    if (!textMode) {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    }
     input.dispatchEvent(new Event('blur', { bubbles: true }));
+    input.blur?.();
 
     return true;
   };
@@ -318,7 +322,7 @@
         const rows = payload.rows || [];
         const isAppreciationMode = payload.mode === 'appreciations';
         if (rows.length === 0) {
-          alert('Le lot ne contient aucune note à importer.');
+          alert(`Le lot ne contient aucune ${isAppreciationMode ? 'appréciation' : 'note'} à importer.`);
           return;
         }
 
@@ -418,7 +422,7 @@
               continue;
             }
 
-            const written = await writeGradeToCell(gradeCell, valueToWrite);
+            const written = await writeGradeToCell(gradeCell, valueToWrite, { textMode: isAppreciationMode });
             if (written) {
               processedCount++;
               processedCellIds.add(nameCell.id);

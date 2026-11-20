@@ -26,6 +26,21 @@ const norm = (value = '') =>
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
+const nameBag = (value = '') =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .match(/[A-Z0-9]+/g)?.sort().join('') || '';
+const studentNameKeys = (student = {}) => new Set([
+  norm(`${student.firstName || ''}${student.lastName || ''}`),
+  norm(`${student.lastName || ''}${student.firstName || ''}`),
+  norm(student.nickname || ''),
+  norm(student.name || ''),
+  norm(student.fullName || ''),
+  nameBag(student.fullName || ''),
+  nameBag(`${student.firstName || ''} ${student.lastName || ''}`)
+].filter(Boolean));
 const antiCheatTone = (antiCheat = {}) => {
   const lvl = String(antiCheat?.level || '').toUpperCase();
   const score = Number(antiCheat?.score || 0);
@@ -239,36 +254,19 @@ export default function StudentsManager({ globalClassId, user }) {
   const buildAppreciationStudentRoster = () => {
     const contextStudents = appreciationContext.students.length ? appreciationContext.students : students;
     const uniqueStudents = [...new Map(contextStudents.map((student) => [extractId(student?._id) || norm(JSON.stringify(student)), student])).values()];
-    return uniqueStudents.map((student) => {
-      const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
-      const reverse = norm(`${student.lastName || ''}${student.firstName || ''}`);
-      return {
-        student,
-        keys: new Set([
-          direct,
-          reverse,
-          norm(student.nickname || ''),
-          norm(student.name || ''),
-          norm(student.fullName || '')
-        ].filter(Boolean))
-      };
-    });
+    return uniqueStudents.map((student) => ({ student, keys: studentNameKeys(student) }));
   };
 
   const parseManualGrades = () => {
     const outOf = Math.max(1, Math.min(100, Number(String(manualGradeDraft.outOf || '20').replace(',', '.')) || 20));
-    const roster = students.map((student) => {
-      const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
-      const reverse = norm(`${student.lastName || ''}${student.firstName || ''}`);
-      return { student, keys: new Set([direct, reverse, norm(student.nickname || '')].filter(Boolean)) };
-    });
+    const roster = students.map((student) => ({ student, keys: studentNameKeys(student) }));
     const matched = [];
     const errors = [];
     String(manualGradeDraft.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach((line, index) => {
       const match = line.match(/^(.+?)\s*[:=]\s*(-?\d+(?:[.,]\d+)?)\s*(?:\/\s*(\d+(?:[.,]\d+)?))?\s*$/);
       if (!match) { errors.push(`Ligne ${index + 1} non comprise : ${line}`); return; }
       const nameKey = norm(match[1]);
-      const candidates = roster.filter(row => row.keys.has(nameKey));
+      const candidates = roster.filter(row => row.keys.has(nameKey) || row.keys.has(nameBag(match[1])));
       const score = Number(match[2].replace(',', '.'));
       const lineTotal = match[3] ? Number(match[3].replace(',', '.')) : outOf;
       const normalizedScore = lineTotal > 0 ? score * outOf / lineTotal : NaN;
@@ -403,7 +401,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       const separator = line.indexOf(':');
       if (separator < 1) { errors.push(`Ligne ${index + 1} : nom et deux-points manquants.`); return null; }
       const name = line.slice(0, separator).trim();
-      const candidates = roster.filter((row) => row.keys.has(norm(name)));
+      const candidates = roster.filter((row) => row.keys.has(norm(name)) || row.keys.has(nameBag(name)));
       if (candidates.length !== 1) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
       const student = candidates[0].student;
       const studentId = extractId(student._id);
@@ -422,6 +420,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
 Règles impératives :
 - une seule ligne par élève au format exact « Prénom NOM : appréciation » ;
+- recopie strictement le nom fourni dans la liste, sans ajouter, retirer ni réordonner aucun prénom ou nom ;
 - ne coupe jamais une appréciation par un retour à la ligne ;
 - 140 caractères environ, ton bienveillant, professionnel et utile ;
 - mentionner le niveau de résultats et donner un conseil concret de progression ;
@@ -431,7 +430,7 @@ Règles impératives :
 
 CLASSE : ${appreciationContext.className || className || 'classe sélectionnée'}
 LISTE DES ÉLÈVES :
-${buildAppreciationStudentRoster().map(({ student }, index) => `${index + 1}. ${student.firstName || ''} ${student.lastName || ''}`.trim()).join('\n')}
+${buildAppreciationStudentRoster().map(({ student }, index) => `${index + 1}. ${String(student.fullName || `${student.firstName || ''} ${student.lastName || ''}`).trim()}`).join('\n')}
 
 Attends maintenant que je colle les moyennes avant de produire les appréciations.`;
     try {
