@@ -89,6 +89,24 @@ router.post('/:id/pronote-export', async (req, res) => {
 router.get('/pronote/ready', async (req, res) => {
     try {
         const classId = String(req.query.classId || '').trim();
+        if (!mongoose.isValidObjectId(classId)) return res.status(400).json({ error: 'Classe invalide.' });
+        const classroom = await Classroom.findById(classId).lean();
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const className = String(classroom.name || '').trim().toUpperCase();
+
+        // Compatibilité avec les lots d'appréciations créés avant leur prise en
+        // charge par le Bridge : les rendre disponibles sans devoir les recréer.
+        const missingAppreciationExports = await AssessmentControl.find({
+            subject: 'APPRECIATIONS',
+            targetClassrooms: className,
+            'pronoteExport.classId': { $ne: classId }
+        });
+        for (const control of missingAppreciationExports) {
+            control.pronoteExport = await preparePronoteExport(control, { classId, title: control.title });
+            control.markModified('pronoteExport');
+            await control.save();
+        }
+
         const controls = await AssessmentControl.find({ 'pronoteExport.classId': classId }, 'title pronoteExport updatedAt').sort({ updatedAt: -1 }).lean();
         res.json((controls || []).map(control => ({
             controlId: String(control._id),
@@ -193,6 +211,13 @@ router.post('/manual-appreciations', async (req, res) => {
             submissions,
             date: req.body?.date ? new Date(req.body.date) : new Date()
         });
+        control.pronoteExport = await preparePronoteExport(control, {
+            classId,
+            title,
+            date: req.body?.date || new Date().toISOString().slice(0, 10)
+        });
+        control.markModified('pronoteExport');
+        await control.save();
         res.status(201).json(control);
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
