@@ -472,14 +472,14 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
         <h2 className="app-logo">Connexion</h2>
         <p className="app-subtitle">Choisis ton mode de connexion</p>
         <a
-          href="/condaweb-eleve-extension.zip?v=0.3.1"
-          download="condaweb-eleve-extension.zip"
+          href="/capconda.zip?v=0.3.2"
+          download="capconda.zip"
           className="login-extension-download"
           title="Télécharger l’extension Chrome CondaWeb"
         >
           <span>🧩</span>
           <span>
-            Télécharger l’extension CondaWeb
+            Télécharger CapConda
             <small>Capture d’écran et outils IA · Windows et Mac</small>
           </span>
         </a>

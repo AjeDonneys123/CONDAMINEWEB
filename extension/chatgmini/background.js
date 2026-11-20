@@ -52,7 +52,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'CONDA_CAPTURE_SAVE' && sender.tab?.id) {
     const tabId = sender.tab.id;
     void (async () => {
-      const filename = `Capture CondaWeb ${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
+      const filename = `Capture CapConda ${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
       try {
         const handle = await getCaptureDirectory();
         if (!handle) throw new Error('NO_FOLDER');
@@ -64,7 +64,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await writable.close();
         chrome.tabs.sendMessage(tabId, { type: 'CONDA_CAPTURE_STATUS', text: `Capture enregistrée dans ${handle.name}.` });
       } catch (_) {
-        chrome.downloads.download({ url: message.dataUrl, filename: `CondaWeb Captures/${filename}`, saveAs: true }, () => {});
+        chrome.downloads.download({ url: message.dataUrl, filename: `CapConda/${filename}`, saveAs: true }, () => {});
         chrome.tabs.sendMessage(tabId, { type: 'CONDA_CAPTURE_STATUS', text: 'Choisissez le dossier depuis l’extension ; la capture a été téléchargée.', error: true });
       }
     })();
