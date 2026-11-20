@@ -96,12 +96,16 @@ router.get('/pronote/ready', async (req, res) => {
 
         // Compatibilité avec les lots d'appréciations créés avant leur prise en
         // charge par le Bridge : les rendre disponibles sans devoir les recréer.
-        const missingAppreciationExports = await AssessmentControl.find({
+        const appreciationControls = await AssessmentControl.find({
             subject: 'APPRECIATIONS',
-            targetClassrooms: className,
-            'pronoteExport.classId': { $ne: classId }
+            targetClassrooms: className
         });
-        for (const control of missingAppreciationExports) {
+        for (const control of appreciationControls) {
+            const currentExport = control.pronoteExport || {};
+            const needsRepair = String(currentExport.classId || '') !== classId
+                || currentExport.mode !== 'appreciations'
+                || !(currentExport.rows || []).some(row => String(row?.appreciation || '').trim());
+            if (!needsRepair) continue;
             control.pronoteExport = await preparePronoteExport(control, { classId, title: control.title });
             control.markModified('pronoteExport');
             await control.save();

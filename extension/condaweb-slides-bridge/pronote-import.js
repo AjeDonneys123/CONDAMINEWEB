@@ -320,7 +320,8 @@
     async open(payload) {
       try {
         const rows = payload.rows || [];
-        const isAppreciationMode = payload.mode === 'appreciations';
+        const isAppreciationMode = payload.mode === 'appreciations'
+          || rows.some(row => String(row?.appreciation || '').trim());
         if (rows.length === 0) {
           alert(`Le lot ne contient aucune ${isAppreciationMode ? 'appréciation' : 'note'} à importer.`);
           return;

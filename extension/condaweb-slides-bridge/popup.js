@@ -21,10 +21,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const updatePronoteImportLabel = () => {
         const selected = pronoteExports[Number(pronoteSelect.value)];
-        pronoteImportBtn.textContent = selected?.export?.mode === 'appreciations'
+        pronoteImportBtn.textContent = isAppreciationExport(selected?.export)
             ? '💬 Importer les appréciations préparées'
             : '📤 Importer les notes préparées';
     };
+
+    const isAppreciationExport = (payload = {}) => payload?.mode === 'appreciations'
+        || (Array.isArray(payload?.rows) && payload.rows.some(row => String(row?.appreciation || '').trim()));
 
     const loadPronoteExports = async (classId) => {
         const className = classSelect.options[classSelect.selectedIndex]?.text || 'cette classe';
@@ -56,7 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             pronoteExports.forEach((entry, index) => {
                 const option = document.createElement('option');
                 option.value = String(index);
-                const itemLabel = entry.export?.mode === 'appreciations' ? 'appréciations' : 'notes';
+                const itemLabel = isAppreciationExport(entry.export) ? 'appréciations' : 'notes';
                 option.textContent = `${entry.export?.title || entry.title} · ${entry.export?.rows?.length || 0} ${itemLabel}`;
                 pronoteSelect.appendChild(option);
             });
@@ -181,10 +184,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Préparez d’abord le lot depuis CondaWeb, dans Contrôles et contestations.');
             return;
         }
+        if (isAppreciationExport(selected.export)) selected.export.mode = 'appreciations';
         updatePronoteImportLabel();
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id || !tab.url || /^chrome:\/\//.test(tab.url) || tab.url.includes('docs.google.com/presentation')) {
-            alert(selected.export.mode === 'appreciations'
+            alert(isAppreciationExport(selected.export)
                 ? 'Ouvrez dans Pronote la page des appréciations, cliquez sur une case de la colonne Appréciations, puis relancez cet import.'
                 : 'Ouvrez Pronote sur la grille du devoir, puis relancez cet import.');
             return;
@@ -199,7 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.close();
         } catch (error) {
             console.error('[CondaWeb Bridge] injection Pronote impossible', error);
-            alert(selected.export.mode === 'appreciations'
+            alert(isAppreciationExport(selected.export)
                 ? 'Impossible d’ouvrir l’import ici. Ouvrez la page des appréciations dans Pronote, cliquez sur une case de la colonne, puis réessayez.'
                 : 'Impossible d’ouvrir l’aperçu sur cette page Pronote. Ouvrez la grille de saisie des notes et réessayez.');
         }
