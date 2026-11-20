@@ -115,6 +115,7 @@ export default function StudentsManager({ globalClassId, user }) {
   const [appreciationSaving, setAppreciationSaving] = useState(false);
   const [appreciationPromptCopied, setAppreciationPromptCopied] = useState(false);
   const [appreciationSuccess, setAppreciationSuccess] = useState('');
+  const [appreciationContext, setAppreciationContext] = useState({ classId: '', className: '', students: [] });
   const [controlAbsenceBoardingId, setControlAbsenceBoardingId] = useState('');
   const [controlAbsencesOnBoardId, setControlAbsencesOnBoardId] = useState('');
 
@@ -236,7 +237,8 @@ export default function StudentsManager({ globalClassId, user }) {
   };
 
   const buildAppreciationStudentRoster = () => {
-    const uniqueStudents = [...new Map(students.map((student) => [extractId(student?._id) || norm(JSON.stringify(student)), student])).values()];
+    const contextStudents = appreciationContext.students.length ? appreciationContext.students : students;
+    const uniqueStudents = [...new Map(contextStudents.map((student) => [extractId(student?._id) || norm(JSON.stringify(student)), student])).values()];
     return uniqueStudents.map((student) => {
       const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
       const reverse = norm(`${student.lastName || ''}${student.firstName || ''}`);
@@ -387,6 +389,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
   const openAppreciationModal = () => {
     setAppreciationError('');
     setAppreciationSuccess('');
+    setAppreciationContext({ classId: globalClassId, className, students: [...students] });
     setAppreciationDraft({ title: 'Appréciations', date: new Date().toISOString().slice(0, 10), text: '' });
     setAppreciationOpen(true);
   };
@@ -410,7 +413,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       if (!appreciation) errors.push(`Ligne ${index + 1} : appréciation vide.`);
       return { studentId, appreciation, student };
     }).filter(Boolean);
-    if (matched.length !== students.length) errors.push(`${matched.length} élève(s) reconnu(s) sur ${students.length}.`);
+    if (matched.length !== roster.length) errors.push(`${matched.length} élève(s) reconnu(s) sur ${roster.length}.`);
     return { matched, errors };
   };
 
@@ -426,9 +429,9 @@ Règles impératives :
 - pour « non évalué », écrire sobrement que les éléments sont insuffisants pour établir un bilan ;
 - aucun titre, aucune puce, aucun tableau, aucune explication.
 
-CLASSE : ${className || 'classe sélectionnée'}
+CLASSE : ${appreciationContext.className || className || 'classe sélectionnée'}
 LISTE DES ÉLÈVES :
-${students.map((student, index) => `${index + 1}. ${student.firstName || ''} ${student.lastName || ''}`.trim()).join('\n')}
+${buildAppreciationStudentRoster().map(({ student }, index) => `${index + 1}. ${student.firstName || ''} ${student.lastName || ''}`.trim()).join('\n')}
 
 Attends maintenant que je colle les moyennes avant de produire les appréciations.`;
     try {
@@ -449,7 +452,7 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          classId: globalClassId,
+          classId: appreciationContext.classId || globalClassId,
           title: appreciationDraft.title || 'Appréciations',
           date: appreciationDraft.date,
           entries: parsed.matched.map(({ studentId, appreciation }) => ({ studentId, appreciation }))
@@ -3202,7 +3205,7 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
                     <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
                         <div>
                             <div className="text-xl font-black text-slate-900">💬 Ajouter des appréciations</div>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">Envoyez vous-même les moyennes à ChatGPT, puis collez une ligne « Nom Prénom : appréciation ». L’ordre n’a aucune importance.</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Classe figée : <strong>{appreciationContext.className || className}</strong>. Collez une ligne « Nom Prénom : appréciation » ; l’ordre n’a aucune importance.</p>
                         </div>
                         <button type="button" onClick={() => setAppreciationOpen(false)} className="text-3xl font-black leading-none text-slate-400 hover:text-slate-800" aria-label="Fermer">×</button>
                     </div>
@@ -3224,7 +3227,7 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
                         {appreciationDraft.text.trim() && (() => {
                             const preview = parseAppreciations();
                             return <div className={`rounded-2xl border p-4 text-sm ${preview.errors.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-emerald-300 bg-emerald-50 text-emerald-950'}`}>
-                                <div className="font-black">{preview.matched.length} appréciation(s) reconnue(s) sur {students.length}</div>
+                                <div className="font-black">{preview.matched.length} appréciation(s) reconnue(s) sur {buildAppreciationStudentRoster().length}</div>
                                 {preview.errors.length > 0 && <pre className="mt-3 whitespace-pre-wrap font-sans font-bold">{preview.errors.join('\n')}</pre>}
                             </div>;
                         })()}
