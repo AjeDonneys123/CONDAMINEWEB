@@ -373,7 +373,11 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const normalizeStudentName = (value) => norm(value).replace(/[^a-z0-9]/g, '');
+    const normalizeStudentName = (value) => String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
     const roster = students.map((student) => ({
       student,
       keys: new Set([
