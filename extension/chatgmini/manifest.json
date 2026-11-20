@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGmini Companion",
-  "version": "0.1.0",
-  "description": "Extension compagnon pour ouvrir Gemini depuis CondaWeb et detecter sa presence.",
+  "name": "CondaWeb Élève",
+  "version": "0.2.0",
+  "description": "Extension élève CondaWeb pour utiliser Gemini directement dans les activités pédagogiques.",
   "permissions": [
     "tabs",
     "storage",
@@ -56,6 +56,6 @@
     }
   ],
   "action": {
-    "default_title": "ChatGmini"
+    "default_title": "CondaWeb Élève"
   }
 }
