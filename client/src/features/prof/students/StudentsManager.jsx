@@ -114,6 +114,7 @@ export default function StudentsManager({ globalClassId, user }) {
   const [appreciationError, setAppreciationError] = useState('');
   const [appreciationSaving, setAppreciationSaving] = useState(false);
   const [appreciationPromptCopied, setAppreciationPromptCopied] = useState(false);
+  const [appreciationSuccess, setAppreciationSuccess] = useState('');
   const [controlAbsenceBoardingId, setControlAbsenceBoardingId] = useState('');
   const [controlAbsencesOnBoardId, setControlAbsencesOnBoardId] = useState('');
 
@@ -385,6 +386,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const openAppreciationModal = () => {
     setAppreciationError('');
+    setAppreciationSuccess('');
     setAppreciationDraft({ title: 'Appréciations', date: new Date().toISOString().slice(0, 10), text: '' });
     setAppreciationOpen(true);
   };
@@ -392,7 +394,6 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const roster = buildAppreciationStudentRoster();
-    const canFallbackToRosterOrder = lines.length === roster.length;
     const errors = [];
     const usedStudentIds = new Set();
     const matched = lines.map((line, index) => {
@@ -400,9 +401,8 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       if (separator < 1) { errors.push(`Ligne ${index + 1} : nom et deux-points manquants.`); return null; }
       const name = line.slice(0, separator).trim();
       const candidates = roster.filter((row) => row.keys.has(norm(name)));
-      const selectedRow = candidates.length === 1 ? candidates[0] : (canFallbackToRosterOrder ? roster[index] : null);
-      if (!selectedRow) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
-      const student = selectedRow.student;
+      if (candidates.length !== 1) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
+      const student = candidates[0].student;
       const studentId = extractId(student._id);
       if (usedStudentIds.has(studentId)) { errors.push(`${name} : élève présent plusieurs fois.`); return null; }
       usedStudentIds.add(studentId);
@@ -459,6 +459,7 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
       if (!response.ok) throw new Error(control?.error || 'Création impossible');
       setAssessmentControls((current) => [control, ...current]);
       setAppreciationOpen(false);
+      setAppreciationSuccess(`✅ Lot créé : ${parsed.matched.length} appréciation(s) prêtes pour Pronote.`);
     } catch (error) { setAppreciationError(error.message || 'Création impossible'); }
     finally { setAppreciationSaving(false); }
   };
@@ -2412,6 +2413,11 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
                 ➕ Ajouter une note
             </button>
         </div>
+        {appreciationSuccess && (
+            <div className="mb-5 rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4 text-sm font-black text-emerald-800">
+                {appreciationSuccess}
+            </div>
+        )}
 
         {/* TABLEAU DES CONTRÔLES & CONTESTATIONS */}
         {assessmentControls.length > 0 && (
