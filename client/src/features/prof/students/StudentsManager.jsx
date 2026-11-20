@@ -392,6 +392,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const roster = buildAppreciationStudentRoster();
+    const canFallbackToRosterOrder = lines.length === roster.length;
     const errors = [];
     const usedStudentIds = new Set();
     const matched = lines.map((line, index) => {
@@ -399,13 +400,14 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       if (separator < 1) { errors.push(`Ligne ${index + 1} : nom et deux-points manquants.`); return null; }
       const name = line.slice(0, separator).trim();
       const candidates = roster.filter((row) => row.keys.has(norm(name)));
-      if (candidates.length !== 1) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
-      const student = candidates[0].student;
+      const selectedRow = candidates.length === 1 ? candidates[0] : (canFallbackToRosterOrder ? roster[index] : null);
+      if (!selectedRow) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
+      const student = selectedRow.student;
       const studentId = extractId(student._id);
       if (usedStudentIds.has(studentId)) { errors.push(`${name} : élève présent plusieurs fois.`); return null; }
       usedStudentIds.add(studentId);
       const appreciation = line.slice(separator + 1).trim();
-      if (appreciation.length < 8) errors.push(`Ligne ${index + 1} : appréciation trop courte.`);
+      if (!appreciation) errors.push(`Ligne ${index + 1} : appréciation vide.`);
       return { studentId, appreciation, student };
     }).filter(Boolean);
     if (matched.length !== students.length) errors.push(`${matched.length} élève(s) reconnu(s) sur ${students.length}.`);
