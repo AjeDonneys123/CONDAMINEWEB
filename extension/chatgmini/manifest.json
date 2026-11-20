@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CondaWeb Élève",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Extension élève CondaWeb pour utiliser Gemini et réaliser des captures d’écran par sélection.",
   "permissions": [
     "tabs",
@@ -9,7 +9,8 @@
     "scripting",
     "sidePanel",
     "activeTab",
-    "downloads"
+    "downloads",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "http://localhost:5173/*",
@@ -73,6 +74,13 @@
         "mac": "Command+Shift+S"
       },
       "description": "Capturer une zone de l’écran"
+    },
+    "capture-clipboard": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      },
+      "description": "Capturer une zone et la copier dans le presse-papiers"
     }
   }
 }

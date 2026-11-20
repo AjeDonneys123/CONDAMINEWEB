@@ -15,7 +15,7 @@
     setTimeout(() => node.remove(), 2600);
   };
 
-  const startSelection = () => {
+  const startSelection = (mode = 'save') => {
     if (document.getElementById('conda-capture-overlay')) return;
     const overlay = document.createElement('div');
     overlay.id = 'conda-capture-overlay';
@@ -64,11 +64,11 @@
       };
       cleanup();
       if (rect.width < 8 || rect.height < 8) return;
-      setTimeout(() => chrome.runtime.sendMessage({ type: 'CONDA_CAPTURE_RECT', rect }), 80);
+      setTimeout(() => chrome.runtime.sendMessage({ type: 'CONDA_CAPTURE_RECT', rect, mode }), 80);
     });
   };
 
-  const cropScreenshot = ({ dataUrl, rect }) => {
+  const cropScreenshot = ({ dataUrl, rect, mode = 'save' }) => {
     const image = new Image();
     image.onload = () => {
       const scaleX = image.naturalWidth / rect.viewportWidth;
@@ -80,13 +80,24 @@
         image, rect.left * scaleX, rect.top * scaleY, rect.width * scaleX, rect.height * scaleY,
         0, 0, canvas.width, canvas.height
       );
+      if (mode === 'clipboard') {
+        canvas.toBlob(async (blob) => {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            toast('Capture copiée. Collez-la avec Ctrl/⌘ + V.');
+          } catch (_) {
+            toast('Chrome a refusé le presse-papiers. Réessayez sur une page web normale.', true);
+          }
+        }, 'image/png');
+        return;
+      }
       chrome.runtime.sendMessage({ type: 'CONDA_CAPTURE_SAVE', dataUrl: canvas.toDataURL('image/png') });
     };
     image.src = dataUrl;
   };
 
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === 'CONDA_CAPTURE_START') startSelection();
+    if (message?.type === 'CONDA_CAPTURE_START') startSelection(message.mode || 'save');
     if (message?.type === 'CONDA_CAPTURE_IMAGE') cropScreenshot(message);
     if (message?.type === 'CONDA_CAPTURE_STATUS') toast(message.text, message.error);
   });

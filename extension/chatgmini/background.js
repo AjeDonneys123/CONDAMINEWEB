@@ -20,31 +20,32 @@ const getCaptureDirectory = async () => {
   });
 };
 
-const beginAreaCapture = async () => {
+const beginAreaCapture = async (mode = 'save') => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
-  chrome.tabs.sendMessage(tab.id, { type: 'CONDA_CAPTURE_START' }, () => {
+  chrome.tabs.sendMessage(tab.id, { type: 'CONDA_CAPTURE_START', mode }, () => {
     if (!chrome.runtime.lastError) return;
     chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['capture.js'] }, () => {
-      if (!chrome.runtime.lastError) chrome.tabs.sendMessage(tab.id, { type: 'CONDA_CAPTURE_START' }, () => {});
+      if (!chrome.runtime.lastError) chrome.tabs.sendMessage(tab.id, { type: 'CONDA_CAPTURE_START', mode }, () => {});
     });
   });
 };
 
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'capture-selection') void beginAreaCapture();
+  if (command === 'capture-selection') void beginAreaCapture('save');
+  if (command === 'capture-clipboard') void beginAreaCapture('clipboard');
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'CONDA_CAPTURE_BEGIN') {
-    void beginAreaCapture();
+    void beginAreaCapture(message.mode || 'save');
     sendResponse({ ok: true });
     return false;
   }
   if (message?.type === 'CONDA_CAPTURE_RECT' && sender.tab?.id) {
     chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' }, (dataUrl) => {
       if (chrome.runtime.lastError || !dataUrl) return;
-      chrome.tabs.sendMessage(sender.tab.id, { type: 'CONDA_CAPTURE_IMAGE', dataUrl, rect: message.rect });
+      chrome.tabs.sendMessage(sender.tab.id, { type: 'CONDA_CAPTURE_IMAGE', dataUrl, rect: message.rect, mode: message.mode || 'save' });
     });
     return false;
   }
