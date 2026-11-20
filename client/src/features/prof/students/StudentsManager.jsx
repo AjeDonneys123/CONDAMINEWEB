@@ -109,6 +109,11 @@ export default function StudentsManager({ globalClassId, user }) {
   const [manualGradeSaving, setManualGradeSaving] = useState(false);
   const [manualGradeError, setManualGradeError] = useState('');
   const [manualGradePromptCopied, setManualGradePromptCopied] = useState(false);
+  const [appreciationOpen, setAppreciationOpen] = useState(false);
+  const [appreciationDraft, setAppreciationDraft] = useState({ title: 'Appréciations', date: new Date().toISOString().slice(0, 10), text: '' });
+  const [appreciationError, setAppreciationError] = useState('');
+  const [appreciationSaving, setAppreciationSaving] = useState(false);
+  const [appreciationPromptCopied, setAppreciationPromptCopied] = useState(false);
   const [controlAbsenceBoardingId, setControlAbsenceBoardingId] = useState('');
   const [controlAbsencesOnBoardId, setControlAbsencesOnBoardId] = useState('');
 
@@ -358,6 +363,76 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
       outOf: '20',
       text: lines.join('\n')
     }));
+  };
+
+  const openAppreciationModal = () => {
+    setAppreciationError('');
+    setAppreciationDraft({ title: 'Appréciations', date: new Date().toISOString().slice(0, 10), text: '' });
+    setAppreciationOpen(true);
+  };
+
+  const parseAppreciations = () => {
+    const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const errors = lines.length === students.length ? [] : [`${lines.length} ligne(s) collée(s) pour ${students.length} élèves. Il faut une ligne par élève, dans l'ordre.`];
+    const matched = lines.slice(0, students.length).map((line, index) => {
+      const student = students[index];
+      const separator = line.indexOf(':');
+      const possibleName = separator > 0 ? line.slice(0, separator).trim() : '';
+      const expectedNames = [norm(`${student.firstName || ''}${student.lastName || ''}`), norm(`${student.lastName || ''}${student.firstName || ''}`)];
+      const appreciation = separator > 0 && expectedNames.includes(norm(possibleName)) ? line.slice(separator + 1).trim() : line;
+      if (appreciation.length < 8) errors.push(`Ligne ${index + 1} : appréciation trop courte.`);
+      return { studentId: extractId(student._id), appreciation, student };
+    });
+    return { matched, errors };
+  };
+
+  const copyAppreciationPrompt = async () => {
+    const prompt = `Tu es professeur principal. À partir des moyennes que je vais te transmettre, propose une appréciation scolaire cohérente et individualisée pour chaque élève.
+
+Règles impératives :
+- respecte exactement l'ordre de la liste ci-dessous ;
+- une seule appréciation par ligne, sans écrire le nom de l'élève ;
+- 140 caractères environ, ton bienveillant, professionnel et utile ;
+- mentionner le niveau de résultats et donner un conseil concret de progression ;
+- varier les formulations ; ne pas inventer de comportement, d'absences ou de qualités non déductibles des résultats ;
+- pour « non évalué », écrire sobrement que les éléments sont insuffisants pour établir un bilan ;
+- aucun titre, aucune puce, aucun tableau, aucune explication.
+
+CLASSE : ${className || 'classe sélectionnée'}
+ORDRE DES ÉLÈVES :
+${students.map((student, index) => `${index + 1}. ${student.firstName || ''} ${student.lastName || ''}`.trim()).join('\n')}
+
+Attends maintenant que je colle les moyennes avant de produire les appréciations.`;
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setAppreciationPromptCopied(true);
+      window.setTimeout(() => setAppreciationPromptCopied(false), 2500);
+    } catch (_) { setAppreciationError('Impossible de copier le prompt. Autorisez le presse-papiers.'); }
+  };
+
+  const createAppreciations = async () => {
+    const parsed = parseAppreciations();
+    if (parsed.errors.length) { setAppreciationError(parsed.errors.join('\n')); return; }
+    if (!parsed.matched.length) { setAppreciationError('Collez au moins une appréciation.'); return; }
+    setAppreciationSaving(true);
+    setAppreciationError('');
+    try {
+      const response = await fetch('/api/controls/manual-appreciations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId: globalClassId,
+          title: appreciationDraft.title || 'Appréciations',
+          date: appreciationDraft.date,
+          entries: parsed.matched.map(({ studentId, appreciation }) => ({ studentId, appreciation }))
+        })
+      });
+      const control = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(control?.error || 'Création impossible');
+      setAssessmentControls((current) => [control, ...current]);
+      setAppreciationOpen(false);
+    } catch (error) { setAppreciationError(error.message || 'Création impossible'); }
+    finally { setAppreciationSaving(false); }
   };
 
   const handleSaveControlScore = async () => {
@@ -2293,7 +2368,14 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
             </div>
         )}
 
-        <div className="mb-5 flex justify-end">
+        <div className="mb-5 flex flex-wrap justify-end gap-3">
+            <button
+                type="button"
+                onClick={openAppreciationModal}
+                className="rounded-2xl bg-sky-600 px-5 py-3 text-sm font-black text-white shadow-lg transition hover:bg-sky-700"
+            >
+                💬 Ajouter des appréciations
+            </button>
             <button
                 type="button"
                 onClick={() => { setManualGradeError(''); setManualGradeOpen(true); }}
@@ -2321,6 +2403,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                     const hasControlContest = isControlContested(control);
                     const submissions = control.submissions || [];
                     const isManualGradeControl = norm(control.subject || '') === norm('NOTE MANUELLE');
+                    const isAppreciationControl = norm(control.subject || '') === norm('APPRECIATIONS');
                     const submittedStudentIds = new Set(submissions.map((copy) => extractId(copy.studentId)).filter(Boolean));
                     const submittedStudentNames = new Set(submissions.map((copy) => norm(copy.studentName || '')).filter(Boolean));
                     const absentStudents = isManualGradeControl ? students.filter((student) =>
@@ -2338,7 +2421,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                         >
                             <summary className="font-black cursor-pointer flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <button
+                                    {!isAppreciationControl && <button
                                         type="button"
                                         onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleToggleControlActive(control); }}
                                         className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border transition cursor-pointer ${
@@ -2349,7 +2432,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                         title={control.active !== false ? 'Contrôle ouvert aux élèves. Cliquer pour fermer.' : 'Contrôle fermé. Cliquer pour ouvrir.'}
                                     >
                                         {control.active !== false ? '🟢 Ouvert' : '🔒 Fermé'}
-                                    </button>
+                                    </button>}
                                     <span>{control.title} · {submissions.length} copie(s)</span>
                                     {absentStudents.length > 0 && (
                                         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-900">
@@ -2496,13 +2579,17 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="text-xs text-slate-500 font-bold mt-0.5">
-                                                        Note : <span className="font-black text-slate-800">{copy.score} / {copy.total}</span>
-                                                        {copy.submittedAt && ` · Rendu le ${new Date(copy.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
-                                                    </div>
+                                                    {isAppreciationControl ? (
+                                                        <div className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-slate-700">{copy.teacherNote || copy.appreciation}</div>
+                                                    ) : (
+                                                        <div className="text-xs text-slate-500 font-bold mt-0.5">
+                                                            Note : <span className="font-black text-slate-800">{copy.score} / {copy.total}</span>
+                                                            {copy.submittedAt && ` · Rendu le ${new Date(copy.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                <div className="flex items-center gap-2">
+                                                {!isAppreciationControl && <div className="flex items-center gap-2">
                                                     <button
                                                         type="button"
                                                         onClick={() => handleOpenControlCopy(control, copy, student)}
@@ -2514,7 +2601,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                                                     >
                                                         ✏️ Ouvrir la copie & Modifier la note
                                                     </button>
-                                                </div>
+                                                </div>}
                                             </div>
                                         );
                                     })
@@ -3075,6 +3162,50 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
             </div>
         )}
 
+        {appreciationOpen && (
+            <div className="fixed inset-0 z-[113] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Ajouter des appréciations">
+                <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+                        <div>
+                            <div className="text-xl font-black text-slate-900">💬 Ajouter des appréciations</div>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Envoyez vous-même les moyennes à ChatGPT, puis collez ici une appréciation par ligne dans l’ordre de la classe.</p>
+                        </div>
+                        <button type="button" onClick={() => setAppreciationOpen(false)} className="text-3xl font-black leading-none text-slate-400 hover:text-slate-800" aria-label="Fermer">×</button>
+                    </div>
+                    <div className="space-y-4 overflow-y-auto p-5">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <label className="text-xs font-black text-slate-700 sm:col-span-2">Titre
+                                <input value={appreciationDraft.title} onChange={(event) => setAppreciationDraft((draft) => ({ ...draft, title: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                            </label>
+                            <label className="text-xs font-black text-slate-700">Date
+                                <input type="date" value={appreciationDraft.date} onChange={(event) => setAppreciationDraft((draft) => ({ ...draft, date: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                            </label>
+                        </div>
+                        <label className="block text-xs font-black text-slate-700">Appréciations générées, une ligne par élève dans l’ordre
+                            <textarea value={appreciationDraft.text} onChange={(event) => { setAppreciationError(''); setAppreciationDraft((draft) => ({ ...draft, text: event.target.value })); }} placeholder={'Ensemble satisfaisant…\nRésultats solides…'} className="mt-1 min-h-[320px] w-full resize-y rounded-2xl border-2 border-violet-200 bg-violet-50/40 p-4 font-mono text-sm outline-none focus:border-violet-500" />
+                        </label>
+                        <button type="button" onClick={() => void copyAppreciationPrompt()} className="w-full rounded-2xl border-2 border-indigo-300 bg-indigo-50 px-4 py-3 text-sm font-black text-indigo-800 transition hover:bg-indigo-100">
+                            {appreciationPromptCopied ? '✅ Consigne et ordre des élèves copiés' : '📋 Copier la consigne et l’ordre des élèves pour ChatGPT'}
+                        </button>
+                        {appreciationDraft.text.trim() && (() => {
+                            const preview = parseAppreciations();
+                            return <div className={`rounded-2xl border p-4 text-sm ${preview.errors.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-emerald-300 bg-emerald-50 text-emerald-950'}`}>
+                                <div className="font-black">{preview.matched.length} appréciation(s) reconnue(s) sur {students.length}</div>
+                                {preview.errors.length > 0 && <pre className="mt-3 whitespace-pre-wrap font-sans font-bold">{preview.errors.join('\n')}</pre>}
+                            </div>;
+                        })()}
+                        {appreciationError && <pre className="whitespace-pre-wrap rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{appreciationError}</pre>}
+                    </div>
+                    <div className="flex justify-end gap-3 border-t border-slate-200 p-4">
+                        <button type="button" onClick={() => setAppreciationOpen(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700">Annuler</button>
+                        <button type="button" disabled={appreciationSaving} onClick={() => void createAppreciations()} className="rounded-xl bg-sky-600 px-5 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-50">
+                            {appreciationSaving ? 'Création…' : '✓ Créer le lot d’appréciations'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {manualGradeOpen && (
             <div className="fixed inset-0 z-[112] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-label="Ajouter des notes dictées">
                 <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
@@ -3168,17 +3299,17 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
                             <label className="text-xs font-black text-slate-700">Date
                                 <input type="date" value={pronoteDraft.date} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, date: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
                             </label>
-                            <label className="text-xs font-black text-slate-700">Coefficient
+                            {norm(pronoteModal.subject || '') !== norm('APPRECIATIONS') && <label className="text-xs font-black text-slate-700">Coefficient
                                 <input type="number" min="0" step="0.01" value={pronoteDraft.coefficient} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, coefficient: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
-                            </label>
-                            <label className="text-xs font-black text-slate-700">Notation Pronote
+                            </label>}
+                            {norm(pronoteModal.subject || '') !== norm('APPRECIATIONS') && <label className="text-xs font-black text-slate-700">Notation Pronote
                                 <input type="number" min="1" max="100" step="0.5" value={pronoteDraft.outOf} onChange={(event) => setPronoteDraft((draft) => ({ ...draft, outOf: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm" />
-                            </label>
+                            </label>}
                         </div>
                         {pronotePrepared && (
                             <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950">
-                                <div className="font-black">✓ Lot prêt : {pronotePrepared.rows?.length || 0} note(s) sur {pronotePrepared.outOf}</div>
-                                <p className="mt-1 font-semibold">Ouvrez dans Pronote la grille de ce devoir, puis cliquez sur l’icône CondaWeb et « Importer les notes préparées ». L’extension affiche un aperçu global avant de remplir les cases.</p>
+                                <div className="font-black">✓ Lot prêt : {pronotePrepared.rows?.length || 0} {pronotePrepared.mode === 'appreciations' ? 'appréciation(s)' : `note(s) sur ${pronotePrepared.outOf}`}</div>
+                                <p className="mt-1 font-semibold">Ouvrez dans Pronote la {pronotePrepared.mode === 'appreciations' ? 'colonne des appréciations et cliquez sur une case' : 'grille de ce devoir'}, puis cliquez sur l’icône CondaWeb pour importer le lot préparé.</p>
                             </div>
                         )}
                     </div>

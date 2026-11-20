@@ -316,6 +316,7 @@
     async open(payload) {
       try {
         const rows = payload.rows || [];
+        const isAppreciationMode = payload.mode === 'appreciations';
         if (rows.length === 0) {
           alert('Le lot ne contient aucune note à importer.');
           return;
@@ -408,16 +409,16 @@
             const gradeCell = findGradeCell(nameCell, activeCol);
             if (!gradeCell) continue;
 
-            updateToast(`Saisie : ${entry.fullName} (${processedCount + 1}/${rows.length})…`);
+            updateToast(`${isAppreciationMode ? 'Appréciation' : 'Saisie'} : ${entry.fullName} (${processedCount + 1}/${rows.length})…`);
 
-            // Si la note est vide ou absente, on valide sans écrire
-            if (entry.grade === null || entry.grade === undefined || entry.grade === '') {
+            const valueToWrite = isAppreciationMode ? entry.appreciation : entry.grade;
+            if (valueToWrite === null || valueToWrite === undefined || valueToWrite === '') {
               processedCellIds.add(nameCell.id);
               remainingRows = remainingRows.filter((r) => r.studentId !== entry.studentId);
               continue;
             }
 
-            const written = await writeGradeToCell(gradeCell, entry.grade);
+            const written = await writeGradeToCell(gradeCell, valueToWrite);
             if (written) {
               processedCount++;
               processedCellIds.add(nameCell.id);
@@ -444,14 +445,14 @@
         scroller.scrollTop = 0;
 
         if (remainingRows.length === 0) {
-          alert(`✅ SUCCÈS TOTAL !\nLes ${processedCount} notes ont été écrites dans Pronote.\n\nPensez à cliquer sur l'icône de disquette Pronote pour enregistrer.`);
+          alert(`✅ SUCCÈS TOTAL !\nLes ${processedCount} ${isAppreciationMode ? 'appréciations ont' : 'notes ont'} été écrites dans Pronote.\n\nPensez à cliquer sur l'icône de disquette Pronote pour enregistrer.`);
         } else if (processedCount > 0) {
           alert(
-            `✅ ${processedCount} note(s) écrite(s).\n\n⚠️ ${remainingRows.length} élève(s) non trouvé(s) :\n${remainingRows.map((r) => r.fullName).join(', ')}\n\nVérifiez qu'ils figurent bien dans la liste Pronote.`
+            `✅ ${processedCount} ${isAppreciationMode ? 'appréciation(s)' : 'note(s)'} écrite(s).\n\n⚠️ ${remainingRows.length} élève(s) non trouvé(s) :\n${remainingRows.map((r) => r.fullName).join(', ')}\n\nVérifiez qu'ils figurent bien dans la liste Pronote.`
           );
         } else {
           alert(
-            `❌ Aucune note n'a pu être écrite (colonne cible : ${activeCol}).\n\nVeuillez cliquer sur une cellule vide de la colonne du devoir avant de relancer l'import.`
+            `❌ Aucune ${isAppreciationMode ? 'appréciation' : 'note'} n'a pu être écrite (colonne cible : ${activeCol}).\n\nVeuillez cliquer sur une cellule vide de la colonne cible avant de relancer l'import.`
           );
         }
       } catch (err) {

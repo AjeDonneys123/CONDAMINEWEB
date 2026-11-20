@@ -51,6 +51,7 @@ async function preparePronoteExport(control, options = {}) {
             score: roundGrade(score),
             total: roundGrade(total),
             grade: roundGrade(score * outOf / total),
+            appreciation: String(copy.teacherNote || copy.appreciation || '').trim().slice(0, 1200),
             submittedAt: copy.submittedAt || null
         };
     }).filter(row => row.fullName && row.studentId);
@@ -64,6 +65,7 @@ async function preparePronoteExport(control, options = {}) {
         date: String(options.date || new Date().toISOString().slice(0, 10)),
         coefficient: Math.max(0, Math.min(100, pronoteNumber(options.coefficient, 1))),
         outOf,
+        mode: String(control.subject || '').toUpperCase() === 'APPRECIATIONS' ? 'appreciations' : 'grades',
         createdAt: new Date().toISOString(),
         rows
     };
@@ -141,6 +143,50 @@ router.post('/manual-grades', async (req, res) => {
         const control = await AssessmentControl.create({
             title,
             subject: 'NOTE MANUELLE',
+            targetClassrooms: [String(classroom.name || '').trim().toUpperCase()].filter(Boolean),
+            active: false,
+            items: [],
+            submissions,
+            date: req.body?.date ? new Date(req.body.date) : new Date()
+        });
+        res.status(201).json(control);
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+router.post('/manual-appreciations', async (req, res) => {
+    try {
+        const classId = String(req.body?.classId || '').trim();
+        const title = String(req.body?.title || 'Appréciations').trim().slice(0, 180);
+        const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+        if (!mongoose.isValidObjectId(classId)) return res.status(400).json({ error: 'Classe invalide.' });
+        if (!entries.length) return res.status(400).json({ error: 'Aucune appréciation reconnue.' });
+        const classroom = await Classroom.findById(classId).lean();
+        if (!classroom) return res.status(404).json({ error: 'Classe introuvable.' });
+        const Student = mongoose.model('Student');
+        const ids = [...new Set(entries.map(entry => String(entry?.studentId || '')).filter(mongoose.isValidObjectId))];
+        const students = await Student.find({ _id: { $in: ids }, classId }).lean();
+        const byId = new Map(students.map(student => [String(student._id), student]));
+        const submissions = entries.map((entry, index) => {
+            const student = byId.get(String(entry?.studentId || ''));
+            const appreciation = String(entry?.appreciation || '').trim().slice(0, 1200);
+            if (!student || !appreciation) return null;
+            return {
+                id: `appreciation_${Date.now()}_${index + 1}`,
+                studentId: student._id,
+                studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+                firstName: String(student.firstName || ''),
+                lastName: String(student.lastName || ''),
+                score: 0,
+                total: 20,
+                teacherNote: appreciation,
+                answers: [],
+                submittedAt: new Date()
+            };
+        }).filter(Boolean);
+        if (!submissions.length) return res.status(400).json({ error: 'Aucune appréciation valide pour cette classe.' });
+        const control = await AssessmentControl.create({
+            title,
+            subject: 'APPRECIATIONS',
             targetClassrooms: [String(classroom.name || '').trim().toUpperCase()].filter(Boolean),
             active: false,
             items: [],

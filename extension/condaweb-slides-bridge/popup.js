@@ -49,7 +49,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             pronoteExports.forEach((entry, index) => {
                 const option = document.createElement('option');
                 option.value = String(index);
-                option.textContent = `${entry.export?.title || entry.title} · ${entry.export?.rows?.length || 0} notes`;
+                const itemLabel = entry.export?.mode === 'appreciations' ? 'appréciations' : 'notes';
+                option.textContent = `${entry.export?.title || entry.title} · ${entry.export?.rows?.length || 0} ${itemLabel}`;
                 pronoteSelect.appendChild(option);
             });
             setPronoteStatus(`${pronoteExports.length} lot(s) prêt(s) pour ${className}.`, 'ready');
@@ -170,6 +171,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Préparez d’abord le lot depuis CondaWeb, dans Contrôles et contestations.');
             return;
         }
+        pronoteImportBtn.textContent = selected.export.mode === 'appreciations'
+            ? '💬 Importer les appréciations préparées'
+            : '📤 Importer les notes préparées';
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id || !tab.url || /^chrome:\/\//.test(tab.url) || tab.url.includes('docs.google.com/presentation')) {
             alert('Ouvrez Pronote sur la grille du devoir, puis relancez cet import.');
