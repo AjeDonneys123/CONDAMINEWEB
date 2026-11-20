@@ -140,7 +140,6 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         </div>
 
         <div className="flex items-center gap-3">
-                <a href="/condaweb-eleve-extension.zip?v=0.3.1" download="condaweb-eleve-extension.zip" className="v80-extension-btn" title="Télécharger l’extension Chrome CondaWeb pour les élèves">🧩 EXTENSION ÉLÈVE</a>
             {!user.isVisitorPreview && <button onClick={handlePasswordReset} className="v80-password-btn">RÉCUPÉRER MON MOT DE PASSE</button>}
             <div className="v80-user-info">
                 <span className="v80-user-name">{user.firstName} {user.lastName}</span>

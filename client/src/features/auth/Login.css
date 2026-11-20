@@ -4,6 +4,23 @@
 
 .app-logo { font-weight: 900; font-size: 2rem; color: #1e293b; margin-bottom: 0.5rem; letter-spacing: -1px; text-transform: uppercase; }
 .app-subtitle { color: #94a3b8; font-weight: 700; margin-bottom: 3rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+.login-extension-download {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin: -1.5rem 0 1.5rem;
+    padding: 0.9rem 1rem;
+    border: 2px solid #bae6fd;
+    border-radius: 18px;
+    background: #f0f9ff;
+    color: #075985;
+    font-weight: 900;
+    text-decoration: none;
+    transition: transform 0.15s, background 0.15s;
+}
+.login-extension-download:hover { background: #e0f2fe; transform: translateY(-1px); }
+.login-extension-download small { display: block; margin-top: 0.2rem; color: #64748b; font-size: 0.68rem; font-weight: 700; }
 .dev-mode-badge {
     display: inline-flex;
     align-items: center;
