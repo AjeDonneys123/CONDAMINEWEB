@@ -373,16 +373,30 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const errors = lines.length === students.length ? [] : [`${lines.length} ligne(s) collée(s) pour ${students.length} élèves. Il faut une ligne par élève, dans l'ordre.`];
-    const matched = lines.slice(0, students.length).map((line, index) => {
-      const student = students[index];
+    const roster = students.map((student) => ({
+      student,
+      keys: new Set([
+        norm(`${student.firstName || ''}${student.lastName || ''}`),
+        norm(`${student.lastName || ''}${student.firstName || ''}`)
+      ])
+    }));
+    const errors = [];
+    const usedStudentIds = new Set();
+    const matched = lines.map((line, index) => {
       const separator = line.indexOf(':');
-      const possibleName = separator > 0 ? line.slice(0, separator).trim() : '';
-      const expectedNames = [norm(`${student.firstName || ''}${student.lastName || ''}`), norm(`${student.lastName || ''}${student.firstName || ''}`)];
-      const appreciation = separator > 0 && expectedNames.includes(norm(possibleName)) ? line.slice(separator + 1).trim() : line;
+      if (separator < 1) { errors.push(`Ligne ${index + 1} : nom et deux-points manquants.`); return null; }
+      const name = line.slice(0, separator).trim();
+      const candidates = roster.filter((row) => row.keys.has(norm(name)));
+      if (candidates.length !== 1) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
+      const student = candidates[0].student;
+      const studentId = extractId(student._id);
+      if (usedStudentIds.has(studentId)) { errors.push(`${name} : élève présent plusieurs fois.`); return null; }
+      usedStudentIds.add(studentId);
+      const appreciation = line.slice(separator + 1).trim();
       if (appreciation.length < 8) errors.push(`Ligne ${index + 1} : appréciation trop courte.`);
-      return { studentId: extractId(student._id), appreciation, student };
-    });
+      return { studentId, appreciation, student };
+    }).filter(Boolean);
+    if (matched.length !== students.length) errors.push(`${matched.length} élève(s) reconnu(s) sur ${students.length}.`);
     return { matched, errors };
   };
 
@@ -390,8 +404,8 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
     const prompt = `Tu es professeur principal. À partir des moyennes que je vais te transmettre, propose une appréciation scolaire cohérente et individualisée pour chaque élève.
 
 Règles impératives :
-- respecte exactement l'ordre de la liste ci-dessous ;
-- une seule appréciation par ligne, sans écrire le nom de l'élève ;
+- une seule ligne par élève au format exact « Prénom NOM : appréciation » ;
+- ne coupe jamais une appréciation par un retour à la ligne ;
 - 140 caractères environ, ton bienveillant, professionnel et utile ;
 - mentionner le niveau de résultats et donner un conseil concret de progression ;
 - varier les formulations ; ne pas inventer de comportement, d'absences ou de qualités non déductibles des résultats ;
@@ -399,7 +413,7 @@ Règles impératives :
 - aucun titre, aucune puce, aucun tableau, aucune explication.
 
 CLASSE : ${className || 'classe sélectionnée'}
-ORDRE DES ÉLÈVES :
+LISTE DES ÉLÈVES :
 ${students.map((student, index) => `${index + 1}. ${student.firstName || ''} ${student.lastName || ''}`.trim()).join('\n')}
 
 Attends maintenant que je colle les moyennes avant de produire les appréciations.`;
@@ -3168,7 +3182,7 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
                     <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
                         <div>
                             <div className="text-xl font-black text-slate-900">💬 Ajouter des appréciations</div>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">Envoyez vous-même les moyennes à ChatGPT, puis collez ici une appréciation par ligne dans l’ordre de la classe.</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Envoyez vous-même les moyennes à ChatGPT, puis collez une ligne « Nom Prénom : appréciation ». L’ordre n’a aucune importance.</p>
                         </div>
                         <button type="button" onClick={() => setAppreciationOpen(false)} className="text-3xl font-black leading-none text-slate-400 hover:text-slate-800" aria-label="Fermer">×</button>
                     </div>
@@ -3181,11 +3195,11 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
                                 <input type="date" value={appreciationDraft.date} onChange={(event) => setAppreciationDraft((draft) => ({ ...draft, date: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
                             </label>
                         </div>
-                        <label className="block text-xs font-black text-slate-700">Appréciations générées, une ligne par élève dans l’ordre
-                            <textarea value={appreciationDraft.text} onChange={(event) => { setAppreciationError(''); setAppreciationDraft((draft) => ({ ...draft, text: event.target.value })); }} placeholder={'Ensemble satisfaisant…\nRésultats solides…'} className="mt-1 min-h-[320px] w-full resize-y rounded-2xl border-2 border-violet-200 bg-violet-50/40 p-4 font-mono text-sm outline-none focus:border-violet-500" />
+                        <label className="block text-xs font-black text-slate-700">Appréciations générées avec le nom de chaque élève
+                            <textarea value={appreciationDraft.text} onChange={(event) => { setAppreciationError(''); setAppreciationDraft((draft) => ({ ...draft, text: event.target.value })); }} placeholder={'Antonella Alegria : Ensemble satisfaisant…\nVictoria Araujo : Résultats solides…'} className="mt-1 min-h-[320px] w-full resize-y rounded-2xl border-2 border-violet-200 bg-violet-50/40 p-4 font-mono text-sm outline-none focus:border-violet-500" />
                         </label>
                         <button type="button" onClick={() => void copyAppreciationPrompt()} className="w-full rounded-2xl border-2 border-indigo-300 bg-indigo-50 px-4 py-3 text-sm font-black text-indigo-800 transition hover:bg-indigo-100">
-                            {appreciationPromptCopied ? '✅ Consigne et ordre des élèves copiés' : '📋 Copier la consigne et l’ordre des élèves pour ChatGPT'}
+                            {appreciationPromptCopied ? '✅ Consigne et liste des élèves copiées' : '📋 Copier la consigne et la liste des élèves pour ChatGPT'}
                         </button>
                         {appreciationDraft.text.trim() && (() => {
                             const preview = parseAppreciations();
