@@ -234,7 +234,7 @@ export default function StudentsManager({ globalClassId, user }) {
     }
   };
 
-  const buildStudentNameRoster = () => {
+  const buildAppreciationStudentRoster = () => {
     const uniqueStudents = [...new Map(students.map((student) => [extractId(student?._id) || norm(JSON.stringify(student)), student])).values()];
     return uniqueStudents.map((student) => {
       const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
@@ -254,7 +254,11 @@ export default function StudentsManager({ globalClassId, user }) {
 
   const parseManualGrades = () => {
     const outOf = Math.max(1, Math.min(100, Number(String(manualGradeDraft.outOf || '20').replace(',', '.')) || 20));
-    const roster = buildStudentNameRoster();
+    const roster = students.map((student) => {
+      const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
+      const reverse = norm(`${student.lastName || ''}${student.firstName || ''}`);
+      return { student, keys: new Set([direct, reverse, norm(student.nickname || '')].filter(Boolean)) };
+    });
     const matched = [];
     const errors = [];
     String(manualGradeDraft.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach((line, index) => {
@@ -387,7 +391,7 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const roster = buildStudentNameRoster();
+    const roster = buildAppreciationStudentRoster();
     const errors = [];
     const usedStudentIds = new Set();
     const matched = lines.map((line, index) => {
