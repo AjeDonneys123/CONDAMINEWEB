@@ -234,13 +234,27 @@ export default function StudentsManager({ globalClassId, user }) {
     }
   };
 
-  const parseManualGrades = () => {
-    const outOf = Math.max(1, Math.min(100, Number(String(manualGradeDraft.outOf || '20').replace(',', '.')) || 20));
-    const roster = students.map((student) => {
+  const buildStudentNameRoster = () => {
+    const uniqueStudents = [...new Map(students.map((student) => [extractId(student?._id) || norm(JSON.stringify(student)), student])).values()];
+    return uniqueStudents.map((student) => {
       const direct = norm(`${student.firstName || ''}${student.lastName || ''}`);
       const reverse = norm(`${student.lastName || ''}${student.firstName || ''}`);
-      return { student, keys: new Set([direct, reverse, norm(student.nickname || '')].filter(Boolean)) };
+      return {
+        student,
+        keys: new Set([
+          direct,
+          reverse,
+          norm(student.nickname || ''),
+          norm(student.name || ''),
+          norm(student.fullName || '')
+        ].filter(Boolean))
+      };
     });
+  };
+
+  const parseManualGrades = () => {
+    const outOf = Math.max(1, Math.min(100, Number(String(manualGradeDraft.outOf || '20').replace(',', '.')) || 20));
+    const roster = buildStudentNameRoster();
     const matched = [];
     const errors = [];
     String(manualGradeDraft.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach((line, index) => {
@@ -373,25 +387,14 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const parseAppreciations = () => {
     const lines = String(appreciationDraft.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const normalizeStudentName = (value) => String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-    const roster = students.map((student) => ({
-      student,
-      keys: new Set([
-        normalizeStudentName(`${student.firstName || ''} ${student.lastName || ''}`),
-        normalizeStudentName(`${student.lastName || ''} ${student.firstName || ''}`)
-      ])
-    }));
+    const roster = buildStudentNameRoster();
     const errors = [];
     const usedStudentIds = new Set();
     const matched = lines.map((line, index) => {
       const separator = line.indexOf(':');
       if (separator < 1) { errors.push(`Ligne ${index + 1} : nom et deux-points manquants.`); return null; }
       const name = line.slice(0, separator).trim();
-      const candidates = roster.filter((row) => row.keys.has(normalizeStudentName(name)));
+      const candidates = roster.filter((row) => row.keys.has(norm(name)));
       if (candidates.length !== 1) { errors.push(`${name} : ${candidates.length ? 'nom ambigu' : 'élève introuvable'}.`); return null; }
       const student = candidates[0].student;
       const studentId = extractId(student._id);
