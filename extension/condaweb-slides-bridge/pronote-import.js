@@ -71,47 +71,108 @@
   };
 
   // Détection de la colonne cible (celle du devoir à noter)
-  const getTargetGradeColumn = () => {
-    // 1. Focus actif dans une cellule de note
+  // Détection de la colonne cible (celle du devoir ou de l'appréciation à renseigner)
+  const getTargetGradeColumn = (payload = {}) => {
+    // 1. Cadre de sélection Pronote (visuel)
+    const cadre = document.querySelector('.liste_conteneurCadreSelection, [id*="cadreSelection"], [class*="cadreSelection"]');
+    if (cadre && isVisible(cadre)) {
+      const cr = cadre.getBoundingClientRect();
+      const cx = cr.left + cr.width / 2;
+      const cy = cr.top + cr.height / 2;
+      const allCells = Array.from(document.querySelectorAll('.liste_celluleGrid[data-colonne]')).filter(isVisible);
+      for (const cell of allCells) {
+        const col = cell.getAttribute('data-colonne');
+        if (col && col !== '0' && col !== '1') {
+          const r = cell.getBoundingClientRect();
+          if (cx >= r.left && cx <= r.right && cy >= r.top - 6 && cy <= r.bottom + 6) {
+            console.info(`[CondaWeb Pronote] Colonne ciblée via cadre de sélection (2D) : colonne "${col}"`);
+            return col;
+          }
+        }
+      }
+      for (const cell of allCells) {
+        const col = cell.getAttribute('data-colonne');
+        if (col && col !== '0' && col !== '1') {
+          const r = cell.getBoundingClientRect();
+          if (cx >= r.left && cx <= r.right) {
+            console.info(`[CondaWeb Pronote] Colonne ciblée via X du cadre : colonne "${col}"`);
+            return col;
+          }
+        }
+      }
+    }
+
+    // 2. Cellule active / focusée ou en mode édition Pronote (celEdit)
     const active = document.activeElement;
     if (active && active !== document.body) {
       const cell = active.closest('.liste_celluleGrid[data-colonne]');
       const col = cell?.getAttribute('data-colonne');
-      if (col && col !== '0') return col;
+      if (col && col !== '0' && col !== '1') return col;
     }
 
-    // 2. Cellule en mode édition Pronote
-    const editInner = document.querySelector('[aria-describedby*="celEdit"]');
-    if (editInner) {
+    const editInner = document.querySelector('[aria-describedby*="celEdit"], [id*="celEdit"] input, [id*="celEdit"] textarea');
+    if (editInner && isVisible(editInner)) {
       const cell = editInner.closest('.liste_celluleGrid[data-colonne]');
       const col = cell?.getAttribute('data-colonne');
-      if (col && col !== '0') return col;
+      if (col && col !== '0' && col !== '1') return col;
     }
 
-    // 3. Gridcell sélectionnée (role="gridcell" avec aria-selected="true")
-    const selectedGridcells = Array.from(document.querySelectorAll('[role="gridcell"][aria-selected="true"]'));
-    for (const gc of selectedGridcells) {
-      const cell = gc.closest('.liste_celluleGrid[data-colonne]');
+    // 3. Correspondance d'en-tête (en mode appréciations ou par titre de devoir)
+    const isAppMode = payload?.mode === 'appreciations' || (Array.isArray(payload?.rows) && payload.rows.some(r => String(r?.appreciation || '').trim()));
+    const headers = Array.from(document.querySelectorAll('.liste_enteteGrid[data-colonne], .liste_celluleEnteteGrid[data-colonne], th[data-colonne], [role="columnheader"][data-colonne]')).filter(isVisible);
+
+    if (isAppMode) {
+      for (const h of headers) {
+        const col = h.getAttribute('data-colonne');
+        if (col && col !== '0' && col !== '1') {
+          const hText = normalize(h.innerText || h.textContent || '');
+          if (hText && (hText.includes('APPRECIATION') || hText.includes('APP A') || hText.includes('APP B') || hText.includes('APP'))) {
+            console.info(`[CondaWeb Pronote] Colonne identifiée par en-tête d'appréciation "${hText}" : colonne "${col}"`);
+            return col;
+          }
+        }
+      }
+    }
+
+    if (payload?.title) {
+      const normTitle = normalize(payload.title);
+      for (const h of headers) {
+        const col = h.getAttribute('data-colonne');
+        if (col && col !== '0' && col !== '1') {
+          const hText = normalize(h.innerText || h.textContent || '');
+          if (hText && (hText.includes(normTitle) || normTitle.includes(hText))) {
+            console.info(`[CondaWeb Pronote] Colonne identifiée par en-tête "${hText}" : colonne "${col}"`);
+            return col;
+          }
+        }
+      }
+    }
+
+    // 4. Cellule avec classe de sélection ou focus spécifique
+    const selectedCell = document.querySelector('.liste_celluleGrid.selected[data-colonne]:not([data-colonne="0"]):not([data-colonne="1"]), [role="gridcell"][aria-selected="true"]');
+    if (selectedCell) {
+      const col = selectedCell.getAttribute('data-colonne') || selectedCell.closest('[data-colonne]')?.getAttribute('data-colonne');
+      if (col && col !== '0' && col !== '1') return col;
+    }
+
+    // 5. Gridcell spécifique avec focus ou aria-selected explicite
+    const focused = document.querySelector('.liste_celluleGrid[data-colonne] .liste-cellule-focusable:focus, .liste_celluleGrid[data-colonne][tabindex="0"]');
+    if (focused) {
+      const cell = focused.closest('.liste_celluleGrid[data-colonne]');
       const col = cell?.getAttribute('data-colonne');
-      if (col && col !== '0') return col;
+      if (col && col !== '0' && col !== '1') return col;
     }
 
-    // 4. Cellule avec classe .selected (en excluant colonne 0 et 1)
-    const selectedCells = Array.from(document.querySelectorAll('.liste_celluleGrid.selected[data-colonne]'))
-      .filter((c) => {
-        const col = c.getAttribute('data-colonne');
-        return col && col !== '0' && col !== '1';
-      });
-    if (selectedCells.length > 0) {
-      return selectedCells[selectedCells.length - 1].getAttribute('data-colonne');
-    }
-
-    // 5. Repli : Colonne la plus à droite parmi les colonnes de données
+    // 6. Liste des colonnes de données existantes triées par numéro
     const allCols = Array.from(new Set(
       Array.from(document.querySelectorAll('.liste_celluleGrid[data-colonne]'))
         .map((c) => c.getAttribute('data-colonne'))
         .filter((col) => col && col !== '0' && col !== '1')
-    ));
+    )).sort((a, b) => Number(a) - Number(b));
+
+    if (allCols.length === 1) return allCols[0];
+
+    // Privilégier la dernière colonne créée
     if (allCols.length > 0) {
       return allCols[allCols.length - 1];
     }
@@ -193,7 +254,7 @@
 
     const clickable = gradeCell.querySelector('.liste-cellule-focusable, [role="gridcell"]') || gradeCell;
 
-    // Si l'éditeur n'est pas déjà actif sur cette cellule, on déclenche les clics
+    // Pronote ouvre la cellule d'édition soit par double-clic soit en pressant Entrée sur la case sélectionnée
     if (!isOverGradeCell(document.activeElement, gradeCell)) {
       clickable.focus?.();
       clickable.dispatchEvent(new PointerEvent('pointerdown', mouseOpts));
@@ -202,13 +263,18 @@
       clickable.dispatchEvent(new MouseEvent('mouseup', mouseOpts));
       clickable.click?.();
       clickable.dispatchEvent(new MouseEvent('dblclick', mouseOpts));
+
+      // Déclencheur officiel Pronote : touche Entrée pour activer l'édition de la cellule
+      clickable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      clickable.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      clickable.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
     }
 
     let input = null;
     for (let attempt = 0; attempt < 9; attempt++) {
       await new Promise((r) => setTimeout(r, 60));
 
-      // 1. Input actif directement positionné sur cette cellule
+      // 1. Input ou Textarea actif directement positionné sur cette cellule
       const active = document.activeElement;
       if (
         active &&
@@ -221,7 +287,7 @@
         break;
       }
 
-      // 2. Input enfant direct de la cellule
+      // 2. Input ou Textarea enfant direct de la cellule
       const cellInput = gradeCell.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled])');
       if (cellInput && isVisible(cellInput)) {
         input = cellInput;
@@ -250,12 +316,13 @@
       }
       if (input) break;
 
-      // Retenter un clic plus franc si pas ouvert au 3e essai
+      // Retenter Entrée et dblclick au 3e essai si pas encore ouvert
       if (attempt === 3) {
-        clickable.dispatchEvent(new MouseEvent('mousedown', mouseOpts));
-        clickable.dispatchEvent(new MouseEvent('mouseup', mouseOpts));
+        clickable.focus?.();
         clickable.click?.();
         clickable.dispatchEvent(new MouseEvent('dblclick', mouseOpts));
+        clickable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        clickable.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
       }
     }
 
@@ -334,7 +401,7 @@
         console.info('[CondaWeb Pronote] Démarrage de l’import...', { total: rows.length, title: payload.title });
 
         // Détection de la colonne cible
-        const activeCol = getTargetGradeColumn();
+        const activeCol = getTargetGradeColumn(payload);
         if (!activeCol) {
           alert(
             '⚠️ Colonne introuvable.\n\nVeuillez cliquer sur une cellule de la colonne du devoir dans Pronote pour indiquer où écrire les notes, puis relancez l’import.'
