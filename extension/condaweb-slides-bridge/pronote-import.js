@@ -416,7 +416,11 @@
 
             updateToast(`${isAppreciationMode ? 'Appréciation' : 'Saisie'} : ${entry.fullName} (${processedCount + 1}/${rows.length})…`);
 
-            const valueToWrite = isAppreciationMode ? entry.appreciation : entry.grade;
+            // Protocole unique : après reconnaissance du nom, écrire exactement
+            // la valeur préparée par CondaWeb dans la colonne choisie.
+            const valueToWrite = entry.value !== undefined
+              ? entry.value
+              : (isAppreciationMode ? entry.appreciation : entry.grade);
             if (valueToWrite === null || valueToWrite === undefined || valueToWrite === '') {
               processedCellIds.add(nameCell.id);
               remainingRows = remainingRows.filter((r) => r.studentId !== entry.studentId);

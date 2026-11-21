@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CondaWeb Presentation Bridge",
-  "version": "1.0.74",
+  "version": "1.0.75",
   "description": "Connecte CondaWeb à Google Slides et Pronote : alertes, notes et appréciations.",
   "permissions": [
     "storage",

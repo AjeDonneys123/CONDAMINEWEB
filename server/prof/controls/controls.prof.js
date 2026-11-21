@@ -39,10 +39,13 @@ async function preparePronoteExport(control, options = {}) {
     const students = await Student.find({ classId }, 'firstName lastName').lean();
     const studentById = new Map(students.map(student => [String(student._id), student]));
     const outOf = Math.max(1, Math.min(100, pronoteNumber(options.outOf, 20)));
+    const mode = String(control.subject || '').toUpperCase() === 'APPRECIATIONS' ? 'appreciations' : 'grades';
     const rows = (control.submissions || []).map(copy => {
         const student = studentById.get(String(copy.studentId || ''));
         const total = Math.max(0.01, pronoteNumber(copy.total, 0));
         const score = pronoteNumber(copy.score, 0);
+        const appreciation = String(copy.teacherNote || copy.appreciation || '').trim().slice(0, 1200);
+        const grade = roundGrade(score * outOf / total);
         return {
             studentId: String(copy.studentId || student?._id || copy.id || `anon_${Date.now()}`),
             firstName: String(student?.firstName || copy.firstName || '').trim(),
@@ -50,8 +53,9 @@ async function preparePronoteExport(control, options = {}) {
             fullName: String(copy.studentName || `${student?.firstName || copy.firstName || ''} ${student?.lastName || copy.lastName || ''}`).trim(),
             score: roundGrade(score),
             total: roundGrade(total),
-            grade: roundGrade(score * outOf / total),
-            appreciation: String(copy.teacherNote || copy.appreciation || '').trim().slice(0, 1200),
+            grade,
+            appreciation,
+            value: mode === 'appreciations' ? appreciation : grade,
             submittedAt: copy.submittedAt || null
         };
     }).filter(row => row.fullName && row.studentId);
@@ -65,7 +69,7 @@ async function preparePronoteExport(control, options = {}) {
         date: String(options.date || new Date().toISOString().slice(0, 10)),
         coefficient: Math.max(0, Math.min(100, pronoteNumber(options.coefficient, 1))),
         outOf,
-        mode: String(control.subject || '').toUpperCase() === 'APPRECIATIONS' ? 'appreciations' : 'grades',
+        mode,
         createdAt: new Date().toISOString(),
         rows
     };
@@ -104,7 +108,8 @@ router.get('/pronote/ready', async (req, res) => {
             const currentExport = control.pronoteExport || {};
             const needsRepair = String(currentExport.classId || '') !== classId
                 || currentExport.mode !== 'appreciations'
-                || !(currentExport.rows || []).some(row => String(row?.appreciation || '').trim());
+                || !(currentExport.rows || []).some(row => String(row?.appreciation || '').trim())
+                || (currentExport.rows || []).some(row => row?.value === undefined);
             if (!needsRepair) continue;
             control.pronoteExport = await preparePronoteExport(control, { classId, title: control.title });
             control.markModified('pronoteExport');
