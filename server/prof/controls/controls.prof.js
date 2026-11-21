@@ -45,14 +45,14 @@ async function preparePronoteExport(control, options = {}) {
         const total = Math.max(0.01, pronoteNumber(copy.total, 0));
         const score = pronoteNumber(copy.score, 0);
         const appreciation = String(copy.teacherNote || copy.appreciation || '').trim().slice(0, 1200);
-        const grade = roundGrade(score * outOf / total);
+        const grade = mode === 'appreciations' ? null : roundGrade(score * outOf / total);
         return {
             studentId: String(copy.studentId || student?._id || copy.id || `anon_${Date.now()}`),
             firstName: String(student?.firstName || copy.firstName || '').trim(),
             lastName: String(student?.lastName || copy.lastName || '').trim(),
             fullName: String(copy.studentName || `${student?.firstName || copy.firstName || ''} ${student?.lastName || copy.lastName || ''}`).trim(),
-            score: roundGrade(score),
-            total: roundGrade(total),
+            score: mode === 'appreciations' ? null : roundGrade(score),
+            total: mode === 'appreciations' ? null : roundGrade(total),
             grade,
             appreciation,
             value: mode === 'appreciations' ? appreciation : grade,
@@ -109,7 +109,7 @@ router.get('/pronote/ready', async (req, res) => {
             const needsRepair = String(currentExport.classId || '') !== classId
                 || currentExport.mode !== 'appreciations'
                 || !(currentExport.rows || []).some(row => String(row?.appreciation || '').trim())
-                || (currentExport.rows || []).some(row => row?.value === undefined);
+                || (currentExport.rows || []).some(row => row?.value === undefined || row?.grade !== null);
             if (!needsRepair) continue;
             control.pronoteExport = await preparePronoteExport(control, { classId, title: control.title });
             control.markModified('pronoteExport');
@@ -203,8 +203,8 @@ router.post('/manual-appreciations', async (req, res) => {
                 studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
                 firstName: String(student.firstName || ''),
                 lastName: String(student.lastName || ''),
-                score: 0,
-                total: 20,
+                score: null,
+                total: null,
                 teacherNote: appreciation,
                 answers: [],
                 submittedAt: new Date()

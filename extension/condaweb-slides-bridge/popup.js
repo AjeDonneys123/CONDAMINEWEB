@@ -184,7 +184,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Préparez d’abord le lot depuis CondaWeb, dans Contrôles et contestations.');
             return;
         }
-        if (isAppreciationExport(selected.export)) selected.export.mode = 'appreciations';
+        if (isAppreciationExport(selected.export)) {
+            selected.export.mode = 'appreciations';
+            if (Array.isArray(selected.export.rows)) {
+                selected.export.rows.forEach((r) => {
+                    const text = String(r.appreciation || (typeof r.value === 'string' ? r.value : '')).trim();
+                    if (text) {
+                        r.appreciation = text;
+                        r.value = text;
+                        r.grade = null;
+                    }
+                });
+            }
+        }
         updatePronoteImportLabel();
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id || !tab.url || /^chrome:\/\//.test(tab.url) || tab.url.includes('docs.google.com/presentation')) {

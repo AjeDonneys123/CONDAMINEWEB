@@ -277,6 +277,10 @@
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
       input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
       input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    } else {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true }));
     }
     input.dispatchEvent(new Event('blur', { bubbles: true }));
     input.blur?.();
@@ -418,9 +422,13 @@
 
             // Protocole unique : après reconnaissance du nom, écrire exactement
             // la valeur préparée par CondaWeb dans la colonne choisie.
-            const valueToWrite = entry.value !== undefined
-              ? entry.value
-              : (isAppreciationMode ? entry.appreciation : entry.grade);
+            let valueToWrite;
+            if (isAppreciationMode) {
+              const cand = String(entry.appreciation || (typeof entry.value === 'string' && entry.value.trim() ? entry.value : '')).trim();
+              valueToWrite = cand;
+            } else {
+              valueToWrite = entry.value !== undefined ? entry.value : entry.grade;
+            }
             if (valueToWrite === null || valueToWrite === undefined || valueToWrite === '') {
               processedCellIds.add(nameCell.id);
               remainingRows = remainingRows.filter((r) => r.studentId !== entry.studentId);
