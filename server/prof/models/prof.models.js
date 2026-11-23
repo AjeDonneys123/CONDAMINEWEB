@@ -327,6 +327,7 @@ const Models = {
                 sheetTimesMs: { type: Object, default: {} },
                 recitationAttempts: { type: [Object], default: [] },
                 recitationValidatedWords: { type: [String], default: [] },
+                masteryPath: { type: Object, default: {} },
                 traceEcrite: { type: Object, default: null }
             }],
             default: []

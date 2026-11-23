@@ -82,6 +82,38 @@
     color: #0f172a;
 }
 
+.learning-sheet.is-mastery-hidden { display: none; }
+
+.mastery-path { margin-top: 12px; padding: 14px; border: 1px solid #ddd6fe; border-radius: 16px; background: #faf8ff; }
+.mastery-heading { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; color: #312e81; }
+.mastery-heading span { font-size: 12px; font-weight: 700; color: #64748b; }
+.mastery-points { display: grid; gap: 8px; }
+.mastery-point { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 12px; background: white; }
+.mastery-point.is-learned { border-color: #60a5fa; background: #eff6ff; }
+.mastery-point.is-fragile { border-color: #f87171; background: #fff1f2; }
+.mastery-point.is-valid { border-color: #34d399; background: #ecfdf5; }
+.mastery-point-text { flex: 1; font-size: 13px; line-height: 1.45; }
+.mastery-pill { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 8px 11px; font-size: 11px; font-weight: 900; color: #1d4ed8; background: #dbeafe; cursor: pointer; }
+.mastery-point.is-fragile .mastery-pill { color: #b91c1c; background: #fee2e2; }
+.mastery-point.is-valid .mastery-pill { color: #047857; background: #d1fae5; }
+.mastery-level { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; }
+.mastery-level span { margin-right: auto; font-size: 12px; font-weight: 900; }
+.mastery-level button, .mastery-final, .mastery-choices button { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 900; cursor: pointer; background: #7c3aed; color: white; }
+.mastery-level button:disabled, .mastery-final:disabled { cursor: not-allowed; opacity: .45; }
+.mastery-final { display: block; width: 100%; margin-top: 12px; background: #0f172a; }
+.mastery-feedback { margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 800; }
+.mastery-test { min-height: 330px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.mastery-test-head { display: flex; justify-content: space-between; font-size: 16px; color: #4c1d95; }
+.mastery-question { font-size: 20px; font-weight: 900; color: #0f172a; }
+.mastery-test textarea { min-height: 130px; resize: vertical; padding: 12px; border: 2px solid #c4b5fd; border-radius: 12px; font: inherit; }
+.mastery-choices { display: grid; gap: 8px; }
+.mastery-choices button { text-align: left; background: white; color: #1e293b; border: 2px solid #c4b5fd; }
+
+@media (max-width: 700px) {
+    .mastery-point, .mastery-level { align-items: stretch; flex-direction: column; }
+    .mastery-level span { margin-right: 0; }
+}
+
 .learning-segment {
     display: inline;
 }

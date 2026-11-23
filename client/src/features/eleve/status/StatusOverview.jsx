@@ -7,6 +7,11 @@ export default function StatusOverview({ user, onOpenActivity }) {
   const hasLoadedOnceRef = useRef(false);
   const userId = user?._id || user?.id;
   const groupByChapter = (items = [], chapters = []) => {
+    const sourceItems = Array.isArray(items) ? items : [];
+    const hasNamedActivity = sourceItems.some((item) => String(item?.label || item?.title || '').trim().toUpperCase() !== 'APPRENTISSAGE');
+    const visibleItems = hasNamedActivity
+      ? sourceItems.filter((item) => String(item?.label || item?.title || '').trim().toUpperCase() !== 'APPRENTISSAGE')
+      : sourceItems;
     const groups = new Map();
     (chapters || []).forEach((chapter) => {
       const title = String(chapter?.chapterTitle || 'CHAPITRE').trim();
@@ -14,13 +19,15 @@ export default function StatusOverview({ user, onOpenActivity }) {
       const key = String(chapter?.chapterId || title);
       groups.set(key, { key, title, section: chapter?.chapterSection || '', items: [] });
     });
-    (items || []).forEach((item) => {
+    visibleItems.forEach((item) => {
       const title = String(item?.chapterTitle || 'Autres activités').trim();
       const key = String(item?.chapterId || title);
       if (!groups.has(key)) groups.set(key, { key, title, section: item?.chapterSection || '', items: [] });
       groups.get(key).items.push(item);
     });
-    return [...groups.values()].sort((a, b) => a.title.localeCompare(b.title, 'fr', { numeric: true, sensitivity: 'base' }));
+    return [...groups.values()]
+      .filter((group) => group.items.length > 0)
+      .sort((a, b) => a.title.localeCompare(b.title, 'fr', { numeric: true, sensitivity: 'base' }));
   };
 
   useEffect(() => {
@@ -102,7 +109,6 @@ export default function StatusOverview({ user, onOpenActivity }) {
                             {it.label || it.title || 'Activité'}
                           </button>
                         ))}
-                        {chapter.items.length === 0 && <span className="status-chapter-empty">Aucune activité attribuée pour le moment.</span>}
                       </div>
                     </section>
                   ))}

@@ -984,7 +984,7 @@ router.get('/list/:studentId', async (req, res) => {
 router.post('/progress', async (req, res) => {
     try {
         const LearningModule = mongoose.model('LearningModule');
-        const { moduleId, studentId, currentStep = 0, completed = false, sheetTimesMs = {}, validatedStepIndexes = [] } = req.body || {};
+        const { moduleId, studentId, currentStep = 0, completed = false, sheetTimesMs = {}, validatedStepIndexes = [], masteryPath = null } = req.body || {};
         if (!moduleId || !studentId) return res.status(400).json({ error: 'moduleId et studentId requis' });
 
         const row = await LearningModule.findById(moduleId);
@@ -1001,6 +1001,7 @@ router.post('/progress', async (req, res) => {
             validatedStepIndexes: [...new Set((Array.isArray(validatedStepIndexes) ? validatedStepIndexes : []).map(Number).filter((value) => Number.isInteger(value) && value >= 0 && value < (row.steps || []).length))],
             sheetTimesMs: {}
         };
+        if (masteryPath && typeof masteryPath === 'object') patch.masteryPath = masteryPath;
         if (sheetTimesMs && typeof sheetTimesMs === 'object') {
             Object.keys(sheetTimesMs).forEach((k) => {
                 const key = String(k || '').trim();
