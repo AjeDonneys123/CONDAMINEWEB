@@ -50,7 +50,14 @@
     font-weight: 900;
     margin-bottom: 10px;
     color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
+
+.mastery-test-selected { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 10px 15px; color: white; background: #7c3aed; font-size: 12px; font-weight: 900; cursor: pointer; box-shadow: 0 6px 16px rgba(124, 58, 237, .2); }
+.mastery-test-selected:disabled { opacity: .38; cursor: not-allowed; box-shadow: none; }
 
 .learning-hint {
     font-size: 12px;
@@ -122,6 +129,10 @@
 .mastery-test-head { display: flex; justify-content: space-between; font-size: 16px; color: #4c1d95; }
 .mastery-question { font-size: 20px; font-weight: 900; color: #0f172a; }
 .mastery-test textarea { min-height: 130px; resize: vertical; padding: 12px; border: 2px solid #c4b5fd; border-radius: 12px; font: inherit; }
+.mastery-fill-test { display: grid; gap: 12px; }
+.mastery-fill-card { padding: 14px; border: 2px solid #dbeafe; border-radius: 14px; background: white; }
+.mastery-fill-card .learning-fill-sentence { margin-top: 8px; font-size: 17px; line-height: 2.4; font-weight: 800; }
+.mastery-submit-fill { width: 100%; border: 0; border-radius: 12px; padding: 12px; color: white; background: #2563eb; font-size: 13px; font-weight: 900; cursor: pointer; }
 .mastery-choices { display: grid; gap: 8px; }
 .mastery-choices button { text-align: left; background: white; color: #1e293b; border: 2px solid #c4b5fd; }
 
@@ -130,6 +141,7 @@
     .mastery-level span { margin-right: 0; }
     .mastery-inline-point, .mastery-inline-checkpoint { align-items: stretch; flex-direction: column; }
     .mastery-inline-point > button { width: 100%; }
+    .learning-step-title { align-items: stretch; flex-direction: column; }
 }
 
 .learning-segment {
