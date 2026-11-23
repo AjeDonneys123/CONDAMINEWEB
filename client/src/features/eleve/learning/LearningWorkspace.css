@@ -84,6 +84,22 @@
 
 .learning-sheet.is-mastery-hidden { display: none; }
 
+.mastery-sheet-intro { margin-bottom: 10px; color: #16a34a; font-size: 17px; font-weight: 800; }
+.mastery-inline-point { display: flex; align-items: center; gap: 12px; margin: 7px 0; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 13px; background: white; transition: .15s ease; }
+.mastery-inline-point > span { flex: 1; min-width: 0; }
+.mastery-inline-point > button { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 118px; justify-content: center; padding: 8px 10px; border: 0; border-radius: 999px; color: #047857; background: #d1fae5; font-size: 20px; font-weight: 900; cursor: pointer; }
+.mastery-inline-point > button small { font-size: 11px; }
+.mastery-inline-point.is-learned { border-color: #60a5fa; background: #eff6ff; }
+.mastery-inline-point.is-learned > button { color: #1d4ed8; background: #dbeafe; }
+.mastery-inline-point.is-fragile { border-color: #f87171; background: #fff1f2; }
+.mastery-inline-point.is-fragile > button { color: #b91c1c; background: #fee2e2; }
+.mastery-inline-point.is-valid { border-color: #34d399; background: #ecfdf5; }
+.mastery-inline-checkpoint { display: flex; align-items: center; gap: 9px; margin: 14px 0 18px; padding: 12px; border-radius: 14px; color: #312e81; background: #ede9fe; border: 2px solid #c4b5fd; }
+.mastery-inline-checkpoint > div { display: flex; flex: 1; flex-direction: column; }
+.mastery-inline-checkpoint span { color: #64748b; font-size: 11px; font-weight: 700; }
+.mastery-inline-checkpoint button { border: 0; border-radius: 10px; padding: 9px 11px; color: white; background: #7c3aed; font-size: 11px; font-weight: 900; cursor: pointer; }
+.mastery-inline-checkpoint button:disabled { opacity: .42; cursor: not-allowed; }
+
 .mastery-path { margin-top: 12px; padding: 14px; border: 1px solid #ddd6fe; border-radius: 16px; background: #faf8ff; }
 .mastery-heading { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; color: #312e81; }
 .mastery-heading span { font-size: 12px; font-weight: 700; color: #64748b; }
@@ -112,6 +128,8 @@
 @media (max-width: 700px) {
     .mastery-point, .mastery-level { align-items: stretch; flex-direction: column; }
     .mastery-level span { margin-right: 0; }
+    .mastery-inline-point, .mastery-inline-checkpoint { align-items: stretch; flex-direction: column; }
+    .mastery-inline-point > button { width: 100%; }
 }
 
 .learning-segment {

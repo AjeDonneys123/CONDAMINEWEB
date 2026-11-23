@@ -742,7 +742,7 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
     const [sheetSlidesIdx, setSheetSlidesIdx] = useState(0);
     const [activeBlankMic, setActiveBlankMic] = useState('');
     const [masteryPath, setMasteryPath] = useState(() => module?.completion?.masteryPath || {
-        learned: {}, validated: {}, errors: {}, halfGames: {}, finalPassed: false, attempts: 0
+        learned: {}, validated: {}, errors: {}, halfGames: {}, finalPassed: {}, attempts: 0
     });
     const [masteryRun, setMasteryRun] = useState(null);
     const [masteryAnswer, setMasteryAnswer] = useState('');
@@ -750,7 +750,7 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
 
     useEffect(() => {
         setMasteryPath(module?.completion?.masteryPath || {
-            learned: {}, validated: {}, errors: {}, halfGames: {}, finalPassed: false, attempts: 0
+            learned: {}, validated: {}, errors: {}, halfGames: {}, finalPassed: {}, attempts: 0
         });
         setMasteryRun(null);
         setMasteryAnswer('');
@@ -950,7 +950,12 @@ export default function LearningWorkspace({ module: initialModule, user, onQuit 
         const qcmAt = source.search(/(?:^|\n)\s*(?:❓\s*)?QCM(?:\s+DE\s+R[ÉE]VISION)?\b/i);
         return qcmAt >= 0 ? source.slice(0, qcmAt).trim() : source;
     })();
-    const learningPoints = useMemo(() => extractLearningPoints(sheetText), [sheetText]);
+    const learningPoints = useMemo(
+        () => extractLearningPoints(sheetText).map((point) => ({ ...point, id: `${currentSheetKey}:${point.id}` })),
+        [sheetText, currentSheetKey]
+    );
+    const learningGroups = useMemo(() => [learningPoints.slice(0, 3), learningPoints.slice(3)].filter((group) => group.length > 0), [learningPoints]);
+    const sheetIntro = useMemo(() => String(sheetText || '').split(/\n+/).filter((line) => !/^\s*\d+\s*[-.)–:]/.test(line)).join('\n').trim(), [sheetText]);
     const sheetFormattingRanges = useMemo(
         () => collectSheetFormattingRanges(currentStep?.sheetTextHtml || '', sheetText),
         [currentStep?.sheetTextHtml, sheetText]
@@ -2133,6 +2138,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
     };
 
     const markPointLearned = (point) => {
+        if (masteryPath.validated?.[point.id]) return;
         const next = {
             ...masteryPath,
             learned: { ...(masteryPath.learned || {}), [point.id]: true },
@@ -2143,14 +2149,14 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
     };
 
     const startMasteryRun = (kind, half = null) => {
-        let selected = half === 0 ? learningPoints.slice(0, 3) : half === 1 ? learningPoints.slice(3, 6) : learningPoints;
+        let selected = Number.isInteger(half) ? (learningGroups[half] || []) : learningPoints;
         if (kind === 'final') {
             selected = [...selected].sort((a, b) => Number(masteryPath.errors?.[b.id] || 0) - Number(masteryPath.errors?.[a.id] || 0));
         } else selected = shuffled(selected);
         const queue = kind === 'game'
             ? shuffled([...selected, ...selected.slice().sort((a, b) => Number(masteryPath.errors?.[b.id] || 0) - Number(masteryPath.errors?.[a.id] || 0)).slice(0, 2)])
             : selected;
-        setMasteryRun({ kind, half, queue, cursor: 0, correct: 0, failed: [] });
+        setMasteryRun({ kind, half, groupKey: Number.isInteger(half) ? `${currentSheetKey}:${half}` : '', queue, cursor: 0, correct: 0, failed: [] });
         setMasteryAnswer('');
         setMasteryFeedback('');
     };
@@ -2178,19 +2184,19 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
         const uniqueFailed = [...new Set(nextRun.failed)];
         let next = { ...masteryPath, errors: nextErrors, attempts: Number(masteryPath.attempts || 0) + 1 };
         if (masteryRun.kind === 'test') {
-            const tested = masteryRun.half === 0 ? learningPoints.slice(0, 3) : learningPoints.slice(3, 6);
+            const tested = learningGroups[masteryRun.half] || [];
             const validated = { ...(masteryPath.validated || {}) };
             tested.forEach((item) => { validated[item.id] = !uniqueFailed.includes(item.id); });
             next = { ...next, validated };
             setMasteryFeedback(uniqueFailed.length ? 'Certains points restent fragiles : relis-les puis reclique sur la croix rouge.' : '✅ Test réussi : le jeu zombie est débloqué.');
         } else if (masteryRun.kind === 'game') {
             if (nextRun.correct >= Math.ceil(nextRun.queue.length * 0.7)) {
-                next = { ...next, halfGames: { ...(masteryPath.halfGames || {}), [masteryRun.half]: true } };
+                next = { ...next, halfGames: { ...(masteryPath.halfGames || {}), [masteryRun.groupKey]: true } };
                 setMasteryFeedback(`🧟 Niveau ${Number(masteryRun.half) + 1} validé !`);
             } else setMasteryFeedback('Les zombies ont gagné cette manche. Revois les points fragiles et recommence.');
         } else if (masteryRun.kind === 'final') {
             const passed = nextRun.correct >= Math.ceil(nextRun.queue.length * 0.75);
-            next = { ...next, finalPassed: passed };
+            next = { ...next, finalPassed: { ...(typeof masteryPath.finalPassed === 'object' ? masteryPath.finalPassed : {}), [currentSheetKey]: passed } };
             setMasteryFeedback(passed ? '⭐ Leçon maîtrisée : test final validé !' : 'Le test final montre encore quelques fragilités. Les erreurs reviendront en priorité.');
         }
         setMasteryRun(null);
@@ -2981,7 +2987,40 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                             {sheetText
                                 ? (
                                     <div className="learning-sheet-text">
-                                        {sheetSegments.map((seg, idx) => (
+                                        {learningPoints.length > 0 ? (
+                                            <>
+                                                {!!sheetIntro && <div className="mastery-sheet-intro">{sheetIntro}</div>}
+                                                {learningPoints.map((point, pointIndex) => {
+                                                    const learned = Boolean(masteryPath.learned?.[point.id]);
+                                                    const valid = Boolean(masteryPath.validated?.[point.id]);
+                                                    const fragile = Number(masteryPath.errors?.[point.id] || 0) > 0 && !valid;
+                                                    const groupIndex = pointIndex < 3 ? 0 : 1;
+                                                    const group = learningGroups[groupIndex] || [];
+                                                    const isGroupEnd = point === group[group.length - 1];
+                                                    const groupLearned = group.length > 0 && group.every((item) => masteryPath.learned?.[item.id]);
+                                                    const groupValidated = group.length > 0 && group.every((item) => masteryPath.validated?.[item.id]);
+                                                    const gamePassed = Boolean(masteryPath.halfGames?.[`${currentSheetKey}:${groupIndex}`]);
+                                                    return (
+                                                        <React.Fragment key={point.id}>
+                                                            <div className={`mastery-inline-point ${valid ? 'is-valid' : learned ? 'is-learned' : ''} ${fragile ? 'is-fragile' : ''}`}>
+                                                                <span><b>{pointIndex + 1}-</b> {point.content}</span>
+                                                                <button type="button" onClick={() => markPointLearned(point)}>
+                                                                    {valid ? '✓' : fragile ? '✕' : learned ? '●' : '○'}
+                                                                    <small>{valid ? 'Validé' : fragile ? 'À revoir' : learned ? 'À tester' : 'J’ai appris'}</small>
+                                                                </button>
+                                                            </div>
+                                                            {isGroupEnd && (
+                                                                <div className="mastery-inline-checkpoint">
+                                                                    <div><b>{groupIndex === 0 && learningGroups.length > 1 ? 'Validation mi-fiche' : 'Validation de la fiche'}</b><span>Teste les points {group[0]?.index + 1} à {group[group.length - 1]?.index + 1} sans regarder.</span></div>
+                                                                    <button type="button" disabled={!groupLearned} onClick={() => startMasteryRun('test', groupIndex)}>{groupValidated ? 'Refaire le test' : 'Valider ce niveau'}</button>
+                                                                    <button type="button" disabled={!groupValidated || gamePassed} onClick={() => startMasteryRun('game', groupIndex)}>{gamePassed ? '🧟 Jeu validé' : 'Jeu zombie'}</button>
+                                                                </div>
+                                                            )}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
+                                            </>
+                                        ) : sheetSegments.map((seg, idx) => (
                                             <React.Fragment key={`seg_${seg.index}`}>
                                                 <span
                                                     ref={(node) => {
@@ -3048,7 +3087,7 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                     ? <iframe src={currentStep.sheetUrl} title="fiche" className="learning-iframe" />
                                 : <div className="learning-missing">Aucune fiche configurée.</div>}
                         </div>
-                        {learningPoints.length === 6 && (
+                        {learningPoints.length > 0 && (
                             <section className="mastery-path" aria-label="Parcours de mémorisation">
                                 {masteryRun ? (() => {
                                     const point = masteryRun.queue[masteryRun.cursor];
@@ -3078,37 +3117,9 @@ Si tu ne peux pas ouvrir le lien externe, dis simplement que tu ne peux pas acce
                                     );
                                 })() : (
                                     <>
-                                        <div className="mastery-heading"><strong>Mes 6 points à maîtriser</strong><span>Lis, marque « J’ai appris », puis teste-toi sans regarder.</span></div>
-                                        <div className="mastery-points">
-                                            {learningPoints.map((point) => {
-                                                const learned = Boolean(masteryPath.learned?.[point.id]);
-                                                const valid = Boolean(masteryPath.validated?.[point.id]);
-                                                const fragile = Number(masteryPath.errors?.[point.id] || 0) > 0;
-                                                return (
-                                                    <div key={point.id} className={`mastery-point ${valid ? 'is-valid' : learned ? 'is-learned' : ''} ${fragile && !valid ? 'is-fragile' : ''}`}>
-                                                        <span className="mastery-point-text"><b>{point.index + 1}.</b> {point.content}</span>
-                                                        <button type="button" className="mastery-pill" onClick={() => markPointLearned(point)} title={valid ? 'Point validé' : 'Marquer ce point comme appris'}>
-                                                            {valid ? '✓ Validé' : learned ? (fragile ? '✕ À revoir' : '● À tester') : '○ J’ai appris'}
-                                                        </button>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        {[0, 1].map((half) => {
-                                            const subset = half === 0 ? learningPoints.slice(0, 3) : learningPoints.slice(3, 6);
-                                            const learned = subset.every((point) => masteryPath.learned?.[point.id]);
-                                            const validatedHalf = subset.every((point) => masteryPath.validated?.[point.id]);
-                                            const gamePassed = Boolean(masteryPath.halfGames?.[half]);
-                                            return (
-                                                <div className="mastery-level" key={half}>
-                                                    <span>Niveau {half + 1} · points {half * 3 + 1} à {half * 3 + 3}</span>
-                                                    <button type="button" disabled={!learned} onClick={() => startMasteryRun('test', half)}>{validatedHalf ? 'Refaire le test' : 'Tester la moitié'}</button>
-                                                    <button type="button" disabled={!validatedHalf || gamePassed} onClick={() => startMasteryRun('game', half)}>{gamePassed ? '🧟 Jeu validé' : 'Lancer le jeu zombie'}</button>
-                                                </div>
-                                            );
-                                        })}
-                                        <button type="button" className="mastery-final" disabled={!masteryPath.halfGames?.[0] || !masteryPath.halfGames?.[1] || masteryPath.finalPassed} onClick={() => startMasteryRun('final')}>
-                                            {masteryPath.finalPassed ? '⭐ Leçon maîtrisée' : 'Passer le test final de la leçon'}
+                                        <div className="mastery-heading"><strong>Progression de la fiche</strong><span>Les pastilles sont placées directement devant chaque connaissance.</span></div>
+                                        <button type="button" className="mastery-final" disabled={!learningGroups.every((_, index) => masteryPath.halfGames?.[`${currentSheetKey}:${index}`]) || masteryPath.finalPassed?.[currentSheetKey]} onClick={() => startMasteryRun('final')}>
+                                            {masteryPath.finalPassed?.[currentSheetKey] ? '⭐ Fiche maîtrisée' : 'Passer le test final de la fiche'}
                                         </button>
                                     </>
                                 )}
