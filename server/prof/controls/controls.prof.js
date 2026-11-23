@@ -456,7 +456,8 @@ router.put('/:id/items/:itemId/expected', async (req, res) => {
                 answer.awardedPoints = isOk ? maxPts : 0;
                 if (isOk && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
             } else if (item.type === 'qcm') {
-                const isOk = Number(answer.value) === Number(item.correctIndex);
+                const hasSelection = answer.value !== '' && answer.value !== null && answer.value !== undefined && Number.isFinite(Number(answer.value));
+                const isOk = hasSelection && Number(answer.value) === Number(item.correctIndex);
                 const maxPts = Number(item.points) || 1;
                 answer.correct = isOk;
                 answer.awardedPoints = isOk ? maxPts : 0;
@@ -540,7 +541,8 @@ router.put('/:id/update-and-regrade', async (req, res) => {
                     answer.awardedPoints = isOk ? maxPts : 0;
                     if (isOk && answer.contestStatus === 'pending') answer.contestStatus = 'accepted';
                 } else if (item.type === 'qcm') {
-                    const isOk = Number(answer.value) === Number(item.correctIndex);
+                    const hasSelection = answer.value !== '' && answer.value !== null && answer.value !== undefined && Number.isFinite(Number(answer.value));
+                    const isOk = hasSelection && Number(answer.value) === Number(item.correctIndex);
                     const maxPts = Number(item.points) || 1;
                     answer.correct = isOk;
                     answer.awardedPoints = isOk ? maxPts : 0;

@@ -794,7 +794,7 @@ export default function CoursesManager({ globalClass, globalClassId = '', global
     // exam (production, preview or local network), rather than a hard-coded
     // deployment URL.
     const controlPublicUrl = projectedControl
-        ? `${/localhost|127\.0\.0\.1/i.test(window.location.hostname) ? 'https://condaweb.vercel.app' : window.location.origin}/?control=${encodeURIComponent(projectedControl._id)}`
+        ? `${(window.location.protocol !== 'https:' || /^(localhost|127\.|0\.0\.0\.0|\[?::1\]?|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(window.location.hostname) || /\.local$/i.test(window.location.hostname)) ? 'https://condaweb.vercel.app' : window.location.origin}/?control=${encodeURIComponent(projectedControl._id)}`
         : '';
     const [presentationRemote, setPresentationRemote] = useState(null);
     const [slideManifest, setSlideManifest] = useState([]);

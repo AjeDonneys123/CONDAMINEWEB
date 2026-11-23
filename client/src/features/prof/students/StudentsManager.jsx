@@ -3033,7 +3033,8 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
                                     {item.type === 'qcm' && (
                                         <div className="space-y-1.5">
                                             {(item.choices || []).map((choice, cIdx) => {
-                                                const isChosen = Number(answer.value) === cIdx;
+                                                const hasChosen = answer.value !== '' && answer.value !== null && answer.value !== undefined && Number.isFinite(Number(answer.value));
+                                                const isChosen = hasChosen && Number(answer.value) === cIdx;
                                                 const isCorrectChoice = Number(item.correctIndex) === cIdx;
                                                 const isChoiceContested = isChosen && (isWholeContested || answer.contestStatus === 'pending');
 

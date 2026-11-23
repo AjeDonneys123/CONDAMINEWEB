@@ -124,13 +124,40 @@ router.post('/:id/submit', async (req, res) => {
         }
         if (!matchedStudent && (firstName || lastName)) {
             const allStudents = await Student.find({}, 'firstName lastName currentClass').lean();
+            const targetClasses = Array.isArray(row.targetClassrooms) && row.targetClassrooms.length > 0
+                ? new Set(row.targetClassrooms.map(classKey).filter(Boolean))
+                : null;
+            const scopedStudents = targetClasses
+                ? allStudents.filter((s) => targetClasses.has(classKey(s.currentClass)))
+                : allStudents;
+            const searchPools = targetClasses && scopedStudents.length > 0 ? [scopedStudents, allStudents] : [allStudents];
             const targetKey1 = norm(`${firstName} ${lastName}`);
             const targetKey2 = norm(`${lastName} ${firstName}`);
-            matchedStudent = allStudents.find(s => {
-                const k1 = norm(`${s.firstName} ${s.lastName}`);
-                const k2 = norm(`${s.lastName} ${s.firstName}`);
-                return k1 === targetKey1 || k2 === targetKey1 || k1 === targetKey2;
-            }) || null;
+            const firstTokens = norm(firstName).split(/\s+/).filter(Boolean);
+            const lastTokens = norm(lastName).split(/\s+/).filter(Boolean);
+
+            for (const pool of searchPools) {
+                matchedStudent = pool.find((s) => {
+                    const k1 = norm(`${s.firstName} ${s.lastName}`);
+                    const k2 = norm(`${s.lastName} ${s.firstName}`);
+                    return k1 === targetKey1 || k2 === targetKey1 || k1 === targetKey2;
+                }) || null;
+                if (matchedStudent) break;
+
+                if (firstTokens.length > 0 && lastTokens.length > 0) {
+                    const partialMatches = pool.filter((s) => {
+                        const sFirst = norm(s.firstName).split(/\s+/).filter(Boolean);
+                        const sLast = norm(s.lastName).split(/\s+/).filter(Boolean);
+                        const direct = firstTokens.every((t) => sFirst.includes(t)) && lastTokens.every((t) => sLast.includes(t));
+                        const swapped = firstTokens.every((t) => sLast.includes(t)) && lastTokens.every((t) => sFirst.includes(t));
+                        return direct || swapped;
+                    });
+                    if (partialMatches.length === 1) {
+                        matchedStudent = partialMatches[0];
+                        break;
+                    }
+                }
+            }
         }
 
         const assignedStudentId = matchedStudent ? String(matchedStudent._id) : (mongoose.Types.ObjectId.isValid(reqStudentId) ? reqStudentId : null);
@@ -145,48 +172,139 @@ router.post('/:id/submit', async (req, res) => {
         }
 
         const raw = Array.isArray(req.body?.answers) ? req.body.answers : [];
-        const total = (row.items || []).reduce((sum, item) => sum + (Number(item.points) || 1), 0);
-        const aiCorrection = await EleveAI.correctAssessmentControl({
-            title: row.title,
-            subject: row.subject,
-            studentClass: assignedClass,
-            items: row.items || [],
-            answers: raw
-        });
-        if (!Number.isFinite(Number(aiCorrection?.score)) || aiCorrection?._ai_debug?.parsed === false) {
-            return res.status(503).json({ error: 'La correction IA est momentanément indisponible. Tes réponses sont conservées sur cet écran : réessaie dans un instant.' });
+        const items = Array.isArray(row.items) ? row.items : [];
+        const total = items.reduce((sum, item) => sum + (Number(item.points) || 1), 0);
+        const nonQcmItems = items.filter((item) => item?.type !== 'qcm');
+
+        let aiCorrection = null;
+        let aiAvailable = false;
+        if (nonQcmItems.length > 0) {
+            try {
+                aiCorrection = await EleveAI.correctAssessmentControl({
+                    title: row.title,
+                    subject: row.subject,
+                    studentClass: assignedClass,
+                    items: nonQcmItems,
+                    answers: raw
+                });
+                aiAvailable = Number.isFinite(Number(aiCorrection?.score)) && aiCorrection?._ai_debug?.parsed !== false;
+            } catch (_) {
+                aiAvailable = false;
+            }
         }
-        const aiItems = new Map((aiCorrection.items || []).map((item) => [String(item?.itemId || ''), item]));
-        const answers = (row.items || []).map((item) => {
+
+        const aiItems = new Map((aiAvailable && Array.isArray(aiCorrection?.items) ? aiCorrection.items : []).map((item) => [String(item?.itemId || ''), item]));
+        const answers = items.map((item) => {
             const given = raw.find((answer) => String(answer?.itemId) === String(item.id)) || {};
-            const corrected = aiItems.get(String(item.id)) || {};
             const maxPoints = Number(item.points) || 1;
-            const awardedPoints = Math.max(0, Math.min(maxPoints, Number(corrected.awardedPoints) || 0));
+
+            // Correction automatique deterministe pour les QCM (sans appel IA)
+            if (item.type === 'qcm') {
+                const choices = Array.isArray(item.choices) ? item.choices : [];
+                const hasSelection = given.value !== '' && given.value !== null && given.value !== undefined && Number.isFinite(Number(given.value));
+                const selectedIndex = hasSelection ? Number(given.value) : -1;
+                const correctIndex = Number(item.correctIndex);
+                const isCorrect = hasSelection && selectedIndex === correctIndex;
+                const selectedChoice = hasSelection && choices[selectedIndex] !== undefined
+                    ? `${String.fromCharCode(65 + selectedIndex)}. ${choices[selectedIndex]}`
+                    : 'Aucune réponse';
+                const expectedChoice = Number.isInteger(correctIndex) && choices[correctIndex] !== undefined
+                    ? `${String.fromCharCode(65 + correctIndex)}. ${choices[correctIndex]}`
+                    : '';
+                const awardedPoints = isCorrect ? Math.round(maxPoints * 100) / 100 : 0;
+                return {
+                    itemId: item.id,
+                    values: [],
+                    value: hasSelection ? selectedIndex : '',
+                    correct: isCorrect,
+                    awardedPoints,
+                    maxPoints,
+                    feedback: isCorrect
+                        ? `Bonne réponse (${selectedChoice}).`
+                        : `Ta réponse : ${selectedChoice}.${expectedChoice ? ` Bonne réponse : ${expectedChoice}.` : ''}`
+                };
+            }
+
+            // Questions ouvertes / textes a trous : correction IA si disponible, sinon repli automatique deterministe
+            if (aiAvailable && aiItems.has(String(item.id))) {
+                const corrected = aiItems.get(String(item.id)) || {};
+                const awardedPoints = Math.max(0, Math.min(maxPoints, Number(corrected.awardedPoints) || 0));
+                return {
+                    itemId: item.id,
+                    values: Array.isArray(given.values) ? given.values.map((value) => String(value || '')) : [],
+                    value: given.value,
+                    correct: corrected.correct === true || awardedPoints >= maxPoints,
+                    awardedPoints: Math.round(awardedPoints * 100) / 100,
+                    maxPoints,
+                    feedback: String(corrected.feedback || '').trim()
+                };
+            }
+
+            if (item.type === 'fill') {
+                const expList = Array.isArray(item.expectedAnswers) ? item.expectedAnswers : [];
+                const givenValues = Array.isArray(given.values) ? given.values.map((value) => String(value || '')) : [];
+                const blankResults = expList.map((exp, bIdx) => {
+                    const val = givenValues[bIdx] || '';
+                    return {
+                        index: bIdx,
+                        value: val,
+                        expected: exp,
+                        correct: matchAnswer(val, exp)
+                    };
+                });
+                const correctBlanks = blankResults.filter((b) => b.correct).length;
+                const awardedPoints = expList.length > 0
+                    ? Math.round((maxPoints * correctBlanks / expList.length) * 100) / 100
+                    : 0;
+                const isCorrect = blankResults.length > 0 && blankResults.every((b) => b.correct);
+                return {
+                    itemId: item.id,
+                    values: givenValues,
+                    value: given.value,
+                    blankResults,
+                    correct: isCorrect,
+                    awardedPoints,
+                    maxPoints,
+                    feedback: isCorrect
+                        ? 'Bonne réponse.'
+                        : `${correctBlanks}/${expList.length} trou(s) correct(s).`
+                };
+            }
+
+            const val = String(given.value ?? '');
+            const isCorrect = (item.expectedAnswers || []).some((exp) => matchAnswer(val, exp))
+                || ((item.expectedKeywords || []).length > 0 && (item.expectedKeywords || []).every((kw) => containsAnswer(val, kw)));
+            const awardedPoints = isCorrect ? Math.round(maxPoints * 100) / 100 : 0;
             return {
                 itemId: item.id,
-                values: Array.isArray(given.values) ? given.values.map((value) => String(value || '')) : [],
+                values: [],
                 value: given.value,
-                correct: corrected.correct === true || awardedPoints >= maxPoints,
-                awardedPoints: Math.round(awardedPoints * 100) / 100,
+                correct: isCorrect,
+                awardedPoints,
                 maxPoints,
-                feedback: String(corrected.feedback || '').trim()
+                feedback: isCorrect ? 'Bonne réponse.' : 'Réponse incomplète ou incorrecte.'
             };
         });
+
         const score = answers.reduce((sum, answer) => sum + answer.awardedPoints, 0);
+        const correctCount = answers.filter((answer) => answer.correct).length;
+        const autoExplanation = nonQcmItems.length === 0
+            ? `Correction automatique du QCM : ${correctCount} bonne(s) réponse(s) sur ${items.length}.`
+            : `Correction automatique : ${correctCount} bonne(s) réponse(s) sur ${items.length}.`;
         const submission = {
             id: `copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             studentId: assignedStudentId,
             studentName: assignedStudentName,
-            firstName: matchedStudent.firstName || '',
-            lastName: matchedStudent.lastName || '',
+            firstName: matchedStudent?.firstName || firstName || '',
+            lastName: matchedStudent?.lastName || lastName || '',
             currentClass: assignedClass,
             answers,
             score: Math.round(score * 100) / 100,
             total: Math.round(total * 100) / 100,
             submittedAt: new Date(),
             correctionStatus: 'completed',
-            explanation: String(aiCorrection.explanation || '').trim(),
-            correctedBy: 'ai',
+            explanation: (aiAvailable && String(aiCorrection?.explanation || '').trim()) || autoExplanation,
+            correctedBy: aiAvailable ? 'ai' : 'auto',
             reviewClosed: true,
             reviewClosedAt: new Date()
         };
@@ -205,6 +323,7 @@ router.post('/:id/submit', async (req, res) => {
             submissions.push(submission);
         }
         row.submissions = submissions;
+        row.markModified('submissions');
         await row.save();
 
         res.json({
