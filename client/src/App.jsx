@@ -16,27 +16,17 @@ const AppLoading = () => <div className="min-h-screen grid place-items-center bg
 const VISITOR_LEVELS = ['5e', '3e', '2de'];
 
 function PublicControlGate({ controlId }) {
-  const [student, setStudent] = useState(() => {
+  const [student] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('player') || 'null');
-      return saved && saved.role === 'student' && saved.controlAuthToken ? saved : null;
+      return saved && (saved.role === 'student' || saved.role === 'prof' || saved.isDeveloper) ? saved : null;
     } catch (_) { return null; }
   });
-  if (!student) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-4 py-8">
-        <section className="mx-auto max-w-xl rounded-[32px] border border-blue-200 bg-white p-6 shadow-xl">
-          <div className="mb-6 text-center">
-            <div className="text-sm font-black uppercase tracking-widest text-blue-600">Contrôle CondaWeb</div>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Identifie-toi avec Google</h1>
-            <p className="mt-2 font-bold text-slate-500">Utilise ton adresse @condamine.edu.ec. Ton contrôle s’ouvrira automatiquement.</p>
-          </div>
-          <Login onLoginSuccess={setStudent} googleOnly />
-        </section>
-      </main>
-    );
-  }
-  return <Suspense fallback={<AppLoading />}><PublicAssessmentControl controlId={controlId} currentUser={student} /></Suspense>;
+  return (
+    <Suspense fallback={<AppLoading />}>
+      <PublicAssessmentControl controlId={controlId} currentUser={student} />
+    </Suspense>
+  );
 }
 
 function VisitorLevelChooser({ user, onChoose, onLogout }) {

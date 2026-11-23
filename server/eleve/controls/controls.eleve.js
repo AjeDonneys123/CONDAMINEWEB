@@ -87,16 +87,15 @@ router.get('/:id', async (req, res) => {
         const row = await Control.findById(req.params.id).lean();
         if (!row || row.active === false) return res.status(404).json({ error: 'Contrôle indisponible' });
         const studentId = String(req.query?.studentId || '').trim();
-        if (!mongoose.Types.ObjectId.isValid(studentId)) {
-            return res.status(401).json({ error: 'Connexion Google élève requise.' });
+        const authToken = String(req.query?.authToken || '').trim();
+        let student = null;
+        if (studentId && mongoose.Types.ObjectId.isValid(studentId) && verifyControlStudent(authToken, studentId)) {
+            student = await Student.findById(studentId, 'currentClass').lean();
+            if (student && !(row.targetClassrooms || []).some((className) => classKey(className) === classKey(student.currentClass))) {
+                return res.status(403).json({ error: 'Ce contrôle n’est pas attribué à ta classe.' });
+            }
         }
-        if (!verifyControlStudent(req.query?.authToken, studentId)) return res.status(401).json({ error: 'Session Google expirée. Reconnecte-toi.' });
-        const student = await Student.findById(studentId, 'currentClass').lean();
-        if (!student) return res.status(401).json({ error: 'Compte élève introuvable.' });
-        if (!(row.targetClassrooms || []).some((className) => classKey(className) === classKey(student.currentClass))) {
-            return res.status(403).json({ error: 'Ce contrôle n’est pas attribué à ta classe.' });
-        }
-        const submitted = mongoose.Types.ObjectId.isValid(studentId)
+        const submitted = studentId && mongoose.Types.ObjectId.isValid(studentId)
             ? (row.submissions || []).find((submission) => String(submission?.studentId || '') === studentId) || null
             : null;
         res.json(publicControl({ ...row, submitted }));
@@ -111,18 +110,38 @@ router.post('/:id/submit', async (req, res) => {
         if (!row) return res.status(404).json({ error: 'Contrôle introuvable' });
 
         const reqStudentId = String(req.body?.studentId || '').trim();
-        if (!mongoose.Types.ObjectId.isValid(reqStudentId)) {
-            return res.status(401).json({ error: 'Connexion Google élève requise.' });
-        }
-        if (!verifyControlStudent(req.body?.authToken, reqStudentId)) return res.status(401).json({ error: 'Session Google expirée. Reconnecte-toi.' });
-        const matchedStudent = await Student.findById(reqStudentId, 'firstName lastName currentClass').lean();
-        if (!matchedStudent) return res.status(401).json({ error: 'Compte élève introuvable.' });
+        const authToken = String(req.body?.authToken || '').trim();
+        const firstName = String(req.body?.firstName || '').trim();
+        const lastName = String(req.body?.lastName || '').trim();
 
-        const assignedStudentId = matchedStudent ? String(matchedStudent._id) : null;
-        const assignedStudentName = `${matchedStudent.firstName} ${matchedStudent.lastName}`.trim();
+        if (!mongoose.Types.ObjectId.isValid(reqStudentId) && !firstName && !lastName) {
+            return res.status(400).json({ error: 'Prénom et nom requis pour valider le contrôle.' });
+        }
+
+        let matchedStudent = null;
+        if (mongoose.Types.ObjectId.isValid(reqStudentId) && verifyControlStudent(authToken, reqStudentId)) {
+            matchedStudent = await Student.findById(reqStudentId, 'firstName lastName currentClass').lean();
+        }
+        if (!matchedStudent && (firstName || lastName)) {
+            const allStudents = await Student.find({}, 'firstName lastName currentClass').lean();
+            const targetKey1 = norm(`${firstName} ${lastName}`);
+            const targetKey2 = norm(`${lastName} ${firstName}`);
+            matchedStudent = allStudents.find(s => {
+                const k1 = norm(`${s.firstName} ${s.lastName}`);
+                const k2 = norm(`${s.lastName} ${s.firstName}`);
+                return k1 === targetKey1 || k2 === targetKey1 || k1 === targetKey2;
+            }) || null;
+        }
+
+        const assignedStudentId = matchedStudent ? String(matchedStudent._id) : (mongoose.Types.ObjectId.isValid(reqStudentId) ? reqStudentId : null);
+        const assignedStudentName = matchedStudent
+            ? `${matchedStudent.firstName} ${matchedStudent.lastName}`.trim()
+            : (`${firstName} ${lastName}`.trim() || 'Élève');
         const assignedClass = matchedStudent?.currentClass || '';
-        if (!(row.targetClassrooms || []).some((className) => classKey(className) === classKey(assignedClass))) {
-            return res.status(403).json({ error: 'Ce contrôle n’est pas attribué à ta classe.' });
+        if (assignedClass && Array.isArray(row.targetClassrooms) && row.targetClassrooms.length > 0) {
+            if (!row.targetClassrooms.some((className) => classKey(className) === classKey(assignedClass))) {
+                return res.status(403).json({ error: 'Ce contrôle n’est pas attribué à ta classe.' });
+            }
         }
 
         const raw = Array.isArray(req.body?.answers) ? req.body.answers : [];
@@ -275,11 +294,10 @@ router.post('/:id/cheat-alert', async (req, res) => {
         }
 
         const reqStudentId = String(bodyData?.studentId || '').trim();
-        if (!verifyControlStudent(bodyData?.authToken, reqStudentId)) return res.status(401).json({ error: 'Session Google expirée.' });
-        let rawStudentName = '';
+        let rawStudentName = String(bodyData?.studentName || '').trim();
         const reason = String(bodyData?.reason || "Sortie de l'écran / Changement d'application sur mobile").trim();
 
-        if (mongoose.Types.ObjectId.isValid(reqStudentId)) {
+        if (mongoose.Types.ObjectId.isValid(reqStudentId) && verifyControlStudent(bodyData?.authToken, reqStudentId)) {
             const student = await Student.findById(reqStudentId, 'firstName lastName').lean();
             if (student) {
                 rawStudentName = `${student.firstName} ${student.lastName}`.trim();

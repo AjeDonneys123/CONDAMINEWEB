@@ -755,8 +755,9 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         return new Promise((resolve) => {
             try {
                 chrome.storage.local.get(['condaServerUrl'], ({ condaServerUrl }) => {
-                    const server = String(condaServerUrl || 'https://condaweb.vercel.app');
-                    const appUrl = server.replace(/:3000\/?$/, ':5173');
+                    const server = String(condaServerUrl || '').trim();
+                    const isLocal = !server || /localhost|127\.0\.0\.1/i.test(server);
+                    const appUrl = isLocal ? 'https://condaweb.vercel.app' : server.replace(/:3000\/?$/, ':5173');
                     resolve(`${appUrl.replace(/\/$/, '')}/?control=${encodeURIComponent(controlId)}`);
                 });
             } catch (_) { resolve(`https://condaweb.vercel.app/?control=${encodeURIComponent(controlId)}`); }
@@ -877,8 +878,19 @@ async function autoConnectPresentation({ replaceClass = false, force = false } =
         qr.alt = `QR code : ${currentSlideControl.controlTitle || 'Contrôle'}`;
         const note = document.createElement('small');
         note.textContent = 'Les élèves scannent ce QR ; les autres répondent sur feuille.';
-        qrPanel.append(title, qr, note);
-        console.info('[CondaWeb Bridge contrôle] contrôle et QR ouverts dans Slides', { controlId: currentSlideControl.controlId });
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = '↗ Ouvrir le quiz CondaWeb';
+        link.style.display = 'block';
+        link.style.textAlign = 'center';
+        link.style.marginTop = '8px';
+        link.style.fontSize = '12px';
+        link.style.fontWeight = '800';
+        link.style.color = '#2563eb';
+        qrPanel.append(title, qr, note, link);
+        console.info('[CondaWeb Bridge contrôle] contrôle et QR ouverts dans Slides', { controlId: currentSlideControl.controlId, url });
     }
 
     // 5. Boucle principale de synchronisation avec CondaWeb

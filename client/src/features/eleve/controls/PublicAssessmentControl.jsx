@@ -173,7 +173,11 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    if (!currentUser?._id && !currentUser?.id) return setSubmissionError('Reconnecte-toi avec ton compte Google Condamine.');
+    if (!firstName.trim() || !lastName.trim()) {
+      setSubmissionError('Renseigne ton prénom et ton nom en haut de la page pour valider ta copie.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setSubmissionError('');
     setSubmitting(true);
 
@@ -590,10 +594,10 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
           </div>
         )}
 
-        {/* Identité certifiée par la connexion Google CondaWeb */}
+        {/* Identité certifiée par la connexion Google CondaWeb ou saisie manuelle */}
         <div className="public-control-identity-card">
           <div className="public-control-identity-title">
-            <span>✅ Élève authentifié</span>
+            <span>{currentUser?.firstName ? '✅ Élève authentifié' : '👤 Renseigne ton prénom et ton nom'}</span>
           </div>
           <div className="public-control-identity-row">
             <div className="public-control-input-group">
@@ -601,7 +605,10 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
               <input
                 type="text"
                 value={firstName}
-                readOnly
+                onChange={(e) => setFirstName(e.target.value)}
+                readOnly={Boolean(currentUser?.firstName)}
+                placeholder="Ton prénom"
+                required
               />
             </div>
             <div className="public-control-input-group">
@@ -609,7 +616,10 @@ export default function PublicAssessmentControl({ controlId, currentUser = null 
               <input
                 type="text"
                 value={lastName}
-                readOnly
+                onChange={(e) => setLastName(e.target.value)}
+                readOnly={Boolean(currentUser?.lastName)}
+                placeholder="Ton nom de famille"
+                required
               />
             </div>
           </div>
