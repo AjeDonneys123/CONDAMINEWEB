@@ -442,7 +442,8 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
 
   const createAppreciations = async () => {
     const parsed = parseAppreciations();
-    if (parsed.errors.length) { setAppreciationError(parsed.errors.join('\n')); return; }
+    const blockingErrors = parsed.errors.filter((message) => !/\d+\s+élève\(s\) reconnu\(s\) sur \d+/i.test(String(message || '')));
+    if (blockingErrors.length) { setAppreciationError(blockingErrors.join('\n')); return; }
     if (!parsed.matched.length) { setAppreciationError('Collez au moins une appréciation.'); return; }
     setAppreciationSaving(true);
     setAppreciationError('');
@@ -461,7 +462,8 @@ Attends maintenant que je colle les moyennes avant de produire les appréciation
       if (!response.ok) throw new Error(control?.error || 'Création impossible');
       setAssessmentControls((current) => [control, ...current]);
       setAppreciationOpen(false);
-      setAppreciationSuccess(`✅ Lot créé : ${parsed.matched.length} appréciation(s) prêtes pour Pronote.`);
+      const missingCount = Math.max(0, buildAppreciationStudentRoster().length - parsed.matched.length);
+      setAppreciationSuccess(`✅ Lot créé : ${parsed.matched.length} appréciation(s) prêtes pour Pronote${missingCount ? `, ${missingCount} élève(s) laissé(s) vide(s)` : ''}.`);
     } catch (error) { setAppreciationError(error.message || 'Création impossible'); }
     finally { setAppreciationSaving(false); }
   };
