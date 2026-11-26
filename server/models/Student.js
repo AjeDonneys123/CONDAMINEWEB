@@ -4,6 +4,7 @@ const TEST_ACCOUNT_EMAIL = 'vuillet433@gmail.com';
 // Ancien historique comportemental conservé uniquement pour compatibilité des données.
 const BehaviorRecordSchema = new mongoose.Schema({
     teacherId: { type: String, required: true },
+    term: { type: Number, enum: [1, 2, 3], default: 1 },
     baseScore: { type: Number, default: 15 },
     crosses: { type: Number, default: 0 },
     bonuses: { type: Number, default: 0 },

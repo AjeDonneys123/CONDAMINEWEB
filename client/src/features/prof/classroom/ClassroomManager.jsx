@@ -22,6 +22,10 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [iaLoading, setIaLoading] = useState(false);
     const [importPanelOpen, setImportPanelOpen] = useState(false);
     const [sheetUrl, setSheetUrl] = useState('');
+    const [activeTerm, setActiveTerm] = useState(() => {
+        const saved = Number(window.localStorage.getItem('condaweb-prof-term') || 1);
+        return [1, 2, 3].includes(saved) ? saved : 1;
+    });
 
     // UI STATES
     const [viewMode, setViewMode] = useState('PLAN');
@@ -584,13 +588,13 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
     const getMyStats = (stu) => {
         if (!stu || !Array.isArray(stu.behaviorRecords)) return { scores: [] };
-        return stu.behaviorRecords.find(r => String(r?.teacherId) === String(myId)) || { scores: [] };
+        return stu.behaviorRecords.find(r => String(r?.teacherId) === String(myId) && Number(r?.term || 1) === activeTerm) || { scores: [] };
     };
     const getStudentGrades = (stu) => {
-        if (!stu) return [{ id: 'legacy', value: 15 }];
+        if (!stu) return [{ id: 'legacy', value: 13 }];
         const stats = getMyStats(stu);
         if (Array.isArray(stats.scores) && stats.scores.length) return stats.scores;
-        return [{ id: 'legacy', value: Number(stats.baseScore ?? 15) + (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0) }];
+        return [{ id: 'legacy', value: Number(stats.baseScore ?? 13) + (Number(stats.bonuses || 0) * 0.5) - Number(stats.crosses || 0) }];
     };
     const getSelectedGrade = (stu) => {
         if (!stu) return null;
@@ -604,7 +608,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         : (grade?.workIncomplete ? 'incomplete-debt' : (grade?.boardWarning ? 'board-warning' : ''));
     const getStudentScore = (stu) => {
         const stats = getMyStats(stu);
-        return Number(getSelectedGrade(stu)?.value ?? 15);
+        return Number(getSelectedGrade(stu)?.value ?? 13);
     };
     const formatScore = (value) => {
         const n = Number(value || 0);
@@ -679,7 +683,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             const response = await fetch(`/api/classroom/${globalClassId}/adjust-all-scores`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ teacherId: myId, delta: safeDelta, source })
+                body: JSON.stringify({ teacherId: myId, term: activeTerm, delta: safeDelta, source })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Modification collective impossible');
@@ -1177,15 +1181,15 @@ export default function ClassroomManager({ globalClassId, user }) {
         const updateStudentLocally = (s) => {
             if (!s || String(s._id) !== String(sid)) return s;
             const newS = { ...s, behaviorRecords: [...(s.behaviorRecords || [])] };
-            let rIdx = newS.behaviorRecords.findIndex(r => String(r.teacherId) === String(myId));
-            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, scores: [] }); rIdx = newS.behaviorRecords.length - 1; }
+            let rIdx = newS.behaviorRecords.findIndex(r => String(r.teacherId) === String(myId) && Number(r?.term || 1) === activeTerm);
+            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, term: activeTerm, baseScore: 13, scores: [] }); rIdx = newS.behaviorRecords.length - 1; }
 
             const r = { ...newS.behaviorRecords[rIdx] };
             let scores = Array.isArray(r.scores) && r.scores.length
                 ? r.scores.map(g => ({ ...g }))
-                : [{ id: 'legacy', value: Number(r.baseScore ?? 15) + Number(r.bonuses || 0) * .5 - Number(r.crosses || 0) }];
+                : [{ id: 'legacy', value: Number(r.baseScore ?? 13) + Number(r.bonuses || 0) * .5 - Number(r.crosses || 0) }];
             if (type === 'ADD_SCORE') {
-                const g = { id: optimisticScoreId, value: 15 };
+                const g = { id: optimisticScoreId, value: 13 };
                 scores.push(g);
                 r.selectedScoreId = g.id;
             }
@@ -1327,6 +1331,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     studentId: sid,
                     type,
                     teacherId: myId,
+                    term: activeTerm,
                     extraData: extra && typeof extra === 'object'
                         ? { ...extra, classId: globalClassId }
                         : (['ADD_PUNISHMENT', 'REMOVE_PUNISHMENT'].includes(type) ? { value: extra, classId: globalClassId } : extra)
@@ -1594,6 +1599,20 @@ export default function ClassroomManager({ globalClassId, user }) {
             <div className="cm-header">
                 <h2 className="cm-title md:block hidden">{viewMode === 'PLAN' ? 'MODE PLAN' : 'MODE LISTE'}</h2>
                 <div className="cm-header-center">
+                    <div className="view-switcher" role="group" aria-label="Trimestre actif">
+                        {[1, 2, 3].map((term) => (
+                            <button
+                                key={term}
+                                type="button"
+                                className={`view-btn ${activeTerm === term ? 'active' : ''}`}
+                                onClick={() => {
+                                    setActiveTerm(term);
+                                    window.localStorage.setItem('condaweb-prof-term', String(term));
+                                    setSelectedStudent(null);
+                                }}
+                            >T{term}</button>
+                        ))}
+                    </div>
                     <div className="view-switcher">
                         <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
                         <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>A–Z</button>

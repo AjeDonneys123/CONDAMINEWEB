@@ -366,12 +366,13 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const collectParticipationGrades = () => {
     const teacherId = extractId(user?._id || user?.id);
+    const activeTerm = Number(window.localStorage.getItem('condaweb-prof-term') || 1);
     const lines = students.map((student) => {
       const records = Array.isArray(student?.behaviorRecords) ? student.behaviorRecords : [];
-      const stats = records.find((record) => teacherId && extractId(record?.teacherId) === teacherId) || records[0] || {};
+      const stats = records.find((record) => teacherId && extractId(record?.teacherId) === teacherId && Number(record?.term || 1) === activeTerm) || {};
       const scores = Array.isArray(stats?.scores) ? stats.scores : [];
       const selected = scores.find((score) => String(score?.id || '') === String(stats?.selectedScoreId || '')) || scores[scores.length - 1];
-      const value = Number(selected?.value ?? (Number(stats?.baseScore ?? 15) + (Number(stats?.bonuses || 0) * 0.5) - Number(stats?.crosses || 0)));
+      const value = Number(selected?.value ?? (Number(stats?.baseScore ?? 13) + (Number(stats?.bonuses || 0) * 0.5) - Number(stats?.crosses || 0)));
       const name = `${String(student?.firstName || '').trim()} ${String(student?.lastName || '').trim()}`.trim();
       return name && Number.isFinite(value) ? `${name} : ${Math.max(0, Math.min(20, value)).toLocaleString('fr-FR')}` : '';
     }).filter(Boolean);
@@ -386,18 +387,19 @@ Réponds uniquement avec la liste finale prête à être collée dans CondaWeb.`
 
   const openOralGradeModal = () => {
     const teacherId = extractId(user?._id || user?.id);
+    const activeTerm = Number(window.localStorage.getItem('condaweb-prof-term') || 1);
     const lines = students.map((student) => {
       const records = Array.isArray(student?.behaviorRecords) ? student.behaviorRecords : [];
-      const stats = records.find((record) => teacherId && extractId(record?.teacherId) === teacherId) || records[0] || {};
+      const stats = records.find((record) => teacherId && extractId(record?.teacherId) === teacherId && Number(record?.term || 1) === activeTerm) || {};
       const scores = Array.isArray(stats?.scores) ? stats.scores : [];
       const selected = scores.find((score) => String(score?.id || '') === String(stats?.selectedScoreId || '')) || scores[scores.length - 1];
-      const value = Number(selected?.value ?? (Number(stats?.baseScore ?? 15) + (Number(stats?.bonuses || 0) * 0.5) - Number(stats?.crosses || 0)));
+      const value = Number(selected?.value ?? (Number(stats?.baseScore ?? 13) + (Number(stats?.bonuses || 0) * 0.5) - Number(stats?.crosses || 0)));
       const name = `${String(student?.firstName || '').trim()} ${String(student?.lastName || '').trim()}`.trim();
       return name && Number.isFinite(value) ? `${name} : ${Math.max(0, Math.min(20, value)).toLocaleString('fr-FR')}` : '';
     }).filter(Boolean);
     setManualGradeError('');
     setManualGradeDraft({
-      title: "Note d’oral",
+      title: `Note d’oral T${activeTerm}`,
       date: new Date().toISOString().slice(0, 10),
       outOf: '20',
       text: lines.join('\n')

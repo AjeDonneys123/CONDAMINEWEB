@@ -1462,14 +1462,15 @@ router.post('/layout', async (req, res) => {
 router.post('/behavior', async (req, res) => {
     try {
         const { studentId, type, teacherId, extraData } = req.body;
+        const term = [1, 2, 3].includes(Number(req.body?.term)) ? Number(req.body.term) : 1;
         const s = await Student.findById(studentId);
         if (!s) return res.status(404).json({ error: "Élève non trouvé" });
         applyCrossDecay(s.behaviorRecords || []);
-        let r = s.behaviorRecords.find(x => x.teacherId && String(x.teacherId) === String(teacherId));
-        if (!r) { s.behaviorRecords.push({ teacherId, baseScore: 15, crosses: 0, bonuses: 0, nextCrossRemovalAt: null }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
+        let r = s.behaviorRecords.find(x => x.teacherId && String(x.teacherId) === String(teacherId) && Number(x.term || 1) === term);
+        if (!r) { s.behaviorRecords.push({ teacherId, term, baseScore: 13, crosses: 0, bonuses: 0, nextCrossRemovalAt: null }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
         const ensureScores = () => {
             if (!Array.isArray(r.scores) || r.scores.length === 0) {
-                const legacy = Math.max(0, Math.min(20, Number(r.baseScore ?? 15) + Number(r.bonuses || 0) * 0.5 - Number(r.crosses || 0)));
+                const legacy = Math.max(0, Math.min(20, Number(r.baseScore ?? 13) + Number(r.bonuses || 0) * 0.5 - Number(r.crosses || 0)));
                 r.scores = [{ id: `note-${Date.now()}`, value: legacy, createdAt: new Date() }];
                 r.selectedScoreId = r.scores[0].id;
             }
@@ -1477,7 +1478,7 @@ router.post('/behavior', async (req, res) => {
         };
         if (type === 'ADD_SCORE') {
             const scores = ensureScores();
-            const score = { id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, value: Math.max(0, Math.min(20, Number(extraData?.value ?? 15))), createdAt: new Date() };
+            const score = { id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, value: Math.max(0, Math.min(20, Number(extraData?.value ?? 13))), createdAt: new Date() };
             scores.push(score); r.selectedScoreId = score.id;
         }
         if (type === 'SELECT_SCORE') { ensureScores(); r.selectedScoreId = String(extraData?.scoreId || extraData || ''); }
@@ -1798,6 +1799,7 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
     try {
         const { classId } = req.params;
         const teacherId = String(req.body?.teacherId || '').trim();
+        const term = [1, 2, 3].includes(Number(req.body?.term)) ? Number(req.body.term) : 1;
         const delta = Number(req.body?.delta) < 0 ? -0.5 : 0.5;
         const source = req.body?.source === 'pepito' ? 'pepito' : 'teacher';
         if (!teacherId) return res.status(400).json({ error: 'Professeur requis' });
@@ -1812,13 +1814,13 @@ router.post('/:classId/adjust-all-scores', async (req, res) => {
         const studentDocs = await Student.find({ _id: { $in: ids } });
         let totalAppliedDelta = 0;
         await Promise.all(studentDocs.map(async (student) => {
-            let record = student.behaviorRecords.find((row) => row?.teacherId && String(row.teacherId) === teacherId);
+            let record = student.behaviorRecords.find((row) => row?.teacherId && String(row.teacherId) === teacherId && Number(row.term || 1) === term);
             if (!record) {
-                student.behaviorRecords.push({ teacherId, baseScore: 15, crosses: 0, bonuses: 0, scores: [] });
+                student.behaviorRecords.push({ teacherId, term, baseScore: 13, crosses: 0, bonuses: 0, scores: [] });
                 record = student.behaviorRecords[student.behaviorRecords.length - 1];
             }
             if (!Array.isArray(record.scores) || record.scores.length === 0) {
-                const legacyValue = Math.max(0, Math.min(20, Number(record.baseScore ?? 15) + Number(record.bonuses || 0) * .5 - Number(record.crosses || 0)));
+                const legacyValue = Math.max(0, Math.min(20, Number(record.baseScore ?? 13) + Number(record.bonuses || 0) * .5 - Number(record.crosses || 0)));
                 record.scores = [{ id: `note-${Date.now()}-${student._id}`, value: legacyValue, createdAt: new Date() }];
                 record.selectedScoreId = record.scores[0].id;
             }
