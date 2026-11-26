@@ -80,23 +80,26 @@
       const cx = cr.left + cr.width / 2;
       const cy = cr.top + cr.height / 2;
       const allCells = Array.from(document.querySelectorAll('.liste_celluleGrid[data-colonne]')).filter(isVisible);
-      for (const cell of allCells) {
+      const overlappingCols = Array.from(new Set(allCells.flatMap((cell) => {
         const col = cell.getAttribute('data-colonne');
-        if (col && col !== '0' && col !== '1') {
-          const r = cell.getBoundingClientRect();
-          if (cx >= r.left && cx <= r.right && cy >= r.top - 6 && cy <= r.bottom + 6) {
-            console.info(`[CondaWeb Pronote] Colonne ciblée via cadre de sélection (2D) : colonne "${col}"`);
-            return col;
-          }
-        }
+        if (!col || col === '0' || col === '1') return [];
+        const r = cell.getBoundingClientRect();
+        const overlapsX = Math.min(cr.right, r.right) - Math.max(cr.left, r.left) > 8;
+        const overlapsY = Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top) > 8;
+        return overlapsX && overlapsY ? [col] : [];
+      })));
+      // Le cadre Pronote peut couvrir toute une ligne : son centre ne désigne
+      // alors aucune colonne précise et ne doit pas servir de cible.
+      if (overlappingCols.length === 1) {
+        console.info(`[CondaWeb Pronote] Colonne ciblée via cadre de sélection : colonne "${overlappingCols[0]}"`);
+        return overlappingCols[0];
       }
-      for (const cell of allCells) {
-        const col = cell.getAttribute('data-colonne');
-        if (col && col !== '0' && col !== '1') {
-          const r = cell.getBoundingClientRect();
-          if (cx >= r.left && cx <= r.right) {
-            console.info(`[CondaWeb Pronote] Colonne ciblée via X du cadre : colonne "${col}"`);
-            return col;
+      if (cr.width < 180) {
+        for (const cell of allCells) {
+          const col = cell.getAttribute('data-colonne');
+          if (col && col !== '0' && col !== '1') {
+            const r = cell.getBoundingClientRect();
+            if (cx >= r.left && cx <= r.right && cy >= r.top - 6 && cy <= r.bottom + 6) return col;
           }
         }
       }
@@ -172,9 +175,16 @@
 
     if (allCols.length === 1) return allCols[0];
 
-    // Privilégier la dernière colonne créée
+    // Un nouveau devoir apparaît vide dans Pronote. Sans cellule précisément
+    // sélectionnée, choisir la colonne la plus vide plutôt que la dernière.
     if (allCols.length > 0) {
-      return allCols[allCols.length - 1];
+      const ranked = allCols.map((col) => {
+        const cells = Array.from(document.querySelectorAll(`.liste_celluleGrid[data-colonne="${col}"]`)).filter(isVisible);
+        const empty = cells.filter((cell) => !(cell.innerText || cell.textContent || '').trim()).length;
+        return { col, empty, total: cells.length };
+      }).filter((item) => item.total > 0)
+        .sort((a, b) => (b.empty / b.total) - (a.empty / a.total) || Number(a.col) - Number(b.col));
+      if (ranked.length > 0 && ranked[0].empty > 0) return ranked[0].col;
     }
 
     return null;
