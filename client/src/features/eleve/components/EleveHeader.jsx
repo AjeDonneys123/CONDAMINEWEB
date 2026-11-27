@@ -1,6 +1,7 @@
 // @signatures: EleveHeader, record
 import React, { useEffect, useMemo, useState } from 'react';
 import './EleveHeader.css';
+import InstallAppButton from '../../shared/InstallAppButton';
 
 export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange, hidePunishmentAlert = false }) {
   const isJean = user.firstName === 'Jean' && user.lastName === 'Vuillet';
@@ -140,6 +141,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         </div>
 
         <div className="flex items-center gap-3">
+            <InstallAppButton compact />
             {!user.isVisitorPreview && <button onClick={handlePasswordReset} className="v80-password-btn">RÉCUPÉRER MON MOT DE PASSE</button>}
             <div className="v80-user-info">
                 <span className="v80-user-name">{user.firstName} {user.lastName}</span>

@@ -1,0 +1,13 @@
+.install-app-button { border: 0; border-radius: 16px; padding: .95rem 1.15rem; background: linear-gradient(135deg,#2563eb,#7c3aed); color: #fff; font-size: .82rem; font-weight: 950; cursor: pointer; box-shadow: 0 10px 25px rgba(79,70,229,.22); }
+.install-app-button:hover { transform: translateY(-1px); }
+.install-app-button.compact { padding: .7rem .9rem; border-radius: 12px; font-size: .68rem; box-shadow: none; }
+.install-help-backdrop { position: fixed; inset: 0; z-index: 2147483600; display: grid; place-items: center; padding: 20px; background: rgba(15,23,42,.72); }
+.install-help-card { position: relative; width: min(430px,100%); border-radius: 28px; padding: 28px; background: #fff; color: #172033; box-shadow: 0 30px 80px rgba(0,0,0,.35); text-align: left; }
+.install-help-card h2 { margin: 4px 0 18px; text-align: center; font-size: 1.5rem; font-weight: 950; }
+.install-help-card ol { display: grid; gap: 14px; margin: 0; padding-left: 24px; font-size: 1rem; line-height: 1.45; }
+.install-help-card p { margin: 20px 0 0; color: #64748b; text-align: center; font-size: .82rem; font-weight: 700; }
+.install-help-icon { text-align: center; font-size: 2.6rem; }
+.install-help-close { position: absolute; top: 12px; right: 16px; border: 0; background: transparent; color: #94a3b8; font-size: 2rem; cursor: pointer; }
+.install-help-ok { width: 100%; margin-top: 18px; border: 0; border-radius: 15px; padding: 13px; background: #2563eb; color: #fff; font-weight: 950; cursor: pointer; }
+.install-share-icon { display: inline-block; color: #2563eb; font-size: 1.25em; font-weight: 900; }
+@media (max-width:640px) { .install-app-button:not(.compact) { width: 100%; } .install-help-card { padding: 24px 20px; border-radius: 24px; } }

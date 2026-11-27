@@ -1,6 +1,7 @@
 // @signatures: Login, handleLogin, handleReset, handleSelectSuggestion
 import React, { useState, useEffect, useRef } from 'react';
 import './Login.css';
+import InstallAppButton from '../shared/InstallAppButton';
 
 export default function Login({ onLoginSuccess, googleOnly = false }) {
   const [allUsersData, setAllUsersData] = useState([]);
@@ -485,6 +486,9 @@ export default function Login({ onLoginSuccess, googleOnly = false }) {
         </a>
         {devFinderEnabled && <div className="dev-mode-badge">DEV ON</div>}
 
+        <div className="mt-5">
+          <InstallAppButton />
+        </div>
         <form onSubmit={handleLogin} className="login-inputs mt-6">
           {googleClientId && (
             <div className="login-google-section login-google-primary">

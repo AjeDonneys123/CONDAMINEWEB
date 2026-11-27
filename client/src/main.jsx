@@ -7,6 +7,10 @@ import { installDevCompletionHorn } from './devCompletionHorn';
 
 installDevCompletionHorn();
 
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
 // A page left open across a Vercel deployment can reference an old hashed
 // lazy-loaded chunk. Retry once with the new index before showing the crash UI.
 const chunkReloadKey = 'condaweb:chunk-reload-at';
