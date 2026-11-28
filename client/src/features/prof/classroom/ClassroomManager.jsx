@@ -1421,6 +1421,26 @@ export default function ClassroomManager({ globalClassId, user }) {
                         {!frenchMode && <span className="plan-finder-count" title={searchTerm.trim() ? 'Élèves trouvés dans la classe' : 'Élèves de la classe'}>
                             {searchTerm.trim() ? listFinderCount : students.length}
                         </span>}
+                        <button
+                            className={`notif-btn${activeNotif ? ' has-notif' : ''}`}
+                            onClick={() => { setNotifText(activeNotif?.text || ''); setNotifModalOpen(true); }}
+                            title={activeNotif ? `Notification active : ${activeNotif.text}` : 'Ajouter une notification (mémo devoirs)'}
+                        >🔔{activeNotif ? ' !' : ''}</button>
+                        <button
+                            className="french-mode-btn"
+                            onClick={() => { setStudentVocabularyDraft(''); setStudentVocabularyCorrect(''); setStudentVocabularyExplanation(''); setStudentVocabularyError(''); setStudentVocabularyView('level-add'); }}
+                            title="Ajouter une expression à toutes les classes de ce niveau"
+                        >FR N</button>
+                        {/(?:^|\D)5\s*(?:e|ème|eme|[a-z])(?:\D|$)/i.test(String(classroomInfo?.name || classroomInfo?.level || '')) && (
+                            <div className="pepito-phone-control" aria-label="Déplacer Pépito pour la classe">
+                                <button type="button" onClick={() => void movePepito(-1)} disabled={pepitoBusy} title="Faire reculer Pépito d’une case">←</button>
+                                <span title={pepitoPosition === 0 ? 'Pépito est au départ' : `${Math.abs(pepitoPosition)} case(s) du côté ${pepitoPosition > 0 ? '+0,5' : '−0,5'}`}>
+                                    Pépito {pepitoPosition === 0 ? '· Départ' : `· ${pepitoPosition > 0 ? '+' : '−'}${Math.abs(pepitoPosition)}`}
+                                </span>
+                                <i className="pepito-phone-marker" aria-hidden="true" />
+                                <button type="button" onClick={() => void movePepito(1)} disabled={pepitoBusy} title="Faire avancer Pépito d’une case">→</button>
+                            </div>
+                        )}
                         <button className={`french-mode-btn ${frenchMode ? 'active' : ''}`} onClick={toggleFrenchMode} title="Mode français : choisis un élève puis ajoute un mot ou une expression">FR</button>
                         {frenchMode && <button className={`french-error-mode-btn ${frenchErrorMode ? 'active' : ''}`} onClick={() => { setFrenchErrorMode((value) => !value); setFrenchKeywords([]); setFrenchIncorrectWords([]); setFrenchCorrectExpression(''); }}>ERREUR</button>}
                         {(frenchMode ? frenchExpression : searchTerm).trim() && (
